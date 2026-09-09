@@ -119,9 +119,16 @@ Supabase 대시보드 → **SQL Editor** 에서 순서대로 실행합니다.
    에디터의 기본 예제 코드를 **지우고** 붙여넣기
 5. **Deploy** 클릭
 
-**추가 Secret 등록은 필요 없습니다.** 함수가 쓰는 `SUPABASE_URL` 과
-`SUPABASE_SERVICE_ROLE_KEY` 는 Edge Function 런타임이 자동으로 넣어 주는
-표준 환경변수입니다. service_role 키를 어디에도 복사할 일이 없습니다.
+**추가 Secret 등록은 필요 없습니다.** 함수는 런타임이 자동으로 넣어 주는
+표준 환경변수만 씁니다.
+
+| 환경변수 | 쓰임 |
+|---|---|
+| `SUPABASE_URL` | 프로젝트 API 주소 |
+| `SUPABASE_SECRET_KEYS` | secret 키 JSON 딕셔너리. `default` 키를 씁니다 (새 표준) |
+| `SUPABASE_SERVICE_ROLE_KEY` | 예전 방식. 위가 없는 환경을 위한 폴백으로만 |
+
+권한 키를 어디에도 복사하거나 입력할 일이 없습니다.
 
 배포 후 확인할 것:
 

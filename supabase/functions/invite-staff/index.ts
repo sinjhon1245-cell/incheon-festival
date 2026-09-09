@@ -6,11 +6,16 @@
 //   RLS 를 전부 무시하는 마스터 키라 브라우저에 두면 안 됩니다.
 //   그래서 여기서만 쓰고, 호출자가 정말 admin 인지 다시 확인합니다.
 //
-// 환경변수:
-//   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY 는 Edge Function 런타임이
-//   자동으로 넣어 줍니다. 별도 Secret 을 등록할 필요가 없습니다.
-//   (예전 버전은 SERVICE_ROLE_KEY 를 직접 만들게 했는데, 표준
-//    환경변수를 쓰는 쪽이 키를 한 군데 덜 만들어 더 안전합니다.)
+// 환경변수 (전부 런타임이 자동 주입 — 직접 등록할 Secret 없음):
+//   SUPABASE_URL          프로젝트 API 주소
+//   SUPABASE_SECRET_KEYS  secret 키 JSON 딕셔너리. 예:
+//                         {"default":"sb_secret_...","internal":"sb_secret_..."}
+//                         새 API 키 체계의 표준이며 이 함수가 우선 씁니다.
+//   SUPABASE_SERVICE_ROLE_KEY
+//                         예전 방식(deprecated). 아직 함께 주입되므로
+//                         SECRET_KEYS 가 없는 환경을 위한 폴백으로만 씁니다.
+//
+//   둘 다 RLS 를 무시하는 권한이라 브라우저에서는 절대 쓰면 안 됩니다.
 //
 // 배포: Supabase 대시보드 → Edge Functions → Deploy a new function
 //       이름 invite-staff, 이 파일 내용을 그대로 붙여넣기.
@@ -31,6 +36,32 @@ function reply(body: unknown, status = 200) {
   });
 }
 
+/**
+ * 권한 키를 고릅니다.
+ * 새 체계(SUPABASE_SECRET_KEYS)를 먼저 보고, 없거나 모양이 다르면
+ * 예전 SUPABASE_SERVICE_ROLE_KEY 로 물러납니다. 두 체계가 함께
+ * 주입되는 과도기라 한쪽만 믿으면 환경에 따라 죽습니다.
+ */
+function resolvePrivilegedKey(): { key: string | null; source: string } {
+  const raw = Deno.env.get('SUPABASE_SECRET_KEYS');
+  if (raw) {
+    try {
+      const parsed = JSON.parse(raw) as Record<string, string>;
+      const k = parsed?.default;
+      if (typeof k === 'string' && k) {
+        return { key: k, source: 'SUPABASE_SECRET_KEYS.default' };
+      }
+      console.error('[invite-staff] SUPABASE_SECRET_KEYS 에 default 키가 없습니다. 가진 키:',
+        Object.keys(parsed ?? {}));
+    } catch (e) {
+      console.error('[invite-staff] SUPABASE_SECRET_KEYS 를 JSON 으로 읽지 못했습니다.', e);
+    }
+  }
+  const legacy = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  if (legacy) return { key: legacy, source: 'SUPABASE_SERVICE_ROLE_KEY (legacy)' };
+  return { key: null, source: 'none' };
+}
+
 /** 사용자에게는 쉬운 말로, 개발자용 원문은 함수 로그에 남깁니다. */
 function fail(userMessage: string, status: number, detail?: unknown) {
   if (detail) console.error('[invite-staff]', userMessage, detail);
@@ -42,13 +73,16 @@ Deno.serve(async (req: Request) => {
 
   // ── 표준 환경변수 ────────────────────────────────────────────────
   const url = Deno.env.get('SUPABASE_URL');
-  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-  if (!url || !serviceKey) {
-    return fail('함수 환경이 준비되지 않았습니다. 배포 상태를 확인해 주세요.', 500,
-      { hasUrl: !!url, hasKey: !!serviceKey });
-  }
+  const { key: privilegedKey, source: keySource } = resolvePrivilegedKey();
 
-  const admin = createClient(url, serviceKey, { auth: { persistSession: false } });
+  if (!url || !privilegedKey) {
+    return fail('함수 환경이 준비되지 않았습니다. 배포 상태를 확인해 주세요.', 500,
+      { hasUrl: !!url, keySource });
+  }
+  // 어느 체계를 썼는지 로그로 남깁니다. 키 값 자체는 절대 찍지 않습니다.
+  console.log('[invite-staff] 권한 키 출처:', keySource);
+
+  const admin = createClient(url, privilegedKey, { auth: { persistSession: false } });
 
   // ── 1. 로그인 확인 ───────────────────────────────────────────────
   const authHeader = req.headers.get('Authorization') ?? '';
