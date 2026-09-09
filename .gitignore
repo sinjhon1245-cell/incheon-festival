@@ -1,0 +1,30 @@
+# ── 비밀정보 ────────────────────────────────────────────────────────
+# assets/config.js 의 publishable 키는 브라우저 공개용이라 커밋합니다.
+# 아래 것들은 절대 올라가면 안 됩니다.
+.env
+.env.*
+*.pem
+*.key
+*.p12
+id_rsa*
+*credentials*
+service-account*.json
+
+# ── 작업 중 임시 파일 ───────────────────────────────────────────────
+# 진단·점검용으로 잠깐 만드는 파일은 밑줄로 시작합니다.
+_*.html
+_*.js
+
+# ── 도구·OS ────────────────────────────────────────────────────────
+node_modules/
+npm-debug.log*
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── Claude Code 개인 설정 ──────────────────────────────────────────
+# launch.json 은 미리보기 설정이라 공유합니다.
+.claude/settings.local.json
