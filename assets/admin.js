@@ -508,10 +508,18 @@
       staffRows = d.rows || [];
       staffNote = null;
     }).catch(function (e) {
-      console.error('[admin] 계정 목록(Edge Function) 실패', e);
-      staffNote = '관계자 초대 기능(Edge Function)이 아직 배포되지 않았습니다. ' +
-                  'README 의 “관계자 초대 기능 배포”를 참고해 주세요. ' +
-                  '아래는 데이터베이스에 저장된 관계자 목록입니다.';
+      // 함수를 아직 배포하지 않은 상태는 오류가 아니라 예정된 단계입니다.
+      // 배포 전까지 매번 콘솔에 빨간 줄이 남지 않도록 안내로만 남깁니다.
+      var notDeployed = /Failed to send a request|Failed to fetch|not found/i.test(e.message || '');
+      if (notDeployed) {
+        console.info('[admin] 관계자 초대 Edge Function 미배포 — 데이터베이스 목록으로 표시합니다.');
+      } else {
+        console.error('[admin] 계정 목록을 불러오지 못했습니다', e);
+      }
+      staffNote = notDeployed
+        ? '관계자 초대 기능(Edge Function)이 아직 배포되지 않았습니다. README 의 ' +
+          '“관계자 초대 기능 배포”를 참고해 주세요. 아래는 데이터베이스에 저장된 관계자 목록입니다.'
+        : '계정 목록을 불러오지 못했습니다: ' + (e.message || '');
       staffRows = null;
     });
   }
