@@ -20,6 +20,7 @@
   var zoneKeys = [];
   var staffRows = null;   // Edge Function 이 돌려준 계정 목록(로그인 상태 포함)
   var staffNote = null;   // 함수가 아직 배포되지 않았을 때 안내
+  var fnUnavailable = false;  // 미배포 확인 후에는 다시 부르지 않습니다
 
   var SCHEDULE_CATS = ['무대', '강연', '부스', '운영', '행사 지원'];
   var SCHEDULE_STATES = ['예정', '진행 중', '종료', '취소', '변경'];
@@ -504,6 +505,8 @@
   }
 
   function loadStaff() {
+    // 한 번 미배포로 확인됐으면 매번 호출해 CORS 오류를 반복하지 않습니다.
+    if (fnUnavailable) return Promise.resolve();
     return fn('list').then(function (d) {
       staffRows = d.rows || [];
       staffNote = null;
@@ -512,6 +515,7 @@
       // 배포 전까지 매번 콘솔에 빨간 줄이 남지 않도록 안내로만 남깁니다.
       var notDeployed = /Failed to send a request|Failed to fetch|not found/i.test(e.message || '');
       if (notDeployed) {
+        fnUnavailable = true;
         console.info('[admin] 관계자 초대 Edge Function 미배포 — 데이터베이스 목록으로 표시합니다.');
       } else {
         console.error('[admin] 계정 목록을 불러오지 못했습니다', e);
@@ -565,6 +569,19 @@
   ];
 
   function openInvite() {
+    // 배포 전에 폼을 채우게 하고 마지막에 실패시키면 헛수고가 됩니다.
+    // 먼저 상태를 알려 줍니다.
+    if (fnUnavailable) {
+      UI.confirm({
+        title: "초대 기능을 먼저 배포해 주세요",
+        message: "관계자 초대는 Supabase Edge Function 이 필요합니다. " +
+                 "Supabase 대시보드 → Edge Functions → Deploy a new function 에서 " +
+                 "이름을 invite-staff 로 만들고 supabase/functions/invite-staff/index.ts 내용을 " +
+                 "붙여넣어 배포한 뒤 이 화면을 새로고침해 주세요. 별도 Secret 등록은 필요 없습니다.",
+        confirmLabel: "알겠습니다"
+      });
+      return;
+    }
     UI.form({
       title: '관계자 초대',
       desc: '이메일로 로그인 계정을 만들고 관계자 명단에 등록합니다. UUID 를 직접 넣을 필요가 없습니다.',

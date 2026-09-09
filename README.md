@@ -107,34 +107,57 @@ Supabase 대시보드 → **SQL Editor** 에서 순서대로 실행합니다.
 ### 관계자 초대 기능 배포 (Edge Function)
 
 관리자에서 `+ 관계자 초대`로 계정을 만들려면 Edge Function 한 개를
-배포해야 합니다. Auth 사용자 생성에는 `service_role` 키가 필요한데,
+배포해야 합니다. Auth 사용자 생성에는 service_role 권한이 필요한데,
 그 키는 브라우저에 두면 안 되기 때문입니다.
 
+**CLI 없이 Supabase 대시보드에서 그대로 배포할 수 있습니다.**
+
+1. Supabase 대시보드 → 왼쪽 메뉴 **Edge Functions**
+2. **Deploy a new function** → **Via Editor** 선택
+3. 함수 이름에 `invite-staff` 입력 (다른 이름을 쓰면 동작하지 않습니다)
+4. `supabase/functions/invite-staff/index.ts` 파일 내용을 **전부 복사**해
+   에디터의 기본 예제 코드를 **지우고** 붙여넣기
+5. **Deploy** 클릭
+
+**추가 Secret 등록은 필요 없습니다.** 함수가 쓰는 `SUPABASE_URL` 과
+`SUPABASE_SERVICE_ROLE_KEY` 는 Edge Function 런타임이 자동으로 넣어 주는
+표준 환경변수입니다. service_role 키를 어디에도 복사할 일이 없습니다.
+
+배포 후 확인할 것:
+
+- Edge Functions 목록에 `invite-staff` 가 **Active** 로 보이는지
+- 관리자 → **계정·권한** 을 새로고침했을 때 “아직 배포되지 않았습니다”
+  안내가 사라지는지
+- 계정 목록의 **상태** 칸에 `활성` / `초대됨` 이 표시되는지
+  (이 값은 함수만 알 수 있는 정보라, 보이면 연결이 된 것입니다)
+
+<details>
+<summary>CLI 를 이미 쓰고 계시다면 (선택)</summary>
+
 ```bash
-npm i -g supabase
 supabase login
 supabase link --project-ref ynixjjqozkbzxjmishbe
 supabase functions deploy invite-staff
-supabase secrets set SERVICE_ROLE_KEY=<service_role 키>
 ```
 
-`service_role` 키는 **Function Secret 에만** 넣습니다. 저장소에 커밋하거나
-`assets/config.js` 에 넣지 마세요.
-
-배포 전에도 관리자 화면은 정상 동작하며, 계정 목록은 데이터베이스
-기준으로 표시되고 초대 버튼만 안내 문구와 함께 실패합니다.
+이 경우에도 Secret 을 따로 넣을 필요는 없습니다.
+</details>
 
 함수가 하는 일:
 
-1. 호출자가 admin 인지 확인 (아니면 403)
-2. Auth 사용자 초대 또는 생성
-3. 받은 UUID 로 `staff_profiles` 자동 생성
-4. 이름·팀·연락처·권한 저장
+1. 호출자가 로그인 상태인지 확인
+2. 요청자의 `staff_profiles.role` 이 admin 인지 **서버에서 다시 확인** (아니면 403)
+3. 이메일 중복 확인
+4. Auth 사용자 초대 또는 생성 → UUID 획득
+5. `staff_profiles` 에 id·email·name·team·phone·role 저장
+6. 프로필 저장이 실패하면 방금 만든 Auth 사용자를 되돌려 반쪽 상태를 막음
 
+프론트엔드가 admin 이라고 주장하는 것은 신뢰하지 않습니다.
 메일 발송이 막힌 프로젝트에서는 초대 대신 임시 비밀번호를 발급하고
 관리자 화면에 한 번만 보여 줍니다.
 
-마지막 남은 admin 계정은 삭제와 권한 강등이 서버에서 차단됩니다.
+마지막 남은 admin 계정은 삭제와 권한 강등이 **서버에서** 차단됩니다.
+화면에서도 삭제 버튼이 비활성화됩니다.
 
 ### 권한 구조
 
@@ -204,6 +227,7 @@ Supabase 연결 정보는 `assets/config.js` 로 함께 배포됩니다.
 | “서버에 연결할 수 없습니다” | `assets/config.js` 값이 비었거나 `.gitignore` 에 걸렸는지 |
 | 로그인은 되는데 바로 로그아웃됨 | `staff_profiles` 에 해당 계정 줄이 있는지 |
 | “데이터베이스가 최신 구조가 아닙니다” | `migration-portal.sql` 실행 여부 |
+| 관계자 초대가 안 됨 | Edge Functions 에 `invite-staff` 가 Active 인지 |
 | 저장·삭제가 “0건” | 로그인 만료 → 재로그인. 그래도 안 되면 `fix-policies.sql` |
 | 관리자에서 “권한 없음” | `staff_profiles.role` 이 `admin` 인지 |
 | 배포본만 옛 화면 | Netlify 최신 배포 로그와 캐시 확인 |

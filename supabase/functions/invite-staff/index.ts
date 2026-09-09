@@ -1,19 +1,19 @@
 // ===================================================================
 // 관계자 초대 · 계정 관리 Edge Function
 //
-// 왜 Edge Function 인가:
-//   Auth 사용자를 만들려면 service_role 키가 필요합니다. 그 키는
+// 왜 서버에서 하는가:
+//   Auth 사용자를 만들려면 service_role 권한이 필요합니다. 그 키는
 //   RLS 를 전부 무시하는 마스터 키라 브라우저에 두면 안 됩니다.
-//   그래서 서버(Edge Function)에만 두고, 관리자 여부를 확인한 뒤
-//   대신 처리합니다.
+//   그래서 여기서만 쓰고, 호출자가 정말 admin 인지 다시 확인합니다.
 //
-// 배포:
-//   supabase functions deploy invite-staff
-//   supabase secrets set SERVICE_ROLE_KEY=<service_role 키>
+// 환경변수:
+//   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY 는 Edge Function 런타임이
+//   자동으로 넣어 줍니다. 별도 Secret 을 등록할 필요가 없습니다.
+//   (예전 버전은 SERVICE_ROLE_KEY 를 직접 만들게 했는데, 표준
+//    환경변수를 쓰는 쪽이 키를 한 군데 덜 만들어 더 안전합니다.)
 //
-//   SUPABASE_URL 은 런타임이 자동 주입합니다.
-//   SERVICE_ROLE_KEY 는 반드시 Function Secret 으로만 두세요.
-//   저장소에 커밋하지 않습니다.
+// 배포: Supabase 대시보드 → Edge Functions → Deploy a new function
+//       이름 invite-staff, 이 파일 내용을 그대로 붙여넣기.
 // ===================================================================
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
@@ -31,73 +31,84 @@ function reply(body: unknown, status = 200) {
   });
 }
 
+/** 사용자에게는 쉬운 말로, 개발자용 원문은 함수 로그에 남깁니다. */
+function fail(userMessage: string, status: number, detail?: unknown) {
+  if (detail) console.error('[invite-staff]', userMessage, detail);
+  return reply({ error: userMessage }, status);
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
 
+  // ── 표준 환경변수 ────────────────────────────────────────────────
   const url = Deno.env.get('SUPABASE_URL');
-  const serviceKey = Deno.env.get('SERVICE_ROLE_KEY');
+  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
   if (!url || !serviceKey) {
-    return reply({ error: '함수 설정이 완료되지 않았습니다. SERVICE_ROLE_KEY 시크릿을 등록해 주세요.' }, 500);
-  }
-
-  // 관리자 권한 확인 — 호출자의 토큰으로 본인 프로필을 읽습니다.
-  const authHeader = req.headers.get('Authorization') ?? '';
-  if (!authHeader.startsWith('Bearer ')) {
-    return reply({ error: '로그인이 필요합니다.' }, 401);
+    return fail('함수 환경이 준비되지 않았습니다. 배포 상태를 확인해 주세요.', 500,
+      { hasUrl: !!url, hasKey: !!serviceKey });
   }
 
   const admin = createClient(url, serviceKey, { auth: { persistSession: false } });
 
-  const { data: userData, error: userErr } = await admin.auth.getUser(authHeader.replace('Bearer ', ''));
-  if (userErr || !userData?.user) {
-    return reply({ error: '로그인이 만료되었습니다. 다시 로그인해 주세요.' }, 401);
+  // ── 1. 로그인 확인 ───────────────────────────────────────────────
+  const authHeader = req.headers.get('Authorization') ?? '';
+  if (!authHeader.startsWith('Bearer ')) {
+    return fail('로그인이 필요합니다.', 401);
   }
+  const token = authHeader.slice('Bearer '.length);
 
-  const { data: profile } = await admin
-    .from('staff_profiles')
-    .select('role')
-    .eq('id', userData.user.id)
-    .maybeSingle();
+  const { data: userData, error: userErr } = await admin.auth.getUser(token);
+  if (userErr || !userData?.user) {
+    return fail('로그인이 만료되었습니다. 다시 로그인해 주세요.', 401, userErr);
+  }
+  const callerId = userData.user.id;
 
-  if (!profile || profile.role !== 'admin') {
-    return reply({ error: '관리자만 사용할 수 있습니다.' }, 403);
+  // ── 2·3. 서버에서 admin 권한 재확인 ──────────────────────────────
+  // 프론트가 admin 이라고 주장하는 것은 신뢰하지 않습니다.
+  const { data: caller, error: callerErr } = await admin
+    .from('staff_profiles').select('role').eq('id', callerId).maybeSingle();
+
+  if (callerErr) return fail('권한을 확인하지 못했습니다.', 500, callerErr);
+  if (!caller || caller.role !== 'admin') {
+    return fail('관리자만 사용할 수 있습니다.', 403);
   }
 
   let payload: Record<string, unknown>;
   try {
     payload = await req.json();
-  } catch {
-    return reply({ error: '요청 형식이 올바르지 않습니다.' }, 400);
+  } catch (e) {
+    return fail('요청 형식이 올바르지 않습니다.', 400, e);
   }
 
   const action = String(payload.action ?? '');
 
-  // ── 목록: 프로필 + 로그인 상태를 합쳐 돌려줍니다 ────────────────
+  /* ── 목록: 프로필 + 로그인 상태 ─────────────────────────────── */
   if (action === 'list') {
     const { data: profiles, error } = await admin
-      .from('staff_profiles')
-      .select('*')
-      .order('role', { ascending: true })
-      .order('name', { ascending: true });
-    if (error) return reply({ error: error.message }, 400);
+      .from('staff_profiles').select('*')
+      .order('role', { ascending: true }).order('name', { ascending: true });
+    if (error) return fail('계정 목록을 불러오지 못했습니다.', 400, error);
 
-    const { data: authList } = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
+    const { data: authList, error: listErr } =
+      await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
+    if (listErr) console.error('[invite-staff] listUsers 실패', listErr);
+
     const byId = new Map((authList?.users ?? []).map((u) => [u.id, u]));
-
     const rows = (profiles ?? []).map((p) => {
       const u = byId.get(p.id);
       return {
         ...p,
         email: p.email || u?.email || '',
         last_sign_in_at: u?.last_sign_in_at ?? null,
-        confirmed: !!(u?.email_confirmed_at || u?.confirmed_at),
         status: !u ? '계정 없음' : u.last_sign_in_at ? '활성' : '초대됨',
       };
     });
     return reply({ rows });
   }
 
-  // ── 초대: Auth 사용자 생성 후 staff_profiles 자동 생성 ──────────
+  /* ── 초대 ────────────────────────────────────────────────────
+     4. 이메일 중복 확인 → 5. 초대 또는 생성 → 6. UUID 획득
+     → 7. staff_profiles 저장 → 8. 결과 반환                      */
   if (action === 'invite') {
     const email = String(payload.email ?? '').trim().toLowerCase();
     const name = String(payload.name ?? '').trim();
@@ -105,93 +116,92 @@ Deno.serve(async (req: Request) => {
     const phone = String(payload.phone ?? '').trim();
     const role = payload.role === 'admin' ? 'admin' : 'staff';
 
-    if (!email || !email.includes('@')) return reply({ error: '올바른 이메일을 입력해 주세요.' }, 400);
-    if (!name) return reply({ error: '이름을 입력해 주세요.' }, 400);
+    if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+      return fail('올바른 이메일 주소를 입력해 주세요.', 400);
+    }
+    if (!name) return fail('이름을 입력해 주세요.', 400);
 
-    // 이미 있는 계정이면 새로 만들지 않고 프로필만 연결합니다.
-    const { data: existingList } = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
-    let user = (existingList?.users ?? []).find((u) => (u.email ?? '').toLowerCase() === email);
+    // 4. 이메일 중복 확인
+    const { data: existingList, error: exErr } =
+      await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
+    if (exErr) return fail('기존 계정을 확인하지 못했습니다.', 500, exErr);
 
+    let user = (existingList?.users ?? [])
+      .find((u) => (u.email ?? '').toLowerCase() === email);
+
+    if (user) {
+      // 계정은 있는데 관계자 명단에만 없는 경우가 있습니다.
+      const { data: dupe } = await admin
+        .from('staff_profiles').select('id').eq('id', user.id).maybeSingle();
+      if (dupe) {
+        return fail('이미 등록된 관계자입니다. 목록에서 수정해 주세요.', 400);
+      }
+    }
+
+    let tempPassword: string | null = null;
+    let createdHere = false;   // 이 요청에서 새로 만든 계정인지
+
+    // 5·6. 초대 또는 생성 후 UUID 확보
     if (!user) {
       const redirectTo = String(payload.redirectTo ?? '') || undefined;
       const { data: invited, error: inviteErr } =
         await admin.auth.admin.inviteUserByEmail(email, { redirectTo });
 
-      if (inviteErr || !invited?.user) {
-        // 메일 발송이 막혀 있는 프로젝트에서는 초대가 실패할 수 있습니다.
-        // 그때는 임시 비밀번호로 계정만 만들고 관리자가 따로 전달합니다.
-        const tempPassword = crypto.randomUUID() + 'Aa1!';
+      if (!inviteErr && invited?.user) {
+        user = invited.user;
+        createdHere = true;
+      } else {
+        // 메일 발송이 막힌 프로젝트에서는 초대가 실패합니다.
+        // 그때는 임시 비밀번호로 계정만 만들고 관리자가 직접 전달합니다.
+        console.error('[invite-staff] 초대 메일 실패, 직접 생성으로 전환', inviteErr);
+        tempPassword = crypto.randomUUID().slice(0, 12) + 'Aa1!';
         const { data: created, error: createErr } = await admin.auth.admin.createUser({
-          email,
-          password: tempPassword,
-          email_confirm: true,
+          email, password: tempPassword, email_confirm: true,
         });
         if (createErr || !created?.user) {
-          return reply({ error: '계정을 만들지 못했습니다: ' + (createErr?.message ?? inviteErr?.message ?? '') }, 400);
+          return fail('계정을 만들지 못했습니다. 이메일 주소를 확인해 주세요.', 400,
+            { inviteErr, createErr });
         }
         user = created.user;
-        var tempIssued: string | null = tempPassword;
-      } else {
-        user = invited.user;
+        createdHere = true;
       }
     }
 
+    // 7. staff_profiles 저장
     const { data: row, error: profErr } = await admin
       .from('staff_profiles')
       .upsert({ id: user.id, email, name, team, phone, role }, { onConflict: 'id' })
-      .select()
-      .single();
+      .select().single();
 
-    if (profErr) return reply({ error: '관계자 정보를 저장하지 못했습니다: ' + profErr.message }, 400);
-
-    return reply({
-      row,
-      // 임시 비밀번호가 발급된 경우에만 내려갑니다. 화면에 한 번만 보여 주고
-      // 저장하지 않습니다.
-      tempPassword: typeof tempIssued === 'string' ? tempIssued : null,
-    });
-  }
-
-  // ── 삭제: 마지막 관리자는 보호합니다 ────────────────────────────
-  if (action === 'remove') {
-    const id = String(payload.id ?? '');
-    if (!id) return reply({ error: '대상이 지정되지 않았습니다.' }, 400);
-    if (id === userData.user.id) return reply({ error: '본인 계정은 삭제할 수 없습니다.' }, 400);
-
-    const { data: target } = await admin.from('staff_profiles').select('role').eq('id', id).maybeSingle();
-    if (target?.role === 'admin') {
-      const { count } = await admin
-        .from('staff_profiles')
-        .select('id', { count: 'exact', head: true })
-        .eq('role', 'admin');
-      if ((count ?? 0) <= 1) {
-        return reply({ error: '마지막 관리자 계정은 삭제할 수 없습니다.' }, 400);
+    if (profErr) {
+      // 프로필 저장이 실패하면 Auth 사용자만 남아 반쪽 상태가 됩니다.
+      // 이 요청에서 만든 계정이면 되돌립니다.
+      if (createdHere) {
+        const { error: rollbackErr } = await admin.auth.admin.deleteUser(user.id);
+        if (rollbackErr) console.error('[invite-staff] 롤백 실패', rollbackErr);
       }
+      return fail('관계자 정보를 저장하지 못했습니다. 다시 시도해 주세요.', 400, profErr);
     }
 
-    await admin.from('staff_profiles').delete().eq('id', id);
-    const { error: delErr } = await admin.auth.admin.deleteUser(id);
-    if (delErr) return reply({ error: '로그인 계정을 지우지 못했습니다: ' + delErr.message }, 400);
-
-    return reply({ ok: true });
+    // 8. 결과 반환 (임시 비밀번호는 발급된 경우에만)
+    return reply({ row, tempPassword });
   }
 
-  // ── 프로필 수정 (권한 변경 포함) ────────────────────────────────
+  /* ── 프로필·권한 수정 ────────────────────────────────────────── */
   if (action === 'update') {
     const id = String(payload.id ?? '');
     const patch = (payload.patch ?? {}) as Record<string, unknown>;
-    if (!id) return reply({ error: '대상이 지정되지 않았습니다.' }, 400);
+    if (!id) return fail('대상이 지정되지 않았습니다.', 400);
 
-    // 마지막 관리자를 staff 로 낮추지 못하게 막습니다.
+    // 마지막 admin 을 staff 로 낮추지 못하게 막습니다.
     if (patch.role === 'staff') {
-      const { data: target } = await admin.from('staff_profiles').select('role').eq('id', id).maybeSingle();
+      const { data: target } = await admin
+        .from('staff_profiles').select('role').eq('id', id).maybeSingle();
       if (target?.role === 'admin') {
-        const { count } = await admin
-          .from('staff_profiles')
-          .select('id', { count: 'exact', head: true })
-          .eq('role', 'admin');
+        const { count } = await admin.from('staff_profiles')
+          .select('id', { count: 'exact', head: true }).eq('role', 'admin');
         if ((count ?? 0) <= 1) {
-          return reply({ error: '마지막 관리자 계정의 권한은 낮출 수 없습니다.' }, 400);
+          return fail('마지막 관리자입니다. 다른 관리자를 먼저 지정해 주세요.', 400);
         }
       }
     }
@@ -202,9 +212,44 @@ Deno.serve(async (req: Request) => {
 
     const { data: row, error } = await admin
       .from('staff_profiles').update(clean).eq('id', id).select().single();
-    if (error) return reply({ error: error.message }, 400);
+    if (error) return fail('저장하지 못했습니다.', 400, error);
+
+    // 로그인 이메일도 함께 맞춰 줍니다.
+    if (typeof clean.email === 'string' && clean.email) {
+      const { error: mailErr } =
+        await admin.auth.admin.updateUserById(id, { email: clean.email as string });
+      if (mailErr) console.error('[invite-staff] 로그인 이메일 변경 실패', mailErr);
+    }
     return reply({ row });
   }
 
-  return reply({ error: '알 수 없는 요청입니다.' }, 400);
+  /* ── 삭제 ────────────────────────────────────────────────────── */
+  if (action === 'remove') {
+    const id = String(payload.id ?? '');
+    if (!id) return fail('대상이 지정되지 않았습니다.', 400);
+    if (id === callerId) return fail('본인 계정은 삭제할 수 없습니다.', 400);
+
+    const { data: target } = await admin
+      .from('staff_profiles').select('role').eq('id', id).maybeSingle();
+    if (target?.role === 'admin') {
+      const { count } = await admin.from('staff_profiles')
+        .select('id', { count: 'exact', head: true }).eq('role', 'admin');
+      if ((count ?? 0) <= 1) {
+        return fail('마지막 관리자 계정은 삭제할 수 없습니다.', 400);
+      }
+    }
+
+    const { error: profErr } = await admin.from('staff_profiles').delete().eq('id', id);
+    if (profErr) return fail('관계자 정보를 지우지 못했습니다.', 400, profErr);
+
+    const { error: delErr } = await admin.auth.admin.deleteUser(id);
+    if (delErr) {
+      // 프로필은 지워졌으니 이미 접근은 막힌 상태입니다.
+      console.error('[invite-staff] Auth 사용자 삭제 실패', delErr);
+      return reply({ ok: true, warning: '로그인 계정 삭제는 실패했지만 접근 권한은 회수했습니다.' });
+    }
+    return reply({ ok: true });
+  }
+
+  return fail('알 수 없는 요청입니다.', 400, { action });
 });
