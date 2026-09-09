@@ -545,12 +545,15 @@
           '<div class="listrow__meta">' + esc(r.email || '') +
           (r.team ? ' · ' + esc(r.team) : '') + (r.phone ? ' · ' + esc(r.phone) : '') + '</div>' +
           '<div class="listrow__tags">' + badge(r.role) +
-          (r.status ? badge(r.status) : '') + (isLastAdmin ? tag('마지막 관리자') : '') + '</div>' +
+          (r.status ? badge(r.status) : '') +
+          (isLastAdmin ? tag('마지막 관리자 · 삭제·강등 불가') : '') + '</div>' +
         '</div>' +
         '<div class="listrow__act">' +
           '<button class="btn btn--ghost btn--sm" type="button" data-sact="edit">수정</button>' +
-          '<button class="btn btn--danger btn--sm" type="button" data-sact="del"' +
-            (isLastAdmin ? ' disabled title="마지막 관리자는 삭제할 수 없습니다"' : '') + '>삭제</button>' +
+          (isLastAdmin
+            ? '<button class="btn btn--danger btn--sm" type="button" disabled ' +
+              'aria-disabled="true" title="마지막 관리자 계정은 삭제할 수 없습니다">삭제</button>'
+            : '<button class="btn btn--danger btn--sm" type="button" data-sact="del">삭제</button>') +
         '</div></div>';
     }).join('') + '</div>' : '<div class="state">등록된 관계자가 없습니다.</div>';
 
@@ -565,7 +568,10 @@
     { k: 'team',  label: '소속/팀' },
     { k: 'phone', label: '연락처', type: 'tel' },
     { k: 'role',  label: '권한', type: 'select',
-      options: [['staff', 'staff · 열람과 요청 등록'], ['admin', 'admin · 전체 편집']] }
+      options: [
+        ['staff', 'staff · 열람 · 운영 요청 등록 · 부스 상태 변경'],
+        ['admin', 'admin · 전체 편집 · 계정 관리']
+      ] }
   ];
 
   function openInvite() {
@@ -616,10 +622,19 @@
     });
   }
 
-  function openStaffEdit(row) {
+  function openStaffEdit(row, isLastAdmin) {
+    var fields = STAFF_FIELDS.map(function (f) {
+      if (f.k !== 'role' || !isLastAdmin) return f;
+      // 마지막 관리자는 staff 로 낮출 수 없으니 선택지에서 뺍니다.
+      return Object.assign({}, f, {
+        options: [['admin', 'admin · 전체 편집 · 계정 관리']],
+        hint: '마지막 관리자라 권한을 낮출 수 없습니다'
+      });
+    });
+
     UI.form({
       title: '관계자 정보 수정',
-      fields: STAFF_FIELDS,
+      fields: fields,
       values: row,
       submitLabel: '저장'
     }).then(function (v) {
@@ -633,7 +648,15 @@
     });
   }
 
-  function confirmStaffDelete(row) {
+  function confirmStaffDelete(row, isLastAdmin) {
+    if (isLastAdmin) {
+      UI.confirm({
+        title: '삭제할 수 없습니다',
+        message: '마지막 남은 관리자 계정입니다. 다른 관계자를 먼저 관리자로 올린 뒤 삭제해 주세요.',
+        confirmLabel: '알겠습니다'
+      });
+      return;
+    }
     UI.confirm({
       title: '관계자를 삭제할까요?',
       message: '“' + (row.name || row.email) + '”의 로그인 계정과 관계자 정보를 모두 지웁니다. 되돌릴 수 없습니다.',
@@ -708,8 +731,11 @@
       if (sact) {
         var srow = (staffRows || cache.staff_profiles || [])[Number(sact.closest('.listrow').dataset.i)];
         if (!srow) return;
-        if (sact.dataset.sact === 'edit') openStaffEdit(srow);
-        else confirmStaffDelete(srow);
+        var rowsNow = staffRows || cache.staff_profiles || [];
+        var adminN = rowsNow.filter(function (x) { return x.role === 'admin'; }).length;
+        var lastAdmin = srow.role === 'admin' && adminN <= 1;
+        if (sact.dataset.sact === 'edit') openStaffEdit(srow, lastAdmin);
+        else confirmStaffDelete(srow, lastAdmin);
         return;
       }
 
