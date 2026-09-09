@@ -57,6 +57,28 @@
   </form>
 </div>
 
+<!-- ══ 초대 수락 · 비밀번호 설정 ═══════════════════════════════ -->
+<div class="gate" id="gate-setpw" hidden>
+  <form class="gate__card" id="setpwform" novalidate>
+    <p class="gate__kicker">2026년 인천 AI·SW미래채움 교육페스티벌</p>
+    <h1 class="gate__title">비밀번호를 정해 주세요</h1>
+    <p class="gate__desc">초대를 확인했습니다. 앞으로 이 비밀번호로 로그인합니다.</p>
+
+    <div class="field">
+      <label class="field__label" for="setpw-1">새 비밀번호</label>
+      <input class="input" type="password" id="setpw-1" autocomplete="new-password" required minlength="6" />
+    </div>
+    <div class="field">
+      <label class="field__label" for="setpw-2">한 번 더</label>
+      <input class="input" type="password" id="setpw-2" autocomplete="new-password" required minlength="6" />
+    </div>
+
+    <p class="alert alert--error" id="setpw-error" role="alert" hidden></p>
+    <button class="btn btn--primary btn--full" type="submit" id="setpw-btn">시작하기</button>
+    <p class="gate__hint">6자 이상으로 정해 주세요.</p>
+  </form>
+</div>
+
 <!-- ══ 포털 본체 ═══════════════════════════════════════════════ -->
 <div class="app" id="app" hidden>
 

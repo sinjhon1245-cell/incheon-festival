@@ -823,14 +823,15 @@
   }
 
   /* ── 시작 ───────────────────────────────────────────────────── */
+  var GATES = ['gate-setup', 'gate-login', 'gate-setpw'];
+
   function showGate(id) {
-    ['gate-setup', 'gate-login'].forEach(function (g) { $('#' + g).hidden = g !== id; });
+    GATES.forEach(function (g) { $('#' + g).hidden = g !== id; });
     $('#app').hidden = true;
   }
 
   function showApp() {
-    $('#gate-setup').hidden = true;
-    $('#gate-login').hidden = true;
+    GATES.forEach(function (g) { $('#' + g).hidden = true; });
     $('#app').hidden = false;
   }
 
@@ -839,8 +840,26 @@
 
     C.session().then(function (sess) {
       if (!sess) { showGate('gate-login'); return; }
+
+      // 초대 메일이나 재설정 링크를 타고 들어왔다면, 먼저 비밀번호를
+      // 정해야 합니다. 이 단계를 건너뛰면 다음 로그인이 불가능합니다.
+      if (C.invitedEntry()) {
+        history.replaceState(null, '', location.pathname);
+        showGate('gate-setpw');
+        var f = $('#setpw-1');
+        if (f) f.focus();
+        return;
+      }
       return C.fetchProfile(sess.user.id).then(function (p) {
         if (!p) {
+          // 조회가 실패한 것뿐이라면 로그아웃시키지 않습니다.
+          // 네트워크가 잠깐 끊겼다고 사용자를 내보내면 안 됩니다.
+          if (C.profileFailed()) {
+            showApp();
+            S.error = C.accessMessage();
+            render();
+            return;
+          }
           return C.signOut().then(function () {
             showGate('gate-login');
             var e = $('#login-error');
@@ -859,6 +878,45 @@
       });
     });
   }
+
+  /* 초대 수락 — 비밀번호 설정 */
+  $('#setpwform').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var a = $('#setpw-1'), b = $('#setpw-2');
+    var err = $('#setpw-error'), btn = $('#setpw-btn');
+    err.hidden = true;
+    a.setAttribute('aria-invalid', 'false');
+    b.setAttribute('aria-invalid', 'false');
+
+    if (a.value.length < 6) {
+      err.textContent = '비밀번호는 6자 이상이어야 합니다.';
+      err.hidden = false;
+      a.setAttribute('aria-invalid', 'true');
+      a.focus();
+      return;
+    }
+    if (a.value !== b.value) {
+      err.textContent = '두 비밀번호가 서로 다릅니다.';
+      err.hidden = false;
+      b.setAttribute('aria-invalid', 'true');
+      b.focus();
+      return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = '저장 중…';
+    C.setPassword(a.value).then(function () {
+      a.value = ''; b.value = '';
+      boot();
+    }).catch(function (e2) {
+      console.error('[portal] 비밀번호 설정 실패', e2);
+      err.textContent = C.authMessage(e2);
+      err.hidden = false;
+    }).then(function () {
+      btn.disabled = false;
+      btn.textContent = '시작하기';
+    });
+  });
 
   /* 로그인 폼 */
   $('#loginform').addEventListener('submit', function (e) {

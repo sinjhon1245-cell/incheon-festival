@@ -22,7 +22,13 @@ window.Core = (function () {
     if (client) return client;
     if (!isConfigured() || !window.supabase) return null;
     client = window.supabase.createClient(cfg.supabaseUrl, cfg.supabaseAnonKey, {
-      auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false }
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        // 초대·비밀번호 재설정 링크는 주소 뒤 #access_token=... 으로
+        // 돌아옵니다. 이걸 켜야 초대받은 사람이 로그인될 수 있습니다.
+        detectSessionInUrl: true
+      }
     });
     return client;
   }
@@ -82,7 +88,9 @@ window.Core = (function () {
         if (r.error) throw r.error;
         return fetchProfile(r.data.user.id).then(function (p) {
           if (!p) {
-            // 계정은 있지만 관계자 명단에 없는 경우 — 바로 로그아웃시킵니다.
+            // 조회 자체가 실패한 경우는 세션을 지우지 않습니다.
+            // 확실히 "명단에 없음" 일 때만 내보냅니다.
+            if (profileError) throw new Error(accessMessage());
             return c.auth.signOut().then(function () {
               throw new Error(accessMessage());
             });
@@ -97,6 +105,29 @@ window.Core = (function () {
     profile = null;
     return c ? c.auth.signOut() : Promise.resolve();
   }
+
+  /* 초대 메일이나 비밀번호 재설정 링크를 타고 들어왔는지.
+     supabase-js 가 주소의 토큰을 이미 먹은 뒤라 값이 남아 있지 않을 수
+     있어, 우리 쪽에서 먼저 기록해 둡니다. */
+  var entryType = (function () {
+    var h = location.hash || '';
+    var m = /[#&]type=([a-z_]+)/.exec(h);
+    return m ? m[1] : null;
+  })();
+  function invitedEntry() { return entryType === 'invite' || entryType === 'recovery'; }
+
+  /* 초대받은 사람이 처음 들어와 비밀번호를 정할 때 씁니다. */
+  function setPassword(pw) {
+    var c = db();
+    if (!c) return Promise.reject(new Error('Supabase 설정이 없습니다.'));
+    return c.auth.updateUser({ password: pw }).then(function (r) {
+      if (r.error) throw r.error;
+      entryType = null;
+      return r.data;
+    });
+  }
+
+  function profileFailed() { return !!profileError; }
 
   function me() { return profile; }
   function isAdmin() { return !!(profile && profile.role === 'admin'); }
@@ -227,6 +258,7 @@ window.Core = (function () {
     isConfigured: isConfigured, db: db,
     session: session, signIn: signIn, signOut: signOut,
     fetchProfile: fetchProfile, me: me, isAdmin: isAdmin, accessMessage: accessMessage,
+    invitedEntry: invitedEntry, setPassword: setPassword, profileFailed: profileFailed,
     authMessage: authMessage, dataMessage: dataMessage,
     select: select, insert: insert, update: update, remove: remove,
     esc: esc, pad2: pad2, toMin: toMin, minLabel: minLabel,
