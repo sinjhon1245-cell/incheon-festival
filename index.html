@@ -1,342 +1,128 @@
 <!doctype html>
-<html lang="ko" data-colorway="sky">
+<html lang="ko">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>제1회 인천 AI디지털 교육 페스티벌</title>
-<meta name="description" content="2026년 10월 17일 토요일, 인천교육과학연구원에서 열리는 제1회 인천 AI디지털 교육 페스티벌. 40개 체험 부스와 기조 강연, 학생 작품 100선 전시. 신청 없이 누구나 무료로 참여할 수 있습니다." />
-<meta name="theme-color" content="#E8F1FD" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>행사 운영 포털 · 2026년 인천 AI·SW미래채움 교육페스티벌</title>
+<meta name="description" content="2026년 인천 AI·SW미래채움 교육페스티벌 관계자 운영 포털입니다. 관계자 로그인이 필요합니다." />
+<meta name="robots" content="noindex, nofollow" />
+<meta name="theme-color" content="#FFFFFF" />
 
-<meta property="og:type" content="website" />
-<meta property="og:locale" content="ko_KR" />
-<meta property="og:title" content="제1회 인천 AI디지털 교육 페스티벌" />
-<meta property="og:description" content="학생이 만들고, 교사가 나누고, 도시가 함께 보는 하루. 2026. 10. 17.(토) 10:00–17:00, 인천교육과학연구원. 신청 없이 누구나 무료." />
-<meta name="twitter:card" content="summary_large_image" />
-
-<link rel="preconnect" href="https://fonts.googleapis.com" />
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous" />
-<link href="https://fonts.googleapis.com/css2?family=Gothic+A1:wght@300;400;500;700;900&amp;family=Gowun+Dodum&amp;display=swap" rel="stylesheet" />
-
-<link rel="stylesheet" href="assets/styles.css" />
+<link rel="preconnect" href="https://cdn.jsdelivr.net" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" />
+<link rel="stylesheet" href="assets/portal.css" />
 </head>
 <body>
 
-<a class="skip-link" href="#view">본문으로 건너뛰기</a>
+<a class="skip-link" href="#main">본문으로 건너뛰기</a>
 
-<div class="page">
+<!-- ══ 설정 없음 ═══════════════════════════════════════════════ -->
+<div class="gate" id="gate-setup" hidden>
+  <div class="gate__card">
+    <p class="gate__kicker">설정 필요</p>
+    <h1 class="gate__title">서버에 연결할 수 없습니다</h1>
+    <p class="gate__desc">
+      <code>assets/config.js</code> 에 Supabase 주소와 publishable 키가 없습니다.
+      <code>README.md</code> 의 “Supabase 설정”을 참고해 입력해 주세요.
+    </p>
+  </div>
+</div>
 
-  <!-- ── 상단 내비게이션 (탭) ──────────────────────────────────────── -->
-  <div class="navwrap">
-    <div class="nav">
-      <a class="nav__brand" href="#home">AI디지털 페스티벌</a>
-      <nav class="nav__links" id="nav" aria-label="페이지">
-        <a href="#home">홈</a>
-        <a href="#program">프로그램</a>
-        <a href="#schedule">시간표</a>
-        <a href="#booth">부스 배치도</a>
-        <a href="#apply">참여 안내</a>
-        <a href="#visit">오시는 길</a>
-        <a href="#faq">FAQ</a>
-      </nav>
+<!-- ══ 로그인 ══════════════════════════════════════════════════ -->
+<div class="gate" id="gate-login" hidden>
+  <form class="gate__card" id="loginform" novalidate>
+    <p class="gate__kicker">2026년 인천 AI·SW미래채움 교육페스티벌</p>
+    <h1 class="gate__title">행사 운영 포털</h1>
+    <p class="gate__date" id="login-date">2026. 10. 17.(토)</p>
+
+    <div class="field">
+      <label class="field__label" for="login-email">이메일</label>
+      <input class="input" type="email" id="login-email" name="email"
+             autocomplete="username" required inputmode="email" />
     </div>
+
+    <div class="field">
+      <label class="field__label" for="login-pw">비밀번호</label>
+      <input class="input" type="password" id="login-pw" name="password"
+             autocomplete="current-password" required />
+    </div>
+
+    <p class="alert alert--error" id="login-error" role="alert" hidden></p>
+
+    <button class="btn btn--primary btn--full" type="submit" id="login-btn">관계자 로그인</button>
+
+    <p class="gate__hint">
+      관계자 계정은 운영 총괄이 발급합니다. 이 포털에는 회원가입이 없습니다.
+    </p>
+  </form>
+</div>
+
+<!-- ══ 포털 본체 ═══════════════════════════════════════════════ -->
+<div class="app" id="app" hidden>
+
+  <!-- 데스크톱 사이드바 -->
+  <aside class="side" id="side">
+    <div class="side__brand">
+      <span class="side__mark" aria-hidden="true"></span>
+      <span>
+        <b>행사 운영 포털</b>
+        <small>인천 AI·SW미래채움</small>
+      </span>
+    </div>
+    <nav class="side__nav" id="sidenav" aria-label="주요 메뉴"></nav>
+    <div class="side__foot">
+      <p class="side__who" id="side-who"></p>
+      <button class="btn btn--ghost btn--sm btn--full" type="button" data-signout>로그아웃</button>
+    </div>
+  </aside>
+
+  <div class="main-wrap">
+    <!-- 모바일 상단바 -->
+    <header class="topbar">
+      <span class="topbar__title" id="topbar-title">대시보드</span>
+      <span class="topbar__clock" id="topbar-clock"></span>
+    </header>
+
+    <main class="main" id="main" tabindex="-1">
+      <div id="view"></div>
+    </main>
   </div>
 
-  <main id="view">
-
-    <!-- ══ 홈 ═══════════════════════════════════════════════════════ -->
-    <div class="pageview" data-page="home" id="home">
-
-      <section class="hero">
-        <p class="pill pill--brand">제1회 · 인천광역시교육청</p>
-
-        <h1 class="hero__title" tabindex="-1">인천 AI디지털<br />교육 페스티벌</h1>
-
-        <p class="hero__lead">
-          학생이 만들고, 교사가 나누고, 도시가 함께 보는 하루.<br />
-          40개 체험 부스와 기조 강연, 학생 작품 전시.
-        </p>
-
-        <ul class="factlist">
-          <li class="fact" data-bind="date_label">2026. 10. 17. 토</li>
-          <li class="fact" data-bind="time_label">10:00 – 17:00</li>
-          <li class="fact" data-bind="venue">인천교육과학연구원</li>
-        </ul>
-
-        <div class="countdown" id="countdown">
-          <span class="countdown__label">개막까지</span>
-          <span class="cdbox cdbox--solid"><b id="cd-d">–</b><i>일</i></span>
-          <span class="cdbox"><b id="cd-h">–</b><i>시간</i></span>
-          <span class="cdbox"><b id="cd-m">–</b><i>분</i></span>
-          <span class="cdbox"><b id="cd-s">–</b><i>초</i></span>
-        </div>
-
-        <p class="freenote"><b>신청 없이 누구나</b> 오시면 됩니다 · 전 프로그램 참가비 무료</p>
-
-        <div class="hero__actions">
-          <a class="btn btn--primary btn--lg" href="#schedule">하루 일정 보기</a>
-          <a class="btn btn--plain btn--lg" href="#booth">부스 둘러보기</a>
-        </div>
-      </section>
-
-      <section class="kpiwrap" id="kpi" aria-label="행사 규모">
-        <ul class="kpigrid">
-          <li class="kpi"><b>40</b><span>체험 부스</span></li>
-          <li class="kpi"><b>4</b><span>구역</span></li>
-          <li class="kpi"><b>3</b><span>강연·특강</span></li>
-          <li class="kpi"><b>100</b><span>학생 작품</span></li>
-          <li class="kpi"><b>260</b><span>주차 대수</span></li>
-        </ul>
-      </section>
-
-      <!-- 홈에서 다른 탭으로 넘어가는 바로가기 -->
-      <section class="section">
-        <ul class="jumpgrid">
-          <li><a class="jump" href="#program"><b>프로그램</b><span>다섯 갈래로 열리는 하루</span></a></li>
-          <li><a class="jump" href="#schedule"><b>시간표</b><span>10월 17일 시간별 순서</span></a></li>
-          <li><a class="jump" href="#booth"><b>부스 배치도</b><span>40개 부스, 네 개 구역</span></a></li>
-          <li><a class="jump" href="#apply"><b>참여 안내</b><span>신청 없이 누구나 · 운영기관 접수</span></a></li>
-          <li><a class="jump" href="#visit"><b>오시는 길</b><span>지하철 · 셔틀버스 · 주차</span></a></li>
-          <li><a class="jump" href="#faq"><b>FAQ</b><span>자주 묻는 질문</span></a></li>
-        </ul>
-      </section>
-
-    </div>
-
-    <!-- ══ 프로그램 ═════════════════════════════════════════════════ -->
-    <div class="pageview" data-page="program" id="program">
-      <section class="section">
-        <h1 class="h2" tabindex="-1">다섯 갈래로 열리는 하루</h1>
-        <p class="lead">체험하고, 듣고, 보고, 즐기는 순서를 하루 안에 모두 담았습니다.</p>
-
-        <ul class="progGrid" id="proggrid"></ul>
-      </section>
-    </div>
-
-    <!-- ══ 시간표 ═══════════════════════════════════════════════════ -->
-    <div class="pageview" data-page="schedule" id="schedule">
-      <section class="section">
-        <h1 class="h2" tabindex="-1">10월 17일, 시간별 순서</h1>
-        <p class="lead">보고 싶은 갈래만 골라서 볼 수 있습니다.</p>
-
-        <div class="segmented" role="group" aria-label="시간표 보기 방식">
-          <button type="button" class="segmented__btn is-on" data-view="timeline" aria-pressed="true">타임라인</button>
-          <button type="button" class="segmented__btn" data-view="table" aria-pressed="false">표 보기</button>
-        </div>
-
-        <div class="chiprow" id="chiprow" role="group" aria-label="갈래 필터"></div>
-
-        <div id="view-timeline">
-          <div class="tlgroup" id="tl-am">
-            <div class="tlgroup__head">
-              <h2 class="h3">오전</h2>
-              <span class="tlgroup__count" id="am-label"></span>
-            </div>
-            <div class="tllist" id="am-list"></div>
-          </div>
-          <div class="tlgroup" id="tl-pm">
-            <div class="tlgroup__head">
-              <h2 class="h3">오후</h2>
-              <span class="tlgroup__count" id="pm-label"></span>
-            </div>
-            <div class="tllist" id="pm-list"></div>
-          </div>
-          <p class="emptynote" id="tl-empty" hidden>선택한 갈래에 해당하는 순서가 없습니다.</p>
-        </div>
-
-        <div id="view-table" hidden>
-          <div class="card card--table">
-            <div class="tablescroll">
-              <table class="table">
-                <caption class="sr-only">10월 17일 시간별 순서 표</caption>
-                <thead>
-                  <tr>
-                    <th scope="col">시간</th>
-                    <th scope="col">순서</th>
-                    <th scope="col">장소</th>
-                    <th scope="col">갈래</th>
-                  </tr>
-                </thead>
-                <tbody id="table-body"></tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-
-        <noscript><p class="emptynote">시간표를 보려면 자바스크립트를 켜 주세요.</p></noscript>
-      </section>
-    </div>
-
-    <!-- ══ 부스 배치도 ══════════════════════════════════════════════ -->
-    <div class="pageview" data-page="booth" id="booth">
-      <section class="section">
-        <h1 class="h2" tabindex="-1">40개 부스, 네 개 구역</h1>
-        <p class="lead">구역을 누르면 아래 목록이 좁혀집니다. 우천 시 실내 대체 배치도로 안내합니다.</p>
-
-        <div class="card card--map">
-          <p class="stagebar">야외무대 · 개막식 / 공연 / 폐막식</p>
-          <div class="zonegrid" id="zonegrid" role="group" aria-label="부스 구역 선택"></div>
-          <ul class="taglist">
-            <li class="tag">운영본부·안내</li>
-            <li class="tag">보건·구급</li>
-            <li class="tag">휴게 쉼터</li>
-            <li class="tag">기업관 등록 데스크</li>
-          </ul>
-        </div>
-
-        <div class="boothhead">
-          <h2 class="h3" id="booth-title">부스 목록</h2>
-          <span class="boothhead__note" id="booth-note"></span>
-        </div>
-
-        <ul class="boothgrid" id="boothgrid" aria-live="polite"></ul>
-
-        <noscript><p class="emptynote">부스 목록을 보려면 자바스크립트를 켜 주세요.</p></noscript>
-      </section>
-    </div>
-
-    <!-- ══ 참여 안내 ════════════════════════════════════════════════ -->
-    <div class="pageview" data-page="apply" id="apply">
-      <section class="section">
-        <h1 class="h2" tabindex="-1">누구나 오실 수 있습니다</h1>
-        <p class="lead">사전신청도, 참가비도 없습니다. 당일 오셔서 보고 싶은 순서부터 자유롭게 참여하시면 됩니다.</p>
-
-        <div class="opencard">
-          <p class="opencard__mark" aria-hidden="true">✓</p>
-          <div>
-            <p class="opencard__title">신청 절차 없음</p>
-            <p class="opencard__desc">명단 접수나 등록 확인 없이 바로 입장하실 수 있습니다. 학교 단위로 오실 때만 인원을 미리 알려 주시면 동선 안내에 도움이 됩니다.</p>
-          </div>
-        </div>
-
-        <div class="applygrid">
-          <div class="card card--apply">
-            <p class="pill pill--brand pill--sm">참여자</p>
-            <h2 class="applycard__title">오시는 분 안내</h2>
-            <dl class="deflist">
-              <div class="deflist__row"><dt>대상</dt><dd>제한 없음 · 학생과 보호자, 교원, 지역 주민 누구나</dd></div>
-              <div class="deflist__row"><dt>일시</dt><dd data-bind-join="date_label time_label">2026. 10. 17.(토) 10:00 ~ 17:00</dd></div>
-              <div class="deflist__row"><dt>참가비</dt><dd>무료 · 전 프로그램 및 체험 부스 포함</dd></div>
-              <div class="deflist__row"><dt>준비물</dt><dd>따로 없습니다 · 야외 부스가 많아 편한 신발을 권합니다</dd></div>
-              <div class="deflist__row"><dt>현장</dt><dd>정문 안내 데스크에서 배치도와 프로그램 책자를 받으실 수 있습니다</dd></div>
-            </dl>
-            <a class="btn btn--primary" href="#schedule">하루 일정 보기</a>
-          </div>
-
-          <div class="card card--apply">
-            <p class="pill pill--teal pill--sm">운영기관</p>
-            <h2 class="applycard__title">부스·프로그램 운영 신청</h2>
-            <p class="applycard__note">참여는 신청이 필요 없지만, <b>부스를 직접 운영하실 기관</b>은 아래 절차로 접수해 주세요.</p>
-            <dl class="deflist">
-              <div class="deflist__row"><dt>대상</dt><dd>학교, 교육기관, 교원 연구회, 에듀테크 기업</dd></div>
-              <div class="deflist__row"><dt>기간</dt><dd data-bind="booth_apply_period">2026. 9. 7.(월) ~ 9. 25.(금)</dd></div>
-              <div class="deflist__row"><dt>제출</dt><dd>운영계획서 1부 · 공문 접수 (전기·부스 규격 포함)</dd></div>
-              <div class="deflist__row"><dt>문의</dt><dd><span data-bind="booth_dept">미래교육과</span> <span data-bind="contact_phone">032-000-0000</span> · <a href="mailto:aifest@ice.go.kr" data-bind-mail="contact_email">aifest@ice.go.kr</a></dd></div>
-            </dl>
-            <a class="btn btn--ground" href="#apply" data-link="booth">운영 신청 안내 보기</a>
-          </div>
-        </div>
-      </section>
-    </div>
-
-    <!-- ══ 오시는 길 ════════════════════════════════════════════════ -->
-    <div class="pageview" data-page="visit" id="visit">
-      <section class="section">
-        <h1 class="h2" tabindex="-1">오시는 길과 주차</h1>
-        <p class="lead">행사장 주차 공간이 넉넉하지 않습니다. 지하철과 셔틀버스를 이용하시면 가장 빠릅니다.</p>
-
-        <div class="card card--venue" id="mapcard">
-          <p class="venue__name" data-bind="venue_detail">인천교육과학연구원 대강당 · 야외광장</p>
-          <p class="venue__addr" data-bind="venue_address">인천광역시 남동구 예술로 000 (예시 주소)</p>
-          <!-- 지도 캡처 이미지를 넣을 자리입니다. <img src="assets/map.png" alt="행사장 약도"> 로 교체하세요. -->
-          <div class="mapslot">
-            <div>
-              <p class="mapslot__title">지도 이미지 영역</p>
-              <p class="mapslot__desc">행사장 약도 또는 지도 캡처를 이 자리에 넣어 주세요.</p>
-            </div>
-          </div>
-        </div>
-
-        <ul class="waygrid">
-          <li class="card card--way">
-            <p class="way__kicker">지하철</p>
-            <p class="way__title">인천1호선 예술회관역</p>
-            <p class="way__desc">3번 출구에서 셔틀버스 10분 또는 도보 20분</p>
-          </li>
-          <li class="card card--way">
-            <p class="way__kicker">버스</p>
-            <p class="way__title">연구원 정문 정류장</p>
-            <p class="way__desc">간선 8번·16번, 지선 522번 하차 후 도보 3분</p>
-          </li>
-          <li class="card card--way">
-            <p class="way__kicker">셔틀버스</p>
-            <p class="way__title">09:20 – 17:20 · 15분 간격</p>
-            <p class="way__desc">예술회관역 3번 출구 ↔ 행사장 정문 순환</p>
-          </li>
-        </ul>
-
-        <!-- 기본값은 숨김입니다. CONFIG.showParkingTable 을 true 로 바꾸면 표시됩니다. -->
-        <div class="card card--table" id="parkingcard" hidden>
-          <div class="boothhead boothhead--inset">
-            <h2 class="h3">주차 안내</h2>
-            <span class="boothhead__note">총 260대 · 08:30 – 17:30</span>
-          </div>
-          <div class="tablescroll">
-            <table class="table">
-              <caption class="sr-only">주차 구역별 수용 대수</caption>
-              <thead>
-                <tr>
-                  <th scope="col">구역</th>
-                  <th scope="col">위치</th>
-                  <th scope="col" class="ta-r">수용</th>
-                  <th scope="col">비고</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr><th scope="row">제1주차장</th><td>본관 앞</td><td class="ta-r num">90대</td><td class="muted">일반 참가자 우선</td></tr>
-                <tr><th scope="row">제2주차장</th><td>체육관 옆</td><td class="ta-r num">60대</td><td class="muted">부스 운영 차량 하차 후 이동</td></tr>
-                <tr><th scope="row">제3주차장</th><td>인접 학교 운동장</td><td class="ta-r num">50대</td><td class="muted">10:00 개방 · 도보 6분</td></tr>
-                <tr><th scope="row">제4주차장</th><td>연구원 후문</td><td class="ta-r num">40대</td><td class="muted">셔틀 정차 구간 진입 금지</td></tr>
-                <tr><th scope="row">내빈주차장</th><td>대강당 앞</td><td class="ta-r num">20대</td><td class="muted">내빈·운영 총괄 전용</td></tr>
-              </tbody>
-            </table>
-          </div>
-          <p class="notice">야외광장은 행사 당일 부스 구역으로 전환되어 주차할 수 없습니다. 만차 시 인접 학교 운동장으로 안내합니다.</p>
-        </div>
-      </section>
-    </div>
-
-    <!-- ══ FAQ ══════════════════════════════════════════════════════ -->
-    <div class="pageview" data-page="faq" id="faq">
-      <section class="section">
-        <h1 class="h2 h2--tight" tabindex="-1">자주 묻는 질문</h1>
-
-        <div class="faqlist" id="faqlist"></div>
-      </section>
-    </div>
-
-  </main>
-
-  <!-- ── 푸터 ──────────────────────────────────────────────────────── -->
-  <footer class="footer">
-    <div class="footer__inner">
-      <div>
-        <p class="footer__title" data-bind="event_title">제1회 인천 AI디지털 교육 페스티벌</p>
-        <p data-bind="host_line">주최 인천광역시교육청 · 주관 인천교육과학연구원</p>
-      </div>
-      <div class="footer__side">
-        <p class="footer__admin"><a href="admin.html">관리자</a></p>
-        <p class="footer__contact">문의 <span data-bind="contact_phone">032-000-0000</span> (평일 09:00–18:00) · <a href="mailto:aifest@ice.go.kr" data-bind-mail="contact_email">aifest@ice.go.kr</a></p>
-        <p class="footer__note" data-bind="footer_note">일정·부스·주차 정보는 검토용 예시 데이터입니다.</p>
-      </div>
-    </div>
-  </footer>
-
+  <!-- 모바일 하단 내비 -->
+  <nav class="tabbar" id="tabbar" aria-label="하단 메뉴"></nav>
 </div>
+
+<!-- ══ 더보기 시트 ═════════════════════════════════════════════ -->
+<div class="sheet" id="sheet" hidden>
+  <div class="sheet__scrim" data-close-sheet></div>
+  <div class="sheet__panel" role="dialog" aria-modal="true" aria-labelledby="sheet-title">
+    <div class="sheet__head">
+      <h2 class="sheet__title" id="sheet-title">더보기</h2>
+      <button class="iconbtn" type="button" data-close-sheet aria-label="닫기">✕</button>
+    </div>
+    <nav class="sheet__nav" id="sheetnav" aria-label="추가 메뉴"></nav>
+    <button class="btn btn--ghost btn--full" type="button" data-signout>로그아웃</button>
+  </div>
+</div>
+
+<!-- ══ 상세 드로어 (부스 · 공지 · 요청) ════════════════════════ -->
+<div class="drawer" id="drawer" hidden>
+  <div class="drawer__scrim" data-close-drawer></div>
+  <div class="drawer__panel" role="dialog" aria-modal="true" aria-labelledby="drawer-title">
+    <div class="drawer__head">
+      <h2 class="drawer__title" id="drawer-title">상세</h2>
+      <button class="iconbtn" type="button" data-close-drawer aria-label="닫기">✕</button>
+    </div>
+    <div class="drawer__body" id="drawer-body"></div>
+  </div>
+</div>
+
+<!-- ══ 알림 ════════════════════════════════════════════════════ -->
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="assets/config.js"></script>
-<script src="assets/fallback-data.js"></script>
-<script src="assets/data.js"></script>
-<script src="assets/app.js"></script>
+<script src="assets/core.js"></script>
+<script src="assets/portal.js"></script>
 </body>
 </html>

@@ -1,0 +1,50 @@
+# ===================================================================
+# Netlify 배포 설정
+#
+# 빌드 도구가 없는 정적 사이트라 publish 만 지정하면 됩니다.
+# GitHub main 브랜치에 push 하면 자동 배포됩니다.
+# ===================================================================
+
+[build]
+  publish = "."
+  command = ""
+
+# 관계자 전용 포털이라 검색엔진에 올리지 않습니다.
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Robots-Tag = "noindex, nofollow"
+    X-Content-Type-Options = "nosniff"
+    X-Frame-Options = "SAMEORIGIN"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "geolocation=(), microphone=(), camera=()"
+
+# 설정 파일은 캐시하지 않습니다. Supabase 주소나 키를 바꿨을 때
+# 예전 값이 남아 "연결 안 됨"으로 보이는 일을 막습니다.
+[[headers]]
+  for = "/assets/config.js"
+  [headers.values]
+    Cache-Control = "no-cache, must-revalidate"
+
+# 코드도 배포마다 새로 받도록 둡니다. 파일이 작아 부담이 없고,
+# 배포했는데 옛 화면이 보이는 혼란을 피하는 쪽이 낫습니다.
+[[headers]]
+  for = "/assets/*.js"
+  [headers.values]
+    Cache-Control = "no-cache, must-revalidate"
+
+[[headers]]
+  for = "/assets/*.css"
+  [headers.values]
+    Cache-Control = "no-cache, must-revalidate"
+
+# 원본 디자인 파일과 SQL 은 배포에 필요 없습니다.
+[[redirects]]
+  from = "/design/*"
+  to = "/index.html"
+  status = 404
+
+[[redirects]]
+  from = "/supabase/*"
+  to = "/index.html"
+  status = 404
