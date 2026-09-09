@@ -37,6 +37,8 @@
 
     settings: {
       label: '행사 기본정보', table: 'settings', single: true,
+      // 한 줄짜리 설정 표라 sort_order 가 없습니다. 기본 정렬을 끕니다.
+      order: false,
       desc: '포털 곳곳에 함께 반영됩니다. D-day 와 진행 상태는 개막·종료 일시로 계산합니다.',
       fields: [
         { k: 'event_title',   label: '행사 이름', wide: true },
@@ -351,7 +353,21 @@
     var note = ent.note ? '<div class="hint">' + esc(ent.note) + '</div>' : '';
 
     if (ent.single) {
-      var s = (cache[key] || [])[0] || {};
+      var rowsOne = cache[key] || [];
+
+      // 줄이 아예 없는 것과 칼럼이 없는 것은 원인이 다릅니다.
+      // 0건이면 권한이나 데이터 문제이지 스키마 문제가 아닙니다.
+      if (!rowsOne.length) {
+        host.innerHTML = '<div class="page">' + head + note +
+          '<div class="state">행사 기본정보 줄을 찾지 못했습니다. ' +
+          'Supabase 의 settings 표에 id = 1 인 줄이 있는지 확인해 주세요.' +
+          '<div class="state__act"><button class="btn btn--ghost btn--sm" type="button" data-retry>다시 시도</button></div>' +
+          '</div></div>';
+        paintNav();
+        return;
+      }
+
+      var s = rowsOne[0];
       var present = ent.fields.filter(function (f) { return f.k in s; });
       var missing = ent.fields.filter(function (f) { return !(f.k in s); });
       host.innerHTML = '<div class="page">' + head + note +
@@ -435,7 +451,7 @@
     var keys = ORDER.filter(function (k) { return !ENTITIES[k].dashboard; });
     return Promise.all(keys.map(function (k) {
       var e = ENTITIES[k];
-      return C.select(e.table, { order: e.order || [['sort_order', true]] })
+      return C.select(e.table, { order: e.order === false ? false : (e.order || [['sort_order', true]]) })
         .then(function (d) { cache[k] = d; });
     }).concat([
       C.select('zones').then(function (z) {

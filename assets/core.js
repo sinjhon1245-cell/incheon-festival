@@ -64,7 +64,9 @@ window.Core = (function () {
   /* 로그인은 됐는데 들어갈 수 없을 때 보여 줄 설명 */
   function accessMessage() {
     var m = (profileError && profileError.message) || '';
-    if (/does not exist|schema cache/i.test(m)) {
+    var code = (profileError && profileError.code) || '';
+    if (code === '42P01' || code === 'PGRST205' || code === 'PGRST202' ||
+        /relation .* does not exist/i.test(m)) {
       return '데이터베이스가 아직 운영 포털 구조가 아닙니다. ' +
              'Supabase SQL Editor 에서 supabase/migration-portal.sql 을 실행해 주세요.';
     }
@@ -111,12 +113,35 @@ window.Core = (function () {
 
   /* 데이터 오류도 마찬가지로 다듬습니다. 기술적인 오류 객체를
      그대로 보여주지 않습니다. */
+  /* PostgREST/Postgres 오류 코드
+       42P01  없는 표          → 마이그레이션이 정말 필요
+       42703  없는 칼럼        → 표는 있고 쿼리가 틀림 (코드 문제)
+       PGRST202/205  스키마 캐시에 표 없음
+       PGRST204      스키마 캐시에 칼럼 없음
+     이 둘을 뭉뚱그리면 멀쩡한 DB 를 "구조가 낡았다"고 잘못 안내하게
+     됩니다. 실제로 그런 버그가 있었습니다. */
   function dataMessage(e) {
     var m = (e && e.message) || '';
+    var code = (e && e.code) || '';
+    var where = e && e.__table ? '(' + e.__table + ') ' : '';
+
     if (/Failed to fetch|NetworkError/i.test(m)) return '네트워크에 연결하지 못했습니다.';
-    if (/JWT|expired/i.test(m)) return '로그인이 만료되었습니다. 다시 로그인해 주세요.';
-    if (/permission|policy|row-level/i.test(m)) return '이 작업을 할 권한이 없습니다.';
-    if (/does not exist/i.test(m)) return '데이터베이스가 최신 구조가 아닙니다. migration-portal.sql 을 실행해 주세요.';
+    if (code === 'PGRST301' || /JWT|expired/i.test(m)) return '로그인이 만료되었습니다. 다시 로그인해 주세요.';
+    if (code === '42501' || /permission denied|row-level security/i.test(m)) return '이 작업을 할 권한이 없습니다.';
+
+    // 표 자체가 없을 때만 마이그레이션을 안내합니다.
+    if (code === '42P01' || code === 'PGRST205' || code === 'PGRST202' ||
+        /relation .* does not exist/i.test(m)) {
+      return where + '필요한 표가 데이터베이스에 없습니다. supabase/migration-portal.sql 을 실행해 주세요.';
+    }
+
+    // 칼럼 불일치는 코드 쪽 문제입니다. 사용자에게는 조용히,
+    // 개발자에게는 콘솔로 정확히 알립니다.
+    if (code === '42703' || code === 'PGRST204' || /column .* does not exist/i.test(m)) {
+      console.error('[core] 요청한 칼럼이 표에 없습니다 — 코드 확인 필요:', e);
+      return where + '요청 형식이 맞지 않습니다. 잠시 후 다시 시도해 주세요.';
+    }
+
     return '데이터를 처리하지 못했습니다. 다시 시도해 주세요.';
   }
 
@@ -126,12 +151,21 @@ window.Core = (function () {
     if (!c) return Promise.reject(new Error('Supabase 설정이 없습니다.'));
     opts = opts || {};
     var q = c.from(table).select(opts.columns || '*');
-    (opts.order || [['sort_order', true]]).forEach(function (o) {
-      q = q.order(o[0], { ascending: o[1] !== false });
-    });
+
+    // order: false 면 정렬하지 않습니다. sort_order 가 없는 표에
+    // 기본 정렬을 걸면 PostgREST 가 42703 으로 거절합니다.
+    if (opts.order !== false) {
+      (opts.order || [['sort_order', true]]).forEach(function (o) {
+        q = q.order(o[0], { ascending: o[1] !== false });
+      });
+    }
     if (opts.eq) Object.keys(opts.eq).forEach(function (k) { q = q.eq(k, opts.eq[k]); });
     if (opts.limit) q = q.limit(opts.limit);
-    return q.then(function (r) { if (r.error) throw r.error; return r.data || []; });
+
+    return q.then(function (r) {
+      if (r.error) { r.error.__table = table; throw r.error; }
+      return r.data || [];
+    });
   }
 
   /* ── 쓰기 — 실제 반영 건수를 반드시 확인합니다 ─────────────────
