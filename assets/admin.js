@@ -624,10 +624,12 @@
           renderStaff();
           if (d && d.tempPassword) {
             UI.confirm({
-              title: '계정을 만들었습니다',
-              message: '초대 메일을 보낼 수 없는 설정이라 임시 비밀번호를 발급했습니다.\n\n' +
-                       v.email + '\n비밀번호: ' + d.tempPassword + '\n\n' +
-                       '이 창을 닫으면 다시 볼 수 없습니다. 본인에게 직접 전달해 주세요.',
+              title: '임시 비밀번호를 발급했습니다',
+              message: '초대 메일을 보내지 못해 계정만 만들었습니다.\n' +
+                       (d.inviteFailReason ? '사유: ' + d.inviteFailReason + '\n' : '') +
+                       '\n' + v.email + '\n비밀번호: ' + d.tempPassword + '\n\n' +
+                       '이 창을 닫으면 다시 볼 수 없습니다. 본인에게 직접 전달해 주세요. ' +
+                       '받은 분은 로그인 후 비밀번호를 바꾸는 것이 좋습니다.',
               confirmLabel: '확인했습니다'
             });
           } else {

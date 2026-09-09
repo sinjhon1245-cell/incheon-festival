@@ -174,6 +174,7 @@ Deno.serve(async (req: Request) => {
 
     let tempPassword: string | null = null;
     let createdHere = false;   // 이 요청에서 새로 만든 계정인지
+    let inviteFailReason: string | null = null;  // 메일 발송이 실패한 이유
 
     // 5·6. 초대 또는 생성 후 UUID 확보
     if (!user) {
@@ -187,7 +188,10 @@ Deno.serve(async (req: Request) => {
       } else {
         // 메일 발송이 막힌 프로젝트에서는 초대가 실패합니다.
         // 그때는 임시 비밀번호로 계정만 만들고 관리자가 직접 전달합니다.
+        // 왜 실패했는지는 관리자 화면에도 그대로 올려 보냅니다.
+        // 조용히 폴백하면 "메일 보냈겠지" 하고 넘어가게 됩니다.
         console.error('[invite-staff] 초대 메일 실패, 직접 생성으로 전환', inviteErr);
+        inviteFailReason = (inviteErr && inviteErr.message) || '알 수 없는 이유';
         tempPassword = crypto.randomUUID().slice(0, 12) + 'Aa1!';
         const { data: created, error: createErr } = await admin.auth.admin.createUser({
           email, password: tempPassword, email_confirm: true,
@@ -217,8 +221,8 @@ Deno.serve(async (req: Request) => {
       return fail('관계자 정보를 저장하지 못했습니다. 다시 시도해 주세요.', 400, profErr);
     }
 
-    // 8. 결과 반환 (임시 비밀번호는 발급된 경우에만)
-    return reply({ row, tempPassword });
+    // 8. 결과 반환 (임시 비밀번호와 실패 사유는 폴백된 경우에만)
+    return reply({ row, tempPassword, inviteFailReason });
   }
 
   /* ── 프로필·권한 수정 ────────────────────────────────────────── */
