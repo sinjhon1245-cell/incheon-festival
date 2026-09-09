@@ -24,6 +24,7 @@ assets/
   core.js             Supabase 연결 · 인증 · 데이터 접근 공통 계층
   portal.js           포털 화면과 동작
   portal.css          디자인 토큰과 스타일 (관리자도 함께 씀)
+  ui.js               공용 모달·확인 대화상자 (prompt/confirm 대체)
   admin.js            관리자 CRUD 엔진
   admin.css           관리자 전용 추가 스타일
 
@@ -31,6 +32,7 @@ supabase/
   schema.sql            최초 설치용 기본 표
   migration-portal.sql  ★ 운영 포털 마이그레이션 (반드시 실행)
   fix-policies.sql      RLS 점검·복구용 (문제 있을 때만)
+  functions/invite-staff/  관계자 초대 Edge Function
 
 dev-server.js         로컬 확인용 정적 서버 (배포에는 불필요)
 design/               원본 디자인 파일 (참고용)
@@ -94,13 +96,45 @@ Supabase 대시보드 → **SQL Editor** 에서 순서대로 실행합니다.
 
 **관계자(staff) 계정**
 
-1. 같은 방법으로 Authentication 에서 계정을 만듭니다.
-2. 만들어진 사용자의 **UUID** 를 복사합니다.
-3. 관리자 → **계정·권한** → “새로 추가” 에서 UUID 를 붙여넣고 이름·소속을 채웁니다.
+관리자 → **계정·권한** → `+ 관계자 초대` 에서 이메일·이름·소속/팀·
+연락처·권한만 입력하면 됩니다. UUID 를 직접 다룰 필요가 없습니다.
+(아래 “관계자 초대 기능 배포”가 선행되어야 합니다.)
 
 > 이 포털에는 회원가입이 없습니다. `staff_profiles` 에 줄이 없는 계정은
 > 로그인에 성공해도 **아무 데이터도 볼 수 없고 즉시 로그아웃됩니다.**
 > 계정 생성만으로 내부 정보가 열리지 않게 하는 잠금장치입니다.
+
+### 관계자 초대 기능 배포 (Edge Function)
+
+관리자에서 `+ 관계자 초대`로 계정을 만들려면 Edge Function 한 개를
+배포해야 합니다. Auth 사용자 생성에는 `service_role` 키가 필요한데,
+그 키는 브라우저에 두면 안 되기 때문입니다.
+
+```bash
+npm i -g supabase
+supabase login
+supabase link --project-ref ynixjjqozkbzxjmishbe
+supabase functions deploy invite-staff
+supabase secrets set SERVICE_ROLE_KEY=<service_role 키>
+```
+
+`service_role` 키는 **Function Secret 에만** 넣습니다. 저장소에 커밋하거나
+`assets/config.js` 에 넣지 마세요.
+
+배포 전에도 관리자 화면은 정상 동작하며, 계정 목록은 데이터베이스
+기준으로 표시되고 초대 버튼만 안내 문구와 함께 실패합니다.
+
+함수가 하는 일:
+
+1. 호출자가 admin 인지 확인 (아니면 403)
+2. Auth 사용자 초대 또는 생성
+3. 받은 UUID 로 `staff_profiles` 자동 생성
+4. 이름·팀·연락처·권한 저장
+
+메일 발송이 막힌 프로젝트에서는 초대 대신 임시 비밀번호를 발급하고
+관리자 화면에 한 번만 보여 줍니다.
+
+마지막 남은 admin 계정은 삭제와 권한 강등이 서버에서 차단됩니다.
 
 ### 권한 구조
 
