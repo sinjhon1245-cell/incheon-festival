@@ -491,16 +491,35 @@
   }
 
   /* ── 계정·권한 ──────────────────────────────────────────────── */
+  /* Edge Function 호출.
+     supabase-js 는 2xx 가 아니면 data 를 비우고 'non-2xx status code'
+     라는 일반 문구만 줍니다. 서버가 공들여 쓴 안내가 사라지므로,
+     응답 본문(error.context)을 직접 읽어 실제 메시지를 꺼냅니다. */
   function fn(action, body) {
     return C.db().functions.invoke('invite-staff', {
       body: Object.assign({ action: action }, body || {})
     }).then(function (r) {
-      if (r.error) {
-        var msg = (r.data && r.data.error) || r.error.message || '';
-        var e = new Error(msg); e.__fn = true; throw e;
+      if (!r.error) {
+        if (r.data && r.data.error) throw new Error(r.data.error);
+        return r.data;
       }
-      if (r.data && r.data.error) throw new Error(r.data.error);
-      return r.data;
+
+      var ctx = r.error.context;
+      // 함수가 배포되지 않았거나 네트워크가 막힌 경우엔 응답 자체가 없습니다.
+      if (!ctx || typeof ctx.json !== 'function') {
+        var e0 = new Error(r.error.message || '요청을 보내지 못했습니다.');
+        e0.__fn = true;
+        throw e0;
+      }
+      return ctx.clone().json().then(function (payload) {
+        var e = new Error((payload && payload.error) || r.error.message);
+        e.__status = ctx.status;
+        throw e;
+      }, function () {
+        var e = new Error(r.error.message || '요청을 처리하지 못했습니다.');
+        e.__status = ctx.status;
+        throw e;
+      });
     });
   }
 
