@@ -203,6 +203,79 @@ window.Core = (function () {
     });
   }
 
+  /* ── 이미지 보관함 (Supabase Storage) ────────────────────────
+     버킷은 공개라 포털에서 로그인 없이 보입니다. 올리고 지우는 것은
+     버킷 정책이 관리자로 제한합니다 — 이 파일에는 권한이 없습니다.
+
+     주소만 데이터베이스에 저장하고 경로는 따로 두지 않습니다.
+     공개 주소에 경로가 그대로 들어 있어, 지울 때 되짚을 수 있습니다. */
+  var BUCKET = 'festival-images';
+  var IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+  var IMAGE_MAX = 10 * 1024 * 1024;   // 10MB
+
+  /* 올리기 전에 브라우저에서 먼저 걸러 줍니다. 큰 파일을 다 올린
+     뒤에 거절당하면 시간만 버리기 때문입니다. 서버(버킷 설정)에도
+     같은 제한이 걸려 있어, 이 검사를 우회해도 통과하지 못합니다. */
+  function imageProblem(file) {
+    if (!file) return '파일을 선택해 주세요.';
+    if (IMAGE_TYPES.indexOf(file.type) < 0) {
+      return 'JPG · PNG · WebP 이미지만 올릴 수 있습니다.';
+    }
+    if (file.size > IMAGE_MAX) {
+      return '이미지가 너무 큽니다. 10MB 이하로 줄여서 올려 주세요. ' +
+             '(현재 ' + (file.size / 1024 / 1024).toFixed(1) + 'MB)';
+    }
+    return null;
+  }
+
+  /* 파일 이름은 새로 짓습니다. 한글·공백·중복을 한 번에 없애고,
+     같은 이름을 덮어써서 다른 화면의 이미지가 바뀌는 사고도 막습니다. */
+  function imageName(file) {
+    var ext = ({ 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' })[file.type] || 'jpg';
+    var rand = Math.random().toString(36).slice(2, 8);
+    return Date.now().toString(36) + '-' + rand + '.' + ext;
+  }
+
+  function uploadImage(file, folder) {
+    var c = db();
+    if (!c) return Promise.reject(new Error('Supabase 설정이 없습니다.'));
+    var bad = imageProblem(file);
+    if (bad) return Promise.reject(new Error(bad));
+
+    var path = (folder || 'etc') + '/' + imageName(file);
+    return c.storage.from(BUCKET).upload(path, file, {
+      cacheControl: '3600', contentType: file.type, upsert: false
+    }).then(function (r) {
+      if (r.error) throw r.error;
+      var pub = c.storage.from(BUCKET).getPublicUrl(path);
+      return { url: (pub.data && pub.data.publicUrl) || '', path: path };
+    });
+  }
+
+  /* 공개 주소에서 보관함 경로를 되짚습니다.
+     .../storage/v1/object/public/festival-images/venue/abc.png → venue/abc.png
+     우리 보관함 주소가 아니면 null 을 줍니다. 남의 주소를 지우려
+     들지 않기 위해서입니다. */
+  function imagePath(url) {
+    var m = new RegExp('/storage/v1/object/public/' + BUCKET + '/(.+)$').exec(String(url || ''));
+    return m ? decodeURIComponent(m[1].split('?')[0]) : null;
+  }
+
+  /* 안 쓰는 이미지 지우기. 실패해도 화면 흐름을 멈추지 않습니다 —
+     파일 한 장이 남는 것보다 저장이 막히는 쪽이 더 나쁩니다. */
+  function deleteImage(url) {
+    var c = db();
+    var path = imagePath(url);
+    if (!c || !path) return Promise.resolve(false);
+    return c.storage.from(BUCKET).remove([path]).then(function (r) {
+      if (r.error) { console.warn('[core] 안 쓰는 이미지를 지우지 못했습니다', path, r.error); return false; }
+      return true;
+    }).catch(function (e) {
+      console.warn('[core] 안 쓰는 이미지를 지우지 못했습니다', path, e);
+      return false;
+    });
+  }
+
   /* ── 잔손질 ─────────────────────────────────────────────────── */
   function esc(v) {
     return String(v == null ? '' : v).replace(/[&<>"']/g, function (c) {
@@ -242,6 +315,8 @@ window.Core = (function () {
     profileFailed: profileFailed,
     authMessage: authMessage, dataMessage: dataMessage,
     select: select, insert: insert, update: update, remove: remove, rpc: rpc,
+    uploadImage: uploadImage, deleteImage: deleteImage,
+    imageProblem: imageProblem, imagePath: imagePath,
     esc: esc, pad2: pad2, toMin: toMin, minLabel: minLabel,
     telHref: telHref, fmtDateTime: fmtDateTime
   };

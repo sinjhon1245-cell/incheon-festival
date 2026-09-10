@@ -89,6 +89,19 @@
 </div>
 
 <!-- ══ 알림 ════════════════════════════════════════════════════ -->
+<!-- ══ 이미지 크게 보기 ════════════════════════════════════════
+     배치도는 작은 화면에서 확대 없이는 읽기 어렵습니다. ══════ -->
+<div class="zoom" id="zoom" hidden>
+  <div class="zoom__scrim" data-close-zoom></div>
+  <div class="zoom__panel" role="dialog" aria-modal="true" aria-label="이미지 크게 보기">
+    <button class="zoom__close" type="button" id="zoom-close" data-close-zoom aria-label="닫기">✕</button>
+    <div class="zoom__scroll">
+      <img id="zoom-img" src="" alt="" />
+    </div>
+    <p class="zoom__cap" id="zoom-cap" hidden></p>
+  </div>
+</div>
+
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>

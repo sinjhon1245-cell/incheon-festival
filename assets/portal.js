@@ -58,7 +58,7 @@
   var view = 'dashboard';
   var ui = { boothQ: '', boothStatus: '전체', boothZone: '전체',
              schedCat: '전체', schedQ: '', reqStatus: '전체',
-             contactQ: '', contactCat: '전체' };
+             contactQ: '', contactCat: '전체', faqCat: '전체' };
   var clockTimer = null;
 
   /* ── 알림 ───────────────────────────────────────────────────── */
@@ -188,6 +188,50 @@
       (desc ? '<p class="page__desc">' + esc(desc) + '</p>' : '') + '</div>' +
       (actions ? '<div class="page__actions">' + actions + '</div>' : '') + '</div>';
   }
+  /* 안내도·배치도 자리.
+     이미지가 없어도 같은 크기의 자리를 남겨 둡니다. 나중에 그림만
+     올리면 화면 구조가 그대로인 채로 채워집니다. 빈 흰 상자나
+     깨진 이미지 아이콘은 보이지 않게 합니다. */
+  function mediaBox(o) {
+    var cap = o.caption ? '<figcaption class="media__cap">' + esc(o.caption) + '</figcaption>' : '';
+    if (!o.url) {
+      return '<figure class="media media--empty">' +
+        '<div class="media__ph">' +
+          '<span class="media__icon" aria-hidden="true">◱</span>' +
+          '<span class="media__phtitle">' + esc(o.title) + '</span>' +
+          '<span class="media__phtext">' + esc(o.hint) + '</span>' +
+        '</div></figure>';
+    }
+    return '<figure class="media">' +
+      '<button class="media__btn" type="button" data-zoom="' + esc(o.url) + '" ' +
+        'data-zoomcap="' + esc(o.caption || o.title) + '" aria-label="' + esc(o.title) + ' 크게 보기">' +
+        // 화면 맨 위에 오는 그림이라 lazy 를 걸지 않습니다.
+        // 보이는 자리의 이미지를 미루면 더 늦게 뜨기만 합니다.
+        '<img src="' + esc(o.url) + '" alt="' + esc(o.alt || o.title) + '" />' +
+        '<span class="media__zoom" aria-hidden="true">확대</span>' +
+      '</button>' + cap + '</figure>';
+  }
+
+  /* 크게 보기. 배치도는 작은 화면에서 확대가 사실상 필수입니다. */
+  function openZoom(url, caption) {
+    var el = $('#zoom');
+    $('#zoom-img').src = url;
+    $('#zoom-img').alt = caption || '';
+    $('#zoom-cap').textContent = caption || '';
+    $('#zoom-cap').hidden = !caption;
+    el.hidden = false;
+    document.body.style.overflow = 'hidden';
+    $('#zoom-close').focus();
+  }
+  function closeZoom() {
+    var el = $('#zoom');
+    if (!el || el.hidden) return;
+    el.hidden = true;
+    $('#zoom-img').src = '';
+    // 상세 드로어 위에서 열렸다면 스크롤 잠금을 유지해야 합니다.
+    document.body.style.overflow = $('#drawer').hidden ? '' : 'hidden';
+  }
+
   function chips(items, active, attr) {
     return '<div class="chiprow" role="group">' + items.map(function (it) {
       var label = typeof it === 'string' ? it : it.label;
@@ -373,8 +417,16 @@
         '</span></button>';
     }).join('') + '</div>' : stateBox('조건에 맞는 부스가 없습니다.');
 
+    var s = S.settings || {};
+    var map = mediaBox({
+      url: s.booth_map_url, alt: s.booth_map_alt, caption: s.booth_map_caption,
+      title: '전체 부스 배치도',
+      hint: '배치도가 등록되면 이곳에서 확인할 수 있습니다.'
+    });
+
     return '<div class="page">' +
       pageHead('부스 운영 현황', '카드를 누르면 상세와 상태 변경을 할 수 있습니다.') +
+      map +
       '<div class="tools"><div class="search"><label class="sr-only" for="booth-q">부스 검색</label>' +
       '<input class="input" id="booth-q" type="search" placeholder="부스번호 · 학교 · 기관 · 프로그램 검색" value="' + esc(ui.boothQ) + '" /></div>' +
       chips(statusChips, ui.boothStatus, 'data-boothstatus') +
@@ -402,6 +454,18 @@
 
     var html = '<div><div class="notice__top">' + badge(b.status || '준비 전') +
       '<span class="notice__meta">최근 변경 ' + esc(fmtDay(b.updated_at)) + '</span></div></div>';
+
+    // 부스 사진은 있을 때만 보여 줍니다. 상세는 목록과 달리 자리를
+    // 미리 잡아 둘 이유가 없어, 없으면 그냥 넘어갑니다.
+    if (b.image_url) {
+      html += '<figure class="media media--sm">' +
+        '<button class="media__btn" type="button" data-zoom="' + esc(b.image_url) + '" ' +
+          'data-zoomcap="' + esc(b.image_caption || b.name) + '" aria-label="부스 사진 크게 보기">' +
+          '<img src="' + esc(b.image_url) + '" alt="' + esc(b.image_alt || b.name) + '" loading="lazy" />' +
+          '<span class="media__zoom" aria-hidden="true">확대</span></button>' +
+        (b.image_caption ? '<figcaption class="media__cap">' + esc(b.image_caption) + '</figcaption>' : '') +
+        '</figure>';
+    }
 
     if (b.manager_phone) {
       html += '<a class="btn btn--primary btn--full" href="' + esc(C.telHref(b.manager_phone)) + '">' +
@@ -567,28 +631,57 @@
 
   function viewVenue() {
     var s = S.settings || {};
-    var map = s.venue_map_url
-      ? '<img src="' + esc(s.venue_map_url) + '" alt="행사장 배치도" style="border-radius:var(--r);border:1px solid var(--line)" />'
-      : stateBox('배치도 준비 중입니다. 관리자 → 행사 기본정보에서 배치도 이미지 주소를 등록하면 여기에 표시됩니다.');
+
+    var map = mediaBox({
+      url: s.venue_map_url, alt: s.venue_map_alt, caption: s.venue_map_caption,
+      title: '행사장 안내도',
+      hint: '안내도가 등록되면 이곳에서 확인할 수 있습니다.'
+    });
+
+    /* 공간 카드. 사진이 있으면 왼쪽에 붙고, 없으면 지금처럼 글만
+       있는 카드로 보입니다. 어느 쪽이든 카드 모양은 같습니다. */
     var body = S.places.length ? '<div class="tl">' + S.places.map(function (p) {
-      return '<div class="rowcard"><div class="rowcard__body">' +
+      return '<div class="rowcard rowcard--place">' +
+        (p.image_url
+          ? '<button class="placethumb" type="button" data-zoom="' + esc(p.image_url) + '" ' +
+              'data-zoomcap="' + esc(p.image_caption || p.name) + '" aria-label="' + esc(p.name) + ' 사진 크게 보기">' +
+              '<img src="' + esc(p.image_url) + '" alt="' + esc(p.image_alt || p.name) + '" loading="lazy" /></button>'
+          : '') +
+        '<div class="rowcard__body">' +
         '<div class="rowcard__name">' + esc(p.name) + '</div>' +
         '<div class="rowcard__meta">' + esc(p.category || '') + (p.detail ? ' · ' + esc(p.detail) : '') + '</div>' +
+        (p.image_caption ? '<div class="rowcard__meta">' + esc(p.image_caption) + '</div>' : '') +
         '</div></div>';
     }).join('') + '</div>' : stateBox('등록된 공간 정보가 없습니다.');
-    return '<div class="page">' + pageHead('행사장 안내', esc(s.venue || '') + (s.venue_detail ? ' · ' + esc(s.venue_detail) : '')) +
+
+    return '<div class="page">' +
+      pageHead('행사장 안내', esc(s.venue || '') + (s.venue_detail ? ' · ' + esc(s.venue_detail) : '')) +
       map + '<h2 class="section-title">주요 공간</h2>' + body + '</div>';
   }
 
   function viewFaq() {
-    var list = S.faqs.filter(function (f) { return f.is_public !== false; });
+    // 답변이 없는 질문은 아직 준비 중입니다. 관리자에서 답변을 채우고
+    // '공개'를 켜야 여기에 나옵니다.
+    var all = S.faqs.filter(function (f) {
+      return f.is_public !== false && (f.answer || '').trim();
+    });
+
+    var cats = ['전체'].concat(all.reduce(function (a, f) {
+      if (f.category && a.indexOf(f.category) < 0) a.push(f.category); return a; }, []));
+    var list = all.filter(function (f) {
+      return ui.faqCat === '전체' || f.category === ui.faqCat;
+    });
+
     var body = list.length ? '<div class="tl">' + list.map(function (f, i) {
       return '<div class="faq" data-faq="' + i + '">' +
         '<button class="faq__q" type="button" aria-expanded="false"><span>' + esc(f.question) + '</span>' +
         '<span class="faq__sign" aria-hidden="true">+</span></button>' +
         '<div class="faq__a" hidden>' + esc(f.answer) + '</div></div>';
-    }).join('') + '</div>' : stateBox('등록된 항목이 없습니다.');
-    return '<div class="page">' + pageHead('운영 FAQ', '행사 준비와 당일 운영에서 자주 나오는 질문입니다.') + body + '</div>';
+    }).join('') + '</div>' : stateBox(all.length ? '조건에 맞는 질문이 없습니다.' : '등록된 항목이 없습니다.');
+
+    return '<div class="page">' + pageHead('운영 FAQ', '행사 준비와 당일 운영에서 자주 나오는 질문입니다.') +
+      (cats.length > 2 ? '<div class="tools">' + chips(cats, ui.faqCat, 'data-faqcat') + '</div>' : '') +
+      body + '</div>';
   }
 
   /* ── 라우터 ─────────────────────────────────────────────────── */
@@ -674,13 +767,22 @@
         return;
       }
 
-      var chip = t.closest('[data-boothstatus],[data-boothzone],[data-schedcat],[data-reqstatus],[data-contactcat]');
+      // 확대 보기는 드로어 안에서도 열리므로 다른 처리보다 먼저 봅니다.
+      var zoom = t.closest('[data-zoom]');
+      if (zoom) {
+        openZoom(zoom.getAttribute('data-zoom'), zoom.getAttribute('data-zoomcap'));
+        return;
+      }
+      if (t.closest('[data-close-zoom]')) { closeZoom(); return; }
+
+      var chip = t.closest('[data-boothstatus],[data-boothzone],[data-schedcat],[data-reqstatus],[data-contactcat],[data-faqcat]');
       if (chip) {
         if (chip.hasAttribute('data-boothstatus')) ui.boothStatus = chip.getAttribute('data-boothstatus');
         if (chip.hasAttribute('data-boothzone'))   ui.boothZone   = chip.getAttribute('data-boothzone');
         if (chip.hasAttribute('data-schedcat'))    ui.schedCat    = chip.getAttribute('data-schedcat');
         if (chip.hasAttribute('data-reqstatus'))   ui.reqStatus   = chip.getAttribute('data-reqstatus');
         if (chip.hasAttribute('data-contactcat'))  ui.contactCat  = chip.getAttribute('data-contactcat');
+        if (chip.hasAttribute('data-faqcat'))      ui.faqCat      = chip.getAttribute('data-faqcat');
         render();
         return;
       }
@@ -716,7 +818,9 @@
 
     document.addEventListener('keydown', function (e) {
       if (e.key !== 'Escape') return;
-      if (!$('#drawer').hidden) closeDrawer();
+      // 확대 보기가 맨 위에 있으므로 먼저 닫습니다.
+      if (!$('#zoom').hidden) closeZoom();
+      else if (!$('#drawer').hidden) closeDrawer();
       else if (!$('#sheet').hidden) closeSheet();
     });
   }

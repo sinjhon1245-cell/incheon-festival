@@ -26,6 +26,7 @@
   var REQ_PRIORITY = ['긴급', '높음', '보통'];
   var REQ_STATES = ['접수', '확인 중', '처리 중', '완료'];
   var NOTICE_LEVELS = ['긴급', '중요', '일반'];
+  var FAQ_CATS = ['부스 운영', '시설·장소', '안전', '물품·지원', '기타'];
 
   function opts(l) { return l.map(function (v) { return [v, v]; }); }
 
@@ -71,10 +72,21 @@
         { k: 'venue',         label: '장소' },
         { k: 'venue_detail',  label: '장소 상세' },
         { k: 'venue_address', label: '주소', wide: true },
-        { k: 'venue_map_url', label: '배치도 이미지 주소', wide: true, hint: '비우면 “배치도 준비 중”' },
         { k: 'contact_phone', label: '대표 전화' },
         { k: 'contact_email', label: '대표 메일' },
-        { k: 'portal_note',   label: '포털 안내 문구', type: 'textarea', wide: true }
+        { k: 'portal_note',   label: '포털 안내 문구', type: 'textarea', wide: true },
+
+        /* 안내도 두 장. 올리면 포털의 행사장·부스 화면 맨 위에
+           바로 나타나고, 비우면 준비 중 안내로 돌아갑니다. */
+        { k: 'venue_map_url',     label: '행사장 전체 안내도', type: 'image', folder: 'venue',
+          hint: '가로형 이미지를 권합니다' },
+        { k: 'venue_map_alt',     label: '행사장 안내도 설명', wide: true,
+          hint: '화면을 읽어 주는 도구가 대신 읽습니다' },
+        { k: 'venue_map_caption', label: '행사장 안내도 캡션', wide: true },
+        { k: 'booth_map_url',     label: '전체 부스 배치도', type: 'image', folder: 'booth-map',
+          hint: '가로형 이미지를 권합니다' },
+        { k: 'booth_map_alt',     label: '부스 배치도 설명', wide: true },
+        { k: 'booth_map_caption', label: '부스 배치도 캡션', wide: true }
       ]
     },
 
@@ -139,7 +151,10 @@
         { k: 'needs_network', label: '네트워크 필요', type: 'bool' },
         { k: 'supplies',      label: '필요 물품', wide: true },
         { k: 'memo',          label: '운영 메모', type: 'textarea', wide: true },
-        { k: 'notes',         label: '특이사항', type: 'textarea', wide: true }
+        { k: 'notes',         label: '특이사항', type: 'textarea', wide: true },
+        { k: 'image_url',     label: '부스 대표 이미지', type: 'image', folder: 'booth' },
+        { k: 'image_alt',     label: '이미지 설명', wide: true },
+        { k: 'image_caption', label: '이미지 캡션', wide: true }
       ],
       beforeSave: function (v) {
         if (!v.code) v.code = v.zone_key + '-' + String(v.no).padStart(2, '0');
@@ -228,24 +243,32 @@
       meta: function (r) { return r.detail || ''; },
       tags: function (r) { return tag(r.category || '기타'); },
       fields: [
-        { k: 'name',     label: '공간 이름', required: true },
-        { k: 'category', label: '분류', hint: '예: 운영 · 안전 · 편의' },
-        { k: 'detail',   label: '위치 설명', type: 'textarea', wide: true }
+        { k: 'name',          label: '공간 이름', required: true },
+        { k: 'category',      label: '분류', hint: '예: 운영 · 안전 · 편의' },
+        { k: 'detail',        label: '위치 설명', type: 'textarea', wide: true },
+        { k: 'image_url',     label: '공간 사진', type: 'image', folder: 'place' },
+        { k: 'image_alt',     label: '사진 설명', wide: true },
+        { k: 'image_caption', label: '사진 캡션', wide: true }
       ]
     },
 
     faqs: {
       label: 'FAQ 관리', table: 'faqs', addLabel: '+ 질문 추가',
-      desc: '관계자가 자주 묻는 운영 질문입니다.',
-      blank: { question: '', answer: '', category: '운영', is_public: true },
+      desc: '답변을 채우고 “공개”를 켜야 포털에 보입니다. 답변이 빈 항목은 아래에 표시됩니다.',
+      blank: { question: '', answer: '', category: '기타', is_public: false },
       title: function (r) { return r.question || '(질문 없음)'; },
       meta: function (r) { return (r.answer || '').slice(0, 70); },
-      tags: function (r) { return tag(r.category || '운영') + (r.is_public ? '' : badge('비공개')); },
+      tags: function (r) {
+        return tag(r.category || '기타') +
+          (r.answer && r.answer.trim() ? '' : badge('답변 없음')) +
+          (r.is_public ? '' : badge('비공개'));
+      },
       fields: [
         { k: 'question',  label: '질문', wide: true, required: true },
-        { k: 'answer',    label: '답변', type: 'textarea', wide: true },
-        { k: 'category',  label: '분류' },
-        { k: 'is_public', label: '공개', type: 'bool' }
+        { k: 'answer',    label: '답변', type: 'textarea', wide: true,
+          hint: '줄바꿈은 포털에서도 그대로 보입니다' },
+        { k: 'category',  label: '분류', type: 'select', options: opts(FAQ_CATS) },
+        { k: 'is_public', label: '공개 (답변을 채운 뒤 켜 주세요)', type: 'bool' }
       ]
     }
   };
@@ -346,6 +369,16 @@
         '<div class="list">' + ent.fields.filter(function (f) { return f.k in s; }).map(function (f) {
           var v = s[f.k];
           if (f.type === 'datetime') v = v ? fmtDay(v) : '';
+
+          // 이미지 칸은 주소를 길게 늘어놓는 대신 실제 그림을 보여 줍니다.
+          if (f.type === 'image') {
+            return '<div class="listrow"><div class="listrow__body">' +
+              '<div class="listrow__meta">' + esc(f.label) + '</div>' +
+              (v ? '<img class="listrow__thumb" src="' + esc(v) + '" alt="" />'
+                 : '<div class="listrow__title"><span style="color:var(--muted-2)">등록된 이미지가 없습니다</span></div>') +
+              '</div></div>';
+          }
+
           return '<div class="listrow"><div class="listrow__body">' +
             '<div class="listrow__meta">' + esc(f.label) + '</div>' +
             '<div class="listrow__title">' +
@@ -395,6 +428,21 @@
     });
   }
 
+  /* 이 항목이 들고 있는 이미지 칸들 */
+  function imageKeys(ent) {
+    return (ent.fields || []).filter(function (f) { return f.type === 'image'; })
+      .map(function (f) { return f.k; });
+  }
+
+  /* 바뀌거나 지워져서 더는 쓰이지 않는 이미지를 보관함에서 지웁니다.
+     이걸 안 하면 교체할 때마다 예전 파일이 계속 쌓입니다. */
+  function dropReplacedImages(ent, before, after) {
+    imageKeys(ent).forEach(function (k) {
+      var old = (before || {})[k];
+      if (old && old !== (after || {})[k]) C.deleteImage(old);
+    });
+  }
+
   function openEditor(key, row) {
     var ent = ENTITIES[key];
     if (!ent.fields) return;
@@ -433,6 +481,9 @@
           var i = -1;
           (cache[key] || []).forEach(function (x, idx) { if (x.id === row.id) i = idx; });
           if (i >= 0) cache[key][i] = updated;
+          // 저장이 끝난 뒤에 지웁니다. 먼저 지웠다가 저장이 실패하면
+          // 화면에는 이미지가 있는데 파일은 없는 상태가 됩니다.
+          dropReplacedImages(ent, row, updated);
           renderPanel();
           toast('저장했습니다.');
         }).catch(function (e) {
@@ -453,6 +504,7 @@
       if (!ok) return;
       C.remove(ent.table, row.id).then(function () {
         cache[key] = cache[key].filter(function (x) { return x.id !== row.id; });
+        dropReplacedImages(ent, row, {});   // 딸린 이미지도 함께 정리
         renderPanel();
         toast('삭제했습니다.');
       }).catch(function (e) {

@@ -7,6 +7,11 @@
 
    UI.form({ title, fields, values })  → Promise<값 객체 | null>
    UI.confirm({ title, message })      → Promise<true | false>
+
+   이미지 칸(type: 'image')은 고르는 즉시 올리고 주소를 감춰진 칸에
+   담아 둡니다. 제출할 때 올리면 폼이 비동기가 되어 버려서, 지금의
+   간단한 구조를 전부 뜯어고쳐야 하기 때문입니다.
+   올려 두고 취소하면 그 파일은 쓰이지 않으므로 바로 지웁니다.
    =================================================================== */
 window.UI = (function () {
   'use strict';
@@ -42,7 +47,10 @@ window.UI = (function () {
     if (lastFocus && lastFocus.focus) lastFocus.focus();
   }
 
-  function open(html, onReady) {
+  /* onEscape 를 받는 이유: Esc 로 닫을 때도 "취소" 와 똑같이
+     처리해야 합니다. 예전에는 그냥 닫기만 해서, 기다리던 약속이
+     영영 끝나지 않고 이미지 뒷정리도 건너뛰었습니다. */
+  function open(html, onReady, onEscape) {
     lastFocus = document.activeElement;
     var h = ensureHost();
     h.innerHTML = html;
@@ -50,10 +58,103 @@ window.UI = (function () {
     document.body.style.overflow = 'hidden';
     var panel = h.querySelector('.modal__panel');
     h.onkeydown = function (e) {
-      if (e.key === 'Escape') { e.preventDefault(); close(); }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        if (onEscape) onEscape(); else close();
+        return;
+      }
       trap(e, panel);
     };
     if (onReady) onReady(h, panel);
+  }
+
+  /* ── 이미지 칸 ──────────────────────────────────────────────── */
+  /* 비어 있을 때도 같은 크기의 자리를 남겨 둡니다. 고르는 순간
+     화면이 덜컥 늘어나지 않게 하려는 것입니다. */
+  function imgPreview(url) {
+    if (!url) {
+      return '<div class="imgpick__empty">' +
+        '<span class="imgpick__icon" aria-hidden="true">◨</span>' +
+        '<span>등록된 이미지가 없습니다</span></div>';
+    }
+    return '<img src="' + esc(url) + '" alt="" />';
+  }
+
+  /* 이미지 칸을 살아 움직이게 만듭니다.
+     window.Core 의 uploadImage / deleteImage 를 그대로 씁니다. */
+  function wireImageFields(panel, session) {
+    var C = window.Core;
+    Array.prototype.forEach.call(panel.querySelectorAll('[data-imgpick]'), function (box) {
+      var hidden = box.querySelector('[data-k]');
+      var view = box.querySelector('.imgpick__view');
+      var msg = box.querySelector('.imgpick__msg');
+      var clearBtn = box.querySelector('[data-imgclear]');
+      var pickLabel = box.querySelector('[data-imgpicklabel]');
+      var file = box.querySelector('[data-imgfile]');
+
+      function say(text, isError) {
+        msg.textContent = text || '';
+        msg.hidden = !text;
+        msg.classList.toggle('is-error', !!isError);
+      }
+      function paint() {
+        view.innerHTML = imgPreview(hidden.value);
+        clearBtn.hidden = !hidden.value;
+        pickLabel.textContent = hidden.value ? '이미지 교체' : '이미지 선택';
+      }
+
+      file.addEventListener('change', function () {
+        var f = file.files && file.files[0];
+        file.value = '';                    // 같은 파일을 다시 골라도 반응하도록
+        if (!f) return;
+
+        var bad = C.imageProblem(f);
+        if (bad) { say(bad, true); return; }
+
+        // 올라가기 전에 먼저 보여 줍니다. 기다리는 동안 화면이
+        // 아무 반응 없으면 눌렸는지조차 알 수 없습니다.
+        var local = URL.createObjectURL(f);
+        view.innerHTML = '<img src="' + local + '" alt="" />';
+        say('올리는 중입니다…');
+        box.classList.add('is-busy');
+
+        C.uploadImage(f, box.dataset.folder).then(function (up) {
+          // 이 모달 안에서 올린 파일입니다. 취소되면 지워야 합니다.
+          session.uploaded.push(up.url);
+          hidden.value = up.url;
+          URL.revokeObjectURL(local);
+          paint();
+          say('이미지를 올렸습니다. 저장을 눌러야 반영됩니다.');
+        }).catch(function (e) {
+          URL.revokeObjectURL(local);
+          paint();
+          console.error('[ui] 이미지 업로드 실패', e);
+          say(uploadMessage(e), true);
+        }).then(function () {
+          box.classList.remove('is-busy');
+        });
+      });
+
+      clearBtn.addEventListener('click', function () {
+        hidden.value = '';
+        paint();
+        say('제거했습니다. 저장을 눌러야 반영됩니다.');
+      });
+    });
+  }
+
+  function uploadMessage(e) {
+    var m = (e && e.message) || '';
+    if (/exceeded the maximum allowed size|Payload too large/i.test(m)) {
+      return '이미지가 너무 큽니다. 10MB 이하로 줄여서 올려 주세요.';
+    }
+    if (/mime type|not supported/i.test(m)) return 'JPG · PNG · WebP 이미지만 올릴 수 있습니다.';
+    if (/row-level security|Unauthorized|403/i.test(m)) return '이미지를 올릴 권한이 없습니다. 다시 로그인해 주세요.';
+    if (/Bucket not found/i.test(m)) {
+      return '이미지 보관함이 아직 없습니다. supabase/migration-media-support.sql 을 실행해 주세요.';
+    }
+    if (/Failed to fetch|NetworkError/i.test(m)) return '네트워크에 연결하지 못했습니다.';
+    return m || '이미지를 올리지 못했습니다.';
   }
 
   /* ── 입력칸 ─────────────────────────────────────────────────── */
@@ -68,6 +169,23 @@ window.UI = (function () {
       return '<div class="field field--wide"><label class="check">' +
         '<input type="checkbox" id="' + id + '" data-k="' + f.k + '"' + (value ? ' checked' : '') + ' /> ' +
         esc(f.label) + '</label></div>';
+    }
+
+    if (f.type === 'image') {
+      return '<div class="field field--wide">' + label +
+        '<div class="imgpick" data-imgpick="' + esc(f.k) + '" data-folder="' + esc(f.folder || 'etc') + '">' +
+          '<div class="imgpick__view">' + imgPreview(value) + '</div>' +
+          '<div class="imgpick__acts">' +
+            '<label class="btn btn--ghost btn--sm imgpick__file">' +
+              '<span data-imgpicklabel>' + (value ? '이미지 교체' : '이미지 선택') + '</span>' +
+              '<input type="file" accept="image/jpeg,image/png,image/webp" data-imgfile hidden />' +
+            '</label>' +
+            '<button class="btn btn--ghost btn--sm" type="button" data-imgclear' +
+              (value ? '' : ' hidden') + '>제거</button>' +
+          '</div>' +
+          '<p class="imgpick__msg" role="status" hidden></p>' +
+          '<input type="hidden" data-k="' + esc(f.k) + '" value="' + esc(value) + '" />' +
+        '</div></div>';
     }
 
     var body;
@@ -116,6 +234,19 @@ window.UI = (function () {
         return fieldHtml(f, vals[f.k] == null ? '' : vals[f.k]);
       }).join('');
 
+      // 이 모달에서 올린 이미지들. 저장하지 않고 나가면 쓰이지
+      // 않으므로, 보관함에 쌓이기 전에 바로 지웁니다.
+      var session = { uploaded: [] };
+
+      function dropUnused(keep) {
+        session.uploaded.forEach(function (url) {
+          if (keep.indexOf(url) < 0) window.Core.deleteImage(url);
+        });
+        session.uploaded = [];
+      }
+
+      function cancel() { dropUnused([]); close(); resolve(null); }
+
       open(
         '<div class="modal__scrim" data-cancel></div>' +
         '<div class="modal__panel" role="dialog" aria-modal="true" aria-labelledby="modal-title">' +
@@ -135,11 +266,13 @@ window.UI = (function () {
           '</div>' +
         '</div>',
         function (h, panel) {
-          var first = panel.querySelector('input, select, textarea');
+          var first = panel.querySelector('input:not([type="hidden"]):not([type="file"]), select, textarea');
           if (first) first.focus();
 
+          wireImageFields(panel, session);
+
           Array.prototype.forEach.call(h.querySelectorAll('[data-cancel]'), function (b) {
-            b.addEventListener('click', function () { close(); resolve(null); });
+            b.addEventListener('click', cancel);
           });
 
           panel.querySelector('#modal-form').addEventListener('submit', function (e) {
@@ -174,13 +307,19 @@ window.UI = (function () {
               }
             }
 
+            // 이미지를 골랐다가 다른 걸로 바꾼 경우, 중간에 올렸던
+            // 파일은 어디에도 쓰이지 않으므로 지웁니다.
+            var kept = Object.keys(values).map(function (k) { return values[k]; });
+            dropUnused(kept);
+
             var ok = panel.querySelector('#modal-ok');
             ok.disabled = true;
             ok.textContent = '저장 중…';
             close();
             resolve(values);
           });
-        }
+        },
+        cancel
       );
     });
   }
@@ -208,7 +347,8 @@ window.UI = (function () {
             b.addEventListener('click', function () { close(); resolve(false); });
           });
           panel.querySelector('#modal-ok').addEventListener('click', function () { close(); resolve(true); });
-        }
+        },
+        function () { close(); resolve(false); }
       );
     });
   }

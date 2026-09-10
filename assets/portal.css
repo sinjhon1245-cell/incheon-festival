@@ -584,3 +584,125 @@ code {
 @media (max-width: 520px) {
   .listrow__act { width: 100%; margin-left: 0; justify-content: flex-end; }
 }
+
+
+/* ── 안내도 · 배치도 ──────────────────────────────────────────
+   이미지가 아직 없어도 같은 자리를 차지합니다. 나중에 그림만
+   올리면 화면 구조가 그대로인 채로 채워집니다. ─────────────── */
+.media { margin: 0 0 4px; }
+
+/* 자리를 미리 잡아 둡니다(aspect-ratio). 이미지가 도착하기 전까지
+   높이가 0이면, 뜨는 순간 아래 내용이 아래로 밀리며 화면이 튑니다.
+   배치도처럼 큰 그림에서 특히 거슬립니다.
+   덕분에 placeholder 와 실제 이미지가 정확히 같은 자리를 씁니다. */
+.media__btn {
+  display: block; width: 100%; padding: 0; border: 1px solid var(--line);
+  border-radius: var(--r); background: var(--bg-soft); overflow: hidden;
+  cursor: zoom-in; position: relative; box-shadow: var(--sh);
+  aspect-ratio: 16 / 9; max-height: 62vh;
+}
+.media__btn img {
+  display: block; width: 100%; height: 100%;
+  object-fit: contain; background: var(--bg-soft);
+}
+/* 세로가 긴 그림도 잘리지 않게 contain 으로 담습니다. 남는 여백은
+   바탕색과 같아 액자처럼 보입니다. */
+.media--sm .media__btn { aspect-ratio: 4 / 3; max-height: 240px; }
+
+.media__zoom {
+  position: absolute; right: 10px; bottom: 10px;
+  padding: 5px 10px; border-radius: 999px;
+  background: rgba(22, 32, 60, 0.78); color: #fff;
+  font-size: 11.5px; font-weight: 700; letter-spacing: -0.01em;
+}
+.media__btn:hover { border-color: var(--primary); }
+.media__btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+.media__cap { font-size: 12.5px; color: var(--muted); margin: 8px 2px 0; line-height: 1.6; }
+
+/* 비어 있을 때 — 깨진 이미지도, 텅 빈 흰 상자도 아닌 모습으로 */
+.media--empty .media__ph {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 7px; text-align: center;
+  aspect-ratio: 16 / 9; min-height: 148px; max-height: 320px; padding: 20px;
+  border: 1px dashed var(--line); border-radius: var(--r);
+  background:
+    linear-gradient(180deg, var(--bg-soft) 0%, var(--bg-sink) 100%);
+}
+.media__icon { font-size: 26px; color: var(--muted-2); line-height: 1; }
+.media__phtitle { font-size: 14px; font-weight: 700; color: var(--ink-2); letter-spacing: -0.02em; }
+.media__phtext { font-size: 12.5px; color: var(--muted); line-height: 1.6; max-width: 30ch; }
+
+/* 공간 카드에 붙는 작은 사진 */
+.rowcard--place { align-items: flex-start; }
+.placethumb {
+  flex: 0 0 auto; width: 84px; height: 64px; padding: 0;
+  border: 1px solid var(--line); border-radius: 10px; overflow: hidden;
+  background: var(--bg-soft); cursor: zoom-in;
+}
+.placethumb img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.placethumb:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+/* ── 이미지 크게 보기 ─────────────────────────────────────────── */
+.zoom { position: fixed; inset: 0; z-index: 90; display: flex; }
+.zoom__scrim { position: absolute; inset: 0; background: rgba(12, 18, 36, 0.82); }
+.zoom__panel {
+  position: relative; margin: auto; width: 100%; height: 100%;
+  display: flex; flex-direction: column; padding: 52px 12px 16px;
+}
+.zoom__scroll {
+  flex: 1; min-height: 0; overflow: auto; -webkit-overflow-scrolling: touch;
+  display: flex; align-items: center; justify-content: center;
+}
+.zoom__scroll img {
+  display: block; max-width: 100%; height: auto;
+  border-radius: 10px; background: #fff;
+}
+.zoom__cap {
+  color: #E8EBF5; font-size: 13px; line-height: 1.6;
+  text-align: center; margin: 12px auto 0; max-width: 60ch;
+}
+.zoom__close {
+  position: absolute; top: 10px; right: 10px; z-index: 1;
+  width: 44px; height: 44px; border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.12); color: #fff;
+  font-size: 17px; cursor: pointer;
+}
+.zoom__close:hover { background: rgba(255, 255, 255, 0.22); }
+.zoom__close:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+
+@media (min-width: 768px) {
+  .zoom__panel { padding: 60px 32px 24px; }
+  .zoom__scroll img { max-height: none; }
+}
+
+/* ── 관리자: 이미지 고르는 칸 ─────────────────────────────────── */
+.imgpick {
+  display: flex; flex-direction: column; gap: 9px;
+  border: 1px solid var(--line); border-radius: var(--r);
+  padding: 11px; background: var(--bg-soft);
+}
+.imgpick__view { border-radius: 9px; overflow: hidden; background: #fff; }
+.imgpick__view img {
+  display: block; width: 100%; height: auto; max-height: 240px;
+  object-fit: contain; background: var(--bg-sink);
+}
+.imgpick__empty {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 5px; min-height: 116px; padding: 16px; text-align: center;
+  border: 1px dashed var(--line); border-radius: 9px;
+  color: var(--muted); font-size: 12.5px;
+}
+.imgpick__icon { font-size: 22px; color: var(--muted-2); line-height: 1; }
+.imgpick__acts { display: flex; gap: 7px; flex-wrap: wrap; }
+.imgpick__file { cursor: pointer; margin: 0; }
+.imgpick__msg { font-size: 12.5px; color: var(--muted); margin: 0; line-height: 1.6; }
+.imgpick__msg.is-error { color: var(--danger); }
+.imgpick.is-busy { opacity: 0.72; pointer-events: none; }
+
+/* 관리자 목록에 미리 보이는 작은 이미지 */
+.listrow__thumb {
+  display: block; margin-top: 6px; max-width: 220px; width: 100%; height: auto;
+  border: 1px solid var(--line); border-radius: 9px; background: var(--bg-sink);
+}
