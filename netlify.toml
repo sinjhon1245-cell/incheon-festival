@@ -46,12 +46,16 @@
     Cache-Control = "no-cache, must-revalidate"
 
 # 원본 디자인 파일과 SQL 은 배포에 필요 없습니다.
+# force = true 가 없으면 Netlify 는 실제 파일을 먼저 내주기 때문에
+# 이 규칙이 그냥 무시됩니다. 실제로 두 경로가 열려 있었습니다.
 [[redirects]]
   from = "/design/*"
   to = "/index.html"
   status = 404
+  force = true
 
 [[redirects]]
   from = "/supabase/*"
   to = "/index.html"
   status = 404
+  force = true
