@@ -4,10 +4,16 @@
 일반 관람객용 홍보 사이트가 아니라, 지금 무엇이 진행 중인지·어떤 부스에 문제가 있는지·
 누구에게 연락해야 하는지를 빠르게 찾는 것이 목적입니다.
 
-로그인하지 않으면 아무 운영정보도 보이지 않습니다.
+**포털에는 로그인이 없습니다.** 주소를 아는 관계자는 바로 들어와 열람하고,
+현장 문제를 보고하고, 부스 상태를 바꿀 수 있습니다.
+운영 내용을 **편집하는 것은 관리자 한 사람뿐**이고, 관리자만 로그인합니다.
 
-- 공개 주소: https://incheon-aisw-festival.netlify.app/
-- 관리자: `/admin.html` (관리자 권한 계정만)
+- 운영 포털: https://incheon-aisw-festival.netlify.app/
+- 관리자: `/admin` (관리자 계정 로그인 필요)
+
+> 이 구조는 “링크를 아는 사람 = 관계자”로 보는 시연·운영용 설계입니다.
+> 링크가 밖으로 전달되면 운영정보도 함께 보입니다. 검색엔진에는
+> 올라가지 않지만(noindex), 주소 자체가 곧 열쇠라는 점을 감안해 주세요.
 
 ## 기술 구조
 
@@ -15,13 +21,14 @@
 `index.html` 을 정적 호스팅에 올리면 그대로 동작합니다.
 
 ```
-index.html            관계자 포털 (로그인 게이트 + 앱 셸)
-admin.html            운영 콘텐츠 관리자(CMS)
-netlify.toml          배포 설정 · 보안 헤더
+index.html            운영 포털 (로그인 없음)
+admin.html            운영 콘텐츠 관리자(CMS) · 관리자 로그인
+netlify.toml          배포 설정 · 보안 헤더 · /admin 경로
+robots.txt            검색엔진 수집 차단
 
 assets/
   config.js           ★ Supabase 주소 · publishable 키 (직접 채우는 유일한 파일)
-  core.js             Supabase 연결 · 인증 · 데이터 접근 공통 계층
+  core.js             Supabase 연결 · 관리자 인증 · 데이터 접근 공통 계층
   portal.js           포털 화면과 동작
   portal.css          디자인 토큰과 스타일 (관리자도 함께 씀)
   ui.js               공용 모달·확인 대화상자 (prompt/confirm 대체)
@@ -29,10 +36,10 @@ assets/
   admin.css           관리자 전용 추가 스타일
 
 supabase/
-  schema.sql            최초 설치용 기본 표
-  migration-portal.sql  ★ 운영 포털 마이그레이션 (반드시 실행)
-  fix-policies.sql      RLS 점검·복구용 (문제 있을 때만)
-  functions/invite-staff/  관계자 초대 Edge Function
+  schema.sql                 최초 설치용 기본 표
+  migration-portal.sql       운영 포털 표·칼럼 (구조용, 이미 반영됨)
+  migration-public-portal.sql ★ 공개 포털 전환 (현재 정책)
+  add-settings-fields.sql    설정 부가 칼럼 (선택)
 
 dev-server.js         로컬 확인용 정적 서버 (배포에는 불필요)
 design/               원본 디자인 파일 (참고용)
@@ -46,13 +53,32 @@ design/               원본 디자인 파일 (참고용)
 | 일정 | 시간순 타임라인, 분류 필터, 검색, 현재 일정 자동 강조 |
 | 부스 현황 | 상태·구역 필터, 검색, 상세 드로어에서 상태 변경 |
 | 공지 | 긴급/중요/일반, 고정 공지, 상세 보기 |
-| 운영 요청 | 현장 문제 보고 등록, 처리 상태 추적 |
+| 운영 요청 | 현장 문제 보고 등록, 처리 상태 확인 |
 | 자료실 | 운영 문서 링크 |
 | 연락망 | 검색·카테고리 필터, 모바일 전화 걸기 |
 | 행사장 | 배치도와 주요 공간 |
 | 운영 FAQ | 관계자용 아코디언 |
 
 모바일에서는 하단 고정 탭(홈·일정·부스·공지·더보기), PC에서는 좌측 사이드바를 씁니다.
+
+## 누가 무엇을 할 수 있나
+
+| | 로그인 없는 관계자 | 관리자 |
+|---|---|---|
+| 전체 열람 | ✔ | ✔ |
+| 운영 요청 등록 | ✔ | ✔ |
+| 부스 **상태** 변경 | ✔ | ✔ |
+| 부스 그 외 항목 편집 | — | ✔ |
+| 일정·공지·자료실·연락망·행사장·FAQ 편집 | — | ✔ |
+| 운영 요청 상태 변경·삭제 | — | ✔ |
+| 관리자 화면 접근 | — | ✔ |
+
+화면에서 감추는 것이 아니라 **데이터베이스의 RLS 가 강제**합니다.
+관리자 주소를 알아내도, API 를 직접 호출해도 권한이 없으면 바꿀 수 없습니다.
+
+부스 상태는 특별히 다룹니다. 표 전체에 쓰기 권한을 열면 담당자 연락처까지
+바뀔 수 있으므로, `status` 한 칸만 고치는 데이터베이스 함수
+`set_booth_status(id, status)` 하나만 열어 두었습니다.
 
 ## Supabase 설정
 
@@ -79,108 +105,24 @@ window.FESTIVAL_CONFIG = {
 Supabase 대시보드 → **SQL Editor** 에서 순서대로 실행합니다.
 
 1. `supabase/schema.sql` — 처음 설치할 때만
-2. `supabase/migration-portal.sql` — **운영 포털에 반드시 필요**
+2. `supabase/migration-portal.sql` — 표와 칼럼 구조 (처음 설치할 때만)
+3. `supabase/migration-public-portal.sql` — **현재 접근 정책. 반드시 실행**
 
-마이그레이션은 기존 표를 지우지 않고 운영용 칼럼을 덧붙이며,
-`staff_profiles` · `notices` · `operation_requests` · `resources` ·
-`contacts` · `venue_places` 를 새로 만듭니다. 여러 번 실행해도 안전합니다.
+> ⚠️ 3번을 실행한 뒤에는 1·2번을 다시 실행하지 마세요.
+> 예전 “관계자 로그인 필수” 정책이 되살아나 포털이 다시 잠깁니다.
+> 세 파일 모두 기존 데이터를 지우지 않고, 여러 번 실행해도 안전합니다.
 
-### 3. 계정 만들기
+### 3. 관리자 계정
 
-**관리자 계정**
+관리자는 Supabase Auth 의 이메일·비밀번호 계정 하나면 됩니다.
 
 1. Supabase → **Authentication → Users → Add user**
    (이메일·비밀번호 입력, *Auto Confirm User* 켜기)
 2. `migration-portal.sql` 이 `aifest@ice.go.kr` 을 자동으로 관리자로 등록합니다.
-   다른 주소를 쓰면 마이그레이션 파일 마지막의 이메일을 바꾸세요.
+   다른 주소를 쓰면 그 파일 마지막의 이메일을 바꾸세요.
 
-**관계자(staff) 계정**
-
-관리자 → **계정·권한** → `+ 관계자 초대` 에서 이메일·이름·소속/팀·
-연락처·권한만 입력하면 됩니다. UUID 를 직접 다룰 필요가 없습니다.
-(아래 “관계자 초대 기능 배포”가 선행되어야 합니다.)
-
-> 이 포털에는 회원가입이 없습니다. `staff_profiles` 에 줄이 없는 계정은
-> 로그인에 성공해도 **아무 데이터도 볼 수 없고 즉시 로그아웃됩니다.**
-> 계정 생성만으로 내부 정보가 열리지 않게 하는 잠금장치입니다.
-
-### 관계자 초대 기능 배포 (Edge Function)
-
-관리자에서 `+ 관계자 초대`로 계정을 만들려면 Edge Function 한 개를
-배포해야 합니다. Auth 사용자 생성에는 service_role 권한이 필요한데,
-그 키는 브라우저에 두면 안 되기 때문입니다.
-
-**CLI 없이 Supabase 대시보드에서 그대로 배포할 수 있습니다.**
-
-1. Supabase 대시보드 → 왼쪽 메뉴 **Edge Functions**
-2. **Deploy a new function** → **Via Editor** 선택
-3. 함수 이름에 `invite-staff` 입력 (다른 이름을 쓰면 동작하지 않습니다)
-4. `supabase/functions/invite-staff/index.ts` 파일 내용을 **전부 복사**해
-   에디터의 기본 예제 코드를 **지우고** 붙여넣기
-5. **Deploy** 클릭
-
-**추가 Secret 등록은 필요 없습니다.** 함수는 런타임이 자동으로 넣어 주는
-표준 환경변수만 씁니다.
-
-| 환경변수 | 쓰임 |
-|---|---|
-| `SUPABASE_URL` | 프로젝트 API 주소 |
-| `SUPABASE_SECRET_KEYS` | secret 키 JSON 딕셔너리. `default` 키를 씁니다 (새 표준) |
-| `SUPABASE_SERVICE_ROLE_KEY` | 예전 방식. 위가 없는 환경을 위한 폴백으로만 |
-
-권한 키를 어디에도 복사하거나 입력할 일이 없습니다.
-
-배포 후 확인할 것:
-
-- Edge Functions 목록에 `invite-staff` 가 **Active** 로 보이는지
-- 관리자 → **계정·권한** 을 새로고침했을 때 “아직 배포되지 않았습니다”
-  안내가 사라지는지
-- 계정 목록의 **상태** 칸에 `활성` / `초대됨` 이 표시되는지
-  (이 값은 함수만 알 수 있는 정보라, 보이면 연결이 된 것입니다)
-
-<details>
-<summary>CLI 를 이미 쓰고 계시다면 (선택)</summary>
-
-```bash
-supabase login
-supabase link --project-ref ynixjjqozkbzxjmishbe
-supabase functions deploy invite-staff
-```
-
-이 경우에도 Secret 을 따로 넣을 필요는 없습니다.
-</details>
-
-함수가 하는 일:
-
-1. 호출자가 로그인 상태인지 확인
-2. 요청자의 `staff_profiles.role` 이 admin 인지 **서버에서 다시 확인** (아니면 403)
-3. 이메일 중복 확인
-4. Auth 사용자 초대 또는 생성 → UUID 획득
-5. `staff_profiles` 에 id·email·name·team·phone·role 저장
-6. 프로필 저장이 실패하면 방금 만든 Auth 사용자를 되돌려 반쪽 상태를 막음
-
-프론트엔드가 admin 이라고 주장하는 것은 신뢰하지 않습니다.
-메일 발송이 막힌 프로젝트에서는 초대 대신 임시 비밀번호를 발급하고
-관리자 화면에 한 번만 보여 줍니다.
-
-마지막 남은 admin 계정은 삭제와 권한 강등이 **서버에서** 차단됩니다.
-화면에서도 삭제 버튼이 비활성화됩니다.
-
-### 권한 구조
-
-| | admin | staff |
-|---|---|---|
-| 전체 데이터 열람 | ✔ | ✔ |
-| 운영 요청 등록 | ✔ | ✔ |
-| 부스 상태 변경 | ✔ | ✔ |
-| 부스 그 외 항목 편집 | ✔ | ✔ (DB 정책상 가능, 화면에는 노출 안 함) |
-| 일정·공지·자료실·연락망·FAQ 편집 | ✔ | — |
-| 운영 요청 상태 변경 | ✔ | — |
-| 계정·권한 관리 | ✔ | — |
-| 관리자 페이지 접근 | ✔ | — |
-
-데이터베이스의 RLS 가 강제하므로, 관리자 주소를 알아내도 권한이 없으면
-아무것도 바꿀 수 없습니다.
+관리자 여부는 `staff_profiles.role = 'admin'` 으로 판단합니다.
+관계자용 계정은 만들지 않습니다 — 포털에 로그인이 없기 때문입니다.
 
 ## 로컬 실행
 
@@ -214,7 +156,7 @@ node dev-server.js
   비어 있으면 포털에 “배치도 준비 중”으로 표시됩니다.
 - **운영 일정** — 시작·종료 시각은 `HH:MM` 형식이어야 현재 일정 강조가 동작합니다.
 - **부스 목록과 담당자 연락처**
-- **운영 연락망** — 전화번호는 로그인한 관계자에게만 보입니다.
+- **운영 연락망**
 - **자료실 링크**
 
 확인되지 않은 값을 사실처럼 채우지 마세요. 비워 두면 화면에
@@ -223,7 +165,7 @@ node dev-server.js
 ## Netlify 배포
 
 GitHub `main` 브랜치에 push 하면 자동 배포됩니다.
-`netlify.toml` 이 publish 경로와 보안 헤더(noindex 포함)를 지정합니다.
+`netlify.toml` 이 publish 경로, 보안 헤더(noindex 포함), `/admin` 경로를 지정합니다.
 
 빌드 명령이 없는 정적 사이트라 환경변수 설정은 필요 없습니다.
 Supabase 연결 정보는 `assets/config.js` 로 함께 배포됩니다.
@@ -233,11 +175,11 @@ Supabase 연결 정보는 `assets/config.js` 로 함께 배포됩니다.
 | 증상 | 확인할 곳 |
 |---|---|
 | “서버에 연결할 수 없습니다” | `assets/config.js` 값이 비었거나 `.gitignore` 에 걸렸는지 |
-| 로그인은 되는데 바로 로그아웃됨 | `staff_profiles` 에 해당 계정 줄이 있는지 |
-| “데이터베이스가 최신 구조가 아닙니다” | `migration-portal.sql` 실행 여부 |
-| 관계자 초대가 안 됨 | Edge Functions 에 `invite-staff` 가 Active 인지 |
-| 저장·삭제가 “0건” | 로그인 만료 → 재로그인. 그래도 안 되면 `fix-policies.sql` |
-| 관리자에서 “권한 없음” | `staff_profiles.role` 이 `admin` 인지 |
+| 포털이 비어 있거나 “권한이 없습니다” | `migration-public-portal.sql` 실행 여부 |
+| “필요한 표가 데이터베이스에 없습니다” | `migration-portal.sql` 실행 여부 |
+| 부스 상태 변경이 안 됨 | `set_booth_status` 함수가 만들어졌는지 (같은 migration) |
+| 관리자 로그인 후 “권한 없음” | `staff_profiles.role` 이 `admin` 인지 |
+| 저장·삭제가 “0건” | 로그인 만료 → 재로그인 |
 | 배포본만 옛 화면 | Netlify 최신 배포 로그와 캐시 확인 |
 
 자세한 오류는 브라우저 개발자도구 콘솔에 `[portal]` · `[admin]` 으로 남습니다.

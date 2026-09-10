@@ -1,17 +1,20 @@
 /* ===================================================================
-   2026년 인천 AI·SW미래채움 교육페스티벌 — 관계자 운영 포털
-   공통 계층: Supabase 연결 · 인증 · 데이터 접근 · 잔손질
+   2026년 인천 AI·SW미래채움 교육페스티벌 — 행사 운영 포털
+   공통 계층: Supabase 연결 · 관리자 인증 · 데이터 접근 · 잔손질
 
-   여기에는 fallback 데이터가 없습니다. 관계자 전용 사이트라
-   인증 없이 운영정보가 보이면 안 되기 때문입니다(TASK 20).
-   연결이 안 되면 데이터를 꾸며내지 않고 오류를 알립니다.
+   포털은 로그인 없이 열립니다. anon 키로 읽고, 무엇을 읽을 수
+   있는지는 데이터베이스의 RLS 열람 정책이 정합니다.
+   로그인은 관리자 한 종류뿐이고, 편집 권한은 is_admin() 이 막습니다.
+
+   여기에는 fallback 데이터가 없습니다. 연결이 안 되면 데이터를
+   꾸며내지 않고 오류를 알립니다.
    =================================================================== */
 window.Core = (function () {
   'use strict';
 
   var cfg = window.FESTIVAL_CONFIG || {};
   var client = null;
-  var profile = null;   // staff_profiles 의 내 줄 (role 포함)
+  var profile = null;   // 로그인한 관리자의 staff_profiles 줄 (role 포함)
 
   /* ── 연결 ───────────────────────────────────────────────────── */
   function isConfigured() {
@@ -25,9 +28,9 @@ window.Core = (function () {
       auth: {
         persistSession: true,
         autoRefreshToken: true,
-        // 초대·비밀번호 재설정 링크는 주소 뒤 #access_token=... 으로
-        // 돌아옵니다. 이걸 켜야 초대받은 사람이 로그인될 수 있습니다.
-        detectSessionInUrl: true
+        // 초대·재설정 링크가 없어졌습니다. 화면 이동에 쓰는
+        // #dashboard 같은 해시를 토큰으로 오해하지 않도록 꺼 둡니다.
+        detectSessionInUrl: false
       }
     });
     return client;
@@ -40,14 +43,6 @@ window.Core = (function () {
     return c.auth.getSession().then(function (r) {
       return (r.data && r.data.session) || null;
     }).catch(function () { return null; });
-  }
-
-  /* 로그인한 사람이 관계자 명단에 있는지 확인합니다.
-     auth 계정만 있고 staff_profiles 에 줄이 없으면 아무것도 못 봅니다. */
-  function loadProfile() {
-    var c = db();
-    if (!c) return Promise.resolve(null);
-    return c.from('staff_profiles').select('*').eq('id', '__self__').then(function () { return null; });
   }
 
   /* 프로필을 못 가져온 이유를 구분해 둡니다. "명단에 없음"과
@@ -67,36 +62,30 @@ window.Core = (function () {
       .catch(function (e) { profileError = e; profile = null; return null; });
   }
 
-  /* 로그인은 됐는데 들어갈 수 없을 때 보여 줄 설명 */
+  /* 로그인은 됐는데 관리자로 들어갈 수 없을 때 보여 줄 설명 */
   function accessMessage() {
     var m = (profileError && profileError.message) || '';
     var code = (profileError && profileError.code) || '';
     if (code === '42P01' || code === 'PGRST205' || code === 'PGRST202' ||
         /relation .* does not exist/i.test(m)) {
       return '데이터베이스가 아직 운영 포털 구조가 아닙니다. ' +
-             'Supabase SQL Editor 에서 supabase/migration-portal.sql 을 실행해 주세요.';
+             'Supabase SQL Editor 에서 supabase/migration-public-portal.sql 을 실행해 주세요.';
     }
-    if (m) return '관계자 정보를 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.';
-    return '관계자로 등록되지 않은 계정입니다. 운영 총괄에게 문의해 주세요.';
+    if (m) return '계정 정보를 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.';
+    return '관리자로 등록되지 않은 계정입니다.';
   }
 
+  /* 관리자 로그인. 권한(admin) 확인은 부르는 쪽이 fetchProfile 로
+     이어서 합니다. 여기서 바로 내보내지 않는 이유는, "권한이 없는
+     계정"과 "조회가 잠깐 실패한 상황"을 화면에서 다르게 안내해야
+     하기 때문입니다. */
   function signIn(email, password) {
     var c = db();
     if (!c) return Promise.reject(new Error('Supabase 설정이 없습니다.'));
     return c.auth.signInWithPassword({ email: email, password: password })
       .then(function (r) {
         if (r.error) throw r.error;
-        return fetchProfile(r.data.user.id).then(function (p) {
-          if (!p) {
-            // 조회 자체가 실패한 경우는 세션을 지우지 않습니다.
-            // 확실히 "명단에 없음" 일 때만 내보냅니다.
-            if (profileError) throw new Error(accessMessage());
-            return c.auth.signOut().then(function () {
-              throw new Error(accessMessage());
-            });
-          }
-          return r.data.session;
-        });
+        return r.data.session;
       });
   }
 
@@ -104,27 +93,6 @@ window.Core = (function () {
     var c = db();
     profile = null;
     return c ? c.auth.signOut() : Promise.resolve();
-  }
-
-  /* 초대 메일이나 비밀번호 재설정 링크를 타고 들어왔는지.
-     supabase-js 가 주소의 토큰을 이미 먹은 뒤라 값이 남아 있지 않을 수
-     있어, 우리 쪽에서 먼저 기록해 둡니다. */
-  var entryType = (function () {
-    var h = location.hash || '';
-    var m = /[#&]type=([a-z_]+)/.exec(h);
-    return m ? m[1] : null;
-  })();
-  function invitedEntry() { return entryType === 'invite' || entryType === 'recovery'; }
-
-  /* 초대받은 사람이 처음 들어와 비밀번호를 정할 때 씁니다. */
-  function setPassword(pw) {
-    var c = db();
-    if (!c) return Promise.reject(new Error('Supabase 설정이 없습니다.'));
-    return c.auth.updateUser({ password: pw }).then(function (r) {
-      if (r.error) throw r.error;
-      entryType = null;
-      return r.data;
-    });
   }
 
   function profileFailed() { return !!profileError; }
@@ -222,6 +190,19 @@ window.Core = (function () {
       .then(function (r) { if (r.error) throw r.error; return affected(r.data, '삭제')[0]; });
   }
 
+  /* 데이터베이스 함수(RPC) 호출.
+     "이 칼럼 하나만 바꿀 수 있어야 한다" 같은 제한된 쓰기에 씁니다.
+     부스 상태 변경이 그렇습니다 — 표 전체에 쓰기 권한을 열지 않고
+     set_booth_status 함수 하나만 열어 둡니다. */
+  function rpc(name, args) {
+    var c = db();
+    if (!c) return Promise.reject(new Error('Supabase 설정이 없습니다.'));
+    return c.rpc(name, args || {}).then(function (r) {
+      if (r.error) throw r.error;
+      return r.data;
+    });
+  }
+
   /* ── 잔손질 ─────────────────────────────────────────────────── */
   function esc(v) {
     return String(v == null ? '' : v).replace(/[&<>"']/g, function (c) {
@@ -258,9 +239,9 @@ window.Core = (function () {
     isConfigured: isConfigured, db: db,
     session: session, signIn: signIn, signOut: signOut,
     fetchProfile: fetchProfile, me: me, isAdmin: isAdmin, accessMessage: accessMessage,
-    invitedEntry: invitedEntry, setPassword: setPassword, profileFailed: profileFailed,
+    profileFailed: profileFailed,
     authMessage: authMessage, dataMessage: dataMessage,
-    select: select, insert: insert, update: update, remove: remove,
+    select: select, insert: insert, update: update, remove: remove, rpc: rpc,
     esc: esc, pad2: pad2, toMin: toMin, minLabel: minLabel,
     telHref: telHref, fmtDateTime: fmtDateTime
   };

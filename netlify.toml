@@ -9,7 +9,14 @@
   publish = "."
   command = ""
 
-# 관계자 전용 포털이라 검색엔진에 올리지 않습니다.
+# 관리자 화면을 /admin 으로도 열 수 있게 합니다.
+# rewrite(200) 라 주소창에는 /admin 이 그대로 남습니다.
+[[redirects]]
+  from = "/admin"
+  to = "/admin.html"
+  status = 200
+
+# 로그인 없이 열리지만 검색엔진에는 올리지 않습니다.
 [[headers]]
   for = "/*"
   [headers.values]

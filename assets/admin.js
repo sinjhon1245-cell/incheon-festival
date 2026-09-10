@@ -18,9 +18,6 @@
   var cache = {};
   var current = 'overview';
   var zoneKeys = [];
-  var staffRows = null;   // Edge Function 이 돌려준 계정 목록(로그인 상태 포함)
-  var staffNote = null;   // 함수가 아직 배포되지 않았을 때 안내
-  var fnUnavailable = false;  // 미배포 확인 후에는 다시 부르지 않습니다
 
   var SCHEDULE_CATS = ['무대', '강연', '부스', '운영', '행사 지원'];
   var SCHEDULE_STATES = ['예정', '진행 중', '종료', '취소', '변경'];
@@ -36,8 +33,7 @@
     '운영 중': 'ok', '준비 완료': 'info', '준비 전': 'warn', '일시 중단': 'danger', '운영 종료': 'off',
     '진행 중': 'ok', '예정': 'info', '종료': 'off', '취소': 'danger', '변경': 'warn',
     '긴급': 'danger', '중요': 'warn', '일반': 'info', '높음': 'warn', '보통': 'info',
-    '접수': 'warn', '확인 중': 'info', '처리 중': 'info', '완료': 'ok',
-    'admin': 'danger', 'staff': 'info', '활성': 'ok', '초대됨': 'warn', '계정 없음': 'off'
+    '접수': 'warn', '확인 중': 'info', '처리 중': 'info', '완료': 'ok'
   };
   function badge(t) { return '<span class="badge badge--' + (TONE[t] || 'off') + '">' + esc(t) + '</span>'; }
   function tag(t) { return '<span class="badge badge--plain">' + esc(t) + '</span>'; }
@@ -251,13 +247,11 @@
         { k: 'category',  label: '분류' },
         { k: 'is_public', label: '공개', type: 'bool' }
       ]
-    },
-
-    staff_profiles: { label: '계정·권한', staff: true }
+    }
   };
 
   var ORDER = ['overview', 'settings', 'schedule_items', 'booths', 'notices',
-               'operation_requests', 'resources', 'contacts', 'venue_places', 'faqs', 'staff_profiles'];
+               'operation_requests', 'resources', 'contacts', 'venue_places', 'faqs'];
   var TABS = ['overview', 'schedule_items', 'booths', 'notices', 'operation_requests'];
 
   /* ── 알림 ───────────────────────────────────────────────────── */
@@ -276,7 +270,7 @@
     function n(k) {
       var e = ENTITIES[k];
       if (!e || e.dashboard || e.single) return '';
-      var len = k === 'staff_profiles' ? (staffRows || cache[k] || []).length : (cache[k] || []).length;
+      var len = (cache[k] || []).length;
       return '<span class="nav__badge" style="background:var(--bg-sink);color:var(--muted)">' + len + '</span>';
     }
     $('#sidenav').innerHTML = ORDER.map(function (k) {
@@ -313,7 +307,7 @@
       { n: openN, l: '미처리 운영 요청', go: 'operation_requests' },
       { n: (cache.contacts || []).length, l: '연락망', go: 'contacts' },
       { n: (cache.resources || []).length, l: '자료실', go: 'resources' },
-      { n: (staffRows || cache.staff_profiles || []).length, l: '관계자 계정', go: 'staff_profiles' }
+      { n: (cache.venue_places || []).length, l: '행사장 공간', go: 'venue_places' }
     ];
     return '<div class="page"><div class="page__head"><div>' +
       '<h1 class="page__title">관리자 대시보드</h1>' +
@@ -332,7 +326,6 @@
     var key = current, ent = ENTITIES[key], host = $('#view');
 
     if (ent.dashboard) { host.innerHTML = renderOverview(); paintNav(); return; }
-    if (ent.staff) { renderStaff(); return; }
 
     var head = '<div class="page__head"><div><h1 class="page__title">' + esc(ent.label) + '</h1>' +
       '<p class="page__desc">' + esc(ent.desc) + '</p></div>' +
@@ -490,209 +483,6 @@
     });
   }
 
-  /* ── 계정·권한 ──────────────────────────────────────────────── */
-  /* Edge Function 호출.
-     supabase-js 는 2xx 가 아니면 data 를 비우고 'non-2xx status code'
-     라는 일반 문구만 줍니다. 서버가 공들여 쓴 안내가 사라지므로,
-     응답 본문(error.context)을 직접 읽어 실제 메시지를 꺼냅니다. */
-  function fn(action, body) {
-    return C.db().functions.invoke('invite-staff', {
-      body: Object.assign({ action: action }, body || {})
-    }).then(function (r) {
-      if (!r.error) {
-        if (r.data && r.data.error) throw new Error(r.data.error);
-        return r.data;
-      }
-
-      var ctx = r.error.context;
-      // 함수가 배포되지 않았거나 네트워크가 막힌 경우엔 응답 자체가 없습니다.
-      if (!ctx || typeof ctx.json !== 'function') {
-        var e0 = new Error(r.error.message || '요청을 보내지 못했습니다.');
-        e0.__fn = true;
-        throw e0;
-      }
-      return ctx.clone().json().then(function (payload) {
-        var e = new Error((payload && payload.error) || r.error.message);
-        e.__status = ctx.status;
-        throw e;
-      }, function () {
-        var e = new Error(r.error.message || '요청을 처리하지 못했습니다.');
-        e.__status = ctx.status;
-        throw e;
-      });
-    });
-  }
-
-  function loadStaff() {
-    // 한 번 미배포로 확인됐으면 매번 호출해 CORS 오류를 반복하지 않습니다.
-    if (fnUnavailable) return Promise.resolve();
-    return fn('list').then(function (d) {
-      staffRows = d.rows || [];
-      staffNote = null;
-    }).catch(function (e) {
-      // 함수를 아직 배포하지 않은 상태는 오류가 아니라 예정된 단계입니다.
-      // 배포 전까지 매번 콘솔에 빨간 줄이 남지 않도록 안내로만 남깁니다.
-      var notDeployed = /Failed to send a request|Failed to fetch|not found/i.test(e.message || '');
-      if (notDeployed) {
-        fnUnavailable = true;
-        console.info('[admin] 관계자 초대 Edge Function 미배포 — 데이터베이스 목록으로 표시합니다.');
-      } else {
-        console.error('[admin] 계정 목록을 불러오지 못했습니다', e);
-      }
-      staffNote = notDeployed
-        ? '관계자 초대 기능(Edge Function)이 아직 배포되지 않았습니다. README 의 ' +
-          '“관계자 초대 기능 배포”를 참고해 주세요. 아래는 데이터베이스에 저장된 관계자 목록입니다.'
-        : '계정 목록을 불러오지 못했습니다: ' + (e.message || '');
-      staffRows = null;
-    });
-  }
-
-  function renderStaff() {
-    var rows = staffRows || cache.staff_profiles || [];
-    var adminCount = rows.filter(function (r) { return r.role === 'admin'; }).length;
-
-    var head = '<div class="page__head"><div><h1 class="page__title">계정·권한</h1>' +
-      '<p class="page__desc">관계자를 초대하면 로그인 계정과 권한이 함께 만들어집니다.</p></div>' +
-      '<div class="page__actions"><button class="btn btn--primary btn--sm" type="button" data-invite>+ 관계자 초대</button></div></div>';
-
-    var body = rows.length ? '<div class="list">' + rows.map(function (r, i) {
-      var isLastAdmin = r.role === 'admin' && adminCount <= 1;
-      return '<div class="listrow" data-sid="' + esc(r.id) + '" data-i="' + i + '">' +
-        '<span class="listrow__num">' + (i + 1) + '</span>' +
-        '<div class="listrow__body">' +
-          '<div class="listrow__title">' + esc(r.name || '(이름 없음)') + '</div>' +
-          '<div class="listrow__meta">' + esc(r.email || '') +
-          (r.team ? ' · ' + esc(r.team) : '') + (r.phone ? ' · ' + esc(r.phone) : '') + '</div>' +
-          '<div class="listrow__tags">' + badge(r.role) +
-          (r.status ? badge(r.status) : '') +
-          (isLastAdmin ? tag('마지막 관리자 · 삭제·강등 불가') : '') + '</div>' +
-        '</div>' +
-        '<div class="listrow__act">' +
-          '<button class="btn btn--ghost btn--sm" type="button" data-sact="edit">수정</button>' +
-          (isLastAdmin
-            ? '<button class="btn btn--danger btn--sm" type="button" disabled ' +
-              'aria-disabled="true" title="마지막 관리자 계정은 삭제할 수 없습니다">삭제</button>'
-            : '<button class="btn btn--danger btn--sm" type="button" data-sact="del">삭제</button>') +
-        '</div></div>';
-    }).join('') + '</div>' : '<div class="state">등록된 관계자가 없습니다.</div>';
-
-    $('#view').innerHTML = '<div class="page">' + head +
-      (staffNote ? '<div class="hint">' + esc(staffNote) + '</div>' : '') + body + '</div>';
-    paintNav();
-  }
-
-  var STAFF_FIELDS = [
-    { k: 'email', label: '이메일', type: 'email', wide: true, required: true },
-    { k: 'name',  label: '이름', required: true },
-    { k: 'team',  label: '소속/팀' },
-    { k: 'phone', label: '연락처', type: 'tel' },
-    { k: 'role',  label: '권한', type: 'select',
-      options: [
-        ['staff', 'staff · 열람 · 운영 요청 등록 · 부스 상태 변경'],
-        ['admin', 'admin · 전체 편집 · 계정 관리']
-      ] }
-  ];
-
-  function openInvite() {
-    // 배포 전에 폼을 채우게 하고 마지막에 실패시키면 헛수고가 됩니다.
-    // 먼저 상태를 알려 줍니다.
-    if (fnUnavailable) {
-      UI.confirm({
-        title: "초대 기능을 먼저 배포해 주세요",
-        message: "관계자 초대는 Supabase Edge Function 이 필요합니다. " +
-                 "Supabase 대시보드 → Edge Functions → Deploy a new function 에서 " +
-                 "이름을 invite-staff 로 만들고 supabase/functions/invite-staff/index.ts 내용을 " +
-                 "붙여넣어 배포한 뒤 이 화면을 새로고침해 주세요. 별도 Secret 등록은 필요 없습니다.",
-        confirmLabel: "알겠습니다"
-      });
-      return;
-    }
-    UI.form({
-      title: '관계자 초대',
-      desc: '이메일로 로그인 계정을 만들고 관계자 명단에 등록합니다. UUID 를 직접 넣을 필요가 없습니다.',
-      fields: STAFF_FIELDS,
-      values: { role: 'staff' },
-      submitLabel: '초대'
-    }).then(function (v) {
-      if (!v) return;
-      toast('초대하는 중입니다…');
-      fn('invite', {
-        email: v.email, name: v.name, team: v.team, phone: v.phone, role: v.role,
-        redirectTo: location.origin + '/index.html'
-      }).then(function (d) {
-        return loadStaff().then(function () {
-          renderStaff();
-          if (d && d.tempPassword) {
-            UI.confirm({
-              title: '임시 비밀번호를 발급했습니다',
-              message: '초대 메일을 보내지 못해 계정만 만들었습니다.\n' +
-                       (d.inviteFailReason ? '사유: ' + d.inviteFailReason + '\n' : '') +
-                       '\n' + v.email + '\n비밀번호: ' + d.tempPassword + '\n\n' +
-                       '이 창을 닫으면 다시 볼 수 없습니다. 본인에게 직접 전달해 주세요. ' +
-                       '받은 분은 로그인 후 비밀번호를 바꾸는 것이 좋습니다.',
-              confirmLabel: '확인했습니다'
-            });
-          } else {
-            toast('초대 메일을 보냈습니다.');
-          }
-        });
-      }).catch(function (e) {
-        console.error('[admin] 초대 실패', e);
-        toast(e.message || '초대하지 못했습니다.', true);
-      });
-    });
-  }
-
-  function openStaffEdit(row, isLastAdmin) {
-    var fields = STAFF_FIELDS.map(function (f) {
-      if (f.k !== 'role' || !isLastAdmin) return f;
-      // 마지막 관리자는 staff 로 낮출 수 없으니 선택지에서 뺍니다.
-      return Object.assign({}, f, {
-        options: [['admin', 'admin · 전체 편집 · 계정 관리']],
-        hint: '마지막 관리자라 권한을 낮출 수 없습니다'
-      });
-    });
-
-    UI.form({
-      title: '관계자 정보 수정',
-      fields: fields,
-      values: row,
-      submitLabel: '저장'
-    }).then(function (v) {
-      if (!v) return;
-      fn('update', { id: row.id, patch: v }).then(function () {
-        return loadStaff().then(function () { renderStaff(); toast('저장했습니다.'); });
-      }).catch(function (e) {
-        console.error('[admin] 계정 수정 실패', e);
-        toast(e.message || '저장하지 못했습니다.', true);
-      });
-    });
-  }
-
-  function confirmStaffDelete(row, isLastAdmin) {
-    if (isLastAdmin) {
-      UI.confirm({
-        title: '삭제할 수 없습니다',
-        message: '마지막 남은 관리자 계정입니다. 다른 관계자를 먼저 관리자로 올린 뒤 삭제해 주세요.',
-        confirmLabel: '알겠습니다'
-      });
-      return;
-    }
-    UI.confirm({
-      title: '관계자를 삭제할까요?',
-      message: '“' + (row.name || row.email) + '”의 로그인 계정과 관계자 정보를 모두 지웁니다. 되돌릴 수 없습니다.',
-      confirmLabel: '삭제', danger: true
-    }).then(function (ok) {
-      if (!ok) return;
-      fn('remove', { id: row.id }).then(function () {
-        return loadStaff().then(function () { renderStaff(); toast('삭제했습니다.'); });
-      }).catch(function (e) {
-        console.error('[admin] 계정 삭제 실패', e);
-        toast(e.message || '삭제하지 못했습니다.', true);
-      });
-    });
-  }
-
   /* ── 데이터 ─────────────────────────────────────────────────── */
   function loadAll() {
     $('#view').innerHTML = '<div class="state">데이터를 불러오는 중입니다.</div>';
@@ -704,10 +494,7 @@
     }).concat([
       C.select('zones').then(function (z) {
         zoneKeys = z.map(function (x) { return { key: x.key, label: x.label }; });
-      }),
-      C.select('staff_profiles', { order: [['role', true]] })
-        .then(function (d) { cache.staff_profiles = d; }).catch(function () {}),
-      loadStaff()
+      })
     ])).then(renderPanel).catch(function (e) {
       console.error('[admin] 로드 실패', e);
       $('#view').innerHTML = '<div class="state state--error">' + esc(C.dataMessage(e)) +
@@ -746,19 +533,6 @@
 
       if (t.closest('[data-add]')) { openEditor(current, null); return; }
       if (t.closest('[data-edit-settings]')) { openEditor('settings', (cache.settings || [])[0]); return; }
-      if (t.closest('[data-invite]')) { openInvite(); return; }
-
-      var sact = t.closest('[data-sact]');
-      if (sact) {
-        var srow = (staffRows || cache.staff_profiles || [])[Number(sact.closest('.listrow').dataset.i)];
-        if (!srow) return;
-        var rowsNow = staffRows || cache.staff_profiles || [];
-        var adminN = rowsNow.filter(function (x) { return x.role === 'admin'; }).length;
-        var lastAdmin = srow.role === 'admin' && adminN <= 1;
-        if (sact.dataset.sact === 'edit') openStaffEdit(srow, lastAdmin);
-        else confirmStaffDelete(srow, lastAdmin);
-        return;
-      }
 
       var act = t.closest('[data-act]');
       if (act) {
@@ -778,26 +552,78 @@
     });
   }
 
-  /* ── 시작 ───────────────────────────────────────────────────── */
+  /* ── 시작 ─────────────────────────────────────────────────────
+     포털은 로그인 없이 열리지만 이 화면은 다릅니다. 로그인한 계정의
+     role 이 admin 일 때만 들어옵니다. 화면을 통과하더라도 실제 편집은
+     데이터베이스의 is_admin() 이 다시 확인합니다. ───────────────── */
+  var GATES = ['gate-setup', 'gate-login', 'gate-denied'];
+
   function gate(id) {
-    ['gate-setup', 'gate-login', 'gate-denied'].forEach(function (g) { $('#' + g).hidden = g !== id; });
+    GATES.forEach(function (g) { $('#' + g).hidden = g !== id; });
     $('#app').hidden = true;
+  }
+
+  function enter() {
+    GATES.forEach(function (g) { $('#' + g).hidden = true; });
+    $('#app').hidden = false;
+    current = routeFromHash();
+    return loadAll();
+  }
+
+  /* 로그인한 세션이 관리자인지 확인하고 들여보냅니다. */
+  function admitOrGate(sess) {
+    if (!sess) { gate('gate-login'); return; }
+    return C.fetchProfile(sess.user.id).then(function (p) {
+      if (!p) {
+        // 조회 자체가 실패한 것과 권한이 없는 것을 구분해 안내합니다.
+        gate(C.profileFailed() ? 'gate-login' : 'gate-denied');
+        if (C.profileFailed()) toast(C.accessMessage(), true);
+        return;
+      }
+      if (p.role !== 'admin') { gate('gate-denied'); return; }
+      return enter();
+    });
   }
 
   if (!C.isConfigured()) { gate('gate-setup'); return; }
 
   bind();
-  C.session().then(function (sess) {
-    if (!sess) { gate('gate-login'); return; }
-    return C.fetchProfile(sess.user.id).then(function (p) {
-      if (!p) { gate('gate-login'); toast(C.accessMessage(), true); return; }
-      if (p.role !== 'admin') { gate('gate-denied'); return; }
-      ['gate-setup', 'gate-login', 'gate-denied'].forEach(function (g) { $('#' + g).hidden = true; });
-      $('#app').hidden = false;
-      current = routeFromHash();
-      return loadAll();
+
+  /* 로그인 폼 */
+  $('#loginform').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var email = $('#login-email'), pw = $('#login-pw');
+    var err = $('#login-error'), btn = $('#login-btn');
+    err.hidden = true;
+    email.setAttribute('aria-invalid', 'false');
+    pw.setAttribute('aria-invalid', 'false');
+
+    if (!email.value.trim() || !pw.value) {
+      err.textContent = '이메일과 비밀번호를 모두 입력해 주세요.';
+      err.hidden = false;
+      (!email.value.trim() ? email : pw).focus();
+      return;
+    }
+
+    btn.disabled = true; btn.textContent = '확인 중…';
+    C.signIn(email.value.trim(), pw.value).then(function (sess) {
+      pw.value = '';
+      return admitOrGate(sess);
+    }).catch(function (e2) {
+      err.textContent = C.authMessage(e2);
+      err.hidden = false;
+      pw.focus();
+    }).then(function () {
+      btn.disabled = false; btn.textContent = '로그인';
     });
-  }).catch(function (e) {
+  });
+
+  /* 관리자가 아닌 계정으로 들어왔을 때 빠져나갈 길 */
+  $('#denied-signout').addEventListener('click', function () {
+    C.signOut().then(function () { location.reload(); });
+  });
+
+  C.session().then(admitOrGate).catch(function (e) {
     console.error('[admin] 시작 실패', e);
     gate('gate-login');
   });

@@ -13,14 +13,10 @@
       service_role 키는 그 정책을 전부 무시하는 마스터 키라,
       이 파일에 넣으면 누구나 데이터를 지울 수 있게 됩니다.
 
-   두 값이 비어 있으면 사이트는 assets/fallback-data.js 의 내용으로
-   그냥 동작합니다. 그래서 Supabase를 아직 안 만드셨어도 괜찮습니다.
+   두 값이 비어 있으면 사이트는 "서버에 연결할 수 없습니다" 화면만
+   보여 줍니다. 데이터를 꾸며내지 않습니다.
    =================================================================== */
 window.FESTIVAL_CONFIG = {
   supabaseUrl: 'https://ynixjjqozkbzxjmishbe.supabase.co',
-  supabaseAnonKey: 'sb_publishable_qNRplAPHrlJOhOapAR6ybQ_fwOxKgzR',
-
-  // 관리자 계정 이메일. 적어 두면 로그인 화면에서 이메일 칸이 사라지고
-  // 비밀번호만 입력하면 됩니다. (비워 두면 이메일도 함께 입력)
-  adminEmail: 'aifest@ice.go.kr'
+  supabaseAnonKey: 'sb_publishable_qNRplAPHrlJOhOapAR6ybQ_fwOxKgzR'
 };

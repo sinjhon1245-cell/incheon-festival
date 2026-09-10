@@ -26,12 +26,28 @@
 </div>
 
 <div class="gate" id="gate-login" hidden>
-  <div class="gate__card">
-    <p class="gate__kicker">관리자</p>
-    <h1 class="gate__title">로그인이 필요합니다</h1>
-    <p class="gate__desc">운영 포털에서 관계자 로그인을 먼저 해 주세요.</p>
-    <a class="btn btn--primary btn--full" href="index.html">운영 포털로 이동</a>
-  </div>
+  <form class="gate__card" id="loginform" novalidate>
+    <p class="gate__kicker">2026년 인천 AI·SW미래채움 교육페스티벌</p>
+    <h1 class="gate__title">관리자 로그인</h1>
+    <p class="gate__desc">운영 콘텐츠를 편집하려면 관리자 계정이 필요합니다.</p>
+
+    <div class="field">
+      <label class="field__label" for="login-email">이메일</label>
+      <input class="input" type="email" id="login-email" name="email"
+             autocomplete="username" required inputmode="email" />
+    </div>
+
+    <div class="field">
+      <label class="field__label" for="login-pw">비밀번호</label>
+      <input class="input" type="password" id="login-pw" name="password"
+             autocomplete="current-password" required />
+    </div>
+
+    <p class="alert alert--error" id="login-error" role="alert" hidden></p>
+
+    <button class="btn btn--primary btn--full" type="submit" id="login-btn">로그인</button>
+    <a class="btn btn--ghost btn--full" href="index.html">운영 포털로 돌아가기</a>
+  </form>
 </div>
 
 <div class="gate" id="gate-denied" hidden>
@@ -39,9 +55,9 @@
     <p class="gate__kicker">권한 없음</p>
     <h1 class="gate__title">관리자만 들어올 수 있습니다</h1>
     <p class="gate__desc">
-      현재 계정은 관계자(staff) 권한입니다. 운영 콘텐츠 편집은 관리자(admin)
-      권한이 있어야 합니다. 운영 총괄에게 문의해 주세요.
+      이 계정에는 관리자(admin) 권한이 없습니다. 운영 총괄에게 문의해 주세요.
     </p>
+    <button class="btn btn--primary btn--full" type="button" id="denied-signout">다른 계정으로 로그인</button>
     <a class="btn btn--ghost btn--full" href="index.html">운영 포털로 돌아가기</a>
   </div>
 </div>

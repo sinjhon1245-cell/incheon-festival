@@ -1,0 +1,5 @@
+# 행사 관계자용 운영 포털입니다. 로그인 없이 열리지만
+# 검색 결과에는 올라가지 않게 합니다.
+# (netlify.toml 의 X-Robots-Tag 헤더와 각 페이지의 meta 태그가 같은 일을 합니다.)
+User-agent: *
+Disallow: /

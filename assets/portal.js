@@ -1,16 +1,19 @@
 /* ===================================================================
-   2026년 인천 AI·SW미래채움 교육페스티벌 — 관계자 운영 포털
+   2026년 인천 AI·SW미래채움 교육페스티벌 — 행사 운영 포털
 
    화면 구성은 해시 라우팅입니다(#dashboard, #booths …).
-   모든 데이터는 Supabase 에서 옵니다. 로그인하지 않으면 아무것도
-   불러오지 않습니다 — 인증 없이 운영정보가 보이면 안 됩니다.
+   모든 데이터는 Supabase 에서 옵니다.
+
+   이 화면에는 로그인이 없습니다. 주소를 아는 관계자는 바로 들어와
+   열람하고, 운영 요청 등록과 부스 상태 변경까지 할 수 있습니다.
+   그 밖의 편집은 전부 /admin 에서 관리자만 합니다 — 화면에서
+   감추는 게 아니라 데이터베이스 정책이 막습니다.
    =================================================================== */
 (function () {
   'use strict';
 
   var C = window.Core;
   var $ = function (s, r) { return (r || document).querySelector(s); };
-  var $$ = function (s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); };
   var esc = C.esc;
 
   /* ── 메뉴 ───────────────────────────────────────────────────── */
@@ -482,7 +485,6 @@
   function requestDetail(id) {
     var r = S.requests.filter(function (x) { return x.id === id; })[0];
     if (!r) return;
-    var canManage = C.isAdmin();
     var html = '<div class="notice__top">' + badge(r.priority) + badge(r.status) +
       '<span class="badge badge--plain">' + esc(r.kind) + '</span></div>' +
       '<dl class="dl">' +
@@ -491,14 +493,10 @@
       (r.reporter ? '<div class="dl__row"><dt>등록자</dt><dd>' + esc(r.reporter) + '</dd></div>' : '') +
       '<div class="dl__row"><dt>등록</dt><dd>' + esc(fmtDay(r.created_at)) + '</dd></div>' +
       (r.assignee_team ? '<div class="dl__row"><dt>담당팀</dt><dd>' + esc(r.assignee_team) + '</dd></div>' : '') +
-      '</dl>';
-    if (canManage) {
-      html += '<div><p class="field__label" style="margin-bottom:8px">처리 상태 변경</p><div class="statusgrid">' +
-        REQ_STATES.map(function (st) {
-          return '<button class="btn ' + (st === r.status ? 'btn--primary' : 'btn--ghost') + ' btn--sm" type="button" ' +
-            'data-setreq="' + esc(r.id) + '" data-status="' + esc(st) + '">' + esc(st) + '</button>';
-        }).join('') + '</div></div>';
-    }
+      '</dl>' +
+      // 처리 상태를 바꾸는 건 관리자 몫입니다. 여기서는 진행 상황만
+      // 확인합니다(데이터베이스도 같은 규칙으로 막고 있습니다).
+      '<p class="gate__hint">처리 상태는 운영 총괄이 관리자 화면에서 변경합니다.</p>';
     openDrawer(r.title, html);
   }
 
@@ -506,7 +504,6 @@
     var boothOpts = S.booths.map(function (b) {
       return '<option value="' + esc(b.code || b.name) + '">' + esc((b.code ? b.code + ' · ' : '') + b.name) + '</option>';
     }).join('');
-    var me = C.me() || {};
     openDrawer('현장 문제 보고',
       '<form id="reqform" novalidate style="display:flex;flex-direction:column;gap:14px">' +
       '<div class="field"><label class="field__label" for="rq-loc">부스 또는 위치<span class="field__req">*</span></label>' +
@@ -523,7 +520,7 @@
       '<div class="field"><label class="field__label" for="rq-body">내용</label>' +
       '<textarea class="textarea" id="rq-body" placeholder="상황을 간단히 적어 주세요."></textarea></div>' +
       '<div class="field"><label class="field__label" for="rq-by">등록자</label>' +
-      '<input class="input" id="rq-by" value="' + esc(me.name || '') + '" /></div>' +
+      '<input class="input" id="rq-by" maxlength="40" placeholder="예: 운영지원팀 김OO" /></div>' +
       '<p class="alert alert--error" id="rq-err" role="alert" hidden></p>' +
       '<button class="btn btn--primary btn--full" type="submit" id="rq-submit">등록</button>' +
       '</form>');
@@ -620,10 +617,12 @@
       if (id === 'notices' && urgent) return '<span class="nav__badge">' + urgent + '</span>';
       return '';
     }
+    // 관리자 링크는 늘 보입니다. 눌러도 admin.html 이 스스로 로그인을
+    // 요구하므로, 링크가 보인다고 해서 열리는 것은 아닙니다.
     $('#sidenav').innerHTML = NAV.map(function (n) {
       return '<a href="#' + n.id + '" class="' + (n.id === view ? 'is-on' : '') + '"' +
         (n.id === view ? ' aria-current="page"' : '') + '>' + esc(n.label) + badgeFor(n.id) + '</a>';
-    }).join('') + (C.isAdmin() ? '<a href="admin.html">관리자</a>' : '');
+    }).join('') + '<a href="admin.html">관리자</a>';
 
     var tabs = NAV.filter(function (n) { return n.tab; });
     $('#tabbar').innerHTML = tabs.map(function (n) {
@@ -638,11 +637,7 @@
 
     $('#sheetnav').innerHTML = NAV.filter(function (n) { return !n.tab; }).map(function (n) {
       return '<a href="#' + n.id + '" class="' + (n.id === view ? 'is-on' : '') + '">' + esc(n.label) + '</a>';
-    }).join('') + (C.isAdmin() ? '<a href="admin.html">관리자</a>' : '');
-
-    var me = C.me() || {};
-    $('#side-who').innerHTML = esc(me.name || me.email || '') +
-      '<br /><span class="badge badge--plain">' + (C.isAdmin() ? '관리자' : '관계자') + '</span>';
+    }).join('') + '<a href="admin.html">관리자</a>';
   }
 
   function routeFromHash() {
@@ -661,12 +656,6 @@
   /* ── 이벤트 ─────────────────────────────────────────────────── */
   function bind() {
     window.addEventListener('hashchange', go);
-
-    $$('[data-signout]').forEach(function (b) {
-      b.addEventListener('click', function () {
-        C.signOut().then(function () { location.reload(); });
-      });
-    });
 
     document.addEventListener('click', function (e) {
       var t = e.target;
@@ -703,9 +692,6 @@
 
       var sb = t.closest('[data-setbooth]');
       if (sb) { setBoothStatus(sb.getAttribute('data-setbooth'), sb.getAttribute('data-status'), sb); return; }
-
-      var sr = t.closest('[data-setreq]');
-      if (sr) { setReqStatus(sr.getAttribute('data-setreq'), sr.getAttribute('data-status'), sr); return; }
 
       var fq = t.closest('.faq__q');
       if (fq) {
@@ -745,9 +731,13 @@
   }
 
   /* ── 쓰기 동작 ──────────────────────────────────────────────── */
+  /* 부스 상태는 표를 직접 고치지 않고 전용 함수로 바꿉니다.
+     비로그인 상태에서 booths 표에 쓰기 권한을 열면 담당자 연락처까지
+     바꿀 수 있게 되기 때문입니다. set_booth_status 는 status 한 칸만
+     건드리고, 허용된 값인지도 서버에서 다시 확인합니다. */
   function setBoothStatus(id, status, btn) {
     btn.disabled = true;
-    C.update('booths', id, { status: status }).then(function (row) {
+    C.rpc('set_booth_status', { p_id: id, p_status: status }).then(function (row) {
       S.booths = S.booths.map(function (b) { return b.id === id ? row : b; });
       toast('부스 상태를 “' + status + '”(으)로 바꿨습니다.');
       boothDetail(id);
@@ -755,19 +745,6 @@
     }).catch(function (e) {
       toast(C.dataMessage(e), true);
       console.error('[portal] 부스 상태 변경 실패', e);
-    }).then(function () { btn.disabled = false; });
-  }
-
-  function setReqStatus(id, status, btn) {
-    btn.disabled = true;
-    C.update('operation_requests', id, { status: status }).then(function (row) {
-      S.requests = S.requests.map(function (r) { return r.id === id ? row : r; });
-      toast('처리 상태를 “' + status + '”(으)로 바꿨습니다.');
-      requestDetail(id);
-      render();
-    }).catch(function (e) {
-      toast(C.dataMessage(e), true);
-      console.error('[portal] 요청 상태 변경 실패', e);
     }).then(function () { btn.disabled = false; });
   }
 
@@ -786,15 +763,16 @@
     }
 
     btn.disabled = true; btn.textContent = '등록 중…';
-    var me = C.me() || {};
+    // 로그인 개념이 없으므로 등록자는 적어 주는 대로 저장합니다.
+    // status 는 반드시 '접수' 여야 합니다 — 데이터베이스 정책이
+    // 비로그인 등록을 '접수' 로만 받습니다.
     C.insert('operation_requests', {
       location: loc.value.trim(),
       kind: $('#rq-kind').value,
       priority: $('#rq-pri').value,
       title: title.value.trim(),
       body: $('#rq-body').value.trim(),
-      reporter: $('#rq-by').value.trim() || me.name || '',
-      reporter_id: me.id || null,
+      reporter: $('#rq-by').value.trim(),
       status: '접수'
     }).then(function (row) {
       S.requests.unshift(row);
@@ -822,130 +800,27 @@
     clockTimer = setInterval(tick, 1000);
   }
 
-  /* ── 시작 ───────────────────────────────────────────────────── */
-  var GATES = ['gate-setup', 'gate-login', 'gate-setpw'];
-
-  function showGate(id) {
-    GATES.forEach(function (g) { $('#' + g).hidden = g !== id; });
-    $('#app').hidden = true;
-  }
-
-  function showApp() {
-    GATES.forEach(function (g) { $('#' + g).hidden = true; });
+  /* ── 시작 ───────────────────────────────────────────────────────
+     로그인 단계가 없습니다. 설정만 확인하고 바로 데이터를 부릅니다.
+     "무엇을 볼 수 있는가"는 여기서 정하지 않고 데이터베이스의 열람
+     정책이 정합니다. ─────────────────────────────────────────── */
+  function boot() {
+    if (!C.isConfigured()) {
+      $('#gate-setup').hidden = false;
+      $('#app').hidden = true;
+      return;
+    }
+    $('#gate-setup').hidden = true;
     $('#app').hidden = false;
-  }
 
-  function boot(reload) {
-    if (!C.isConfigured()) { showGate('gate-setup'); return; }
-
-    C.session().then(function (sess) {
-      if (!sess) { showGate('gate-login'); return; }
-
-      // 초대 메일이나 재설정 링크를 타고 들어왔다면, 먼저 비밀번호를
-      // 정해야 합니다. 이 단계를 건너뛰면 다음 로그인이 불가능합니다.
-      if (C.invitedEntry()) {
-        history.replaceState(null, '', location.pathname);
-        showGate('gate-setpw');
-        var f = $('#setpw-1');
-        if (f) f.focus();
-        return;
-      }
-      return C.fetchProfile(sess.user.id).then(function (p) {
-        if (!p) {
-          // 조회가 실패한 것뿐이라면 로그아웃시키지 않습니다.
-          // 네트워크가 잠깐 끊겼다고 사용자를 내보내면 안 됩니다.
-          if (C.profileFailed()) {
-            showApp();
-            S.error = C.accessMessage();
-            render();
-            return;
-          }
-          return C.signOut().then(function () {
-            showGate('gate-login');
-            var e = $('#login-error');
-            e.textContent = C.accessMessage();
-            e.hidden = false;
-          });
-        }
-        showApp();
-        S.loading = true;
-        view = routeFromHash();
-        render();
-        return loadAll().then(function () {
-          go();
-          startClock();
-        });
-      });
+    S.loading = true;
+    view = routeFromHash();
+    render();
+    return loadAll().then(function () {
+      go();
+      startClock();
     });
   }
-
-  /* 초대 수락 — 비밀번호 설정 */
-  $('#setpwform').addEventListener('submit', function (e) {
-    e.preventDefault();
-    var a = $('#setpw-1'), b = $('#setpw-2');
-    var err = $('#setpw-error'), btn = $('#setpw-btn');
-    err.hidden = true;
-    a.setAttribute('aria-invalid', 'false');
-    b.setAttribute('aria-invalid', 'false');
-
-    if (a.value.length < 6) {
-      err.textContent = '비밀번호는 6자 이상이어야 합니다.';
-      err.hidden = false;
-      a.setAttribute('aria-invalid', 'true');
-      a.focus();
-      return;
-    }
-    if (a.value !== b.value) {
-      err.textContent = '두 비밀번호가 서로 다릅니다.';
-      err.hidden = false;
-      b.setAttribute('aria-invalid', 'true');
-      b.focus();
-      return;
-    }
-
-    btn.disabled = true;
-    btn.textContent = '저장 중…';
-    C.setPassword(a.value).then(function () {
-      a.value = ''; b.value = '';
-      boot();
-    }).catch(function (e2) {
-      console.error('[portal] 비밀번호 설정 실패', e2);
-      err.textContent = C.authMessage(e2);
-      err.hidden = false;
-    }).then(function () {
-      btn.disabled = false;
-      btn.textContent = '시작하기';
-    });
-  });
-
-  /* 로그인 폼 */
-  $('#loginform').addEventListener('submit', function (e) {
-    e.preventDefault();
-    var email = $('#login-email'), pw = $('#login-pw');
-    var err = $('#login-error'), btn = $('#login-btn');
-    err.hidden = true;
-    email.setAttribute('aria-invalid', 'false');
-    pw.setAttribute('aria-invalid', 'false');
-
-    if (!email.value.trim() || !pw.value) {
-      err.textContent = '이메일과 비밀번호를 모두 입력해 주세요.';
-      err.hidden = false;
-      (!email.value.trim() ? email : pw).focus();
-      return;
-    }
-
-    btn.disabled = true; btn.textContent = '확인 중…';
-    C.signIn(email.value.trim(), pw.value).then(function () {
-      pw.value = '';
-      boot();
-    }).catch(function (e2) {
-      err.textContent = C.authMessage(e2);
-      err.hidden = false;
-      pw.focus();
-    }).then(function () {
-      btn.disabled = false; btn.textContent = '관계자 로그인';
-    });
-  });
 
   bind();
   boot();
