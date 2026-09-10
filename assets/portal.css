@@ -36,6 +36,10 @@
 
   --side-w: 232px;
   --tabbar-h: 60px;
+
+  /* 본문 좌우 여백. 안내도를 화면 끝까지 늘릴 때 이 값만큼
+     되돌려야 해서 변수로 뺐습니다. */
+  --main-pad: 16px;
 }
 
 *, *::before, *::after { box-sizing: border-box; }
@@ -183,7 +187,7 @@ code {
 
 .main {
   flex: 1; min-width: 0;
-  padding: 18px 16px calc(var(--tabbar-h) + env(safe-area-inset-bottom) + 24px);
+  padding: 18px var(--main-pad) calc(var(--tabbar-h) + env(safe-area-inset-bottom) + 24px);
 }
 .main:focus { outline: none; }
 
@@ -463,7 +467,8 @@ code {
 @media (min-width: 768px) {
   .statgrid { grid-template-columns: repeat(4, 1fr); }
   .boothgrid { grid-template-columns: repeat(2, 1fr); }
-  .main { padding: 22px 22px 40px; }
+  :root { --main-pad: 22px; }
+  .main { padding: 22px var(--main-pad) 40px; }
   .drawer__panel {
     left: auto; top: 0; bottom: 0; width: min(460px, 100%);
     max-height: none; border-radius: 0;
@@ -501,7 +506,8 @@ code {
   .topbar { display: none; }
   .tabbar { display: none; }
   .fab { bottom: 24px; right: 24px; }
-  .main { padding: 26px 28px 48px; }
+  :root { --main-pad: 28px; }
+  .main { padding: 26px var(--main-pad) 48px; }
   .toast { bottom: 24px; }
   .boothgrid { grid-template-columns: repeat(3, 1fr); }
   .page { max-width: 1180px; }
@@ -591,22 +597,42 @@ code {
    올리면 화면 구조가 그대로인 채로 채워집니다. ─────────────── */
 .media { margin: 0 0 4px; }
 
+/* 안내도·배치도는 본문 좌우 여백을 넘어 화면 폭을 꽉 채웁니다.
+   배치도는 크게 볼수록 쓸모 있는 그림이라, 카드처럼 가둬 두지
+   않았습니다. 여백만큼 음수 마진으로 되돌리는 방식이라 부모의
+   레이아웃은 건드리지 않습니다. */
+.media--bleed {
+  margin-left: calc(-1 * var(--main-pad));
+  margin-right: calc(-1 * var(--main-pad));
+  width: calc(100% + 2 * var(--main-pad));
+}
+
 /* 자리를 미리 잡아 둡니다(aspect-ratio). 이미지가 도착하기 전까지
    높이가 0이면, 뜨는 순간 아래 내용이 아래로 밀리며 화면이 튑니다.
-   배치도처럼 큰 그림에서 특히 거슬립니다.
-   덕분에 placeholder 와 실제 이미지가 정확히 같은 자리를 씁니다. */
+   그림이 실제로 뜨면 원본 비율로 바꿔 주므로(portal.js 의 fitMedia),
+   위아래에 빈 띠가 남지 않고 가로를 정확히 채웁니다. */
+/* 높이 제한을 두지 않습니다. 제한을 걸면 그림이 그 안에 담기면서
+   좌우에 빈 띠가 생겨, 정작 "가로를 채운다"가 무너집니다.
+   비율은 원본을 그대로 따르고, 자세히 볼 때는 확대를 씁니다. */
 .media__btn {
-  display: block; width: 100%; padding: 0; border: 1px solid var(--line);
-  border-radius: var(--r); background: var(--bg-soft); overflow: hidden;
-  cursor: zoom-in; position: relative; box-shadow: var(--sh);
-  aspect-ratio: 16 / 9; max-height: 62vh;
+  display: block; width: 100%; padding: 0; background: var(--bg-soft);
+  overflow: hidden; cursor: zoom-in; position: relative;
+  aspect-ratio: 16 / 9;
+  border: 1px solid var(--line); border-radius: var(--r);
 }
 .media__btn img {
   display: block; width: 100%; height: 100%;
   object-fit: contain; background: var(--bg-soft);
 }
-/* 세로가 긴 그림도 잘리지 않게 contain 으로 담습니다. 남는 여백은
-   바탕색과 같아 액자처럼 보입니다. */
+
+/* 화면 끝에 닿는 그림에 둥근 모서리를 두면 잘린 것처럼 보입니다.
+   위아래 선만 남겨 띠처럼 보이게 합니다. */
+.media--bleed .media__btn,
+.media--bleed.media--empty .media__ph {
+  border-radius: 0; border-left: none; border-right: none;
+}
+
+/* 부스 상세 안의 작은 사진은 그대로 카드 모양입니다. */
 .media--sm .media__btn { aspect-ratio: 4 / 3; max-height: 240px; }
 
 .media__zoom {
@@ -618,13 +644,22 @@ code {
 .media__btn:hover { border-color: var(--primary); }
 .media__btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 
+/* 캡션은 글이라 본문 여백 안으로 되돌립니다. */
 .media__cap { font-size: 12.5px; color: var(--muted); margin: 8px 2px 0; line-height: 1.6; }
+.media--bleed .media__cap { margin-left: calc(var(--main-pad) + 2px); margin-right: calc(var(--main-pad) + 2px); }
 
 /* 비어 있을 때 — 깨진 이미지도, 텅 빈 흰 상자도 아닌 모습으로 */
 .media--empty .media__ph {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   gap: 7px; text-align: center;
-  aspect-ratio: 16 / 9; min-height: 148px; max-height: 320px; padding: 20px;
+  /* 폭을 못 박아 둡니다. 안 그러면 아래 max-height 에서 높이가
+     잘릴 때 비율을 맞추느라 폭까지 함께 줄어듭니다. */
+  width: 100%;
+  /* 비어 있을 때는 16:9 로 두되, 큰 화면에서 빈 상자가 화면을
+     통째로 잡아먹지 않도록 높이만 적당히 묶어 둡니다.
+     안내 영역과 실제 이미지가 함께 보이는 일은 없으므로,
+     이 제한이 이미지 쪽 자리 잡기를 방해하지 않습니다. */
+  aspect-ratio: 16 / 9; min-height: 148px; max-height: 340px; padding: 20px;
   border: 1px dashed var(--line); border-radius: var(--r);
   background:
     linear-gradient(180deg, var(--bg-soft) 0%, var(--bg-sink) 100%);

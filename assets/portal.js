@@ -78,6 +78,7 @@
     lastFocus = document.activeElement;
     $('#drawer-title').textContent = title;
     $('#drawer-body').innerHTML = html;
+    fitMedia($('#drawer-body'));
     $('#drawer').hidden = false;
     document.body.style.overflow = 'hidden';
     var f = $('#drawer-body button, #drawer-body a, #drawer-body input') || $('#drawer .iconbtn');
@@ -194,15 +195,17 @@
      깨진 이미지 아이콘은 보이지 않게 합니다. */
   function mediaBox(o) {
     var cap = o.caption ? '<figcaption class="media__cap">' + esc(o.caption) + '</figcaption>' : '';
+    // bleed: 본문 여백을 넘어 화면 가로를 꽉 채웁니다.
+    var cls = 'media' + (o.bleed === false ? '' : ' media--bleed');
     if (!o.url) {
-      return '<figure class="media media--empty">' +
+      return '<figure class="' + cls + ' media--empty">' +
         '<div class="media__ph">' +
           '<span class="media__icon" aria-hidden="true">◱</span>' +
           '<span class="media__phtitle">' + esc(o.title) + '</span>' +
           '<span class="media__phtext">' + esc(o.hint) + '</span>' +
         '</div></figure>';
     }
-    return '<figure class="media">' +
+    return '<figure class="' + cls + '">' +
       '<button class="media__btn" type="button" data-zoom="' + esc(o.url) + '" ' +
         'data-zoomcap="' + esc(o.caption || o.title) + '" aria-label="' + esc(o.title) + ' 크게 보기">' +
         // 화면 맨 위에 오는 그림이라 lazy 를 걸지 않습니다.
@@ -210,6 +213,21 @@
         '<img src="' + esc(o.url) + '" alt="' + esc(o.alt || o.title) + '" />' +
         '<span class="media__zoom" aria-hidden="true">확대</span>' +
       '</button>' + cap + '</figure>';
+  }
+
+  /* 그림이 실제로 뜨면 미리 잡아 둔 16:9 를 원본 비율로 바꿉니다.
+     그래야 가로를 정확히 채우면서 위아래에 빈 띠가 남지 않습니다.
+     뜨기 전까지는 16:9 로 자리를 지켜 화면이 튀지 않습니다. */
+  function fitMedia(root) {
+    var imgs = (root || document).querySelectorAll('.media__btn img');
+    Array.prototype.forEach.call(imgs, function (img) {
+      function fit() {
+        if (!img.naturalWidth || !img.naturalHeight) return;
+        img.parentNode.style.aspectRatio = img.naturalWidth + ' / ' + img.naturalHeight;
+      }
+      if (img.complete) fit();
+      else img.addEventListener('load', fit, { once: true });
+    });
   }
 
   /* 크게 보기. 배치도는 작은 화면에서 확대가 사실상 필수입니다. */
@@ -696,6 +714,7 @@
     if (S.loading) { host.innerHTML = stateBox('데이터를 불러오는 중입니다.'); return; }
     if (S.error)   { host.innerHTML = stateBox(S.error, 'error', true); return; }
     host.innerHTML = (VIEWS[view] || viewDashboard)();
+    fitMedia(host);
     var nav = NAV.filter(function (n) { return n.id === view; })[0];
     $('#topbar-title').textContent = nav ? nav.label : '대시보드';
     document.title = (nav ? nav.label + ' · ' : '') + '행사 운영 포털';
