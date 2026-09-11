@@ -73,19 +73,51 @@
   }
 
   /* ── 드로어 ─────────────────────────────────────────────────── */
+  /* 상세 드로어. 모바일에서는 아래에서 올라오는 시트, PC 에서는
+     오른쪽 패널입니다(모양은 portal.css 가 정합니다).
+     공지·부스·요청이 모두 이 하나를 돌려 씁니다. 자료실·행사장
+     상세가 나중에 붙더라도 여기에 얹으면 됩니다.
+
+     opts.accent  'urgent' 면 긴급 공지의 붉은 강조를 상세에도 이어 줍니다.
+     opts.footer  아래쪽에 닫기 버튼을 답니다. 긴 글을 다 읽고 나서
+                  위로 되돌아가 X 를 찾지 않아도 되게 합니다. */
   var lastFocus = null;
-  function openDrawer(title, html) {
+  function openDrawer(title, html, opts) {
+    opts = opts || {};
     lastFocus = document.activeElement;
     $('#drawer-title').textContent = title;
-    $('#drawer-body').innerHTML = html;
+
+    var panel = $('#drawer .drawer__panel');
+    panel.classList.toggle('drawer__panel--urgent', opts.accent === 'urgent');
+
+    $('#drawer-body').innerHTML = html +
+      (opts.footer ? '<div class="drawer__foot">' +
+        '<button class="btn btn--ghost btn--full" type="button" data-close-drawer>닫기</button></div>' : '');
     fitMedia($('#drawer-body'));
     $('#drawer').hidden = false;
     document.body.style.overflow = 'hidden';
-    var f = $('#drawer-body button, #drawer-body a, #drawer-body input') || $('#drawer .iconbtn');
-    if (f) f.focus();
+
+    // 처음 초점은 닫기 버튼에 둡니다. 본문 안의 버튼에 두면 화면을
+    // 읽어 주는 도구가 제목을 건너뛰고 중간부터 읽습니다.
+    var close = $('#drawer .drawer__head .iconbtn');
+    if (close) close.focus();
+  }
+
+  /* 열려 있는 동안 초점이 드로어 밖으로 빠져나가지 않게 합니다.
+     뒤에 가려진 목록으로 초점이 넘어가면 키보드만 쓰는 사람은
+     지금 무엇이 열려 있는지 알 수 없게 됩니다. */
+  function trapInDrawer(e) {
+    if (e.key !== 'Tab' || $('#drawer').hidden) return;
+    var f = $('#drawer .drawer__panel').querySelectorAll(
+      'button:not([disabled]), a[href], input, select, textarea');
+    if (!f.length) return;
+    var first = f[0], last = f[f.length - 1];
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
   }
   function closeDrawer() {
     $('#drawer').hidden = true;
+    $('#drawer .drawer__panel').classList.remove('drawer__panel--urgent');
     document.body.style.overflow = '';
     if (lastFocus && lastFocus.focus) lastFocus.focus();
   }
@@ -236,18 +268,37 @@
 
   /* 화면별 예시. 확정되지 않은 사실(시간·장소·전화번호 등)은 쓰지
      않고, "무엇이 이 자리에 오는지" 만 보여 줍니다. */
+  /* 예시 공지는 목록과 상세가 같은 원본을 씁니다. 눌러서 상세까지
+     볼 수 있어야 실제 화면 흐름을 이해할 수 있습니다.
+     확정되지 않은 시각·장소·연락처는 쓰지 않습니다. */
+  var SAMPLE_NOTICES = [
+    { level: '중요', sample: true,
+      title: '부스 운영자 사전 안내',
+      summary: '행사 전 부스 세팅 시간과 준비사항을 안내합니다.',
+      body: '부스 운영 전 준비사항, 세팅 시간, 준비물과 현장 운영 유의사항 등이 ' +
+            '등록되면 이곳에서 자세히 확인할 수 있습니다.' },
+    { level: '일반', sample: true,
+      title: '행사장 주차 및 출입 안내',
+      summary: '행사장 출입과 주차 관련 안내가 등록되면 이곳에서 확인할 수 있습니다.',
+      body: '행사장 출입 방법, 주차 위치, 차량 진입 및 물품 반입 관련 안내가 ' +
+            '확정되면 이곳에서 확인할 수 있습니다.' },
+    { level: '긴급', sample: true,
+      title: '긴급 운영 공지',
+      summary: '행사 당일 긴급 변경사항은 이 영역에 우선 표시됩니다.',
+      body: '행사 당일 일정 변경, 장소 변경, 안전 관련 긴급 안내 등 ' +
+            '즉시 확인해야 하는 내용이 이 영역에 우선 표시됩니다.' }
+  ];
+
   function sampleNotices() {
     return sampleWrap(
-      '등록된 공지가 없습니다. 아래는 어떤 공지가 올라오는지 보여 주는 예시이며, 실제 공지가 등록되면 사라집니다.',
-      [
-        ['중요', '부스 운영자 사전 안내', '행사 전 부스 세팅 시간과 준비사항을 안내합니다.'],
-        ['일반', '행사장 주차 및 출입 안내', '행사장 출입과 주차 관련 안내가 등록되면 이곳에서 확인할 수 있습니다.'],
-        ['긴급', '긴급 운영 공지', '행사 당일 긴급 변경사항은 이 영역에 우선 표시됩니다.']
-      ].map(function (n) {
-        return '<div class="notice is-sample' + (n[0] === '긴급' ? ' notice--urgent' : '') + '">' +
-          '<span class="notice__top">' + badge(n[0]) + SAMPLE + '</span>' +
-          '<span class="notice__title">' + esc(n[1]) + '</span>' +
-          '<span class="notice__body">' + esc(n[2]) + '</span></div>';
+      '등록된 공지가 없습니다. 아래는 어떤 공지가 올라오는지 보여 주는 예시이며, 실제 공지가 등록되면 사라집니다. 눌러서 상세 화면도 볼 수 있습니다.',
+      SAMPLE_NOTICES.map(function (n, i) {
+        // button 이라 마우스·Enter·Space 가 모두 됩니다.
+        return '<button class="notice is-sample' + (n.level === '긴급' ? ' notice--urgent' : '') +
+          '" type="button" data-samplenotice="' + i + '">' +
+          '<span class="notice__top">' + badge(n.level) + SAMPLE + '</span>' +
+          '<span class="notice__title">' + esc(n.title) + '</span>' +
+          '<span class="notice__body">' + esc(n.summary) + '</span></button>';
       }).join(''));
   }
 
@@ -704,19 +755,37 @@
       body + '</div>';
   }
 
+  /* 공지 상세. 실제 공지와 예시 공지가 같은 화면을 씁니다 —
+     예시를 눌러 본 사람이 실제 공지에서 다른 화면을 만나면
+     예시를 본 의미가 없기 때문입니다.
+
+     위에서부터 배지 · 작성 정보 · 본문 순서입니다. 본문이 길어도
+     드로어 안에서 스크롤되고, 줄바꿈과 문단은 그대로 살립니다. */
+  function noticeDetailView(n) {
+    var meta = [];
+    if (n.sample) {
+      meta.push(['작성 정보', '실제 공지가 등록되면 작성자와 등록 시각이 표시됩니다.']);
+    } else {
+      if (n.author) meta.push(['작성', n.author]);
+      meta.push(['등록', fmtDay(n.created_at)]);
+      if (n.updated_at && n.updated_at !== n.created_at) meta.push(['수정', fmtDay(n.updated_at)]);
+    }
+
+    var html =
+      '<div class="notice__top">' + badge(n.level) +
+      (n.pinned ? '<span class="badge badge--plain">고정</span>' : '') +
+      (n.sample ? SAMPLE : '') + '</div>' +
+      '<dl class="dl">' + meta.map(function (m) {
+        return '<div class="dl__row"><dt>' + esc(m[0]) + '</dt><dd>' + esc(m[1]) + '</dd></div>';
+      }).join('') + '</dl>' +
+      '<div class="noticebody">' + esc(n.body || '') + '</div>';
+
+    openDrawer(n.title, html, { accent: n.level === '긴급' ? 'urgent' : null, footer: true });
+  }
+
   function noticeDetail(id) {
     var n = S.notices.filter(function (x) { return x.id === id; })[0];
-    if (!n) return;
-    openDrawer(n.title,
-      '<div class="notice__top">' + badge(n.level) +
-      (n.pinned ? '<span class="badge badge--plain">고정</span>' : '') + '</div>' +
-      '<p style="font-size:15px;line-height:1.85;white-space:pre-wrap">' + esc(n.body) + '</p>' +
-      '<dl class="dl">' +
-      (n.author ? '<div class="dl__row"><dt>작성</dt><dd>' + esc(n.author) + '</dd></div>' : '') +
-      '<div class="dl__row"><dt>등록</dt><dd>' + esc(fmtDay(n.created_at)) + '</dd></div>' +
-      (n.updated_at && n.updated_at !== n.created_at ?
-        '<div class="dl__row"><dt>수정</dt><dd>' + esc(fmtDay(n.updated_at)) + '</dd></div>' : '') +
-      '</dl>');
+    if (n) noticeDetailView(n);
   }
 
   /* ── 화면: 운영 요청 ────────────────────────────────────────── */
@@ -1013,6 +1082,8 @@
 
       var bo = t.closest('[data-booth]');   if (bo) { boothDetail(bo.getAttribute('data-booth')); return; }
       var no = t.closest('[data-notice]');  if (no) { noticeDetail(no.getAttribute('data-notice')); return; }
+      var sn = t.closest('[data-samplenotice]');
+      if (sn) { noticeDetailView(SAMPLE_NOTICES[Number(sn.getAttribute('data-samplenotice'))]); return; }
       var rq = t.closest('[data-req]');     if (rq) { requestDetail(rq.getAttribute('data-req')); return; }
       if (t.closest('[data-newreq]')) { openRequestForm(); return; }
 
@@ -1039,6 +1110,8 @@
     document.addEventListener('submit', function (e) {
       if (e.target.id === 'reqform') { e.preventDefault(); submitRequest(); }
     });
+
+    document.addEventListener('keydown', trapInDrawer);
 
     document.addEventListener('keydown', function (e) {
       if (e.key !== 'Escape') return;
