@@ -256,6 +256,28 @@ code {
 .state__title { font-size: 14.5px; font-weight: 600; color: var(--ink-2); }
 .state__hint { font-size: 13px; color: var(--muted); line-height: 1.7; max-width: 34ch; }
 
+/* ── 예시 카드 ────────────────────────────────────────────────
+   실제 데이터가 아직 없을 때, 그 메뉴에 무엇이 들어오는지 보여 줍니다.
+   흐리게 만들지 않습니다 — 구성을 읽을 수 있어야 하기 때문입니다.
+   대신 점선 테두리와 “예시” 배지로 진짜와 구분합니다. */
+.sample { display: flex; flex-direction: column; gap: 12px; }
+.samplenote {
+  font-size: 12.5px; line-height: 1.7; color: var(--muted);
+  background: var(--bg-sink); border-radius: 10px; padding: 10px 13px;
+}
+.is-sample {
+  border-style: dashed; box-shadow: none; cursor: default;
+  background: var(--bg-soft);
+}
+.is-sample .rowcard__name,
+.is-sample .notice__title,
+.is-sample .req__title { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+.is-sample .btn:disabled { opacity: 0.55; }
+
+/* 예시 FAQ 는 접었다 펴지 않고 질문과 답을 함께 보여 줍니다. */
+.faq__q--static { cursor: default; font-weight: 600; }
+.is-sample .faq__a { padding-top: 0; }
+
 /* 화면 맨 위 한두 줄 안내 */
 .pageintro { font-size: 13.5px; line-height: 1.75; color: var(--muted); margin: -2px 2px 0; }
 .pagenote {
@@ -276,6 +298,8 @@ code {
 .badge--danger { background: var(--danger-t); color: var(--danger); }
 .badge--info   { background: var(--info-t);   color: var(--info); }
 .badge--plain::before { display: none; }
+/* 예시 표시 — 실제 상태 배지보다 한 단계 낮은 강조 */
+.badge--sample { background: var(--primary-t); color: var(--primary); font-weight: 600; }
 
 /* ── 대시보드 ─────────────────────────────────────────────────── */
 .hero {
@@ -302,6 +326,8 @@ code {
 .stat:hover { border-color: var(--primary); transform: translateY(-1px); }
 .stat__n { font-size: 24px; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; letter-spacing: -0.03em; }
 .stat__l { font-size: 12.5px; font-weight: 600; color: var(--muted); }
+/* 0 인 칸이 허전하지 않도록 무엇을 세는지 한 줄 */
+.stat__hint { font-size: 11.5px; line-height: 1.5; color: var(--muted-2); margin-top: 2px; }
 .stat--ok     .stat__n { color: var(--ok); }
 .stat--warn   .stat__n { color: var(--warn); }
 .stat--danger .stat__n { color: var(--danger); }

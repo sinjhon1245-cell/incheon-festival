@@ -204,11 +204,137 @@
     'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
     '<circle cx="10.8" cy="10.8" r="6.2" /><path d="m19.6 19.6-4.4-4.4" /></svg>';
 
+  /* ── 예시 카드 ──────────────────────────────────────────────────
+     행사 정보가 아직 채워지기 전이라, 안내문 한 줄만 두면 그 메뉴에
+     무엇이 들어오는지 알 수 없습니다. 실제와 같은 모양의 카드를
+     몇 장 보여 주어 화면 구성을 미리 이해하게 합니다.
+
+     지켜야 할 두 가지
+       · 데이터베이스에 넣지 않습니다. 화면에서만 만듭니다.
+       · 진짜 데이터가 한 건이라도 생기면 곧바로 사라집니다.
+     그래서 각 화면에서 "전체 건수 0" 일 때만 부릅니다.
+     검색·필터 결과가 0인 경우는 해당하지 않습니다 — 그때는
+     예시가 아니라 "검색 결과 없음" 을 보여 줘야 합니다.
+
+     실제 카드와 헷갈리지 않도록 "예시" 배지를 반드시 붙이고,
+     테두리를 점선으로 둡니다. 흐리게 만들지는 않습니다 —
+     구성을 읽을 수 있어야 하기 때문입니다. */
+  var SAMPLE = '<span class="badge badge--plain badge--sample">예시</span>';
+
+  function sampleWrap(note, cards) {
+    return '<div class="sample">' +
+      '<p class="samplenote">' + esc(note) + '</p>' +
+      '<div class="tl" aria-label="예시 목록">' + cards + '</div></div>';
+  }
+
   function emptyBox(title, hint) {
     return '<div class="state state--empty">' +
       '<span class="state__icon">' + ICON_EMPTY + '</span>' +
       '<p class="state__title">' + esc(title) + '</p>' +
       (hint ? '<p class="state__hint">' + esc(hint) + '</p>' : '') + '</div>';
+  }
+
+  /* 화면별 예시. 확정되지 않은 사실(시간·장소·전화번호 등)은 쓰지
+     않고, "무엇이 이 자리에 오는지" 만 보여 줍니다. */
+  function sampleNotices() {
+    return sampleWrap(
+      '등록된 공지가 없습니다. 아래는 어떤 공지가 올라오는지 보여 주는 예시이며, 실제 공지가 등록되면 사라집니다.',
+      [
+        ['중요', '부스 운영자 사전 안내', '행사 전 부스 세팅 시간과 준비사항을 안내합니다.'],
+        ['일반', '행사장 주차 및 출입 안내', '행사장 출입과 주차 관련 안내가 등록되면 이곳에서 확인할 수 있습니다.'],
+        ['긴급', '긴급 운영 공지', '행사 당일 긴급 변경사항은 이 영역에 우선 표시됩니다.']
+      ].map(function (n) {
+        return '<div class="notice is-sample' + (n[0] === '긴급' ? ' notice--urgent' : '') + '">' +
+          '<span class="notice__top">' + badge(n[0]) + SAMPLE + '</span>' +
+          '<span class="notice__title">' + esc(n[1]) + '</span>' +
+          '<span class="notice__body">' + esc(n[2]) + '</span></div>';
+      }).join(''));
+  }
+
+  function sampleRequests() {
+    return sampleWrap(
+      '등록된 운영 요청이 없습니다. 아래는 어떤 요청을 등록할 수 있는지 보여 주는 예시입니다.',
+      [
+        ['전기', 'A구역 멀티탭 추가 요청', '부스 운영 중 전원 사용을 위해 멀티탭이 필요합니다.'],
+        ['네트워크', '와이파이 연결 확인 요청', '체험 부스에서 네트워크 연결이 불안정합니다.'],
+        ['시설', '테이블 추가 요청', '운영 물품 배치를 위해 테이블 1개가 더 필요합니다.']
+      ].map(function (r) {
+        return '<div class="req is-sample">' +
+          '<span class="req__top">' + badge('보통') + badge('접수') +
+          '<span class="badge badge--plain">' + esc(r[0]) + '</span>' + SAMPLE + '</span>' +
+          '<span class="req__title">' + esc(r[1]) + '</span>' +
+          '<span class="req__meta">' + esc(r[2]) + '</span></div>';
+      }).join(''));
+  }
+
+  function sampleResources() {
+    return sampleWrap(
+      '등록된 자료가 없습니다. 아래는 어떤 자료가 올라오는지 보여 주는 예시입니다.',
+      [
+        ['운영 매뉴얼', '행사 운영 매뉴얼', '행사 운영 절차와 기본 안내를 확인하는 자료입니다.'],
+        ['부스 운영 안내', '부스 운영자 안내 자료', '부스 준비·운영·철수 관련 내용을 확인할 수 있습니다.'],
+        ['안전관리 자료', '행사 안전관리 안내', '비상상황과 안전사고 대응 절차를 확인하는 자료입니다.']
+      ].map(function (r) {
+        return '<div class="rowcard is-sample"><div class="rowcard__body">' +
+          '<div class="rowcard__name">' + esc(r[1]) + ' ' + SAMPLE + '</div>' +
+          '<div class="rowcard__meta">' + esc(r[0]) + ' · ' + esc(r[2]) + '</div></div>' +
+          // 예시라 열 수 있는 자료가 없습니다. 눌리지 않게 막아 둡니다.
+          '<div class="rowcard__act"><button class="btn btn--ghost btn--sm" type="button" disabled ' +
+          'aria-disabled="true">열기</button></div></div>';
+      }).join(''));
+  }
+
+  function sampleContacts() {
+    return sampleWrap(
+      '등록된 연락처가 없습니다. 아래는 어떤 담당이 등록되는지 보여 주는 예시입니다.',
+      [
+        ['운영본부', '행사 운영 총괄', '행사 진행과 전체 운영 관련 문의'],
+        ['전산 지원', '네트워크·기기 지원', '인터넷, 노트북, 장비 관련 지원'],
+        ['안전 지원', '안전 및 응급 대응', '안전사고 및 응급 상황 지원']
+      ].map(function (c) {
+        return '<div class="rowcard is-sample"><div class="rowcard__body">' +
+          '<div class="rowcard__name">' + esc(c[1]) + ' ' + SAMPLE + '</div>' +
+          '<div class="rowcard__meta">' + esc(c[0]) + ' · ' + esc(c[2]) + '</div></div>' +
+          // 전화번호는 확정된 값이 없어 만들지 않습니다.
+          '<div class="rowcard__act"><button class="btn btn--ghost btn--sm" type="button" disabled ' +
+          'aria-disabled="true">전화</button></div></div>';
+      }).join(''));
+  }
+
+  function samplePlaces() {
+    return sampleWrap(
+      '등록된 공간 안내가 없습니다. 아래는 어떤 공간이 등록되는지 보여 주는 예시입니다.',
+      [
+        ['운영본부', '행사 운영 총괄 및 현장 지원'],
+        ['메인 무대', '개막식, 공연, 주요 프로그램 진행 공간'],
+        ['체험 부스 구역', 'AI·SW 체험 부스 운영 공간'],
+        ['안내 데스크', '참가자 안내 및 문의 접수'],
+        ['휴게 공간', '관계자 및 참가자 휴식 공간'],
+        ['화장실', '행사장 내 편의시설 위치 안내']
+      ].map(function (p) {
+        // 층수나 위치는 확정되지 않아 적지 않습니다.
+        return '<div class="rowcard is-sample"><div class="rowcard__body">' +
+          '<div class="rowcard__name">' + esc(p[0]) + ' ' + SAMPLE + '</div>' +
+          '<div class="rowcard__meta">' + esc(p[1]) + '</div></div></div>';
+      }).join(''));
+  }
+
+  function sampleFaqs() {
+    return sampleWrap(
+      '공개된 운영 FAQ가 없습니다. 아래는 어떤 질문이 오르는지 보여 주는 예시이며, 답변이 확정되면 실제 FAQ 로 바뀝니다.',
+      [
+        ['부스 운영자는 몇 시까지 도착해야 하나요?', '실제 운영 시간이 확정되면 이곳에 안내됩니다.'],
+        ['부스에서 전기를 사용할 수 있나요?', '전기 사용 기준과 제공 사항이 확정되면 안내됩니다.'],
+        ['운영 중 문제가 생기면 어떻게 하나요?', '운영 요청 메뉴로 등록하거나 운영본부에 지원을 요청할 수 있습니다.'],
+        ['주차는 어디에 하나요?', '주차 안내가 확정되면 이곳에 안내됩니다.'],
+        ['안전사고가 발생하면 어떻게 해야 하나요?', '행사 안전 운영 기준이 확정되면 안내됩니다.']
+      ].map(function (f) {
+        // 접었다 펴는 동작 없이 질문과 답을 함께 보여 줍니다.
+        // 예시는 눌러도 할 일이 없습니다.
+        return '<div class="faq is-sample">' +
+          '<div class="faq__q faq__q--static"><span>' + esc(f[0]) + '</span>' + SAMPLE + '</div>' +
+          '<div class="faq__a">' + esc(f[1]) + '</div></div>';
+      }).join(''));
   }
 
   function noMatchBox(title) {
@@ -343,13 +469,18 @@
       { n: byStatus['일시 중단'], l: '일시 중단', go: 'booths', f: '일시 중단', tone: 'danger' },
       { n: todayCount, l: '행사 일정', go: 'schedule', f: null },
       { n: runningCount, l: '진행 중 일정', go: 'schedule', f: null, tone: 'ok' },
-      { n: urgent.length, l: '긴급 공지', go: 'notices', f: null, tone: urgent.length ? 'danger' : null },
-      { n: openReq, l: '미처리 요청', go: 'requests', f: '미완료', tone: openReq ? 'warn' : null }
+      { n: urgent.length, l: '긴급 공지', go: 'notices', f: null, tone: urgent.length ? 'danger' : null,
+        // 0 일 때는 숫자만 두면 허전해서, 무엇을 세는 칸인지 적어 둡니다.
+        zero: '새 운영 안내가 등록되면 표시됩니다.' },
+      { n: openReq, l: '미처리 요청', go: 'requests', f: '미완료', tone: openReq ? 'warn' : null,
+        zero: '처리가 필요한 현장 요청 수입니다.' }
     ];
     var statsHtml = '<div class="statgrid">' + stats.map(function (st) {
       return '<button class="stat' + (st.tone ? ' stat--' + st.tone : '') + '" type="button" data-go="' + st.go + '"' +
         (st.f ? ' data-filter="' + esc(st.f) + '"' : '') + '>' +
-        '<span class="stat__n">' + st.n + '</span><span class="stat__l">' + esc(st.l) + '</span></button>';
+        '<span class="stat__n">' + st.n + '</span><span class="stat__l">' + esc(st.l) + '</span>' +
+        (st.zero && !st.n ? '<span class="stat__hint">' + esc(st.zero) + '</span>' : '') +
+        '</button>';
     }).join('') + '</div>';
 
     /* 지금 / 다음 */
@@ -567,8 +698,7 @@
         '<span class="notice__meta">' + esc(fmtDay(n.created_at)) + '</span></span>' +
         '<span class="notice__title">' + esc(n.title) + '</span>' +
         '<span class="notice__body">' + esc(n.body) + '</span></button>';
-    }).join('') + '</div>'
-      : emptyBox('현재 등록된 공지가 없습니다.', '새로운 운영 안내가 등록되면 이곳에 표시됩니다.');
+    }).join('') + '</div>' : sampleNotices();
     return '<div class="page">' +
       pageHead('운영 공지', '운영 중 확인해야 할 변경 사항과 주요 안내입니다. 긴급 공지는 대시보드 상단에도 표시됩니다.') +
       body + '</div>';
@@ -611,8 +741,7 @@
     }).join('') + '</div>'
       : S.requests.length
         ? noMatchBox('조건에 맞는 요청이 없습니다.')
-        : emptyBox('현재 등록된 운영 요청이 없습니다.',
-                   '현장에서 지원이 필요하면 “현장 문제 보고”로 등록해 주세요.');
+        : sampleRequests();
 
     return '<div class="page">' +
       pageHead('운영 요청',
@@ -679,8 +808,9 @@
           ? '<a class="btn btn--ghost btn--sm" href="' + esc(r.url) + '" target="_blank" rel="noopener">열기</a>'
           : '<span class="badge badge--plain">준비 중</span>') + '</div></div>';
     }).join('') + '</div>'
-      : emptyBox('현재 등록된 자료가 없습니다.',
-                 '운영 매뉴얼과 안내 자료가 등록되면 이곳에 표시됩니다.');
+      : S.resources.length
+        ? noMatchBox('공개된 자료가 없습니다.')
+        : sampleResources();
     return '<div class="page">' +
       pageHead('관계자 자료실', '행사 운영에 필요한 안내문과 매뉴얼, 서식을 모아 둡니다.') +
       body + '</div>';
@@ -706,8 +836,7 @@
     }).join('') + '</div>'
       : S.contacts.length
         ? noMatchBox('조건에 맞는 연락처가 없습니다.')
-        : emptyBox('등록된 연락처가 없습니다.',
-                   '운영 담당자와 지원팀 연락처가 등록되면 이곳에 표시됩니다.');
+        : sampleContacts();
     return '<div class="page">' +
       pageHead('운영 연락망', '운영 담당자와 지원팀 연락처입니다. 전화 버튼을 누르면 바로 연결됩니다.') +
       '<div class="tools"><div class="search"><label class="sr-only" for="contact-q">연락처 검색</label>' +
@@ -741,8 +870,7 @@
         (p.image_caption ? '<div class="rowcard__meta">' + esc(p.image_caption) + '</div>' : '') +
         '</div></div>';
     }).join('') + '</div>'
-      : emptyBox('등록된 공간 안내가 없습니다.',
-                 '주요 행사 공간 정보가 등록되면 이곳에서 확인할 수 있습니다.');
+      : samplePlaces();
 
     return '<div class="page">' +
       pageHead('행사장 안내', venueLine) +
@@ -771,8 +899,7 @@
     }).join('') + '</div>'
       : all.length
         ? noMatchBox('조건에 맞는 질문이 없습니다.')
-        : emptyBox('현재 공개된 운영 FAQ가 없습니다.',
-                   '운영 안내가 확정되면 이곳에서 확인할 수 있습니다.');
+        : sampleFaqs();
 
     return '<div class="page">' +
       pageHead('운영 FAQ', '행사 준비와 당일 운영 중 자주 확인하는 내용을 모았습니다.') +
