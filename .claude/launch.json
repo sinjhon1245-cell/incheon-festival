@@ -3,8 +3,8 @@
   "configurations": [
     {
       "name": "festival",
-      "runtimeExecutable": "node",
-      "runtimeArgs": ["dev-server.js", "8321"],
+      "runtimeExecutable": "powershell",
+      "runtimeArgs": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "dev-server.ps1", "8321"],
       "port": 8321
     }
   ]

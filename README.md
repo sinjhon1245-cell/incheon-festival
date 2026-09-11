@@ -42,7 +42,8 @@ supabase/
   migration-media-support.sql ★ 이미지 칼럼 · 보관함 · FAQ 질문 목록
   add-settings-fields.sql    설정 부가 칼럼 (선택)
 
-dev-server.js         로컬 확인용 정적 서버 (배포에는 불필요)
+dev-server.ps1        로컬 확인용 정적 서버 (Windows · Node 없이)
+dev-server.js         같은 서버의 Node 판 (둘 중 편한 쪽을 쓰면 됩니다)
 design/               원본 디자인 파일 (참고용)
 ```
 
@@ -164,12 +165,21 @@ Supabase 대시보드 → **SQL Editor** 에서 순서대로 실행합니다.
 
 ## 로컬 실행
 
+Node 없이 (Windows 에는 PowerShell 이 항상 있습니다):
+
+```bash
+powershell -ExecutionPolicy Bypass -File dev-server.ps1
+```
+
+Node 가 설치되어 있다면:
+
 ```bash
 node dev-server.js
 ```
 
 `http://localhost:8321` 로 접속합니다. Supabase 는 원격이라 로컬에서도
-실제 데이터로 동작합니다.
+실제 데이터로 동작합니다. 두 서버 모두 `/admin` 을 `/admin.html` 로
+이어 줘서 배포본과 주소가 같습니다.
 
 ## 데이터 수정 방법
 
