@@ -184,6 +184,39 @@
       (retry ? '<div class="state__act"><button class="btn btn--ghost btn--sm" type="button" data-retry>다시 시도</button></div>' : '') +
       '</div>';
   }
+
+  /* ── 비어 있는 화면 ─────────────────────────────────────────────
+     행사 정보가 아직 다 채워지지 않은 단계라, 빈 화면을 자주 보게
+     됩니다. 한 줄만 덩그러니 두면 고장 난 것처럼 보이므로 "무엇이
+     들어올 자리인지"까지 함께 알려 줍니다.
+
+     두 경우를 구분합니다.
+       아직 등록 전  → 기다리면 채워집니다
+       조건에 안 맞음 → 검색어나 필터를 바꾸면 됩니다
+     둘을 뭉뚱그리면 사용자가 무엇을 해야 할지 알 수 없습니다. */
+  var ICON_EMPTY =
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" ' +
+    'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+    '<rect x="3.4" y="4.6" width="17.2" height="14.8" rx="2.6" /><path d="M3.4 9.6h17.2" />' +
+    '<path d="M8 14h8" /></svg>';
+  var ICON_SEARCH =
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" ' +
+    'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+    '<circle cx="10.8" cy="10.8" r="6.2" /><path d="m19.6 19.6-4.4-4.4" /></svg>';
+
+  function emptyBox(title, hint) {
+    return '<div class="state state--empty">' +
+      '<span class="state__icon">' + ICON_EMPTY + '</span>' +
+      '<p class="state__title">' + esc(title) + '</p>' +
+      (hint ? '<p class="state__hint">' + esc(hint) + '</p>' : '') + '</div>';
+  }
+
+  function noMatchBox(title) {
+    return '<div class="state state--empty">' +
+      '<span class="state__icon">' + ICON_SEARCH + '</span>' +
+      '<p class="state__title">' + esc(title) + '</p>' +
+      '<p class="state__hint">검색어나 필터를 바꿔 보세요.</p></div>';
+  }
   function pageHead(title, desc, actions) {
     return '<div class="page__head"><div><h1 class="page__title">' + esc(title) + '</h1>' +
       (desc ? '<p class="page__desc">' + esc(desc) + '</p>' : '') + '</div>' +
@@ -279,7 +312,9 @@
       '<div class="hero__meta">' + esc(s.date_label || '') +
       (s.time_label ? ' · ' + esc(s.time_label) : '') +
       (s.venue ? ' · ' + esc(s.venue) : '') + '</div></div>' +
-      '<div class="hero__state">' + phaseHtml + '</div></section>';
+      '<div class="hero__state">' + phaseHtml + '</div></section>' +
+      '<p class="pageintro">행사 준비 상황과 당일 운영을 한곳에서 확인합니다. ' +
+      '일정·부스 상태·공지는 관리자가 등록하는 대로 바로 반영됩니다.</p>';
 
     /* 긴급 공지 — 있으면 최상단 */
     var urgent = S.notices.filter(function (n) { return n.level === '긴급'; });
@@ -320,10 +355,15 @@
     /* 지금 / 다음 */
     var nowHtml;
     if (nn.preview) {
+      // 행사 전입니다. 아래에 첫 일정을 함께 보여 주는데, 아무 설명
+      // 없이 시각과 제목만 두면 지금 진행 중인 일정으로 오해합니다.
+      // 그래서 "첫 일정" 이라고 분명히 적습니다.
       nowHtml = '<section class="card card__pad nowcard nowcard--idle">' +
         '<div class="nowcard__kicker">행사 당일 안내</div>' +
-        '<p class="nowcard__meta" style="margin-top:6px">행사 당일이 되면 현재 시각 기준으로 진행 중인 일정이 여기에 표시됩니다.</p>' +
-        (nn.next ? '<div class="nowcard__time" style="margin-top:10px">' + esc(nn.next.start_time || nn.next.time_label) + '</div>' +
+        '<p class="nowcard__meta" style="margin-top:6px">행사 당일에는 현재 시각을 기준으로 ' +
+        '진행 중인 일정과 다음 일정이 이 자리에 표시됩니다.</p>' +
+        (nn.next ? '<div class="nowcard__kicker" style="margin-top:14px">첫 일정</div>' +
+          '<div class="nowcard__time" style="margin-top:4px">' + esc(nn.next.start_time || nn.next.time_label) + '</div>' +
           '<div class="nowcard__title">' + esc(nn.next.title) + '</div>' +
           '<div class="nowcard__meta">' + esc(nn.next.place || '') + '</div>' : '') +
         '</section>';
@@ -396,10 +436,15 @@
         (i.memo ? '<p class="tlitem__memo">' + esc(i.memo) + '</p>' : '') +
         '<div class="tlitem__tags">' + badge(st) +
         '<span class="badge badge--plain">' + esc(i.category) + '</span></div></div></article>';
-    }).join('') + '</div>' : stateBox('조건에 맞는 일정이 없습니다.');
+    }).join('') + '</div>'
+      : S.schedule.length
+        ? noMatchBox('조건에 맞는 일정이 없습니다.')
+        : emptyBox('등록된 일정이 없습니다.', '일정이 등록되면 시간순으로 표시됩니다.');
 
     return '<div class="page">' +
-      pageHead('운영 일정', ev.sameDay ? '현재 시각 기준으로 진행 중인 일정이 강조됩니다.' : '행사 당일에는 현재 진행 중인 일정이 자동으로 강조됩니다.') +
+      pageHead('운영 일정', ev.sameDay
+        ? '현재 시각을 기준으로 진행 중인 일정이 강조됩니다.'
+        : '행사 전체 일정을 시간순으로 정리했습니다. 변경 사항은 공지에서 함께 확인해 주세요.') +
       '<div class="tools"><div class="search"><label class="sr-only" for="sched-q">일정 검색</label>' +
       '<input class="input" id="sched-q" type="search" placeholder="일정·장소·담당 검색" value="' + esc(ui.schedQ) + '" /></div>' +
       chips(cats, ui.schedCat, 'data-schedcat') + '</div>' + body + '</div>';
@@ -433,7 +478,10 @@
         (b.needs_power ? '<span class="tag">전기</span>' : '') +
         (b.needs_network ? '<span class="tag">네트워크</span>' : '') +
         '</span></button>';
-    }).join('') + '</div>' : stateBox('조건에 맞는 부스가 없습니다.');
+    }).join('') + '</div>'
+      : S.booths.length
+        ? noMatchBox('조건에 맞는 부스가 없습니다.')
+        : emptyBox('등록된 부스 정보가 없습니다.', '부스가 등록되면 위치와 운영 상태를 확인할 수 있습니다.');
 
     var s = S.settings || {};
     var map = mediaBox({
@@ -443,7 +491,8 @@
     });
 
     return '<div class="page">' +
-      pageHead('부스 운영 현황', '카드를 누르면 상세와 상태 변경을 할 수 있습니다.') +
+      pageHead('부스 운영 현황',
+        '부스 위치와 운영 상태를 확인합니다. 카드를 누르면 상세 정보와 상태 변경이 열립니다.') +
       map +
       '<div class="tools"><div class="search"><label class="sr-only" for="booth-q">부스 검색</label>' +
       '<input class="input" id="booth-q" type="search" placeholder="부스번호 · 학교 · 기관 · 프로그램 검색" value="' + esc(ui.boothQ) + '" /></div>' +
@@ -518,8 +567,11 @@
         '<span class="notice__meta">' + esc(fmtDay(n.created_at)) + '</span></span>' +
         '<span class="notice__title">' + esc(n.title) + '</span>' +
         '<span class="notice__body">' + esc(n.body) + '</span></button>';
-    }).join('') + '</div>' : stateBox('등록된 공지가 없습니다.');
-    return '<div class="page">' + pageHead('운영 공지', '긴급 공지는 대시보드 상단에도 표시됩니다.') + body + '</div>';
+    }).join('') + '</div>'
+      : emptyBox('현재 등록된 공지가 없습니다.', '새로운 운영 안내가 등록되면 이곳에 표시됩니다.');
+    return '<div class="page">' +
+      pageHead('운영 공지', '운영 중 확인해야 할 변경 사항과 주요 안내입니다. 긴급 공지는 대시보드 상단에도 표시됩니다.') +
+      body + '</div>';
   }
 
   function noticeDetail(id) {
@@ -556,11 +608,18 @@
         '<span class="req__title">' + esc(r.title) + '</span>' +
         '<span class="req__meta">' + esc(r.location || '위치 미지정') + ' · ' + esc(fmtDay(r.created_at)) +
         (r.assignee_team ? ' · ' + esc(r.assignee_team) : '') + '</span></button>';
-    }).join('') + '</div>' : stateBox('등록된 운영 요청이 없습니다.');
+    }).join('') + '</div>'
+      : S.requests.length
+        ? noMatchBox('조건에 맞는 요청이 없습니다.')
+        : emptyBox('현재 등록된 운영 요청이 없습니다.',
+                   '현장에서 지원이 필요하면 “현장 문제 보고”로 등록해 주세요.');
 
     return '<div class="page">' +
-      pageHead('운영 요청', '현장에서 발생한 문제를 등록하고 처리 상태를 확인합니다.',
+      pageHead('운영 요청',
+        '전기·네트워크·기자재·시설·안전·물품 등 현장 지원이 필요할 때 등록해 주세요.',
         '<button class="btn btn--primary btn--sm" type="button" data-newreq>+ 현장 문제 보고</button>') +
+      // 비상 연락처가 아직 확정되지 않아 번호는 넣지 않습니다.
+      '<p class="pagenote">안전과 관련된 긴급 상황은 요청 등록과 함께 운영본부에 직접 알려 주세요.</p>' +
       '<div class="tools">' + chips(cs, ui.reqStatus, 'data-reqstatus') + '</div>' + body + '</div>';
   }
 
@@ -619,8 +678,12 @@
         '<div class="rowcard__act">' + (r.url
           ? '<a class="btn btn--ghost btn--sm" href="' + esc(r.url) + '" target="_blank" rel="noopener">열기</a>'
           : '<span class="badge badge--plain">준비 중</span>') + '</div></div>';
-    }).join('') + '</div>' : stateBox('등록된 자료가 없습니다.');
-    return '<div class="page">' + pageHead('관계자 자료실', '운영에 필요한 문서를 모아 둡니다.') + body + '</div>';
+    }).join('') + '</div>'
+      : emptyBox('현재 등록된 자료가 없습니다.',
+                 '운영 매뉴얼과 안내 자료가 등록되면 이곳에 표시됩니다.');
+    return '<div class="page">' +
+      pageHead('관계자 자료실', '행사 운영에 필요한 안내문과 매뉴얼, 서식을 모아 둡니다.') +
+      body + '</div>';
   }
 
   function viewContacts() {
@@ -640,8 +703,13 @@
         '<div class="rowcard__act">' + (c.phone
           ? '<a class="btn btn--primary btn--sm" href="' + esc(C.telHref(c.phone)) + '">전화</a>'
           : '<span class="badge badge--plain">번호 없음</span>') + '</div></div>';
-    }).join('') + '</div>' : stateBox('조건에 맞는 연락처가 없습니다.');
-    return '<div class="page">' + pageHead('운영 연락망', '전화 버튼을 누르면 바로 연결됩니다.') +
+    }).join('') + '</div>'
+      : S.contacts.length
+        ? noMatchBox('조건에 맞는 연락처가 없습니다.')
+        : emptyBox('등록된 연락처가 없습니다.',
+                   '운영 담당자와 지원팀 연락처가 등록되면 이곳에 표시됩니다.');
+    return '<div class="page">' +
+      pageHead('운영 연락망', '운영 담당자와 지원팀 연락처입니다. 전화 버튼을 누르면 바로 연결됩니다.') +
       '<div class="tools"><div class="search"><label class="sr-only" for="contact-q">연락처 검색</label>' +
       '<input class="input" id="contact-q" type="search" placeholder="이름 · 소속 · 담당업무 검색" value="' + esc(ui.contactQ) + '" /></div>' +
       (cats.length > 1 ? chips(cats, ui.contactCat, 'data-contactcat') : '') + '</div>' + body + '</div>';
@@ -650,10 +718,12 @@
   function viewVenue() {
     var s = S.settings || {};
 
+    // 장소 이름은 확정된 정보라 제목 바로 아래에 그대로 둡니다.
+    var venueLine = (s.venue || '') + (s.venue_detail ? ' · ' + s.venue_detail : '');
     var map = mediaBox({
       url: s.venue_map_url, alt: s.venue_map_alt, caption: s.venue_map_caption,
-      title: '행사장 안내도',
-      hint: '안내도가 등록되면 이곳에서 확인할 수 있습니다.'
+      title: '행사장 전체 안내도',
+      hint: '행사장 안내 이미지가 등록되면 이곳에서 확인할 수 있습니다.'
     });
 
     /* 공간 카드. 사진이 있으면 왼쪽에 붙고, 없으면 지금처럼 글만
@@ -670,10 +740,13 @@
         '<div class="rowcard__meta">' + esc(p.category || '') + (p.detail ? ' · ' + esc(p.detail) : '') + '</div>' +
         (p.image_caption ? '<div class="rowcard__meta">' + esc(p.image_caption) + '</div>' : '') +
         '</div></div>';
-    }).join('') + '</div>' : stateBox('등록된 공간 정보가 없습니다.');
+    }).join('') + '</div>'
+      : emptyBox('등록된 공간 안내가 없습니다.',
+                 '주요 행사 공간 정보가 등록되면 이곳에서 확인할 수 있습니다.');
 
     return '<div class="page">' +
-      pageHead('행사장 안내', esc(s.venue || '') + (s.venue_detail ? ' · ' + esc(s.venue_detail) : '')) +
+      pageHead('행사장 안내', venueLine) +
+      '<p class="pageintro">운영본부와 주요 행사 공간, 편의시설 위치를 안내합니다.</p>' +
       map + '<h2 class="section-title">주요 공간</h2>' + body + '</div>';
   }
 
@@ -695,9 +768,14 @@
         '<button class="faq__q" type="button" aria-expanded="false"><span>' + esc(f.question) + '</span>' +
         '<span class="faq__sign" aria-hidden="true">+</span></button>' +
         '<div class="faq__a" hidden>' + esc(f.answer) + '</div></div>';
-    }).join('') + '</div>' : stateBox(all.length ? '조건에 맞는 질문이 없습니다.' : '등록된 항목이 없습니다.');
+    }).join('') + '</div>'
+      : all.length
+        ? noMatchBox('조건에 맞는 질문이 없습니다.')
+        : emptyBox('현재 공개된 운영 FAQ가 없습니다.',
+                   '운영 안내가 확정되면 이곳에서 확인할 수 있습니다.');
 
-    return '<div class="page">' + pageHead('운영 FAQ', '행사 준비와 당일 운영에서 자주 나오는 질문입니다.') +
+    return '<div class="page">' +
+      pageHead('운영 FAQ', '행사 준비와 당일 운영 중 자주 확인하는 내용을 모았습니다.') +
       (cats.length > 2 ? '<div class="tools">' + chips(cats, ui.faqCat, 'data-faqcat') + '</div>' : '') +
       body + '</div>';
   }

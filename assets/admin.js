@@ -30,6 +30,13 @@
 
   function opts(l) { return l.map(function (v) { return [v, v]; }); }
 
+  /* 포털의 빈 화면과 같은 모양을 씁니다(assets/portal.css 의 .state--empty). */
+  var ICON_EMPTY =
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" ' +
+    'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+    '<rect x="3.4" y="4.6" width="17.2" height="14.8" rx="2.6" /><path d="M3.4 9.6h17.2" />' +
+    '<path d="M8 14h8" /></svg>';
+
   var TONE = {
     '운영 중': 'ok', '준비 완료': 'info', '준비 전': 'warn', '일시 중단': 'danger', '운영 종료': 'off',
     '진행 중': 'ok', '예정': 'info', '종료': 'off', '취소': 'danger', '변경': 'warn',
@@ -62,7 +69,8 @@
 
     settings: {
       label: '행사 기본정보', table: 'settings', single: true, order: false,
-      desc: '포털 곳곳에 함께 반영됩니다. D-day 와 진행 상태는 개막·종료 일시로 계산합니다.',
+      desc: '행사명과 일정, 장소, 안내도 등 포털 전반에 쓰이는 기본 정보를 관리합니다. ' +
+            'D-day 와 진행 상태는 개막·종료 일시로 계산합니다.',
       fields: [
         { k: 'event_title',   label: '행사 이름', wide: true, required: true },
         { k: 'event_start',   label: '개막 일시', type: 'datetime' },
@@ -92,7 +100,8 @@
 
     schedule_items: {
       label: '일정 관리', table: 'schedule_items', addLabel: '+ 일정 추가',
-      desc: '시작·종료 시각으로 포털의 “지금 진행 중”이 자동 계산됩니다.',
+      desc: '관계자 포털에 표시되는 행사 일정을 관리합니다. ' +
+            '시작·종료 시각으로 포털의 “지금 진행 중”이 자동 계산됩니다.',
       blank: { start_time: '10:00', end_time: '10:30', title: '', category: '운영', status: '예정' },
       title: function (r) { return r.title || '(제목 없음)'; },
       meta: function (r) {
@@ -129,7 +138,8 @@
 
     booths: {
       label: '부스 관리', table: 'booths', addLabel: '+ 부스 추가',
-      desc: '부스 번호와 구역으로 표시용 코드(A-01)를 만듭니다.',
+      desc: '부스 정보와 운영 상태, 대표 이미지를 관리합니다. ' +
+            '전체 배치도는 행사 기본정보에서 등록합니다.',
       blank: { no: 1, zone_key: 'A', name: '', org: '', status: '준비 전' },
       title: function (r) { return (r.code || (r.zone_key + '-' + r.no)) + ' · ' + (r.name || '(이름 없음)'); },
       meta: function (r) { return (r.org || '운영기관 미정') + (r.manager ? ' · 담당 ' + r.manager : ''); },
@@ -165,7 +175,8 @@
     notices: {
       label: '공지 관리', table: 'notices', addLabel: '+ 공지 작성',
       order: [['pinned', false], ['created_at', false]],
-      desc: '긴급 공지는 포털 대시보드 최상단에 자동으로 올라갑니다.',
+      desc: '행사 관계자에게 전달할 주요 운영 안내를 관리합니다. ' +
+            '긴급 공지는 포털 대시보드 최상단에 자동으로 올라갑니다.',
       blank: { level: '일반', title: '', body: '', pinned: false },
       title: function (r) { return r.title || '(제목 없음)'; },
       meta: function (r) { return (r.author ? r.author + ' · ' : '') + fmtDay(r.created_at); },
@@ -182,7 +193,7 @@
     operation_requests: {
       label: '운영 요청 관리', table: 'operation_requests', addLabel: '+ 요청 등록',
       order: [['created_at', false]],
-      desc: '현장에서 등록한 문제 보고입니다. 처리 상태를 여기서 바꿉니다.',
+      desc: '현장에서 접수된 요청을 확인하고 처리 상태를 관리합니다.',
       blank: { location: '', kind: '기타', priority: '보통', title: '', status: '접수' },
       title: function (r) { return r.title || '(제목 없음)'; },
       meta: function (r) {
@@ -204,13 +215,15 @@
 
     resources: {
       label: '자료실 관리', table: 'resources', addLabel: '+ 자료 추가',
-      desc: '파일은 외부 저장소에 올리고 주소만 등록하는 방식입니다.',
+      desc: '운영 매뉴얼과 안내 자료를 등록합니다. ' +
+            '파일은 외부 저장소에 올리고 주소만 등록하는 방식입니다.',
       blank: { title: '', category: '기타', url: '', is_public: true },
       title: function (r) { return r.title || '(제목 없음)'; },
       meta: function (r) { return (r.category || '기타') + (r.description ? ' · ' + r.description : ''); },
       tags: function (r) { return r.is_public ? tag('공개') : badge('비공개'); },
       fields: [
-        { k: 'title',       label: '자료명', wide: true, required: true },
+        { k: 'title',       label: '자료명', wide: true, required: true,
+          hint: '예: 운영 매뉴얼 · 부스 운영 안내 · 안전관리 자료 · 행사장 안내도' },
         { k: 'category',    label: '분류', hint: '예: 운영계획 · 안전' },
         { k: 'is_public',   label: '관계자에게 공개', type: 'bool' },
         { k: 'url',         label: '자료 주소(URL)', wide: true },
@@ -220,14 +233,14 @@
 
     contacts: {
       label: '연락망 관리', table: 'contacts', addLabel: '+ 연락처 추가',
-      desc: '전화번호는 로그인한 관계자에게만 보입니다.',
+      desc: '행사 운영 담당자와 지원 연락처를 관리합니다.',
       blank: { name: '', category: '기타', phone: '' },
       title: function (r) { return r.name || '(이름 없음)'; },
       meta: function (r) { return (r.org || '') + (r.phone ? ' · ' + r.phone : ''); },
       tags: function (r) { return tag(r.category || '기타') + (r.duty ? tag(r.duty) : ''); },
       fields: [
         { k: 'name',     label: '이름', required: true },
-        { k: 'category', label: '구분', hint: '예: 운영 총괄 · 시설' },
+        { k: 'category', label: '구분', hint: '예: 운영본부 · 시설지원 · 전산지원 · 안전지원' },
         { k: 'org',      label: '소속' },
         { k: 'duty',     label: '담당업무' },
         { k: 'phone',    label: '전화번호', type: 'tel' },
@@ -237,13 +250,14 @@
 
     venue_places: {
       label: '행사장 관리', table: 'venue_places', addLabel: '+ 공간 추가',
-      desc: '운영본부·보건·주차 등 관계자가 찾는 공간을 등록합니다.',
+      desc: '운영본부와 주요 공간의 위치·설명·이미지를 관리합니다.',
       blank: { name: '', category: '기타', detail: '' },
       title: function (r) { return r.name || '(이름 없음)'; },
       meta: function (r) { return r.detail || ''; },
       tags: function (r) { return tag(r.category || '기타'); },
       fields: [
-        { k: 'name',          label: '공간 이름', required: true },
+        { k: 'name',          label: '공간 이름', required: true,
+          hint: '예: 운영본부 · 안내 데스크 · 메인 무대 · 체험 부스 구역 · 휴게 공간 · 화장실 · 안전지원 공간' },
         { k: 'category',      label: '분류', hint: '예: 운영 · 안전 · 편의' },
         { k: 'detail',        label: '위치 설명', type: 'textarea', wide: true },
         { k: 'image_url',     label: '공간 사진', type: 'image', folder: 'place' },
@@ -254,7 +268,8 @@
 
     faqs: {
       label: 'FAQ 관리', table: 'faqs', addLabel: '+ 질문 추가',
-      desc: '답변을 채우고 “공개”를 켜야 포털에 보입니다. 답변이 빈 항목은 아래에 표시됩니다.',
+      desc: '관계자가 자주 확인하는 운영 질문과 답변을 관리합니다. ' +
+            '답변을 채우고 “공개”를 켜야 포털에 표시됩니다.',
       blank: { question: '', answer: '', category: '기타', is_public: false },
       title: function (r) { return r.question || '(질문 없음)'; },
       meta: function (r) { return (r.answer || '').slice(0, 70); },
@@ -392,8 +407,12 @@
     var rows = cache[key] || [];
     if (!rows.length) {
       host.innerHTML = '<div class="page">' + head +
-        '<div class="state">아직 등록된 항목이 없습니다. 오른쪽 위 “' +
-        esc(ent.addLabel || '새로 추가') + '”로 시작하세요.</div></div>';
+        '<div class="state state--empty">' +
+          '<span class="state__icon">' + ICON_EMPTY + '</span>' +
+          '<p class="state__title">아직 등록된 항목이 없습니다.</p>' +
+          '<p class="state__hint">오른쪽 위 “' + esc(ent.addLabel || '새로 추가') +
+          '”로 시작하세요. 등록하면 관계자 포털에 바로 반영됩니다.</p>' +
+        '</div></div>';
       paintNav(); return;
     }
 

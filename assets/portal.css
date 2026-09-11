@@ -243,6 +243,26 @@ code {
 .state--error { border-style: solid; border-color: #F0CFD4; background: var(--danger-t); color: var(--danger); }
 .state__act { margin-top: 12px; }
 
+/* 비어 있는 화면. 행사 정보가 아직 채워지는 중이라 자주 보게 되는
+   화면이라, 한 줄만 두지 않고 무엇이 들어올 자리인지 함께 알립니다.
+   큰 그림이나 두꺼운 카드는 쓰지 않습니다 — 운영 도구이지
+   빈 화면이 주인공은 아닙니다. */
+.state--empty {
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  padding: 34px 20px; background: var(--bg-soft);
+}
+.state__icon { display: block; width: 26px; height: 26px; color: var(--muted-2); margin-bottom: 2px; }
+.state__icon svg { width: 100%; height: 100%; display: block; }
+.state__title { font-size: 14.5px; font-weight: 600; color: var(--ink-2); }
+.state__hint { font-size: 13px; color: var(--muted); line-height: 1.7; max-width: 34ch; }
+
+/* 화면 맨 위 한두 줄 안내 */
+.pageintro { font-size: 13.5px; line-height: 1.75; color: var(--muted); margin: -2px 2px 0; }
+.pagenote {
+  font-size: 12.5px; line-height: 1.7; color: var(--muted);
+  background: var(--bg-sink); border-radius: 10px; padding: 10px 13px;
+}
+
 /* ── 상태 배지 — 색 + 글자 ────────────────────────────────────── */
 .badge {
   display: inline-flex; align-items: center; gap: 5px;
