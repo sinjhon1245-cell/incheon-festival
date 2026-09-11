@@ -167,6 +167,30 @@ window.Core = (function () {
     });
   }
 
+  /* 아직 만들지 않은 표를 조회할 때 씁니다.
+
+     새 기능의 표는 관리자가 SQL 을 직접 돌려야 생깁니다. 그때까지
+     Promise.all 안에서 하나가 거절되면 포털 전체가 오류 화면이 됩니다.
+     표가 없다는 것은 "아직 준비 전" 이지 고장이 아니므로, 빈 배열로
+     돌려주고 어느 표가 없었는지만 표시해 둡니다.
+
+     권한·네트워크 오류는 그대로 던집니다. 그건 진짜 문제라서
+     조용히 넘기면 빈 화면의 이유를 알 수 없게 됩니다. */
+  var missingTables = {};
+  function tableMissing(e) {
+    var code = (e && e.code) || '';
+    return code === '42P01' || code === 'PGRST205' || code === 'PGRST202' ||
+           /relation .* does not exist/i.test((e && e.message) || '');
+  }
+  function selectSoft(table, opts) {
+    return select(table, opts).catch(function (e) {
+      if (!tableMissing(e)) throw e;
+      missingTables[table] = true;
+      return [];
+    });
+  }
+  function isTableMissing(table) { return !!missingTables[table]; }
+
   /* ── 쓰기 — 실제 반영 건수를 반드시 확인합니다 ─────────────────
      PostgREST 는 RLS 가 걸러 0건이 처리돼도 error 를 주지 않아서,
      .select() 로 돌려받아 확인하지 않으면 화면만 바뀝니다. */
@@ -314,7 +338,8 @@ window.Core = (function () {
     fetchProfile: fetchProfile, me: me, isAdmin: isAdmin, accessMessage: accessMessage,
     profileFailed: profileFailed,
     authMessage: authMessage, dataMessage: dataMessage,
-    select: select, insert: insert, update: update, remove: remove, rpc: rpc,
+    select: select, selectSoft: selectSoft, isTableMissing: isTableMissing,
+    insert: insert, update: update, remove: remove, rpc: rpc,
     uploadImage: uploadImage, deleteImage: deleteImage,
     imageProblem: imageProblem, imagePath: imagePath,
     esc: esc, pad2: pad2, toMin: toMin, minLabel: minLabel,

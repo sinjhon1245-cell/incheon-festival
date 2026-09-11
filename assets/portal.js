@@ -16,24 +16,39 @@
   var $ = function (s, r) { return (r || document).querySelector(s); };
   var esc = C.esc;
 
-  /* ── 메뉴 ───────────────────────────────────────────────────── */
+  /* ── 메뉴 ─────────────────────────────────────────────────────
+     메뉴가 늘어나 한 줄로 나열하면 무엇부터 봐야 할지 알 수 없게
+     됩니다. 세 갈래로 묶습니다.
+
+       (그룹 없음) 행사 당일 계속 들여다보는 화면 — 하단 탭에도 둡니다
+       운영        현장에서 처리하는 일
+       정보        필요할 때 찾아보는 자료
+
+     하단 탭은 그대로 네 개만 둡니다. 손가락이 닿는 자리는 한정돼
+     있어서, 늘어난 메뉴를 전부 밀어 넣으면 오히려 못 누릅니다.
+     나머지는 '더보기' 시트에서 그룹 제목과 함께 보여 줍니다. */
   var NAV = [
     { id: 'dashboard', label: '대시보드', short: '홈',   mark: '홈', tab: true },
     { id: 'schedule',  label: '일정',     short: '일정', mark: '일', tab: true },
     { id: 'booths',    label: '부스 현황', short: '부스', mark: '부', tab: true },
     { id: 'notices',   label: '공지',     short: '공지', mark: '공', tab: true },
-    { id: 'requests',  label: '운영 요청', short: '요청', mark: '요' },
-    { id: 'resources', label: '자료실',   short: '자료', mark: '자' },
-    { id: 'contacts',  label: '연락망',   short: '연락', mark: '연' },
-    { id: 'venue',     label: '행사장',   short: '행사장', mark: '장' },
-    { id: 'faq',       label: '운영 FAQ', short: 'FAQ',  mark: 'F' }
+    { id: 'requests',  label: '운영 요청', short: '요청', mark: '요', group: '운영' },
+    { id: 'tasks',     label: '담당 업무', short: '업무', mark: '업', group: '운영' },
+    { id: 'supplies',  label: '운영 물품', short: '물품', mark: '물', group: '운영' },
+    { id: 'resources', label: '자료실',   short: '자료', mark: '자', group: '정보' },
+    { id: 'contacts',  label: '연락망',   short: '연락', mark: '연', group: '정보' },
+    { id: 'venue',     label: '행사장',   short: '행사장', mark: '장', group: '정보' },
+    { id: 'faq',       label: '운영 FAQ', short: 'FAQ',  mark: 'F', group: '정보' }
   ];
+  var NAV_GROUPS = ['운영', '정보'];
 
   var SCHEDULE_CATS = ['무대', '강연', '부스', '운영', '행사 지원'];
   var BOOTH_STATES  = ['준비 전', '준비 완료', '운영 중', '일시 중단', '운영 종료'];
   var REQ_KINDS     = ['전기', '네트워크', '기자재', '시설', '안전', '물품', '주차', '기타'];
   var REQ_PRIORITY  = ['긴급', '높음', '보통'];
   var REQ_STATES    = ['접수', '확인 중', '처리 중', '완료'];
+  var SUPPLY_KINDS  = ['기관', '팀', '부스'];
+  var SUPPLY_STATES = ['미배부', '일부 배부', '배부 완료'];
 
   /* 상태 → 배지 색. 색만으로 뜻을 전하지 않도록 글자는 항상 함께 씁니다. */
   var TONE = {
@@ -42,7 +57,8 @@
     '진행 중': 'ok', '예정': 'info', '종료': 'off', '취소': 'danger', '변경': 'warn',
     '긴급': 'danger', '중요': 'warn', '일반': 'info',
     '높음': 'warn', '보통': 'info',
-    '접수': 'warn', '확인 중': 'info', '처리 중': 'info', '완료': 'ok'
+    '접수': 'warn', '확인 중': 'info', '처리 중': 'info', '완료': 'ok',
+    '미배부': 'warn', '일부 배부': 'info', '배부 완료': 'ok'
   };
   function badge(text, extra) {
     var t = TONE[text] || 'off';
@@ -53,11 +69,15 @@
   var S = {
     settings: null, schedule: [], booths: [], zones: [], notices: [],
     requests: [], resources: [], contacts: [], places: [], faqs: [],
+    tasks: [], assigns: [], supplyItems: [], supplyTargets: [], supplyAllocs: [],
     error: null, loading: false
   };
   var view = 'dashboard';
   var ui = { boothQ: '', boothStatus: '전체', boothZone: '전체',
-             schedCat: '전체', schedQ: '', reqStatus: '전체',
+             schedCat: '전체', schedQ: '', schedHalf: '전체', schedKey: false,
+             reqStatus: '전체',
+             taskMode: '업무별', taskArea: '전체', taskQ: '', taskPerson: '',
+             supplyStatus: '전체', supplyKind: '전체', supplyQ: '',
              contactQ: '', contactCat: '전체', faqCat: '전체' };
   var clockTimer = null;
 
@@ -196,12 +216,22 @@
       C.select('resources'),
       C.select('contacts'),
       C.select('venue_places'),
-      C.select('faqs')
+      C.select('faqs'),
+      // 아래 다섯은 migration-operations.sql 을 돌리기 전에는 없습니다.
+      // 없다고 포털 전체가 오류 화면이 되면 안 되므로 selectSoft 로
+      // 부릅니다(표가 없으면 빈 배열).
+      C.selectSoft('operation_tasks'),
+      C.selectSoft('task_assignments'),
+      C.selectSoft('supply_items'),
+      C.selectSoft('supply_targets'),
+      C.selectSoft('supply_allocations')
     ]).then(function (r) {
       S.settings = r[0][0] || {};
       S.schedule = r[1]; S.zones = r[2]; S.booths = r[3]; S.notices = r[4];
       S.requests = r[5]; S.resources = r[6]; S.contacts = r[7];
       S.places = r[8]; S.faqs = r[9];
+      S.tasks = r[10]; S.assigns = r[11];
+      S.supplyItems = r[12]; S.supplyTargets = r[13]; S.supplyAllocs = r[14];
       S.loading = false;
     }).catch(function (e) {
       S.loading = false;
@@ -510,16 +540,21 @@
     BOOTH_STATES.forEach(function (st) { byStatus[st] = S.booths.filter(function (b) { return b.status === st; }).length; });
     var openReq = S.requests.filter(function (r) { return r.status !== '완료'; }).length;
     var todayCount = S.schedule.filter(function (i) { return i.status !== '취소'; }).length;
-    var runningCount = ev.sameDay
-      ? S.schedule.filter(function (i) { return liveStatus(i, ev) === '진행 중'; }).length : 0;
+
+    // 운영 인력은 연락망에서 '운영 인력' 으로 표시한 사람 수입니다.
+    // 아직 그 칸이 없으면(마이그레이션 전) 0 이 아니라 '-' 로 둡니다.
+    // 0 명이라고 적으면 아무도 없는 것처럼 읽히기 때문입니다.
+    var staff = staffList();
 
     var stats = [
       { n: S.booths.length, l: '전체 부스', go: 'booths', f: null },
       { n: byStatus['운영 중'], l: '운영 중', go: 'booths', f: '운영 중', tone: 'ok' },
       { n: byStatus['준비 전'] + byStatus['준비 완료'], l: '준비 중', go: 'booths', f: '준비 전', tone: 'warn' },
       { n: byStatus['일시 중단'], l: '일시 중단', go: 'booths', f: '일시 중단', tone: 'danger' },
-      { n: todayCount, l: '행사 일정', go: 'schedule', f: null },
-      { n: runningCount, l: '진행 중 일정', go: 'schedule', f: null, tone: 'ok' },
+      { n: todayCount, l: '행사 일정', go: 'schedule', f: null,
+        zero: '일정이 등록되면 표시됩니다.' },
+      { n: staff ? staff.length : '-', l: '운영 인력', go: 'tasks', f: null,
+        zero: '연락망에서 운영 인력을 표시하면 집계됩니다.' },
       { n: urgent.length, l: '긴급 공지', go: 'notices', f: null, tone: urgent.length ? 'danger' : null,
         // 0 일 때는 숫자만 두면 허전해서, 무엇을 세는 칸인지 적어 둡니다.
         zero: '새 운영 안내가 등록되면 표시됩니다.' },
@@ -527,12 +562,44 @@
         zero: '처리가 필요한 현장 요청 수입니다.' }
     ];
     var statsHtml = '<div class="statgrid">' + stats.map(function (st) {
+      var blank = !st.n || st.n === '-';
       return '<button class="stat' + (st.tone ? ' stat--' + st.tone : '') + '" type="button" data-go="' + st.go + '"' +
         (st.f ? ' data-filter="' + esc(st.f) + '"' : '') + '>' +
         '<span class="stat__n">' + st.n + '</span><span class="stat__l">' + esc(st.l) + '</span>' +
-        (st.zero && !st.n ? '<span class="stat__hint">' + esc(st.zero) + '</span>' : '') +
+        (st.zero && blank ? '<span class="stat__hint">' + esc(st.zero) + '</span>' : '') +
         '</button>';
     }).join('') + '</div>';
+
+    /* 오늘의 하이라이트 — 관리자가 '핵심 일정' 으로 표시한 것만.
+       표시된 일정이 없으면 이 자리를 아예 두지 않습니다. 빈 제목만
+       남으면 무언가 빠진 화면처럼 보입니다. */
+    var keyItems = S.schedule.filter(function (i) {
+      return i.is_highlight && i.status !== '취소';
+    }).slice(0, 5);
+    var keyHtml = keyItems.length
+      ? '<section class="keybox"><h2 class="section-title">오늘의 하이라이트' +
+        '<button class="section-title__go" type="button" data-go="schedule" data-schedkey="1">일정에서 보기</button>' +
+        '</h2><div class="keyrow">' + keyItems.map(function (i) {
+          var st = liveStatus(i, ev);
+          return '<button class="keycard' + (st === '진행 중' ? ' keycard--now' : '') + '" type="button" ' +
+            'data-go="schedule" data-schedkey="1">' +
+            '<span class="keycard__time">' + esc(i.start_time || '') +
+            (i.end_time ? '–' + esc(i.end_time) : '') + '</span>' +
+            '<span class="keycard__title">' + esc(i.title) + '</span>' +
+            '<span class="keycard__meta">' + esc(i.place || '장소 미정') + '</span>' +
+            (st === '진행 중' ? '<span class="keycard__now">진행 중</span>' : '') +
+            '</button>';
+        }).join('') + '</div></section>'
+      : '';
+
+    /* 운영 안내 — 관리자가 행사 기본정보에 적어 둔 짧은 안내입니다.
+       줄바꿈을 그대로 살립니다. 비어 있으면 자리를 두지 않습니다. */
+    var guide = (s.ops_guide || '').trim();
+    var guideHtml = guide
+      ? '<section class="card card__pad guidebox">' +
+        '<h2 class="guidebox__title">운영 안내</h2>' +
+        '<div class="noticebody">' + esc(guide) + '</div></section>'
+      : '';
 
     /* 지금 / 다음 */
     var nowHtml;
@@ -573,7 +640,7 @@
         '</section>';
     }
 
-    return '<div class="page">' + hero + urgentHtml + statsHtml + nowHtml +
+    return '<div class="page">' + hero + urgentHtml + statsHtml + nowHtml + keyHtml + guideHtml +
       '<div class="page__actions" style="margin-left:0"><button class="btn btn--primary" type="button" data-newreq>+ 현장 문제 보고</button>' +
       '<button class="btn btn--ghost" type="button" data-go="contacts">연락망</button></div>' +
       '</div>';
@@ -592,44 +659,130 @@
     return (d.getMonth() + 1) + '/' + d.getDate() + ' ' + C.pad2(d.getHours()) + ':' + C.pad2(d.getMinutes());
   }
 
-  /* ── 화면: 일정 ─────────────────────────────────────────────── */
+  /* ── 화면: 일정 ───────────────────────────────────────────────
+     시간 흐름이 눈에 보이게 시각을 왼쪽 기둥에 세우고, 같은 시간대의
+     일정을 그 아래에 묶습니다. 목록만 늘어놓으면 "지금이 어디쯤인지"
+     를 매번 머리로 계산해야 합니다.
+
+     행사 당일에는 현재 시각 선을 실제 위치에 그어 줍니다. 색으로만
+     알리지 않고 '지금 13:27' 처럼 글자로도 적습니다 — 색을 구분하기
+     어려운 사람도 같은 정보를 얻어야 합니다. */
   function viewSchedule() {
     var ev = eventInfo();
-    var cats = ['전체'].concat(SCHEDULE_CATS).map(function (c) {
-      return { label: c, n: c === '전체' ? S.schedule.length : S.schedule.filter(function (i) { return i.category === c; }).length };
-    });
+
+    var hasKey = S.schedule.some(function (i) { return i.is_highlight; });
     var q = ui.schedQ.trim().toLowerCase();
-    var list = S.schedule.filter(function (i) {
-      if (ui.schedCat !== '전체' && i.category !== ui.schedCat) return false;
-      if (!q) return true;
-      return (i.title + ' ' + (i.place || '') + ' ' + (i.team || '') + ' ' + (i.owner || '')).toLowerCase().indexOf(q) >= 0;
+
+    function half(i) {
+      var m = C.toMin(i.start_time);
+      return m == null ? null : (m < 12 * 60 ? '오전' : '오후');
+    }
+
+    var cats = ['전체'].concat(SCHEDULE_CATS).map(function (c) {
+      return { label: c, n: c === '전체' ? S.schedule.length
+        : S.schedule.filter(function (i) { return i.category === c; }).length };
+    });
+    var halves = ['전체', '오전', '오후'].map(function (h) {
+      return { label: h, n: h === '전체' ? S.schedule.length
+        : S.schedule.filter(function (i) { return half(i) === h; }).length };
     });
 
-    var body = list.length ? '<div class="tl">' + list.map(function (i) {
-      var st = liveStatus(i, ev);
-      var cls = st === '진행 중' ? ' tlitem--now' : st === '종료' ? ' tlitem--done' : '';
-      if (st === '취소' || st === '변경') cls = ' tlitem--off';
-      return '<article class="tlitem' + cls + '">' +
-        '<div class="tlitem__time">' + esc(i.start_time || '') +
-        (i.end_time ? '–' + esc(i.end_time) : '') + '</div>' +
-        '<div class="tlitem__body"><h3 class="tlitem__title">' + esc(i.title) + '</h3>' +
-        '<p class="tlitem__meta">' + esc(i.place || '장소 미정') +
-        (i.team ? ' · ' + esc(i.team) : '') + (i.owner ? ' · ' + esc(i.owner) : '') + '</p>' +
-        (i.memo ? '<p class="tlitem__memo">' + esc(i.memo) + '</p>' : '') +
-        '<div class="tlitem__tags">' + badge(st) +
-        '<span class="badge badge--plain">' + esc(i.category) + '</span></div></div></article>';
-    }).join('') + '</div>'
+    var list = S.schedule.filter(function (i) {
+      if (ui.schedCat !== '전체' && i.category !== ui.schedCat) return false;
+      if (ui.schedHalf !== '전체' && half(i) !== ui.schedHalf) return false;
+      if (ui.schedKey && !i.is_highlight) return false;
+      if (!q) return true;
+      return (i.title + ' ' + (i.place || '') + ' ' + (i.team || '') + ' ' + (i.owner || ''))
+        .toLowerCase().indexOf(q) >= 0;
+    }).sort(function (a, b) {
+      var x = C.toMin(a.start_time), y = C.toMin(b.start_time);
+      if (x == null) x = 9999;
+      if (y == null) y = 9999;
+      if (x !== y) return x - y;
+      return (a.sort_order || 0) - (b.sort_order || 0);
+    });
+
+    /* 현재 시각 머리말. 당일에는 크게, 그 밖의 날에는 작게 둡니다. */
+    var nowMin = ev.now.getHours() * 60 + ev.now.getMinutes();
+    var nowLabel = C.pad2(ev.now.getHours()) + ':' + C.pad2(ev.now.getMinutes());
+    var clock = '<div class="nowbar' + (ev.sameDay ? ' nowbar--live' : '') + '">' +
+      '<span class="nowbar__l">현재 시각</span>' +
+      '<span class="nowbar__t">' + esc(nowLabel) + '</span>' +
+      (ev.sameDay ? '<span class="nowbar__tag">행사 진행일</span>' : '') + '</div>';
+
+    /* 시간대별로 묶습니다. 시작 시각이 없는 일정은 맨 뒤에 따로 모읍니다. */
+    var groups = [], seen = {};
+    list.forEach(function (i) {
+      var m = C.toMin(i.start_time);
+      var key = m == null ? '미정' : C.pad2(Math.floor(m / 60)) + ':00';
+      if (!seen[key]) { seen[key] = { key: key, at: m == null ? null : Math.floor(m / 60) * 60, items: [] }; groups.push(seen[key]); }
+      seen[key].items.push(i);
+    });
+
+    var marked = false;
+    var body = groups.map(function (g) {
+      var rows = g.items.map(function (i) {
+        var st = liveStatus(i, ev);
+        var cls = st === '진행 중' ? ' tmlrow--now' : st === '종료' ? ' tmlrow--done' : '';
+        if (st === '취소' || st === '변경') cls = ' tmlrow--off';
+        return '<article class="tmlrow' + cls + '">' +
+          '<div class="tmlrow__time">' + esc(i.start_time || '') +
+          (i.end_time ? '<span class="tmlrow__to">' + esc(i.end_time) + '</span>' : '') + '</div>' +
+          '<div class="tmlrow__body">' +
+          '<h3 class="tmlrow__title">' + esc(i.title) +
+          (i.is_highlight ? '<span class="keymark" title="핵심 일정">핵심</span>' : '') + '</h3>' +
+          '<p class="tmlrow__meta">' + esc(i.place || '장소 미정') +
+          (i.team ? ' · ' + esc(i.team) : '') + (i.owner ? ' · ' + esc(i.owner) : '') + '</p>' +
+          (i.memo ? '<p class="tmlrow__memo">' + esc(i.memo) + '</p>' : '') +
+          '<div class="tmlrow__tags">' + badge(st) +
+          '<span class="badge badge--plain">' + esc(i.category) + '</span>' +
+          (st === '진행 중' ? '<span class="tmlrow__live">현재 진행 중</span>' : '') +
+          '</div></div></article>';
+      }).join('');
+
+      /* 현재 시각 선. 아직 긋지 않았고 이 시간대가 지금보다 뒤라면
+         이 묶음 앞에 긋습니다. */
+      var line = '';
+      if (ev.sameDay && !marked && g.at != null && g.at + 60 > nowMin) {
+        if (g.at > nowMin) { line = nowLine(nowLabel); marked = true; }
+      }
+
+      return line + '<section class="tmlgroup">' +
+        '<h2 class="tmlgroup__hour">' + esc(g.key) + '</h2>' +
+        '<div class="tmlgroup__rows">' + rows + '</div></section>';
+    }).join('');
+
+    // 모든 일정이 이미 지났으면 맨 끝에 긋습니다.
+    if (ev.sameDay && !marked && groups.length) body += nowLine(nowLabel);
+
+    var listHtml = list.length
+      ? '<div class="tml">' + body + '</div>'
       : S.schedule.length
         ? noMatchBox('조건에 맞는 일정이 없습니다.')
         : emptyBox('등록된 일정이 없습니다.', '일정이 등록되면 시간순으로 표시됩니다.');
+
+    var keyToggle = hasKey
+      ? '<button class="chip chip--toggle' + (ui.schedKey ? ' is-on' : '') + '" type="button" ' +
+        'data-schedkeytoggle aria-pressed="' + (ui.schedKey ? 'true' : 'false') + '">핵심 일정만 보기</button>'
+      : '';
 
     return '<div class="page">' +
       pageHead('운영 일정', ev.sameDay
         ? '현재 시각을 기준으로 진행 중인 일정이 강조됩니다.'
         : '행사 전체 일정을 시간순으로 정리했습니다. 변경 사항은 공지에서 함께 확인해 주세요.') +
+      clock +
       '<div class="tools"><div class="search"><label class="sr-only" for="sched-q">일정 검색</label>' +
       '<input class="input" id="sched-q" type="search" placeholder="일정·장소·담당 검색" value="' + esc(ui.schedQ) + '" /></div>' +
-      chips(cats, ui.schedCat, 'data-schedcat') + '</div>' + body + '</div>';
+      chips(cats, ui.schedCat, 'data-schedcat') +
+      chips(halves, ui.schedHalf, 'data-schedhalf') +
+      (keyToggle ? '<div class="chiprow">' + keyToggle + '</div>' : '') + '</div>' +
+      (list.length ? '<p class="resultline">' + list.length + '건</p>' : '') +
+      listHtml + '</div>';
+  }
+
+  function nowLine(label) {
+    return '<div class="nowline" role="separator" aria-label="현재 시각 ' + esc(label) + '">' +
+      '<span class="nowline__t">지금 ' + esc(label) + '</span></div>';
   }
 
   /* ── 화면: 부스 현황 ────────────────────────────────────────── */
@@ -640,6 +793,19 @@
 
     var zoneLabels = ['전체'].concat(S.zones.map(function (z) { return z.key + '존'; }));
     var q = ui.boothQ.trim().toLowerCase();
+
+    /* 구역별 현황. 배치도 다음에 두어 '배치도 → 구역 → 부스' 순으로
+       좁혀 가게 합니다. 누르면 그 구역만 남습니다. */
+    var zoneHtml = S.zones.length
+      ? '<div class="minigrid minigrid--zone">' + S.zones.map(function (z) {
+          var n = S.booths.filter(function (b) { return b.zone_key === z.key; }).length;
+          var lab = z.key + '존';
+          return '<button class="mini mini--btn' + (ui.boothZone === lab ? ' is-on' : '') + '" type="button" ' +
+            'data-boothzone="' + esc(lab) + '" aria-pressed="' + (ui.boothZone === lab) + '">' +
+            '<span class="mini__n">' + n + '</span>' +
+            '<span class="mini__l">' + esc(lab) + (z.label ? ' · ' + esc(z.label) : '') + '</span></button>';
+        }).join('') + '</div>'
+      : '';
 
     var list = S.booths.filter(function (b) {
       if (ui.boothStatus !== '전체' && b.status !== ui.boothStatus) return false;
@@ -675,11 +841,13 @@
     return '<div class="page">' +
       pageHead('부스 운영 현황',
         '부스 위치와 운영 상태를 확인합니다. 카드를 누르면 상세 정보와 상태 변경이 열립니다.') +
-      map +
+      map + zoneHtml +
       '<div class="tools"><div class="search"><label class="sr-only" for="booth-q">부스 검색</label>' +
       '<input class="input" id="booth-q" type="search" placeholder="부스번호 · 학교 · 기관 · 프로그램 검색" value="' + esc(ui.boothQ) + '" /></div>' +
       chips(statusChips, ui.boothStatus, 'data-boothstatus') +
-      chips(zoneLabels, ui.boothZone, 'data-boothzone') + '</div>' + body + '</div>';
+      chips(zoneLabels, ui.boothZone, 'data-boothzone') + '</div>' +
+      (list.length ? '<p class="resultline">' + list.length + '건</p>' : '') +
+      body + '</div>';
   }
 
   function boothDetail(id) {
@@ -941,10 +1109,21 @@
     }).join('') + '</div>'
       : samplePlaces();
 
+    /* 부스 배치도는 부스 화면과 같은 이미지를 그대로 씁니다.
+       행사장에서 길을 찾다가 부스 위치를 확인하려고 메뉴를 옮겨
+       다니지 않아도 되게 여기에도 둡니다. 따로 등록하지 않습니다. */
+    var boothMap = mediaBox({
+      url: s.booth_map_url, alt: s.booth_map_alt, caption: s.booth_map_caption,
+      title: '전체 부스 배치도',
+      hint: '부스 배치도가 등록되면 이곳에서도 확인할 수 있습니다.'
+    });
+
     return '<div class="page">' +
       pageHead('행사장 안내', venueLine) +
       '<p class="pageintro">운영본부와 주요 행사 공간, 편의시설 위치를 안내합니다.</p>' +
-      map + '<h2 class="section-title">주요 공간</h2>' + body + '</div>';
+      map +
+      '<h2 class="section-title">부스 배치도</h2>' + boothMap +
+      '<h2 class="section-title">주요 공간</h2>' + body + '</div>';
   }
 
   function viewFaq() {
@@ -976,10 +1155,478 @@
       body + '</div>';
   }
 
+  /* ══ 담당 업무 · 운영 인력 ══════════════════════════════════════
+     두 가지를 같은 데이터로 보여 줍니다.
+
+       업무별 담당자 — 이 업무는 누가 맡는가
+       개인별 역할   — 이 사람은 오늘 무엇을 하는가
+
+     행사 당일에는 두 번째 질문이 훨씬 자주 나옵니다. 그래서 사람을
+     고르면 그 사람의 하루가 시간순으로 한 번에 보이게 합니다.
+
+     사람은 연락망(contacts)을 그대로 씁니다. 명부를 따로 두면 이름과
+     소속이 두 군데로 갈라져 어느 쪽이 맞는지 알 수 없게 됩니다.
+     연락망에 없는 사람은 배정에 이름만 적어 둡니다. */
+
+  /* 운영 인력 명부. is_staff 칸이 아직 없으면 null 을 돌려줍니다 —
+     "0 명" 과 "아직 모름" 은 화면에서 다르게 보여야 합니다. */
+  function staffList() {
+    if (!S.contacts.length) return null;
+    var has = S.contacts.some(function (c) { return typeof c.is_staff !== 'undefined'; });
+    if (!has) return null;
+    return S.contacts.filter(function (c) { return c.is_staff; });
+  }
+
+  /* 배정 한 줄이 가리키는 사람. 연락망에 연결돼 있으면 그쪽 이름을
+     씁니다 — 연락처가 바뀌어도 배정을 다시 고칠 필요가 없습니다. */
+  function assignPerson(a) {
+    var c = a.contact_id
+      ? S.contacts.filter(function (x) { return x.id === a.contact_id; })[0]
+      : null;
+    return {
+      key: a.contact_id || ('name:' + (a.person_name || '')),
+      name: (c ? c.name : a.person_name) || '',
+      org: (c ? c.org : a.person_org) || '',
+      roleGroup: c ? (c.role_group || '') : '',
+      phone: c ? (c.phone || '') : '',
+      role: a.role || ''
+    };
+  }
+  function assignsOf(taskId) {
+    return S.assigns.filter(function (a) { return a.task_id === taskId; });
+  }
+  function taskTime(t) {
+    if (!t.start_time) return '';
+    return t.start_time + (t.end_time ? '–' + t.end_time : '–');
+  }
+  function tasksSorted() {
+    return S.tasks.slice().sort(function (a, b) {
+      var x = C.toMin(a.start_time), y = C.toMin(b.start_time);
+      if (x == null) x = 9999;
+      if (y == null) y = 9999;
+      if (x !== y) return x - y;
+      return (a.sort_order || 0) - (b.sort_order || 0);
+    });
+  }
+
+  /* 사람별로 업무를 묶습니다. 개인별 역할 화면이 쓰는 원본입니다. */
+  function peopleWithTasks() {
+    var map = {}, order = [];
+    tasksSorted().forEach(function (t) {
+      assignsOf(t.id).forEach(function (a) {
+        var p = assignPerson(a);
+        if (!p.name) return;
+        if (!map[p.key]) { map[p.key] = { person: p, tasks: [] }; order.push(p.key); }
+        map[p.key].tasks.push({ task: t, role: a.role || '' });
+      });
+    });
+    return order.map(function (k) { return map[k]; });
+  }
+
+  /* 아직 표가 없을 때. 고장이 아니라 준비 전이라는 것을 분명히 적고,
+     무엇을 하면 되는지까지 알려 줍니다. */
+  function notReadyBox(title) {
+    return '<div class="state state--empty">' +
+      '<span class="state__icon">' + ICON_EMPTY + '</span>' +
+      '<p class="state__title">' + esc(title) + '</p>' +
+      '<p class="state__hint">데이터베이스에 이 기능의 표가 아직 없습니다. ' +
+      'supabase/migration-operations.sql 을 실행하면 관리자에서 등록할 수 있습니다.</p></div>';
+  }
+
+  /* 예시 — 실제 사람 이름을 쓰지 않습니다. 확정되지 않은 시각·장소를
+     지어내지도 않습니다. 무엇이 이 자리에 들어오는지만 보여 줍니다. */
+  var SAMPLE_TASKS = [
+    { area: '기념식', title: '좌석 및 안내 준비', when: '행사 시작 전', place: '운영본부',
+      people: ['담당자 1', '담당자 2'] },
+    { area: '부스 운영', title: '부스 세팅 지원', when: '부스 운영 전', place: '부스 구역',
+      people: ['담당자 1'] },
+    { area: '안전', title: '안전 점검 및 현장 순회', when: '운영 시간 중', place: '행사장 전체',
+      people: ['담당자 1', '담당자 2'] }
+  ];
+
+  function sampleTasks() {
+    return sampleWrap(
+      '등록된 담당 업무가 없습니다. 아래는 업무와 담당자가 어떻게 표시되는지 보여 주는 예시이며, ' +
+      '실제 업무가 등록되면 사라집니다. 시간과 장소는 관리자에서 등록한 값이 표시됩니다.',
+      SAMPLE_TASKS.map(function (t) {
+        return '<div class="task is-sample">' +
+          '<div class="task__top"><span class="task__time">' + esc(t.when) + '</span>' +
+          '<span class="badge badge--plain">' + esc(t.area) + '</span>' + SAMPLE + '</div>' +
+          '<div class="task__title">' + esc(t.title) + '</div>' +
+          '<div class="task__meta">' + esc(t.place) + '</div>' +
+          '<div class="task__people">' + t.people.map(function (n) {
+            return '<span class="person">' + esc(n) + '</span>';
+          }).join('') + '</div></div>';
+      }).join(''));
+  }
+
+  function samplePeople() {
+    return sampleWrap(
+      '등록된 담당 업무가 없습니다. 담당자가 배정되면 아래처럼 사람별로 맡은 업무를 시간순으로 확인할 수 있습니다.',
+      ['담당자 1', '담당자 2', '담당자 3'].map(function (n, i) {
+        return '<div class="rowcard is-sample"><div class="rowcard__body">' +
+          '<div class="rowcard__name">' + esc(n) + ' ' + SAMPLE + '</div>' +
+          '<div class="rowcard__meta">소속이 등록되면 표시됩니다 · 담당 업무 ' + (i + 1) + '건</div>' +
+          '</div></div>';
+      }).join(''));
+  }
+
+  /* ── 화면: 담당 업무 ────────────────────────────────────────── */
+  function viewTasks() {
+    var modes = ['업무별', '개인별'];
+    var switcher = '<div class="segrow" role="group" aria-label="보기 방식">' +
+      modes.map(function (m) {
+        return '<button class="seg' + (ui.taskMode === m ? ' is-on' : '') + '" type="button" ' +
+          'data-taskmode="' + esc(m) + '" aria-pressed="' + (ui.taskMode === m) + '">' +
+          esc(m === '업무별' ? '업무별 담당자' : '개인별 역할') + '</button>';
+      }).join('') + '</div>';
+
+    return '<div class="page">' +
+      pageHead('담당 업무',
+        '업무별 담당자와 개인별 역할을 확인합니다. 행사 당일 누가 무엇을 맡는지 빠르게 찾을 수 있습니다.') +
+      switcher + (ui.taskMode === '개인별' ? tasksByPerson() : tasksByTask()) + '</div>';
+  }
+
+  /* 업무별 담당자 — 업무 영역으로 묶어서 보여 줍니다. */
+  function tasksByTask() {
+    if (!S.tasks.length) {
+      return C.isTableMissing('operation_tasks')
+        ? notReadyBox('담당 업무 기능이 아직 준비되지 않았습니다.')
+        : sampleTasks();
+    }
+
+    var areas = ['전체'].concat(S.tasks.reduce(function (a, t) {
+      if (t.area && a.indexOf(t.area) < 0) a.push(t.area); return a; }, []));
+    var q = ui.taskQ.trim().toLowerCase();
+
+    var list = tasksSorted().filter(function (t) {
+      if (ui.taskArea !== '전체' && t.area !== ui.taskArea) return false;
+      if (!q) return true;
+      var names = assignsOf(t.id).map(function (a) { return assignPerson(a).name; }).join(' ');
+      return (t.title + ' ' + (t.place || '') + ' ' + (t.description || '') + ' ' +
+              (t.area || '') + ' ' + names).toLowerCase().indexOf(q) >= 0;
+    });
+
+    var tools = '<div class="tools"><div class="search">' +
+      '<label class="sr-only" for="task-q">업무 검색</label>' +
+      '<input class="input" id="task-q" type="search" placeholder="업무 · 장소 · 담당자 검색" value="' +
+      esc(ui.taskQ) + '" /></div>' +
+      (areas.length > 1 ? chips(areas.map(function (a) {
+        return { label: a, n: a === '전체' ? S.tasks.length
+          : S.tasks.filter(function (t) { return t.area === a; }).length };
+      }), ui.taskArea, 'data-taskarea') : '') + '</div>';
+
+    if (!list.length) return tools + noMatchBox('조건에 맞는 업무가 없습니다.');
+
+    /* 영역별로 묶습니다. 한 줄로 죽 늘어놓으면 "기념식 담당" 을
+       찾으려고 목록 전체를 훑어야 합니다. */
+    var groups = [], seen = {};
+    list.forEach(function (t) {
+      var k = t.area || '기타';
+      if (!seen[k]) { seen[k] = { area: k, items: [] }; groups.push(seen[k]); }
+      seen[k].items.push(t);
+    });
+
+    return tools + '<p class="resultline">' + list.length + '건</p>' +
+      groups.map(function (g) {
+        return '<section class="taskgroup">' +
+          '<h2 class="section-title">' + esc(g.area) +
+          '<span class="section-title__n">' + g.items.length + '</span></h2>' +
+          '<div class="tl">' + g.items.map(taskCard).join('') + '</div></section>';
+      }).join('');
+  }
+
+  function taskCard(t) {
+    var people = assignsOf(t.id).map(assignPerson).filter(function (p) { return p.name; });
+    var time = taskTime(t);
+    return '<button class="task" type="button" data-task="' + esc(t.id) + '">' +
+      '<span class="task__top">' +
+      (time ? '<span class="task__time">' + esc(time) + '</span>' : '') +
+      '<span class="badge badge--plain">' + esc(t.area || '기타') + '</span></span>' +
+      '<span class="task__title">' + esc(t.title) + '</span>' +
+      (t.place ? '<span class="task__meta">' + esc(t.place) + '</span>' : '') +
+      (people.length
+        ? '<span class="task__people">' + people.map(function (p) {
+            return '<span class="person">' + esc(p.name) +
+              (p.role ? '<span class="person__role">' + esc(p.role) + '</span>' : '') + '</span>';
+          }).join('') + '</span>'
+        : '<span class="task__meta task__meta--none">담당자 미배정</span>') +
+      '</button>';
+  }
+
+  function taskDetail(id) {
+    var t = S.tasks.filter(function (x) { return x.id === id; })[0];
+    if (!t) return;
+    var rows = [
+      ['업무 영역', t.area],
+      ['시간', taskTime(t)],
+      ['장소', t.place]
+    ].filter(function (r) { return r[1]; });
+
+    var html = '<div class="notice__top"><span class="badge badge--plain">' +
+      esc(t.area || '기타') + '</span></div>';
+
+    if (rows.length) {
+      html += '<dl class="dl">' + rows.map(function (r) {
+        return '<div class="dl__row"><dt>' + esc(r[0]) + '</dt><dd>' + esc(r[1]) + '</dd></div>';
+      }).join('') + '</dl>';
+    }
+    if (t.description) html += '<div class="noticebody">' + esc(t.description) + '</div>';
+
+    var people = assignsOf(t.id).map(assignPerson).filter(function (p) { return p.name; });
+    html += '<div><p class="field__label" style="margin-bottom:8px">담당자 ' + people.length + '명</p>' +
+      (people.length
+        ? '<div class="tl">' + people.map(function (p) {
+            return '<div class="rowcard"><div class="rowcard__body">' +
+              '<div class="rowcard__name">' + esc(p.name) +
+              (p.role ? ' <span class="badge badge--plain">' + esc(p.role) + '</span>' : '') + '</div>' +
+              (p.org ? '<div class="rowcard__meta">' + esc(p.org) + '</div>' : '') + '</div>' +
+              (p.phone ? '<div class="rowcard__act"><a class="btn btn--primary btn--sm" href="' +
+                esc(C.telHref(p.phone)) + '">전화</a></div>' : '') + '</div>';
+          }).join('') + '</div>'
+        : '<p class="nowcard__meta">아직 배정된 담당자가 없습니다.</p>') + '</div>';
+
+    openDrawer(t.title, html, { footer: true });
+  }
+
+  /* 개인별 역할 — 사람을 고르면 그 사람의 하루가 시간순으로 열립니다. */
+  function tasksByPerson() {
+    if (!S.tasks.length) {
+      return C.isTableMissing('operation_tasks')
+        ? notReadyBox('담당 업무 기능이 아직 준비되지 않았습니다.')
+        : samplePeople();
+    }
+
+    var people = peopleWithTasks();
+    var q = ui.taskQ.trim().toLowerCase();
+    var list = people.filter(function (p) {
+      if (!q) return true;
+      return (p.person.name + ' ' + p.person.org + ' ' + p.person.roleGroup)
+        .toLowerCase().indexOf(q) >= 0;
+    });
+
+    /* 운영 인력 요약. 연락망에서 "운영 인력" 으로 표시한 사람을 셉니다.
+       아직 그 칸이 없으면(마이그레이션 전) 숫자를 지어내지 않습니다. */
+    var staff = staffList();
+    var summary = '';
+    if (staff && staff.length) {
+      var byRole = {}, roles = [];
+      staff.forEach(function (c) {
+        var r = c.role_group || '기타';
+        if (!byRole[r]) { byRole[r] = 0; roles.push(r); }
+        byRole[r]++;
+      });
+      summary = '<div class="minigrid">' +
+        '<div class="mini"><span class="mini__n">' + staff.length + '</span>' +
+        '<span class="mini__l">전체 운영 인력</span></div>' +
+        roles.map(function (r) {
+          return '<div class="mini"><span class="mini__n">' + byRole[r] + '</span>' +
+            '<span class="mini__l">' + esc(r) + '</span></div>';
+        }).join('') + '</div>';
+    }
+
+    var tools = '<div class="tools"><div class="search">' +
+      '<label class="sr-only" for="task-q">담당자 검색</label>' +
+      '<input class="input" id="task-q" type="search" placeholder="이름 · 소속 · 역할 검색" value="' +
+      esc(ui.taskQ) + '" /></div></div>';
+
+    var body = list.length
+      ? '<div class="tl">' + list.map(function (p) {
+          return '<button class="rowcard rowcard--btn" type="button" data-person="' + esc(p.person.key) + '">' +
+            '<span class="rowcard__body">' +
+            '<span class="rowcard__name">' + esc(p.person.name) +
+            (p.person.roleGroup ? ' <span class="badge badge--plain">' + esc(p.person.roleGroup) + '</span>' : '') +
+            '</span>' +
+            '<span class="rowcard__meta">' + esc(p.person.org || '소속 미정') +
+            ' · 담당 업무 ' + p.tasks.length + '건</span></span>' +
+            '<span class="rowcard__act"><span class="rowcard__go" aria-hidden="true">›</span></span></button>';
+        }).join('') + '</div>'
+      : noMatchBox('조건에 맞는 담당자가 없습니다.');
+
+    return summary + tools +
+      (list.length ? '<p class="resultline">' + list.length + '명</p>' : '') + body;
+  }
+
+  function personDetail(key) {
+    var p = peopleWithTasks().filter(function (x) { return x.person.key === key; })[0];
+    if (!p) return;
+
+    var rows = [
+      ['소속', p.person.org],
+      ['역할', p.person.roleGroup]
+    ].filter(function (r) { return r[1]; });
+
+    var html = '';
+    if (rows.length) {
+      html += '<dl class="dl">' + rows.map(function (r) {
+        return '<div class="dl__row"><dt>' + esc(r[0]) + '</dt><dd>' + esc(r[1]) + '</dd></div>';
+      }).join('') + '</dl>';
+    }
+    if (p.person.phone) {
+      html += '<a class="btn btn--primary btn--full" href="' + esc(C.telHref(p.person.phone)) + '">' +
+        '전화 · ' + esc(p.person.phone) + '</a>';
+    }
+
+    html += '<div><p class="field__label" style="margin-bottom:8px">담당 업무 ' + p.tasks.length + '건</p>' +
+      '<div class="tml tml--plain">' + p.tasks.map(function (it) {
+        return '<div class="tmlrow">' +
+          '<div class="tmlrow__time">' + esc(taskTime(it.task) || '시간 미정') + '</div>' +
+          '<div class="tmlrow__body"><div class="tmlrow__title">' + esc(it.task.title) + '</div>' +
+          '<div class="tmlrow__meta">' + esc(it.task.place || '장소 미정') +
+          (it.role ? ' · ' + esc(it.role) : '') + '</div></div></div>';
+      }).join('') + '</div></div>';
+
+    openDrawer(p.person.name, html, { footer: true });
+  }
+
+  /* ══ 운영 물품 ══════════════════════════════════════════════════
+     "누구에게 무엇을 몇 개 주었는가" 를 확인하는 화면입니다.
+     사람 명단을 통째로 펼치지 않고 기관·팀·부스 단위로만 봅니다 —
+     포털은 링크만 알면 열리므로 개인 명단을 올릴 자리가 아닙니다.
+
+     포털에서는 조회만 합니다. 배부 상태는 관리자에서 바꿉니다. */
+  function allocsOf(targetId) {
+    return S.supplyAllocs.filter(function (a) { return a.target_id === targetId; })
+      .map(function (a) {
+        var item = S.supplyItems.filter(function (x) { return x.id === a.item_id; })[0];
+        return { name: item ? item.name : '', unit: item ? (item.unit || '개') : '개', qty: a.qty || 0 };
+      })
+      .filter(function (a) { return a.name; });
+  }
+
+  var SAMPLE_SUPPLIES = [
+    { name: '운영본부', kind: '팀', status: '배부 완료', items: ['명찰', '운영키트', '생수'] },
+    { name: '부스 운영 기관', kind: '기관', status: '일부 배부', items: ['명찰', '식권'] },
+    { name: '체험 부스', kind: '부스', status: '미배부', items: ['운영키트'] }
+  ];
+
+  function sampleSupplies() {
+    return sampleWrap(
+      '등록된 운영 물품이 없습니다. 아래는 배부 현황이 어떻게 표시되는지 보여 주는 예시이며, ' +
+      '실제 물품이 등록되면 사라집니다. 물품 종류와 수량은 관리자에서 등록한 값이 표시됩니다.',
+      SAMPLE_SUPPLIES.map(function (t) {
+        return '<div class="supply is-sample">' +
+          '<div class="supply__top">' + badge(t.status) +
+          '<span class="badge badge--plain">' + esc(t.kind) + '</span>' + SAMPLE + '</div>' +
+          '<div class="supply__name">' + esc(t.name) + '</div>' +
+          '<div class="supply__items">' + t.items.map(function (n) {
+            return '<span class="chipitem">' + esc(n) + '<b>–</b></span>';
+          }).join('') + '</div></div>';
+      }).join(''));
+  }
+
+  /* ── 화면: 운영 물품 ────────────────────────────────────────── */
+  function viewSupplies() {
+    var head = pageHead('운영 물품',
+      '기관·팀·부스별 물품 배부 현황을 확인합니다. 배부 상태는 관리자에서 변경합니다.');
+
+    if (!S.supplyTargets.length) {
+      return '<div class="page">' + head +
+        (C.isTableMissing('supply_targets')
+          ? notReadyBox('운영 물품 기능이 아직 준비되지 않았습니다.')
+          : sampleSupplies()) + '</div>';
+    }
+
+    var byStatus = {};
+    SUPPLY_STATES.forEach(function (st) {
+      byStatus[st] = S.supplyTargets.filter(function (t) { return t.status === st; }).length;
+    });
+    var totalQty = S.supplyAllocs.reduce(function (n, a) { return n + (a.qty || 0); }, 0);
+
+    var summary = '<div class="minigrid">' +
+      '<div class="mini"><span class="mini__n">' + S.supplyTargets.length + '</span>' +
+      '<span class="mini__l">배부 대상</span></div>' +
+      '<div class="mini mini--ok"><span class="mini__n">' + byStatus['배부 완료'] + '</span>' +
+      '<span class="mini__l">배부 완료</span></div>' +
+      '<div class="mini mini--info"><span class="mini__n">' + byStatus['일부 배부'] + '</span>' +
+      '<span class="mini__l">일부 배부</span></div>' +
+      '<div class="mini mini--warn"><span class="mini__n">' + byStatus['미배부'] + '</span>' +
+      '<span class="mini__l">미배부</span></div>' +
+      '<div class="mini"><span class="mini__n">' + totalQty + '</span>' +
+      '<span class="mini__l">전체 물품 수량</span></div></div>';
+
+    var q = ui.supplyQ.trim().toLowerCase();
+    var list = S.supplyTargets.filter(function (t) {
+      if (ui.supplyStatus !== '전체' && t.status !== ui.supplyStatus) return false;
+      if (ui.supplyKind !== '전체' && t.kind !== ui.supplyKind) return false;
+      if (!q) return true;
+      var items = allocsOf(t.id).map(function (a) { return a.name; }).join(' ');
+      return (t.name + ' ' + (t.manager || '') + ' ' + (t.kind || '') + ' ' + items)
+        .toLowerCase().indexOf(q) >= 0;
+    });
+
+    var statusChips = ['전체'].concat(SUPPLY_STATES).map(function (c) {
+      return { label: c, n: c === '전체' ? S.supplyTargets.length : byStatus[c] };
+    });
+    var kindChips = ['전체'].concat(SUPPLY_KINDS.filter(function (k) {
+      return S.supplyTargets.some(function (t) { return t.kind === k; });
+    }));
+
+    var tools = '<div class="tools"><div class="search">' +
+      '<label class="sr-only" for="supply-q">물품 검색</label>' +
+      '<input class="input" id="supply-q" type="search" placeholder="대상 · 담당자 · 물품 검색" value="' +
+      esc(ui.supplyQ) + '" /></div>' +
+      chips(statusChips, ui.supplyStatus, 'data-supplystatus') +
+      (kindChips.length > 2 ? chips(kindChips, ui.supplyKind, 'data-supplykind') : '') + '</div>';
+
+    var body = list.length ? '<div class="tl">' + list.map(function (t) {
+      var items = allocsOf(t.id);
+      return '<button class="supply" type="button" data-supply="' + esc(t.id) + '">' +
+        '<span class="supply__top">' + badge(t.status || '미배부') +
+        '<span class="badge badge--plain">' + esc(t.kind || '팀') + '</span>' +
+        (t.headcount ? '<span class="notice__meta">' + t.headcount + '명</span>' : '') + '</span>' +
+        '<span class="supply__name">' + esc(t.name) + '</span>' +
+        (t.manager ? '<span class="supply__meta">담당 ' + esc(t.manager) + '</span>' : '') +
+        (items.length
+          ? '<span class="supply__items">' + items.map(function (a) {
+              return '<span class="chipitem">' + esc(a.name) + '<b>' + a.qty + '</b></span>';
+            }).join('') + '</span>'
+          : '<span class="supply__meta supply__meta--none">배부 물품 미등록</span>') +
+        '</button>';
+    }).join('') + '</div>' : noMatchBox('조건에 맞는 배부 대상이 없습니다.');
+
+    return '<div class="page">' + head + summary + tools +
+      (list.length ? '<p class="resultline">' + list.length + '건</p>' : '') + body + '</div>';
+  }
+
+  function supplyDetail(id) {
+    var t = S.supplyTargets.filter(function (x) { return x.id === id; })[0];
+    if (!t) return;
+    var items = allocsOf(t.id);
+    var rows = [
+      ['구분', t.kind],
+      ['담당자', t.manager],
+      ['인원', t.headcount ? t.headcount + '명' : ''],
+      ['메모', t.memo]
+    ].filter(function (r) { return r[1]; });
+
+    var html = '<div class="notice__top">' + badge(t.status || '미배부') +
+      '<span class="notice__meta">최근 변경 ' + esc(fmtDay(t.updated_at)) + '</span></div>';
+
+    if (rows.length) {
+      html += '<dl class="dl">' + rows.map(function (r) {
+        return '<div class="dl__row"><dt>' + esc(r[0]) + '</dt><dd>' + esc(r[1]) + '</dd></div>';
+      }).join('') + '</dl>';
+    }
+
+    html += '<div><p class="field__label" style="margin-bottom:8px">배부 물품 ' + items.length + '종</p>' +
+      (items.length
+        ? '<table class="qtytable"><thead><tr><th scope="col">물품</th>' +
+          '<th scope="col" class="qtytable__n">수량</th></tr></thead><tbody>' +
+          items.map(function (a) {
+            return '<tr><td>' + esc(a.name) + '</td><td class="qtytable__n">' +
+              a.qty + ' ' + esc(a.unit) + '</td></tr>';
+          }).join('') + '</tbody></table>'
+        : '<p class="nowcard__meta">등록된 배부 물품이 없습니다.</p>') + '</div>';
+
+    openDrawer(t.name, html, { footer: true });
+  }
+
   /* ── 라우터 ─────────────────────────────────────────────────── */
   var VIEWS = {
     dashboard: viewDashboard, schedule: viewSchedule, booths: viewBooths,
-    notices: viewNotices, requests: viewRequests, resources: viewResources,
+    notices: viewNotices, requests: viewRequests, tasks: viewTasks,
+    supplies: viewSupplies, resources: viewResources,
     contacts: viewContacts, venue: viewVenue, faq: viewFaq
   };
 
@@ -1003,12 +1650,23 @@
       if (id === 'notices' && urgent) return '<span class="nav__badge">' + urgent + '</span>';
       return '';
     }
-    // 관리자 링크는 늘 보입니다. 눌러도 admin.html 이 스스로 로그인을
-    // 요구하므로, 링크가 보인다고 해서 열리는 것은 아닙니다.
-    $('#sidenav').innerHTML = NAV.map(function (n) {
+    function link(n) {
       return '<a href="#' + n.id + '" class="' + (n.id === view ? 'is-on' : '') + '"' +
         (n.id === view ? ' aria-current="page"' : '') + '>' + esc(n.label) + badgeFor(n.id) + '</a>';
-    }).join('') + '<a href="admin.html">관리자</a>';
+    }
+    /* 그룹 제목을 사이에 끼워 메뉴가 세 덩어리로 읽히게 합니다.
+       제목은 누를 수 없는 글자라 탭 순서에 끼어들지 않습니다. */
+    function group(name) {
+      var items = NAV.filter(function (n) { return n.group === name; });
+      if (!items.length) return '';
+      return '<p class="side__group">' + esc(name) + '</p>' + items.map(link).join('');
+    }
+    // 관리자 링크는 늘 보입니다. 눌러도 admin.html 이 스스로 로그인을
+    // 요구하므로, 링크가 보인다고 해서 열리는 것은 아닙니다.
+    $('#sidenav').innerHTML =
+      NAV.filter(function (n) { return !n.group; }).map(link).join('') +
+      NAV_GROUPS.map(group).join('') +
+      '<p class="side__group">관리</p><a href="admin.html">관리자</a>';
 
     var tabs = NAV.filter(function (n) { return n.tab; });
     $('#tabbar').innerHTML = tabs.map(function (n) {
@@ -1021,9 +1679,17 @@
     }).join('') +
       '<button type="button" data-open-sheet><span class="tab__dot">⋯</span><span>더보기</span></button>';
 
-    $('#sheetnav').innerHTML = NAV.filter(function (n) { return !n.tab; }).map(function (n) {
-      return '<a href="#' + n.id + '" class="' + (n.id === view ? 'is-on' : '') + '">' + esc(n.label) + '</a>';
-    }).join('') + '<a href="admin.html">관리자</a>';
+    /* 더보기 시트도 같은 묶음으로 보여 줍니다. 사이드바와 순서가
+       다르면 PC 로 익힌 위치가 휴대폰에서 통하지 않습니다. */
+    function sheetLink(n) {
+      return '<a href="#' + n.id + '" class="' + (n.id === view ? 'is-on' : '') + '">' +
+        esc(n.label) + badgeFor(n.id) + '</a>';
+    }
+    $('#sheetnav').innerHTML = NAV_GROUPS.map(function (name) {
+      var items = NAV.filter(function (n) { return n.group === name && !n.tab; });
+      if (!items.length) return '';
+      return '<p class="sheet__group">' + esc(name) + '</p>' + items.map(sheetLink).join('');
+    }).join('') + '<p class="sheet__group">관리</p><a href="admin.html">관리자</a>';
   }
 
   function routeFromHash() {
@@ -1056,6 +1722,11 @@
         var f = go2.getAttribute('data-filter');
         if (f && go2.dataset.go === 'booths') ui.boothStatus = f === '준비 전' ? '준비 전' : f;
         if (f && go2.dataset.go === 'requests') ui.reqStatus = f;
+        // 하이라이트에서 건너왔다면 일정 화면을 핵심 일정만 켠 채로
+        // 엽니다. 전체 목록에서 방금 본 일정을 다시 찾게 하지 않습니다.
+        if (go2.hasAttribute('data-schedkey')) {
+          ui.schedKey = true; ui.schedCat = '전체'; ui.schedHalf = '전체'; ui.schedQ = '';
+        }
         location.hash = '#' + go2.dataset.go;
         return;
       }
@@ -1068,7 +1739,9 @@
       }
       if (t.closest('[data-close-zoom]')) { closeZoom(); return; }
 
-      var chip = t.closest('[data-boothstatus],[data-boothzone],[data-schedcat],[data-reqstatus],[data-contactcat],[data-faqcat]');
+      var chip = t.closest('[data-boothstatus],[data-boothzone],[data-schedcat],[data-schedhalf],' +
+        '[data-reqstatus],[data-contactcat],[data-faqcat],[data-taskarea],' +
+        '[data-supplystatus],[data-supplykind]');
       if (chip) {
         if (chip.hasAttribute('data-boothstatus')) ui.boothStatus = chip.getAttribute('data-boothstatus');
         if (chip.hasAttribute('data-boothzone'))   ui.boothZone   = chip.getAttribute('data-boothzone');
@@ -1076,6 +1749,10 @@
         if (chip.hasAttribute('data-reqstatus'))   ui.reqStatus   = chip.getAttribute('data-reqstatus');
         if (chip.hasAttribute('data-contactcat'))  ui.contactCat  = chip.getAttribute('data-contactcat');
         if (chip.hasAttribute('data-faqcat'))      ui.faqCat      = chip.getAttribute('data-faqcat');
+        if (chip.hasAttribute('data-schedhalf'))   ui.schedHalf   = chip.getAttribute('data-schedhalf');
+        if (chip.hasAttribute('data-taskarea'))    ui.taskArea    = chip.getAttribute('data-taskarea');
+        if (chip.hasAttribute('data-supplystatus')) ui.supplyStatus = chip.getAttribute('data-supplystatus');
+        if (chip.hasAttribute('data-supplykind'))  ui.supplyKind  = chip.getAttribute('data-supplykind');
         render();
         return;
       }
@@ -1085,6 +1762,16 @@
       var sn = t.closest('[data-samplenotice]');
       if (sn) { noticeDetailView(SAMPLE_NOTICES[Number(sn.getAttribute('data-samplenotice'))]); return; }
       var rq = t.closest('[data-req]');     if (rq) { requestDetail(rq.getAttribute('data-req')); return; }
+      var tk = t.closest('[data-task]');    if (tk) { taskDetail(tk.getAttribute('data-task')); return; }
+      var pe = t.closest('[data-person]');  if (pe) { personDetail(pe.getAttribute('data-person')); return; }
+      var sp = t.closest('[data-supply]');  if (sp) { supplyDetail(sp.getAttribute('data-supply')); return; }
+
+      // 보기 방식 전환(업무별 ↔ 개인별). 검색어는 두 화면이 찾는
+      // 대상이 달라서 함께 비웁니다.
+      if (t.closest('[data-schedkeytoggle]')) { ui.schedKey = !ui.schedKey; render(); return; }
+
+      var tm = t.closest('[data-taskmode]');
+      if (tm) { ui.taskMode = tm.getAttribute('data-taskmode'); ui.taskQ = ''; render(); return; }
       if (t.closest('[data-newreq]')) { openRequestForm(); return; }
 
       var sb = t.closest('[data-setbooth]');
@@ -1105,6 +1792,8 @@
       if (e.target.id === 'booth-q')   { ui.boothQ = e.target.value; softRender('#booth-q'); }
       if (e.target.id === 'sched-q')   { ui.schedQ = e.target.value; softRender('#sched-q'); }
       if (e.target.id === 'contact-q') { ui.contactQ = e.target.value; softRender('#contact-q'); }
+      if (e.target.id === 'task-q')    { ui.taskQ = e.target.value; softRender('#task-q'); }
+      if (e.target.id === 'supply-q')  { ui.supplyQ = e.target.value; softRender('#supply-q'); }
     });
 
     document.addEventListener('submit', function (e) {
@@ -1195,7 +1884,10 @@
     function tick() {
       var d = new Date();
       $('#topbar-clock').textContent = C.pad2(d.getHours()) + ':' + C.pad2(d.getMinutes());
-      if (view === 'dashboard' && d.getSeconds() % 30 === 0) render();
+      // 검색어를 입력하는 중에 다시 그리면 글자가 끊깁니다.
+      var typing = document.activeElement && document.activeElement.tagName === 'INPUT';
+      if (d.getSeconds() % 30 !== 0 || typing) return;
+      if (view === 'dashboard' || view === 'schedule') render();
     }
     tick();
     clockTimer = setInterval(tick, 1000);
