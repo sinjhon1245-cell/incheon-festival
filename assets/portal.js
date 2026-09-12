@@ -490,8 +490,8 @@
     document.body.style.overflow = $('#drawer').hidden ? '' : 'hidden';
   }
 
-  function chips(items, active, attr) {
-    return '<div class="chiprow" role="group">' + items.map(function (it) {
+  function chips(items, active, attr, extra) {
+    return '<div class="chiprow' + (extra ? ' ' + extra : '') + '" role="group">' + items.map(function (it) {
       var label = typeof it === 'string' ? it : it.label;
       var n = typeof it === 'string' ? null : it.n;
       return '<button class="chip' + (label === active ? ' is-on' : '') + '" type="button" ' +
@@ -546,28 +546,21 @@
     // 0 명이라고 적으면 아무도 없는 것처럼 읽히기 때문입니다.
     var staff = staffList();
 
+    /* 첫 화면에서 바로 판단해야 하는 것만 남깁니다. 숫자를 여덟 개
+       늘어놓으면 다 비슷해 보여서 하나도 눈에 안 들어옵니다.
+       일정 수·장소 수처럼 지금 당장 결정에 쓰이지 않는 값은 각
+       메뉴에서 봅니다. */
     var stats = [
       { n: S.booths.length, l: '전체 부스', go: 'booths', f: null },
       { n: byStatus['운영 중'], l: '운영 중', go: 'booths', f: '운영 중', tone: 'ok' },
-      { n: byStatus['준비 전'] + byStatus['준비 완료'], l: '준비 중', go: 'booths', f: '준비 전', tone: 'warn' },
-      { n: byStatus['일시 중단'], l: '일시 중단', go: 'booths', f: '일시 중단', tone: 'danger' },
-      { n: todayCount, l: '행사 일정', go: 'schedule', f: null,
-        zero: '일정이 등록되면 표시됩니다.' },
-      { n: staff ? staff.length : '-', l: '운영 인력', go: 'tasks', f: null,
-        zero: '연락망에서 운영 인력을 표시하면 집계됩니다.' },
-      { n: urgent.length, l: '긴급 공지', go: 'notices', f: null, tone: urgent.length ? 'danger' : null,
-        // 0 일 때는 숫자만 두면 허전해서, 무엇을 세는 칸인지 적어 둡니다.
-        zero: '새 운영 안내가 등록되면 표시됩니다.' },
-      { n: openReq, l: '미처리 요청', go: 'requests', f: '미완료', tone: openReq ? 'warn' : null,
-        zero: '처리가 필요한 현장 요청 수입니다.' }
+      { n: openReq, l: '미처리 요청', go: 'requests', f: '미완료', tone: openReq ? 'warn' : null },
+      { n: staff ? staff.length : '-', l: '운영 인력', go: 'tasks', f: null }
     ];
     var statsHtml = '<div class="statgrid">' + stats.map(function (st) {
-      var blank = !st.n || st.n === '-';
       return '<button class="stat' + (st.tone ? ' stat--' + st.tone : '') + '" type="button" data-go="' + st.go + '"' +
         (st.f ? ' data-filter="' + esc(st.f) + '"' : '') + '>' +
-        '<span class="stat__n">' + st.n + '</span><span class="stat__l">' + esc(st.l) + '</span>' +
-        (st.zero && blank ? '<span class="stat__hint">' + esc(st.zero) + '</span>' : '') +
-        '</button>';
+        '<span class="stat__n">' + st.n + '</span>' +
+        '<span class="stat__l">' + esc(st.l) + '</span></button>';
     }).join('') + '</div>';
 
     /* 오늘의 하이라이트 — 관리자가 '핵심 일정' 으로 표시한 것만.
@@ -575,10 +568,10 @@
        남으면 무언가 빠진 화면처럼 보입니다. */
     var keyItems = S.schedule.filter(function (i) {
       return i.is_highlight && i.status !== '취소';
-    }).slice(0, 5);
+    }).slice(0, 3);
     var keyHtml = keyItems.length
-      ? '<section class="keybox"><h2 class="section-title">오늘의 하이라이트' +
-        '<button class="section-title__go" type="button" data-go="schedule" data-schedkey="1">일정에서 보기</button>' +
+      ? '<section class="keybox"><h2 class="section-title">오늘의 주요 일정' +
+        '<button class="linkbtn" type="button" data-go="schedule">전체 일정 보기</button>' +
         '</h2><div class="keyrow">' + keyItems.map(function (i) {
           var st = liveStatus(i, ev);
           return '<button class="keycard' + (st === '진행 중' ? ' keycard--now' : '') + '" type="button" ' +
@@ -595,10 +588,15 @@
     /* 운영 안내 — 관리자가 행사 기본정보에 적어 둔 짧은 안내입니다.
        줄바꿈을 그대로 살립니다. 비어 있으면 자리를 두지 않습니다. */
     var guide = (s.ops_guide || '').trim();
+    // 대시보드는 훑는 화면입니다. 안내가 길면 앞 세 줄만 두고
+    // 나머지는 드로어에서 읽게 합니다.
+    var guideLong = guide.split(String.fromCharCode(10)).length > 3 || guide.length > 110;
     var guideHtml = guide
-      ? '<section class="card card__pad guidebox">' +
-        '<h2 class="guidebox__title">운영 안내</h2>' +
-        '<div class="noticebody">' + esc(guide) + '</div></section>'
+      ? '<section class="guidebox">' +
+        '<h2 class="section-title">운영 안내</h2>' +
+        '<div class="noticebody' + (guideLong ? ' is-clamped' : '') + '">' + esc(guide) + '</div>' +
+        (guideLong ? '<div><button class="linkbtn" type="button" data-guide>전체 보기</button></div>' : '') +
+        '</section>'
       : '';
 
     /* 지금 / 다음 */
@@ -640,7 +638,7 @@
         '</section>';
     }
 
-    return '<div class="page">' + hero + urgentHtml + statsHtml + nowHtml + keyHtml + guideHtml +
+    return '<div class="page">' + hero + statsHtml + nowHtml + urgentHtml + keyHtml + guideHtml +
       '<div class="page__actions" style="margin-left:0"><button class="btn btn--primary" type="button" data-newreq>+ 현장 문제 보고</button>' +
       '<button class="btn btn--ghost" type="button" data-go="contacts">연락망</button></div>' +
       '</div>';
@@ -735,8 +733,7 @@
           (i.team ? ' · ' + esc(i.team) : '') + (i.owner ? ' · ' + esc(i.owner) : '') + '</p>' +
           (i.memo ? '<p class="tmlrow__memo">' + esc(i.memo) + '</p>' : '') +
           '<div class="tmlrow__tags">' + badge(st) +
-          '<span class="badge badge--plain">' + esc(i.category) + '</span>' +
-          (st === '진행 중' ? '<span class="tmlrow__live">현재 진행 중</span>' : '') +
+          '<span class="tag tag--soft">' + esc(i.category) + '</span>' +
           '</div></div></article>';
       }).join('');
 
@@ -773,9 +770,11 @@
       clock +
       '<div class="tools"><div class="search"><label class="sr-only" for="sched-q">일정 검색</label>' +
       '<input class="input" id="sched-q" type="search" placeholder="일정·장소·담당 검색" value="' + esc(ui.schedQ) + '" /></div>' +
-      chips(cats, ui.schedCat, 'data-schedcat') +
-      chips(halves, ui.schedHalf, 'data-schedhalf') +
-      (keyToggle ? '<div class="chiprow">' + keyToggle + '</div>' : '') + '</div>' +
+      // 오전·오후와 핵심 일정이 한 줄. 당일에 가장 자주 누르는 것입니다.
+      '<div class="filterline">' + chips(halves, ui.schedHalf, 'data-schedhalf') +
+      (keyToggle ? '<div class="chiprow chiprow--end">' + keyToggle + '</div>' : '') + '</div>' +
+      // 분류는 한 단계 아래. 같은 크기로 두면 무엇이 먼저인지 알 수 없습니다.
+      chips(cats, ui.schedCat, 'data-schedcat', 'chiprow--sub') + '</div>' +
       (list.length ? '<p class="resultline">' + list.length + '건</p>' : '') +
       listHtml + '</div>';
   }
@@ -791,19 +790,29 @@
     BOOTH_STATES.forEach(function (st) { counts[st] = S.booths.filter(function (b) { return b.status === st; }).length; });
     var statusChips = ['전체'].concat(BOOTH_STATES).map(function (c) { return { label: c, n: counts[c] }; });
 
-    var zoneLabels = ['전체'].concat(S.zones.map(function (z) { return z.key + '존'; }));
+    /* 한 줄 요약. 상자에 넣지 않습니다 — 이 화면의 주인공은 배치도와
+       부스 목록이고, 이 숫자는 그 사이를 잇는 한 줄이면 충분합니다.
+       0 인 상태는 적지 않습니다. 없는 것을 세어 봐야 읽을 것만 늡니다. */
+    var sumLine = '<p class="sumline">' +
+      ['전체 <b>' + counts['전체'] + '</b>'].concat(
+        BOOTH_STATES.filter(function (st) { return counts[st]; }).map(function (st) {
+          return esc(st) + ' <b>' + counts[st] + '</b>';
+        })).join('<span aria-hidden="true">·</span>') + '</p>';
+
     var q = ui.boothQ.trim().toLowerCase();
 
     /* 구역별 현황. 배치도 다음에 두어 '배치도 → 구역 → 부스' 순으로
        좁혀 가게 합니다. 누르면 그 구역만 남습니다. */
+    /* 구역은 몇 개인지보다 그 구역만 보기로 쓰입니다. 큰 카드 넉 장을
+       세우면 배치도와 목록 사이가 멀어지기만 합니다. */
     var zoneHtml = S.zones.length
-      ? '<div class="minigrid minigrid--zone">' + S.zones.map(function (z) {
-          var n = S.booths.filter(function (b) { return b.zone_key === z.key; }).length;
-          var lab = z.key + '존';
-          return '<button class="mini mini--btn' + (ui.boothZone === lab ? ' is-on' : '') + '" type="button" ' +
+      ? '<div class="chiprow" role="group" aria-label="구역">' +
+        ['전체'].concat(S.zones.map(function (z) { return z.key + '존'; })).map(function (lab) {
+          var n = lab === '전체' ? S.booths.length
+            : S.booths.filter(function (b) { return b.zone_key + '존' === lab; }).length;
+          return '<button class="chip' + (ui.boothZone === lab ? ' is-on' : '') + '" type="button" ' +
             'data-boothzone="' + esc(lab) + '" aria-pressed="' + (ui.boothZone === lab) + '">' +
-            '<span class="mini__n">' + n + '</span>' +
-            '<span class="mini__l">' + esc(lab) + (z.label ? ' · ' + esc(z.label) : '') + '</span></button>';
+            esc(lab) + '<span class="chip__n">' + n + '</span></button>';
         }).join('') + '</div>'
       : '';
 
@@ -820,12 +829,10 @@
         '<span class="booth__top"><span class="booth__code">' + esc(b.code || (b.zone_key + '-' + b.no)) + '</span>' +
         badge(b.status || '준비 전') + '</span>' +
         '<span class="booth__name">' + esc(b.name) + '</span>' +
+        // 담당자·전기·네트워크는 상세에 있습니다. 목록에서 필요한 것은
+        // 번호·이름·기관·상태까지입니다.
         '<span class="booth__org">' + esc(b.org || '운영기관 미정') + '</span>' +
-        '<span class="booth__tags">' +
-        (b.manager ? '<span class="tag">담당 ' + esc(b.manager) + '</span>' : '') +
-        (b.needs_power ? '<span class="tag">전기</span>' : '') +
-        (b.needs_network ? '<span class="tag">네트워크</span>' : '') +
-        '</span></button>';
+        '</button>';
     }).join('') + '</div>'
       : S.booths.length
         ? noMatchBox('조건에 맞는 부스가 없습니다.')
@@ -841,11 +848,10 @@
     return '<div class="page">' +
       pageHead('부스 운영 현황',
         '부스 위치와 운영 상태를 확인합니다. 카드를 누르면 상세 정보와 상태 변경이 열립니다.') +
-      map + zoneHtml +
+      map + sumLine + zoneHtml +
       '<div class="tools"><div class="search"><label class="sr-only" for="booth-q">부스 검색</label>' +
       '<input class="input" id="booth-q" type="search" placeholder="부스번호 · 학교 · 기관 · 프로그램 검색" value="' + esc(ui.boothQ) + '" /></div>' +
-      chips(statusChips, ui.boothStatus, 'data-boothstatus') +
-      chips(zoneLabels, ui.boothZone, 'data-boothzone') + '</div>' +
+      chips(statusChips, ui.boothStatus, 'data-boothstatus', 'chiprow--sub') + '</div>' +
       (list.length ? '<p class="resultline">' + list.length + '건</p>' : '') +
       body + '</div>';
   }
@@ -1102,9 +1108,10 @@
               '<img src="' + esc(p.image_url) + '" alt="' + esc(p.image_alt || p.name) + '" loading="lazy" /></button>'
           : '') +
         '<div class="rowcard__body">' +
-        '<div class="rowcard__name">' + esc(p.name) + '</div>' +
-        '<div class="rowcard__meta">' + esc(p.category || '') + (p.detail ? ' · ' + esc(p.detail) : '') + '</div>' +
-        (p.image_caption ? '<div class="rowcard__meta">' + esc(p.image_caption) + '</div>' : '') +
+        '<div class="rowcard__name">' + esc(p.name) +
+        (p.category ? ' <span class="tag tag--soft">' + esc(p.category) + '</span>' : '') + '</div>' +
+        // 위치 한 줄까지만. 사진 설명은 사진을 크게 볼 때 함께 보입니다.
+        (p.detail ? '<div class="rowcard__meta">' + esc(p.detail) + '</div>' : '') +
         '</div></div>';
     }).join('') + '</div>'
       : samplePlaces();
@@ -1345,10 +1352,11 @@
       '<span class="badge badge--plain">' + esc(t.area || '기타') + '</span></span>' +
       '<span class="task__title">' + esc(t.title) + '</span>' +
       (t.place ? '<span class="task__meta">' + esc(t.place) + '</span>' : '') +
+      // 맡은 몫까지 목록에 적으면 카드마다 높이가 달라져 훑기 어렵습니다.
+      // 이름만 두고 자세한 것은 상세에서 봅니다.
       (people.length
         ? '<span class="task__people">' + people.map(function (p) {
-            return '<span class="person">' + esc(p.name) +
-              (p.role ? '<span class="person__role">' + esc(p.role) + '</span>' : '') + '</span>';
+            return '<span class="person">' + esc(p.name) + '</span>';
           }).join('') + '</span>'
         : '<span class="task__meta task__meta--none">담당자 미배정</span>') +
       '</button>';
@@ -1531,7 +1539,6 @@
     SUPPLY_STATES.forEach(function (st) {
       byStatus[st] = S.supplyTargets.filter(function (t) { return t.status === st; }).length;
     });
-    var totalQty = S.supplyAllocs.reduce(function (n, a) { return n + (a.qty || 0); }, 0);
 
     var summary = '<div class="minigrid">' +
       '<div class="mini"><span class="mini__n">' + S.supplyTargets.length + '</span>' +
@@ -1541,9 +1548,7 @@
       '<div class="mini mini--info"><span class="mini__n">' + byStatus['일부 배부'] + '</span>' +
       '<span class="mini__l">일부 배부</span></div>' +
       '<div class="mini mini--warn"><span class="mini__n">' + byStatus['미배부'] + '</span>' +
-      '<span class="mini__l">미배부</span></div>' +
-      '<div class="mini"><span class="mini__n">' + totalQty + '</span>' +
-      '<span class="mini__l">전체 물품 수량</span></div></div>';
+      '<span class="mini__l">미배부</span></div></div>';
 
     var q = ui.supplyQ.trim().toLowerCase();
     var list = S.supplyTargets.filter(function (t) {
@@ -1577,10 +1582,14 @@
         (t.headcount ? '<span class="notice__meta">' + t.headcount + '명</span>' : '') + '</span>' +
         '<span class="supply__name">' + esc(t.name) + '</span>' +
         (t.manager ? '<span class="supply__meta">담당 ' + esc(t.manager) + '</span>' : '') +
+        // 수량은 상세에서 봅니다. 목록에서는 무엇을 받는가까지만 알면
+        // 되고, 숫자가 늘어서면 대상 이름이 묻힙니다.
         (items.length
-          ? '<span class="supply__items">' + items.map(function (a) {
-              return '<span class="chipitem">' + esc(a.name) + '<b>' + a.qty + '</b></span>';
-            }).join('') + '</span>'
+          ? '<span class="supply__items">' + items.slice(0, 3).map(function (a) {
+              return '<span class="chipitem">' + esc(a.name) + '</span>';
+            }).join('') +
+            (items.length > 3 ? '<span class="chipitem chipitem--more">+' + (items.length - 3) + '</span>' : '') +
+            '</span>'
           : '<span class="supply__meta supply__meta--none">배부 물품 미등록</span>') +
         '</button>';
     }).join('') + '</div>' : noMatchBox('조건에 맞는 배부 대상이 없습니다.');
@@ -1769,6 +1778,13 @@
       // 보기 방식 전환(업무별 ↔ 개인별). 검색어는 두 화면이 찾는
       // 대상이 달라서 함께 비웁니다.
       if (t.closest('[data-schedkeytoggle]')) { ui.schedKey = !ui.schedKey; render(); return; }
+
+      if (t.closest('[data-guide]')) {
+        openDrawer('운영 안내',
+          '<div class="noticebody">' + esc(((S.settings || {}).ops_guide || '').trim()) + '</div>',
+          { footer: true });
+        return;
+      }
 
       var tm = t.closest('[data-taskmode]');
       if (tm) { ui.taskMode = tm.getAttribute('data-taskmode'); ui.taskQ = ''; render(); return; }
