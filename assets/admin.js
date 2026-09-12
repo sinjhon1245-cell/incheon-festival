@@ -128,18 +128,16 @@
         { k: 'ops_guide',     label: '대시보드 운영 안내', type: 'textarea', wide: true,
           hint: '행사 당일 먼저 확인할 내용. 줄바꿈은 포털에서도 그대로 보입니다' },
 
-        /* 안내도 두 장. 올리면 포털의 행사장·부스 화면 맨 위에
-           바로 나타나고, 비우면 준비 중 안내로 돌아갑니다. */
-        { type: 'group', label: '안내도' },
-        { k: 'venue_map_url',     label: '행사장 전체 안내도', type: 'image', folder: 'venue',
-          hint: '가로형 이미지를 권합니다' },
-        { k: 'booth_map_url',     label: '전체 부스 배치도', type: 'image', folder: 'booth-map',
-          hint: '가로형 이미지를 권합니다' },
-        { type: 'group', label: '안내도 상세 설정', fold: true,
+        /* 지도는 부스 배치도 한 장만 관리합니다. 행사장 안내도까지
+           두면 그림을 두 번 올려야 하는데, 현장에서 실제로 찾는 것은
+           부스 자리입니다. 이 한 장을 부스·행사장 두 화면이 함께
+           씁니다. venue_map_* 칸은 표에 그대로 남겨 둡니다 — 지우면
+           예전에 올린 그림을 되살릴 길이 없어집니다. */
+        { type: 'group', label: '부스 배치도' },
+        { k: 'booth_map_url',     label: '부스 배치도', type: 'image', folder: 'booth-map',
+          hint: '가로형 이미지를 권합니다. 부스 현황과 행사장 화면에 함께 쓰입니다' },
+        { type: 'group', label: '상세 설정', fold: true,
           hint: '화면을 읽어 주는 도구가 대신 읽는 설명과, 그림 아래 붙는 캡션입니다.' },
-        { k: 'venue_map_alt',     label: '행사장 안내도 설명', wide: true,
-          hint: '화면을 읽어 주는 도구가 대신 읽습니다' },
-        { k: 'venue_map_caption', label: '행사장 안내도 캡션', wide: true },
         { k: 'booth_map_alt',     label: '부스 배치도 설명', wide: true },
         { k: 'booth_map_caption', label: '부스 배치도 캡션', wide: true }
       ]

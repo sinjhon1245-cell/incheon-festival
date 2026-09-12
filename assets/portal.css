@@ -225,7 +225,13 @@ code {
 }
 
 /* ── 페이지 공통 ──────────────────────────────────────────────── */
-.page { display: flex; flex-direction: column; gap: var(--gap-section); max-width: 1080px; }
+/* 넓은 모니터에서 본문까지 늘리면 한 줄이 길어져 눈이 줄을 잃습니다.
+   폭을 여기서 묶고 가운데로 모읍니다. 화면이 더 넓어져도 이 값은
+   그대로 두고, 남는 자리는 여백으로 둡니다. */
+.page {
+  display: flex; flex-direction: column; gap: var(--gap-section);
+  width: 100%; max-width: 1120px; margin-inline: auto;
+}
 .page__head { display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; }
 .page__title { font-size: 24px; font-weight: 800; letter-spacing: -0.035em; line-height: 1.25; }
 .page__desc { font-size: 14.5px; line-height: 1.6; color: var(--muted); margin-top: 5px; max-width: 62ch; }
@@ -592,13 +598,10 @@ button.is-sample:hover { border-color: var(--primary); background: #fff; }
   :root { --main-pad: 28px; }
   .main { padding: 26px var(--main-pad) 48px; }
   .toast { bottom: 24px; }
-  .boothgrid { grid-template-columns: repeat(3, 1fr); }
-  .page { max-width: 1180px; }
 }
 
 @media (min-width: 1440px) {
   .statgrid { grid-template-columns: repeat(4, 1fr); }
-  .page { max-width: 1280px; }
 }
 
 
@@ -984,6 +987,61 @@ button.supply:hover { border-color: var(--primary); }
      같은 설명이 각 메뉴 제목 아래에 다시 있습니다. */
   .hero + .pageintro { display: none; }
 }
+
+/* ═══ 두 칸 배치 ═══════════════════════════════════════════════════
+   PC 에서 짧은 카드가 한 줄을 통째로 쓰면 화면이 휑하고 눈이 멀리
+   움직입니다. 폭이 넉넉할 때만 두 칸으로 나눕니다. 세 칸은 쓰지
+   않습니다 — 카드가 좁아져 제목이 두 줄로 접힙니다. */
+.grid-2 { display: grid; grid-template-columns: 1fr; gap: 15px; align-items: start; }
+
+@media (min-width: 760px) {
+  .grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  /* 목록도 같은 규칙으로 나눕니다. tl 은 그대로 두고 tl--2 만
+     바뀌므로, 한 칸을 지켜야 하는 목록은 손대지 않아도 됩니다. */
+  .tl--2 {
+    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 15px; align-items: start;
+  }
+}
+
+/* 홈의 묶음. 카드를 한 겹 더 씌우지 않고 제목과 구분선으로만 나눕니다. */
+.homebox { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+
+.minilist {
+  display: flex; flex-direction: column;
+  background: #fff; border: 1px solid var(--line); border-radius: var(--r);
+  overflow: hidden;
+}
+.minirow {
+  display: flex; flex-direction: column; gap: 3px;
+  padding: 12px 14px; border-bottom: 1px solid var(--line-2);
+  background: none; border-left: 0; border-right: 0; border-top: 0;
+  text-align: left; cursor: pointer; width: 100%;
+}
+.minirow:last-child { border-bottom: 0; }
+.minirow:hover { background: var(--bg-soft); }
+.minirow__top { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+.minirow__when {
+  font-size: 12.5px; font-weight: 600; color: var(--muted-2);
+  font-variant-numeric: tabular-nums;
+}
+.minirow__title {
+  font-size: 15px; font-weight: 700; color: var(--ink); letter-spacing: -0.02em;
+  line-height: 1.45;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.minirow__meta { font-size: 13.5px; color: var(--muted); }
+.minirow--now { background: #FCFBFF; }
+
+/* 홈 머리말 — 이 화면이 첫 화면임을 한 줄로 알립니다. */
+.hero__kicker {
+  margin: 0 0 4px; font-size: 12.5px; font-weight: 700;
+  letter-spacing: 0.02em; color: var(--primary);
+}
+
+/* 로고는 누르는 것이라 밑줄을 빼고 초점 표시만 남깁니다. */
+a.side__brand { text-decoration: none; color: inherit; border-radius: 10px; }
+a.side__brand:hover b { color: var(--primary); }
 
 /* ── 인쇄 ─────────────────────────────────────────────────────── */
 @media print {

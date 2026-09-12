@@ -28,7 +28,9 @@
      있어서, 늘어난 메뉴를 전부 밀어 넣으면 오히려 못 누릅니다.
      나머지는 '더보기' 시트에서 그룹 제목과 함께 보여 줍니다. */
   var NAV = [
-    { id: 'dashboard', label: '대시보드', short: '홈',   mark: '홈', tab: true },
+    // 주소(#dashboard)는 그대로 둡니다. 이미 나눠 쓰는 링크가 있고,
+    // 바꿔서 얻는 것이 없습니다. 보이는 이름만 '홈' 입니다.
+    { id: 'dashboard', label: '홈', short: '홈', mark: '홈', tab: true },
     { id: 'schedule',  label: '일정',     short: '일정', mark: '일', tab: true },
     { id: 'booths',    label: '부스 현황', short: '부스', mark: '부', tab: true },
     { id: 'notices',   label: '공지',     short: '공지', mark: '공', tab: true },
@@ -285,10 +287,11 @@
      구성을 읽을 수 있어야 하기 때문입니다. */
   var SAMPLE = '<span class="badge badge--plain badge--sample">예시</span>';
 
-  function sampleWrap(note, cards) {
+  function sampleWrap(note, cards, two) {
     return '<div class="sample">' +
       '<p class="samplenote">' + esc(note) + '</p>' +
-      '<div class="tl" aria-label="예시 목록">' + cards + '</div></div>';
+      '<div class="tl' + (two ? ' tl--2' : '') + '" aria-label="예시 목록">' +
+      cards + '</div></div>';
   }
 
   function emptyBox(title, hint) {
@@ -310,9 +313,9 @@
       body: '행사 전 부스 운영자가 확인해야 할 세팅 시간, 준비물, 반입 방법, ' +
             '운영 유의사항 등이 등록되면 이곳에서 자세히 확인할 수 있습니다.' },
     { level: '일반', sample: true,
-      title: '행사장 주차 및 출입 안내',
-      summary: '행사장 출입과 주차 관련 안내가 등록되면 이곳에서 확인할 수 있습니다.',
-      body: '행사장 출입 방법, 주차 위치, 차량 진입, 물품 반입과 관련된 안내가 ' +
+      title: '행사장 출입 및 물품 반입 안내',
+      summary: '행사장 출입과 물품 반입 안내가 등록되면 이곳에서 확인할 수 있습니다.',
+      body: '행사장 출입 방법, 물품 반입 동선, 반입 가능 시간과 관련된 안내가 ' +
             '확정되면 이곳에서 확인할 수 있습니다.' },
     { level: '긴급', sample: true,
       title: '긴급 운영 공지',
@@ -331,7 +334,7 @@
           '<span class="notice__top">' + badge(n.level) + SAMPLE + '</span>' +
           '<span class="notice__title">' + esc(n.title) + '</span>' +
           '<span class="notice__body">' + esc(n.summary) + '</span></button>';
-      }).join(''));
+      }).join(''), true);
   }
 
   function sampleRequests() {
@@ -364,7 +367,7 @@
           // 예시라 열 수 있는 자료가 없습니다. 눌리지 않게 막아 둡니다.
           '<div class="rowcard__act"><button class="btn btn--ghost btn--sm" type="button" disabled ' +
           'aria-disabled="true">열기</button></div></div>';
-      }).join(''));
+      }).join(''), true);
   }
 
   function sampleContacts() {
@@ -381,7 +384,7 @@
           // 전화번호는 확정된 값이 없어 만들지 않습니다.
           '<div class="rowcard__act"><button class="btn btn--ghost btn--sm" type="button" disabled ' +
           'aria-disabled="true">전화</button></div></div>';
-      }).join(''));
+      }).join(''), true);
   }
 
   function samplePlaces() {
@@ -399,7 +402,7 @@
         return '<div class="rowcard is-sample"><div class="rowcard__body">' +
           '<div class="rowcard__name">' + esc(p[0]) + ' ' + SAMPLE + '</div>' +
           '<div class="rowcard__meta">' + esc(p[1]) + '</div></div></div>';
-      }).join(''));
+      }).join(''), true);
   }
 
   function sampleFaqs() {
@@ -409,7 +412,7 @@
         ['부스 운영자는 몇 시까지 도착해야 하나요?', '실제 운영 시간이 확정되면 이곳에 안내됩니다.'],
         ['부스에서 전기를 사용할 수 있나요?', '전기 사용 기준과 제공 사항이 확정되면 안내됩니다.'],
         ['운영 중 문제가 생기면 어떻게 하나요?', '운영 요청 메뉴로 등록하거나 운영본부에 지원을 요청할 수 있습니다.'],
-        ['주차는 어디에 하나요?', '주차 안내가 확정되면 이곳에 안내됩니다.'],
+        ['행사 운영 중 지원이 필요하면 어떻게 하나요?', '지원 요청 방법이 확정되면 이곳에 안내됩니다.'],
         ['안전사고가 발생하면 어떻게 해야 하나요?', '행사 안전 운영 기준이 확정되면 안내됩니다.']
       ].map(function (f) {
         // 접었다 펴는 동작 없이 질문과 답을 함께 보여 줍니다.
@@ -516,8 +519,9 @@
         : '<div class="hero__dday">D-' + Math.max(0, ev.dday) + '</div><div class="hero__now">' +
           C.fmtDateTime(ev.now) + '</div>';
 
-    var hero = '<section class="hero"><div><div class="hero__name">' +
-      esc(s.event_title || '2026년 인천 AI·SW미래채움 교육페스티벌') + '</div>' +
+    var hero = '<section class="hero"><div><p class="hero__kicker">행사 운영 홈</p>' +
+      '<h1 class="hero__name">' +
+      esc(s.event_title || '2026년 인천 AI·SW미래채움 교육페스티벌') + '</h1>' +
       '<div class="hero__meta">' + esc(s.date_label || '') +
       (s.time_label ? ' · ' + esc(s.time_label) : '') +
       (s.venue ? ' · ' + esc(s.venue) : '') + '</div></div>' +
@@ -527,14 +531,22 @@
 
     /* 긴급 공지 — 있으면 최상단 */
     var urgent = S.notices.filter(function (n) { return n.level === '긴급'; });
-    var urgentHtml = urgent.length
-      ? '<section class="card notice--urgent card__pad" style="border-radius:var(--r)">' +
-        '<div class="notice__top">' + badge('긴급') +
-        '<span class="notice__meta">' + esc(fmtWhen(urgent[0].updated_at || urgent[0].created_at)) + ' 업데이트</span></div>' +
-        '<h2 class="notice__title" style="margin-top:6px">' + esc(urgent[0].title) + '</h2>' +
-        '<p class="notice__body" style="-webkit-line-clamp:3">' + esc(urgent[0].body) + '</p>' +
-        '<div style="margin-top:10px"><button class="btn btn--ghost btn--sm" type="button" data-go="notices">공지 전체 보기' +
-        (urgent.length > 1 ? ' (긴급 ' + urgent.length + '건)' : '') + '</button></div></section>'
+    /* 긴급과 중요를 함께 봅니다. 홈에서 알아야 하는 것은 '지금 읽어야
+       할 공지가 있는가' 이고, 등급을 가려 읽는 일은 공지 화면의 몫입니다. */
+    var keyNotices = S.notices.filter(function (n) {
+      return n.level === '긴급' || n.level === '중요';
+    }).slice(0, 3);
+
+    var urgentHtml = keyNotices.length
+      ? '<section class="homebox">' +
+        '<h2 class="section-title">중요 공지' +
+        '<button class="linkbtn" type="button" data-go="notices">공지 전체 보기</button></h2>' +
+        '<div class="minilist">' + keyNotices.map(function (n) {
+          return '<button class="minirow" type="button" data-notice="' + esc(n.id) + '">' +
+            '<span class="minirow__top">' + badge(n.level) +
+            '<span class="minirow__when">' + esc(fmtDay(n.created_at)) + '</span></span>' +
+            '<span class="minirow__title">' + esc(n.title) + '</span></button>';
+        }).join('') + '</div></section>'
       : '';
 
     /* 운영 숫자 — 전부 DB 집계 */
@@ -572,18 +584,17 @@
       return i.is_highlight && i.status !== '취소';
     }).slice(0, 3);
     var keyHtml = keyItems.length
-      ? '<section class="keybox"><h2 class="section-title">오늘의 주요 일정' +
-        '<button class="linkbtn" type="button" data-go="schedule">전체 일정 보기</button>' +
-        '</h2><div class="keyrow">' + keyItems.map(function (i) {
+      ? '<section class="homebox"><h2 class="section-title">오늘의 주요 일정' +
+        '<button class="linkbtn" type="button" data-go="schedule" data-schedkey="1">전체 일정 보기</button>' +
+        '</h2><div class="minilist">' + keyItems.map(function (i) {
           var st = liveStatus(i, ev);
-          return '<button class="keycard' + (st === '진행 중' ? ' keycard--now' : '') + '" type="button" ' +
+          return '<button class="minirow' + (st === '진행 중' ? ' minirow--now' : '') + '" type="button" ' +
             'data-go="schedule" data-schedkey="1">' +
-            '<span class="keycard__time">' + esc(i.start_time || '') +
+            '<span class="minirow__top"><span class="minirow__when">' + esc(i.start_time || '') +
             (i.end_time ? '–' + esc(i.end_time) : '') + '</span>' +
-            '<span class="keycard__title">' + esc(i.title) + '</span>' +
-            '<span class="keycard__meta">' + esc(i.place || '장소 미정') + '</span>' +
-            (st === '진행 중' ? '<span class="keycard__now">진행 중</span>' : '') +
-            '</button>';
+            (st === '진행 중' ? badge('진행 중') : '') + '</span>' +
+            '<span class="minirow__title">' + esc(i.title) + '</span>' +
+            '<span class="minirow__meta">' + esc(i.place || '장소 미정') + '</span></button>';
         }).join('') + '</div></section>'
       : '';
 
@@ -602,7 +613,7 @@
       : '';
 
     /* 지금 / 다음 */
-    var nowHtml;
+    var nowHtml, nowCount = 1;
     if (nn.preview) {
       // 행사 전입니다. 아래에 첫 일정을 함께 보여 주는데, 아무 설명
       // 없이 시각과 제목만 두면 지금 진행 중인 일정으로 오해합니다.
@@ -621,8 +632,7 @@
         '<div class="nowcard__kicker">지금 진행 중</div>' +
         '<div class="nowcard__time">' + esc(nn.live.start_time) + '–' + esc(nn.live.end_time) + '</div>' +
         '<div class="nowcard__title">' + esc(nn.live.title) + '</div>' +
-        '<div class="nowcard__meta">' + esc(nn.live.place || '') +
-        (nn.live.team ? ' · 담당 ' + esc(nn.live.team) : '') + '</div></section>';
+        '<div class="nowcard__meta">' + esc(nn.live.place || '장소 미정') + '</div></section>';
     } else {
       nowHtml = '<section class="card card__pad nowcard nowcard--idle">' +
         '<div class="nowcard__kicker">현재 진행 중인 일정 없음</div>' +
@@ -631,6 +641,7 @@
         '</p></section>';
     }
     if (nn.next && !nn.preview) {
+      nowCount = 2;
       nowHtml += '<section class="card card__pad nowcard nowcard--idle">' +
         '<div class="nowcard__kicker">다음 일정</div>' +
         '<div class="nowcard__time">' + esc(nn.next.start_time) + '</div>' +
@@ -640,7 +651,17 @@
         '</section>';
     }
 
-    return '<div class="page">' + hero + statsHtml + nowHtml + urgentHtml + keyHtml + guideHtml +
+    /* 짧은 것끼리 한 줄에 놓습니다. 넓은 화면에서 전부 전체 폭으로
+       쌓으면 카드 하나에 한 줄씩만 담긴 채 화면이 길어집니다.
+       좁은 화면에서는 CSS 가 알아서 한 칸으로 내려 줍니다. */
+    // 한 칸짜리를 두 칸 격자에 넣으면 옆이 비어 보입니다.
+    // 둘 다 있을 때만 나눕니다.
+    var pairA = nowCount === 2 ? '<div class="grid-2">' + nowHtml + '</div>' : nowHtml;
+    var pairB = (urgentHtml && keyHtml)
+      ? '<div class="grid-2">' + urgentHtml + keyHtml + '</div>'
+      : (urgentHtml || keyHtml);
+
+    return '<div class="page">' + hero + statsHtml + pairA + pairB + guideHtml +
       '<div class="page__actions" style="margin-left:0"><button class="btn btn--primary" type="button" data-newreq>+ 현장 문제 보고</button>' +
       '<button class="btn btn--ghost" type="button" data-go="contacts">연락망</button></div>' +
       '</div>';
@@ -843,8 +864,8 @@
     var s = S.settings || {};
     var map = mediaBox({
       url: s.booth_map_url, alt: s.booth_map_alt, caption: s.booth_map_caption,
-      title: '전체 부스 배치도',
-      hint: '배치도가 등록되면 이곳에서 확인할 수 있습니다.'
+      title: '부스 배치도',
+      hint: '부스 배치도를 준비 중입니다.'
     });
 
     return '<div class="page">' +
@@ -918,7 +939,7 @@
       if (rank[a.level] !== rank[b.level]) return rank[a.level] - rank[b.level];
       return new Date(b.created_at) - new Date(a.created_at);
     });
-    var body = list.length ? '<div class="tl">' + list.map(function (n) {
+    var body = list.length ? '<div class="tl tl--2">' + list.map(function (n) {
       return '<button class="notice' + (n.level === '긴급' ? ' notice--urgent' : '') + '" type="button" data-notice="' + esc(n.id) + '">' +
         '<span class="notice__top">' + badge(n.level) +
         (n.pinned ? '<span class="badge badge--plain">고정</span>' : '') +
@@ -1044,7 +1065,7 @@
   /* ── 화면: 자료실 · 연락망 · 행사장 · FAQ ───────────────────── */
   function viewResources() {
     var list = S.resources.filter(function (r) { return r.is_public !== false; });
-    var body = list.length ? '<div class="tl">' + list.map(function (r) {
+    var body = list.length ? '<div class="tl tl--2">' + list.map(function (r) {
       return '<div class="rowcard"><div class="rowcard__body">' +
         '<div class="rowcard__name">' + esc(r.title) + '</div>' +
         '<div class="rowcard__meta">' + esc(r.category || '기타') +
@@ -1070,7 +1091,7 @@
       if (!q) return true;
       return (c.name + ' ' + (c.org || '') + ' ' + (c.duty || '') + ' ' + (c.category || '')).toLowerCase().indexOf(q) >= 0;
     });
-    var body = list.length ? '<div class="tl">' + list.map(function (c) {
+    var body = list.length ? '<div class="tl tl--2">' + list.map(function (c) {
       return '<div class="rowcard"><div class="rowcard__body">' +
         '<div class="rowcard__name">' + esc(c.name) +
         (c.duty ? ' <span class="badge badge--plain">' + esc(c.duty) + '</span>' : '') + '</div>' +
@@ -1094,15 +1115,10 @@
 
     // 장소 이름은 확정된 정보라 제목 바로 아래에 그대로 둡니다.
     var venueLine = (s.venue || '') + (s.venue_detail ? ' · ' + s.venue_detail : '');
-    var map = mediaBox({
-      url: s.venue_map_url, alt: s.venue_map_alt, caption: s.venue_map_caption,
-      title: '행사장 전체 안내도',
-      hint: '행사장 안내 이미지가 등록되면 이곳에서 확인할 수 있습니다.'
-    });
 
     /* 공간 카드. 사진이 있으면 왼쪽에 붙고, 없으면 지금처럼 글만
        있는 카드로 보입니다. 어느 쪽이든 카드 모양은 같습니다. */
-    var body = S.places.length ? '<div class="tl">' + S.places.map(function (p) {
+    var body = S.places.length ? '<div class="tl tl--2">' + S.places.map(function (p) {
       return '<div class="rowcard rowcard--place">' +
         (p.image_url
           ? '<button class="placethumb" type="button" data-zoom="' + esc(p.image_url) + '" ' +
@@ -1118,19 +1134,19 @@
     }).join('') + '</div>'
       : samplePlaces();
 
-    /* 부스 배치도는 부스 화면과 같은 이미지를 그대로 씁니다.
-       행사장에서 길을 찾다가 부스 위치를 확인하려고 메뉴를 옮겨
-       다니지 않아도 되게 여기에도 둡니다. 따로 등록하지 않습니다. */
+    /* 지도는 부스 배치도 하나만 씁니다. 행사장 안내도와 배치도를
+       따로 두면 관리자는 그림을 두 번 올려야 하고, 보는 사람은 두 장을
+       견줘 봐야 합니다. 현장에서 실제로 찾는 것은 부스 자리입니다.
+       부스 화면과 같은 이미지를 그대로 씁니다. */
     var boothMap = mediaBox({
       url: s.booth_map_url, alt: s.booth_map_alt, caption: s.booth_map_caption,
-      title: '전체 부스 배치도',
-      hint: '부스 배치도가 등록되면 이곳에서도 확인할 수 있습니다.'
+      title: '부스 배치도',
+      hint: '부스 배치도를 준비 중입니다.'
     });
 
     return '<div class="page">' +
       pageHead('행사장 안내', venueLine) +
       '<p class="pageintro">운영본부와 주요 행사 공간, 편의시설 위치를 안내합니다.</p>' +
-      map +
       '<h2 class="section-title">부스 배치도</h2>' + boothMap +
       '<h2 class="section-title">주요 공간</h2>' + body + '</div>';
   }
@@ -1266,7 +1282,7 @@
           '<div class="task__people">' + t.people.map(function (n) {
             return '<span class="person">' + esc(n) + '</span>';
           }).join('') + '</div></div>';
-      }).join(''));
+      }).join(''), true);
   }
 
   function samplePeople() {
@@ -1277,7 +1293,7 @@
           '<div class="rowcard__name">' + esc(n) + ' ' + SAMPLE + '</div>' +
           '<div class="rowcard__meta">소속이 등록되면 표시됩니다 · 담당 업무 ' + (i + 1) + '건</div>' +
           '</div></div>';
-      }).join(''));
+      }).join(''), true);
   }
 
   /* ── 화면: 담당 업무 ────────────────────────────────────────── */
@@ -1341,7 +1357,7 @@
         return '<section class="taskgroup">' +
           '<h2 class="section-title">' + esc(g.area) +
           '<span class="section-title__n">' + g.items.length + '</span></h2>' +
-          '<div class="tl">' + g.items.map(taskCard).join('') + '</div></section>';
+          '<div class="tl tl--2">' + g.items.map(taskCard).join('') + '</div></section>';
       }).join('');
   }
 
@@ -1441,7 +1457,7 @@
       esc(ui.taskQ) + '" /></div></div>';
 
     var body = list.length
-      ? '<div class="tl">' + list.map(function (p) {
+      ? '<div class="tl tl--2">' + list.map(function (p) {
           return '<button class="rowcard rowcard--btn" type="button" data-person="' + esc(p.person.key) + '">' +
             '<span class="rowcard__body">' +
             '<span class="rowcard__name">' + esc(p.person.name) +
@@ -1522,7 +1538,7 @@
           '<div class="supply__items">' + t.items.map(function (n) {
             return '<span class="chipitem">' + esc(n) + '<b>–</b></span>';
           }).join('') + '</div></div>';
-      }).join(''));
+      }).join(''), true);
   }
 
   /* ── 화면: 운영 물품 ────────────────────────────────────────── */
@@ -1576,7 +1592,7 @@
       chips(statusChips, ui.supplyStatus, 'data-supplystatus') +
       (kindChips.length > 2 ? chips(kindChips, ui.supplyKind, 'data-supplykind') : '') + '</div>';
 
-    var body = list.length ? '<div class="tl">' + list.map(function (t) {
+    var body = list.length ? '<div class="tl tl--2">' + list.map(function (t) {
       var items = allocsOf(t.id);
       return '<button class="supply" type="button" data-supply="' + esc(t.id) + '">' +
         '<span class="supply__top">' + badge(t.status || '미배부') +
