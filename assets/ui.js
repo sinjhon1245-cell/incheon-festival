@@ -157,8 +157,97 @@ window.UI = (function () {
     return m || '이미지를 올리지 못했습니다.';
   }
 
+  /* ── 여러 줄 입력칸 ───────────────────────────────────────────
+     cols 로 칸 모양을 정하고, value 로 지금 있는 줄을 받습니다.
+     돌려줄 때는 줄의 배열이 됩니다. 부모를 저장한 쪽에서 이 배열을
+     보고 넣고·고치고·지웁니다. */
+  function rowsCell(col, v) {
+    var val = v == null ? '' : v;
+    if (col.type === 'select') {
+      return '<select class="select" data-col="' + esc(col.k) + '"' +
+        (col.label ? ' aria-label="' + esc(col.label) + '"' : '') + '>' +
+        (col.options || []).map(function (o) {
+          var ov = Array.isArray(o) ? o[0] : o, ot = Array.isArray(o) ? o[1] : o;
+          return '<option value="' + esc(ov) + '"' +
+            (String(val) === String(ov) ? ' selected' : '') + '>' + esc(ot) + '</option>';
+        }).join('') + '</select>';
+    }
+    var type = col.type === 'number' ? 'number' : 'text';
+    return '<input class="input" type="' + type + '" data-col="' + esc(col.k) + '"' +
+      ' value="' + esc(val) + '"' +
+      (col.placeholder ? ' placeholder="' + esc(col.placeholder) + '"' : '') +
+      (col.label ? ' aria-label="' + esc(col.label) + '"' : '') +
+      (col.min != null ? ' min="' + col.min + '"' : '') + ' />';
+  }
+
+  function rowsRowHtml(f, row) {
+    return '<div class="rowsrow">' +
+      f.cols.map(function (c) {
+        return '<div class="rowsrow__c"' + (c.wide ? ' data-wide="1"' : '') + '>' +
+          rowsCell(c, (row || {})[c.k]) + '</div>';
+      }).join('') +
+      '<button class="iconbtn iconbtn--sm" type="button" data-rowdel aria-label="이 줄 삭제">✕</button>' +
+      '</div>';
+  }
+
+  function rowsFieldHtml(f, value) {
+    var rows = Array.isArray(value) ? value : [];
+    return '<div class="field field--wide">' +
+      '<span class="field__label">' + esc(f.label) +
+      (f.hint ? ' <span style="font-weight:500;opacity:.75">· ' + esc(f.hint) + '</span>' : '') + '</span>' +
+      '<div class="rowsfield" data-rows="' + esc(f.k) + '">' +
+        '<div class="rowsfield__list">' + rows.map(function (r) { return rowsRowHtml(f, r); }).join('') + '</div>' +
+        '<p class="rowsfield__none"' + (rows.length ? ' hidden' : '') + '>' +
+          esc(f.emptyText || '아직 없습니다.') + '</p>' +
+        '<div><button class="btn btn--ghost btn--sm" type="button" data-rowadd>' +
+          esc(f.addLabel || '+ 추가') + '</button></div>' +
+      '</div></div>';
+  }
+
+  /* 줄을 더하고 지우는 동작. 지운 자리 다음 줄로 초점을 옮깁니다 —
+     지우고 나서 초점이 사라지면 키보드만 쓰는 사람은 길을 잃습니다. */
+  function wireRowsFields(panel, fields) {
+    Array.prototype.forEach.call(panel.querySelectorAll('[data-rows]'), function (box) {
+      var f = fields.filter(function (x) { return x.k === box.dataset.rows; })[0];
+      if (!f) return;
+      var list = box.querySelector('.rowsfield__list');
+      var none = box.querySelector('.rowsfield__none');
+      function paint() { none.hidden = !!list.children.length; }
+
+      box.querySelector('[data-rowadd]').addEventListener('click', function () {
+        list.insertAdjacentHTML('beforeend', rowsRowHtml(f, f.blank || {}));
+        paint();
+        var added = list.lastElementChild.querySelector('select, input');
+        if (added) added.focus();
+      });
+
+      box.addEventListener('click', function (e) {
+        var del = e.target.closest('[data-rowdel]');
+        if (!del) return;
+        var row = del.closest('.rowsrow');
+        var next = row.nextElementSibling || row.previousElementSibling;
+        row.remove();
+        paint();
+        var to = next ? next.querySelector('select, input') : box.querySelector('[data-rowadd]');
+        if (to) to.focus();
+      });
+    });
+  }
+
+  function readRows(box) {
+    return Array.prototype.map.call(box.querySelectorAll('.rowsrow'), function (row) {
+      var o = {};
+      Array.prototype.forEach.call(row.querySelectorAll('[data-col]'), function (el) {
+        var k = el.dataset.col;
+        o[k] = el.type === 'number' ? (el.value === '' ? null : Number(el.value)) : el.value;
+      });
+      return o;
+    });
+  }
+
   /* ── 입력칸 ─────────────────────────────────────────────────── */
   function fieldHtml(f, value) {
+    if (f.type === 'rows') return rowsFieldHtml(f, value);
     var id = 'm_' + f.k;
     var wide = f.wide || f.type === 'textarea';
     var req = f.required ? '<span class="field__req" aria-hidden="true">*</span>' : '';
@@ -217,6 +306,11 @@ window.UI = (function () {
 
   function readFields(panel) {
     var out = {};
+    // 여러 줄 칸은 통째로 배열이 됩니다. 안쪽 칸은 data-col 이라
+    // 아래의 data-k 훑기에 걸리지 않습니다.
+    Array.prototype.forEach.call(panel.querySelectorAll('[data-rows]'), function (box) {
+      out[box.dataset.rows] = readRows(box);
+    });
     Array.prototype.forEach.call(panel.querySelectorAll('[data-k]'), function (el) {
       var k = el.dataset.k;
       if (el.type === 'checkbox') out[k] = el.checked;
@@ -230,8 +324,34 @@ window.UI = (function () {
   function form(opts) {
     return new Promise(function (resolve) {
       var vals = opts.values || {};
-      var body = opts.fields.map(function (f) {
-        return fieldHtml(f, vals[f.k] == null ? '' : vals[f.k]);
+
+      /* 칸이 스무 개씩 늘어서면 어디까지가 한 덩어리인지 알 수 없습니다.
+         { type: 'group' } 을 만나면 거기서 새 묶음이 시작됩니다.
+         fold 가 붙은 묶음은 접어 둡니다 — 늘 쓰는 칸이 아니라서
+         처음 열었을 때 보이지 않는 편이 낫습니다. 접기는 details 를
+         그대로 씁니다. 직접 만들면 키보드 동작까지 다시 만들어야 합니다. */
+      function cell(f) { return fieldHtml(f, vals[f.k] == null ? '' : vals[f.k]); }
+
+      var groups = [], cur = null;
+      opts.fields.forEach(function (f) {
+        if (f.type === 'group') { cur = { label: f.label, fold: !!f.fold, hint: f.hint, items: [] }; groups.push(cur); return; }
+        if (!cur) { cur = { label: null, items: [] }; groups.push(cur); }
+        cur.items.push(f);
+      });
+
+      var body = groups.map(function (g) {
+        var grid = '<div class="modal__grid">' + g.items.map(cell).join('') + '</div>';
+        if (!g.label) return grid;
+        if (g.fold) {
+          return '<details class="fgroup fgroup--fold">' +
+            '<summary class="fgroup__sum">' + esc(g.label) + '</summary>' +
+            (g.hint ? '<p class="fgroup__hint">' + esc(g.hint) + '</p>' : '') +
+            grid + '</details>';
+        }
+        return '<section class="fgroup">' +
+          '<h3 class="fgroup__t">' + esc(g.label) + '</h3>' +
+          (g.hint ? '<p class="fgroup__hint">' + esc(g.hint) + '</p>' : '') +
+          grid + '</section>';
       }).join('');
 
       // 이 모달에서 올린 이미지들. 저장하지 않고 나가면 쓰이지
@@ -256,7 +376,7 @@ window.UI = (function () {
           '</div>' +
           '<form class="modal__body" id="modal-form" novalidate>' +
             (opts.desc ? '<p class="modal__desc">' + esc(opts.desc) + '</p>' : '') +
-            '<div class="modal__grid">' + body + '</div>' +
+            body +
             '<p class="alert alert--error" id="modal-err" role="alert" hidden></p>' +
           '</form>' +
           '<div class="modal__foot">' +
@@ -266,10 +386,15 @@ window.UI = (function () {
           '</div>' +
         '</div>',
         function (h, panel) {
-          var first = panel.querySelector('input:not([type="hidden"]):not([type="file"]), select, textarea');
+          // 접힌 묶음 안은 보이지 않으므로 초점을 두지 않습니다.
+          var first = panel.querySelector(
+            '.modal__body > .modal__grid, .modal__body > .fgroup:not(.fgroup--fold)');
+          first = (first || panel).querySelector(
+            'input:not([type="hidden"]):not([type="file"]), select, textarea');
           if (first) first.focus();
 
           wireImageFields(panel, session);
+          wireRowsFields(panel, opts.fields);
 
           Array.prototype.forEach.call(h.querySelectorAll('[data-cancel]'), function (b) {
             b.addEventListener('click', cancel);
@@ -284,6 +409,7 @@ window.UI = (function () {
 
             // 필수값 확인 — 첫 번째 빈 칸으로 초점을 옮깁니다.
             var missing = opts.fields.filter(function (f) {
+              if (f.type === 'group' || f.type === 'rows') return false;
               return f.required && !String(values[f.k] == null ? '' : values[f.k]).trim();
             });
             Array.prototype.forEach.call(panel.querySelectorAll('[data-k]'), function (el) {
