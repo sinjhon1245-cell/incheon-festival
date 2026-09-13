@@ -1032,11 +1032,6 @@ button.supply:hover { border-color: var(--primary); }
 .minirow__meta { font-size: 13.5px; color: var(--muted); }
 .minirow--now { background: #FCFBFF; }
 
-/* 홈 머리말 — 이 화면이 첫 화면임을 한 줄로 알립니다. */
-.hero__kicker {
-  margin: 0 0 4px; font-size: 12.5px; font-weight: 700;
-  letter-spacing: 0.02em; color: var(--primary);
-}
 
 /* 로고는 누르는 것이라 밑줄을 빼고 초점 표시만 남깁니다. */
 a.side__brand { text-decoration: none; color: inherit; border-radius: 10px; }
@@ -1294,6 +1289,167 @@ a.side__brand:hover b { color: var(--primary); }
   /* 구역·구분 칩은 옆으로 밀지 않고 줄을 바꿉니다. 수가 적어 두 줄이면 끝납니다. */
   .filterrow .chiprow { flex-wrap: wrap; overflow: visible; row-gap: 6px; }
   .contact { min-height: 0; }
+}
+
+
+/* ═══ 마지막 다듬기: 덜 강조하기 ════════════════════════════════════
+   요소가 모두 비슷한 무게라 무엇이 중요한지 흐려졌습니다.
+   더하지 않고 줄이는 쪽으로만 고칩니다. 앞선 규칙을 여기서 덮습니다. */
+
+/* ── 크기 체계 ─────────────────────────────────────────────────── */
+:root { --side-w: 224px; }
+.page__title { font-size: 22.5px; font-weight: 800; }
+.page__desc { font-size: 14px; margin-top: 4px; }
+.section-title { font-size: 16px; }
+.booth__name, .supply__name, .task__title, .notice__title,
+.rescard__title, .contact__name { font-size: 15.5px; }
+.req__title { font-size: 16px; }
+.req__meta, .supply__meta, .booth__org { font-size: 13.5px; }
+.badge, .orgtag, .donemark { font-size: 12px; }
+
+/* 페이지마다 겹치던 장식 줄이기: 요약 칸의 윗줄 색은 뺍니다.
+   제목 막대 · 섹션 점 두 가지로 충분합니다. */
+.minigrid--sum .mini { box-shadow: none; }
+
+/* ── 홈 hero: 낮게, 상태는 작은 표시로 ─────────────────────────── */
+.hero {
+  padding: 13px 16px; gap: 10px 14px; box-shadow: none;
+  border-radius: var(--r); align-items: center;
+}
+.hero__main { min-width: 0; flex: 1 1 320px; }
+.hero__name { font-size: 20px; font-weight: 800; letter-spacing: -0.035em; line-height: 1.35; margin: 0; }
+.hero__meta { font-size: 13.5px; margin-top: 2px; }
+.hero__state { margin-left: auto; text-align: right; }
+.phase {
+  display: inline-flex; align-items: center; white-space: nowrap;
+  font-size: 12.5px; font-weight: 700; padding: 4px 10px; border-radius: 999px;
+  background: var(--bg-sink); color: var(--ink-2); font-variant-numeric: tabular-nums;
+}
+.phase--live { background: var(--ok-t); color: var(--ok); }
+.phase--done { background: var(--off-t); color: var(--off); }
+
+/* ── 홈 숫자 카드: 한 단계 작게 ────────────────────────────────── */
+.stat { padding: 14px 15px 12px; gap: 3px; min-height: 90px; justify-content: center; }
+.stat__n { font-size: 25px; font-weight: 800; line-height: 1.15; }
+.stat__l { font-size: 13.5px; }
+.stat:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+/* 첫 일정 카드: 설명을 머리글 한 줄에 담아 낮게 */
+.nowcard__kicker { font-size: 12.5px; }
+.nowcard__time { margin-top: 4px; }
+.nowcard__title { font-size: 16px; }
+
+/* ── 두 칸 배치: 화면 폭이 아니라 카드가 들어갈 자리로 판단 ─────────
+   '넓은 화면이면 두 칸' 으로 하면 사이드바가 있는 1024px 에서 카드가
+   좁아집니다. 칸 하나가 최소 폭(--col-min)을 확보할 때만 두 칸이 되고,
+   세 칸은 절대 되지 않게 절반 폭을 함께 겁니다. auto-fill 이라 카드가
+   한 장뿐이어도 한 칸 폭을 지킵니다(auto-fit 이면 가로로 늘어납니다). */
+.tl--2, .boothgrid, .grid-2 {
+  --col-min: 380px;
+  display: grid; gap: 14px; align-items: start;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, max(var(--col-min), calc(50% - 7px))), 1fr));
+}
+.boothgrid { --col-min: 350px; }
+.grid-2 { --col-min: 360px; }
+#view[data-view="supplies"] .tl--2,
+#view[data-view="venue"] .tl--2,
+#view[data-view="notices"] .tl--2 { --col-min: 360px; }
+/* 예전 화면 폭 기준 규칙을 무력화합니다. */
+@media (min-width: 760px) {
+  .tl--2, .grid-2 {
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, max(var(--col-min), calc(50% - 7px))), 1fr));
+  }
+}
+@media (min-width: 768px) {
+  .boothgrid {
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, max(var(--col-min), calc(50% - 7px))), 1fr));
+  }
+}
+
+/* ── 배치도: 목록을 밀어내지 않게 ─────────────────────────────────
+   부스 화면은 빠른 미리보기, 행사장 화면은 조금 크게, 크게 보는 것은
+   확대 창의 몫입니다. 비어 있을 때는 작은 안내 한 칸만 둡니다. */
+.media--empty .media__ph {
+  aspect-ratio: auto; height: 200px; min-height: 0; max-height: none; padding: 16px;
+  background: var(--bg-soft);
+}
+.media__btn { max-height: 360px; }
+#view[data-view="venue"] .media__btn { max-height: 460px; }
+.media__icon { font-size: 22px; }
+
+/* ── 빈 화면·완료 묶음: 주인공이 아니게 ─────────────────────────── */
+.state { padding: 20px 16px; }
+.state--empty { padding: 22px 18px; }
+.allclear { padding: 11px 14px; font-size: 13.5px; }
+
+.donebox { background: transparent; border: 1px solid var(--line-2); }
+.donebox__sum { min-height: 46px; padding: 9px 14px; }
+.donebox__t { font-size: 14.5px; font-weight: 700; color: var(--ink-2); }
+.donebox__open { font-size: 13px; }
+.donebox[open] { background: #fff; }
+
+/* ── 부스 카드: 번호는 글자, 유형만 색, 구역은 아래 작은 글자 ──── */
+.booth { gap: 3px; padding: 13px 15px; }
+.booth__top { justify-content: space-between; margin-bottom: 3px; }
+.booth__code {
+  background: none; padding: 0; border-radius: 0;
+  font-size: 13px; font-weight: 700; color: var(--muted); letter-spacing: 0.01em;
+}
+.booth__org { color: var(--ink-2); margin-top: 0; }
+.booth__foot {
+  margin-top: 4px; font-size: 12.5px; color: var(--muted-2);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.filterrow + .filterrow { margin-top: -16px; }
+
+/* ── 운영 물품 카드: 구분선 하나 줄이기 ─────────────────────────── */
+.supply { gap: 3px; }
+.supply__top { margin-bottom: 3px; }
+.supply__kind { font-size: 13px; color: var(--muted); }
+.supply__line { border-top: 0; padding-top: 0; margin-top: 4px; }
+
+/* ── 운영 요청 카드: 제목 · 짧은 내용이 먼저 ─────────────────────── */
+.req__body {
+  font-size: 14px; color: var(--ink-2); line-height: 1.55;
+  display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden;
+}
+
+/* ── 연락망: 높이를 억지로 맞추지 않음 ───────────────────────────── */
+.contact { min-height: 0; }
+.tl--2 > .contact { align-self: start; }
+.contact__phone { margin-top: 6px; }
+.contact__num { font-size: 15.5px; }
+
+/* ── 자료실: 종류는 설명 아래 작은 글자 ─────────────────────────── */
+.rescard__kind { margin-top: 0; }
+
+/* ── 검색창: PC 에서는 한 단계 낮게, 손가락 화면은 44px ─────────── */
+@media (min-width: 1024px) {
+  .search .input { min-height: 40px; padding-top: 8px; padding-bottom: 8px; }
+}
+
+/* ── 확인창: 짧은 질문은 작은 창 ──────────────────────────────────
+   '해결되었나요?' 한 줄에 입력창과 같은 폭을 쓰면 휑합니다. */
+.modal__panel--sm .modal__body { padding: 14px 18px 4px; }
+.modal__panel--sm .modal__desc { font-size: 14px; line-height: 1.65; }
+@media (min-width: 640px) {
+  .modal__panel--sm { max-width: 440px; }
+}
+@media (max-width: 639px) {
+  .modal:has(.modal__panel--sm) { align-items: center; padding: 16px; }
+  .modal__panel--sm { width: calc(100vw - 32px); border-radius: 16px; }
+}
+
+/* ── 모바일 하단 메뉴: 선 아이콘 ───────────────────────────────── */
+.tabbar .tab__ico { width: 21px; height: 21px; display: block; }
+
+@media (max-width: 420px) {
+  .page__title { font-size: 20.5px; }
+  .hero__name { font-size: 18px; }
+  .stat__n { font-size: 23px; }
+  .hero__state { margin-left: 0; text-align: left; }
+  .media--empty .media__ph { height: 160px; }
+  .media__btn, #view[data-view="venue"] .media__btn { max-height: 260px; }
 }
 
 /* ── 인쇄 ─────────────────────────────────────────────────────── */

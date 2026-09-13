@@ -44,6 +44,19 @@
   ];
   var NAV_GROUPS = ['운영', '정보'];
 
+  function svgIcon(d) {
+    return '<svg class="tab__ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" ' +
+      'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">' + d + '</svg>';
+  }
+  var TAB_ICONS = {
+    dashboard: svgIcon('<path d="M4 10.5 12 4l8 6.5V19a1 1 0 0 1-1 1h-4.5v-5.5h-5V20H5a1 1 0 0 1-1-1z"/>'),
+    schedule:  svgIcon('<rect x="4" y="5.5" width="16" height="14" rx="2"/><path d="M4 10h16M8.5 3.5v4M15.5 3.5v4"/>'),
+    booths:    svgIcon('<rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/>' +
+                       '<rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/>'),
+    notices:   svgIcon('<path d="M5 10v4h3l6 4V6l-6 4H5z"/><path d="M17.5 9.5a3.5 3.5 0 0 1 0 5"/>'),
+    more:      svgIcon('<circle cx="6" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="18" cy="12" r="1.2"/>')
+  };
+
   var SCHEDULE_CATS = ['무대', '강연', '부스', '운영', '행사 지원'];
   /* 새 요청에서 고를 수 있는 유형입니다. 이미 등록된 요청의 유형은
      이 목록과 상관없이 그대로 표시됩니다(r.kind 를 그대로 씁니다). */
@@ -532,23 +545,26 @@
     var s = S.settings || {};
     var nn = nowNext(ev);
 
+    /* 상태는 작은 표시 하나로. 크게 적으면 행사명과 무게를 다툽니다.
+       D-day 는 행사 전에만 같은 표시 안에 덧붙입니다. */
     var phaseHtml = ev.phase === 'during'
-      ? '<div class="hero__dday">행사 진행 중</div><div class="hero__now">현재 ' +
-        C.pad2(ev.now.getHours()) + ':' + C.pad2(ev.now.getMinutes()) + '</div>'
+      ? '<span class="phase phase--live">진행 중 · ' +
+        C.pad2(ev.now.getHours()) + ':' + C.pad2(ev.now.getMinutes()) + '</span>'
       : ev.phase === 'after'
-        ? '<div class="hero__dday">행사 종료</div>'
-        : '<div class="hero__dday">D-' + Math.max(0, ev.dday) + '</div><div class="hero__now">' +
-          C.fmtDateTime(ev.now) + '</div>';
+        ? '<span class="phase phase--done">행사 종료</span>'
+        : ev.phase === 'before'
+          ? '<span class="phase">행사 전 · D-' + Math.max(0, ev.dday) + '</span>'
+          : '';
 
-    var hero = '<section class="hero"><div><p class="hero__kicker">행사 운영 홈</p>' +
+    // '행사 운영 홈' 머리말과 설명 문단은 뺐습니다. 메뉴가 이미 '홈' 이고,
+    // 날마다 여는 사람에게 같은 설명은 숫자를 아래로 밀어낼 뿐입니다.
+    var hero = '<section class="hero"><div class="hero__main">' +
       '<h1 class="hero__name">' +
       esc(s.event_title || '2026년 인천 AI·SW미래채움 교육페스티벌') + '</h1>' +
       '<div class="hero__meta">' + esc(s.date_label || '') +
       (s.time_label ? ' · ' + esc(s.time_label) : '') +
       (s.venue ? ' · ' + esc(s.venue) : '') + '</div></div>' +
-      '<div class="hero__state">' + phaseHtml + '</div></section>' +
-      '<p class="pageintro">행사 준비 상황과 당일 운영 정보를 한곳에서 확인합니다. ' +
-      '일정·공지·업무·물품 현황은 관리자에서 등록한 내용이 바로 반영됩니다.</p>';
+      (phaseHtml ? '<div class="hero__state">' + phaseHtml + '</div>' : '') + '</section>';
 
     /* 긴급 공지 — 있으면 최상단 */
     var urgent = S.notices.filter(function (n) { return n.level === '긴급'; });
@@ -637,14 +653,14 @@
       // 행사 전입니다. 아래에 첫 일정을 함께 보여 주는데, 아무 설명
       // 없이 시각과 제목만 두면 지금 진행 중인 일정으로 오해합니다.
       // 그래서 "첫 일정" 이라고 분명히 적습니다.
-      nowHtml = '<section class="card card__pad nowcard nowcard--idle">' +
-        '<div class="nowcard__kicker">행사 당일 안내</div>' +
-        '<p class="nowcard__meta" style="margin-top:6px">행사 당일에는 현재 시각을 기준으로 ' +
-        '진행 중인 일정과 다음 일정이 이 자리에 표시됩니다.</p>' +
-        (nn.next ? '<div class="nowcard__kicker" style="margin-top:14px">첫 일정</div>' +
-          '<div class="nowcard__time" style="margin-top:4px">' + esc(nn.next.start_time || nn.next.time_label) + '</div>' +
-          '<div class="nowcard__title">' + esc(nn.next.title) + '</div>' +
-          '<div class="nowcard__meta">' + esc(nn.next.place || '') + '</div>' : '') +
+      // 행사가 끝났으면 '첫 일정' 은 의미가 없어 자리를 두지 않습니다.
+      // 행사 전에는 첫 일정 한 장만. 긴 설명은 반복해서 볼 정보가 아닙니다.
+      nowHtml = (ev.phase === 'after' || !nn.next) ? '' :
+        '<section class="card card__pad nowcard nowcard--idle">' +
+        '<div class="nowcard__kicker">첫 일정 · 행사 당일에는 지금/다음 일정이 표시됩니다</div>' +
+        '<div class="nowcard__time">' + esc(nn.next.start_time || nn.next.time_label) + '</div>' +
+        '<div class="nowcard__title">' + esc(nn.next.title) + '</div>' +
+        (nn.next.place ? '<div class="nowcard__meta">' + esc(nn.next.place) + '</div>' : '') +
         '</section>';
     } else if (nn.live) {
       nowHtml = '<section class="card card__pad nowcard">' +
@@ -808,7 +824,7 @@
     return '<div class="page">' +
       pageHead('운영 일정', ev.sameDay
         ? '현재 시각을 기준으로 진행 중인 일정이 강조됩니다.'
-        : '행사 전체 일정을 시간순으로 정리했습니다. 변경 사항은 공지에서 함께 확인해 주세요.') +
+        : '행사 전체 일정을 시간순으로 확인합니다.') +
       clock +
       '<div class="tools"><div class="search"><label class="sr-only" for="sched-q">일정 검색</label>' +
       '<input class="input" id="sched-q" type="search" placeholder="일정·장소·담당 검색" value="' + esc(ui.schedQ) + '" /></div>' +
@@ -867,7 +883,7 @@
     var q = ui.boothQ.trim().toLowerCase();
 
     // 구역은 개수보다 '그 구역만 보기' 로 쓰입니다.
-    var zoneHtml = S.zones.length
+    var zoneHtml = S.zones.length > 1
       ? '<div class="chiprow" role="group" aria-label="구역">' +
         ['전체'].concat(S.zones.map(function (z) { return z.key + '존'; })).map(function (lab) {
           var n = lab === '전체' ? S.booths.length
@@ -884,7 +900,8 @@
     var groupsPresent = ['초등', '중등', '고등', '기관·기타'].filter(function (g) {
       return S.booths.some(function (b) { return orgGroup(orgType(b)) === g; });
     });
-    var typeHtml = groupsPresent.length
+    // 고를 것이 한 가지뿐이면(예: 전부 초등) 필터는 뜻이 없습니다.
+    var typeHtml = groupsPresent.length > 1
       ? '<div class="filterrow"><span class="filterrow__l">구분</span>' +
         chips(['전체'].concat(groupsPresent).map(function (g) {
           return { label: g, n: g === '전체' ? S.booths.length
@@ -908,8 +925,10 @@
         orgBadge(orgType(b)) + '</span>' +
         '<span class="booth__name">' + esc(b.name) + '</span>' +
         '<span class="booth__org">' + esc(b.org || '운영기관 미정') + '</span>' +
-        (b.program ? '<span class="booth__prog">' + esc(b.program) + '</span>' : '') +
-        (b.zone_key ? '<span class="booth__zone"><span class="zonetag">' + esc(zoneName(b.zone_key)) + '</span></span>' : '') +
+        // 구역은 상자 없이 작은 글자로. 위치 정보라 유형 배지와 겹쳐 보이면 안 됩니다.
+        ((b.zone_key || b.program)
+          ? '<span class="booth__foot">' + esc([zoneName(b.zone_key), b.program].filter(Boolean).join(' · ')) + '</span>'
+          : '') +
         '</button>';
     }).join('') + '</div>'
       : S.booths.length
@@ -924,7 +943,7 @@
     });
 
     return '<div class="page">' +
-      pageHead('부스 현황', '부스 위치와 운영기관을 확인합니다. 카드를 누르면 상세 정보가 열립니다.') +
+      pageHead('부스 현황', '부스 위치와 운영기관을 확인합니다.') +
       map +
       '<p class="countline">전체 부스 <b>' + S.booths.length + '</b>개</p>' +
       (zoneHtml ? '<div class="filterrow"><span class="filterrow__l">구역</span>' + zoneHtml + '</div>' : '') +
@@ -998,7 +1017,7 @@
         '<span class="notice__body">' + esc(n.body) + '</span></button>';
     }).join('') + '</div>' : sampleNotices();
     return '<div class="page">' +
-      pageHead('운영 공지', '운영 중 확인해야 할 변경 사항과 주요 안내입니다. 긴급 공지는 대시보드 상단에도 표시됩니다.') +
+      pageHead('운영 공지', '운영 중 확인해야 할 변경 사항과 주요 안내입니다.') +
       body + '</div>';
   }
 
@@ -1042,6 +1061,7 @@
       '<span class="req__top">' + (done ? doneMark('해결 완료') : badge(r.priority) + badge(r.status)) +
       '<span class="tag tag--soft">' + esc(r.kind) + '</span></span>' +
       '<span class="req__title">' + esc(r.title) + '</span>' +
+      (r.body ? '<span class="req__body">' + esc(r.body) + '</span>' : '') +
       '<span class="req__meta">' + esc(r.location || '위치 미지정') + ' · ' + esc(fmtDay(r.created_at)) +
       (r.assignee_team ? ' · ' + esc(r.assignee_team) : '') + '</span></button>';
     // 끝난 요청에는 단추를 두지 않습니다.
@@ -1079,7 +1099,7 @@
 
     return '<div class="page">' +
       pageHead('운영 요청',
-        '전기·네트워크·기자재·시설·안전·물품 등 현장 지원이 필요할 때 등록해 주세요.',
+        '현장 지원이 필요할 때 등록하고, 해결되면 완료로 표시합니다.',
         '<button class="btn btn--primary btn--sm" type="button" data-newreq>+ 현장 문제 보고</button>') +
       // 비상 연락처가 아직 확정되지 않아 번호는 넣지 않습니다.
       '<p class="pagenote">안전과 관련된 긴급 상황은 요청 등록과 함께 운영본부에 직접 알려 주세요.</p>' +
@@ -1145,8 +1165,8 @@
     var body = list.length ? '<div class="tl tl--2">' + list.map(function (r) {
       return '<div class="rescard">' +
         '<div class="rescard__title">' + esc(r.title) + '</div>' +
-        '<div class="rescard__kind">' + esc(r.category || '기타') + '</div>' +
         (r.description ? '<p class="rescard__desc">' + esc(r.description) + '</p>' : '') +
+        '<div class="rescard__kind">' + esc(r.category || '기타') + '</div>' +
         (r.url
           ? '<div class="rescard__act"><a class="btn btn--ghost btn--sm" href="' + esc(r.url) + '" ' +
             'target="_blank" rel="noopener noreferrer" aria-label="' + esc(r.title) + ' 자료 열기 (새 탭)">' +
@@ -1159,7 +1179,7 @@
         : S.resources.length ? noMatchBox('공개된 자료가 없습니다.') : sampleResources();
 
     return '<div class="page">' +
-      pageHead('관계자 자료실', '행사 운영에 필요한 안내문과 매뉴얼, 서식을 모아 둡니다.') +
+      pageHead('관계자 자료실', '행사 운영에 필요한 자료를 확인합니다.') +
       (all.length ? '<p class="countline">등록 자료 <b>' + all.length + '</b>개</p>' +
         '<div class="tools"><div class="search"><label class="sr-only" for="resource-q">자료 검색</label>' +
         '<input class="input" id="resource-q" type="search" placeholder="자료명 · 종류 검색" value="' +
@@ -1202,7 +1222,7 @@
         : sampleContacts();
 
     return '<div class="page">' +
-      pageHead('운영 연락망', '운영 담당자와 지원팀 연락처입니다.') +
+      pageHead('운영 연락망', '운영 담당자와 지원팀 연락처를 확인합니다.') +
       (S.contacts.length ? '<p class="countline">등록 연락처 <b>' + S.contacts.length + '</b>명</p>' +
         '<div class="tools"><div class="search"><label class="sr-only" for="contact-q">연락처 검색</label>' +
         '<input class="input" id="contact-q" type="search" placeholder="이름 · 소속 · 담당업무 검색" value="' + esc(ui.contactQ) + '" /></div>' +
@@ -1269,7 +1289,6 @@
 
     return '<div class="page">' +
       pageHead('행사장 안내', venueLine) +
-      '<p class="pageintro">운영본부와 주요 행사 공간, 편의시설 위치를 안내합니다.</p>' +
       '<h2 class="section-title">부스 배치도</h2>' + boothMap +
       '<h2 class="section-title">주요 공간</h2>' + body + '</div>';
   }
@@ -1298,7 +1317,7 @@
         : sampleFaqs();
 
     return '<div class="page">' +
-      pageHead('운영 FAQ', '행사 준비와 당일 운영 중 자주 확인하는 내용을 모았습니다.') +
+      pageHead('운영 FAQ', '자주 확인하는 운영 질문을 모았습니다.') +
       (cats.length > 2 ? '<div class="tools">' + chips(cats, ui.faqCat, 'data-faqcat') + '</div>' : '') +
       body + '</div>';
   }
@@ -1431,7 +1450,7 @@
 
     return '<div class="page">' +
       pageHead('담당 업무',
-        '업무별 담당자와 개인별 역할을 확인합니다. 행사 당일 누가 무엇을 맡는지 빠르게 찾을 수 있습니다.') +
+        '업무별 담당자와 개인별 역할을 확인합니다.') +
       switcher + (ui.taskMode === '개인별' ? tasksByPerson() : tasksByTask()) + '</div>';
   }
 
@@ -1745,8 +1764,7 @@
     var st = t.status || '미배부';
     var card = '<button class="supply' + (st === '배부 완료' ? ' is-done' : '') + '" type="button" data-supply="' + esc(t.id) + '">' +
       '<span class="supply__top">' + (st === '배부 완료' ? doneMark('배부 완료') : badge(st)) +
-      '<span class="tag tag--soft">' + esc(t.kind || '팀') + '</span>' +
-      (t.headcount ? '<span class="notice__meta">' + t.headcount + '명</span>' : '') + '</span>' +
+      '<span class="supply__kind">' + esc([t.kind || '팀', t.headcount ? t.headcount + '명' : ''].filter(Boolean).join(' · ')) + '</span></span>' +
       '<span class="supply__name">' + esc(t.name) + '</span>' +
       (t.manager ? '<span class="supply__meta">담당 ' + esc(t.manager) + '</span>' : '') +
       (items.length
@@ -1847,11 +1865,11 @@
       var b = badgeFor(n.id);
       return '<a href="#' + n.id + '" class="' + (n.id === view ? 'is-on' : '') + '"' +
         (n.id === view ? ' aria-current="page"' : '') + '>' +
-        '<span class="tab__dot">' + esc(n.mark) + '</span>' +
+        (TAB_ICONS[n.id] || '') +
         (b ? '<span class="tab__badge">' + (n.id === 'requests' ? openReq : urgent) + '</span>' : '') +
         '<span>' + esc(n.short) + '</span></a>';
     }).join('') +
-      '<button type="button" data-open-sheet><span class="tab__dot">⋯</span><span>더보기</span></button>';
+      '<button type="button" data-open-sheet>' + TAB_ICONS.more + '<span>더보기</span></button>';
 
     /* 더보기 시트도 같은 묶음으로 보여 줍니다. 사이드바와 순서가
        다르면 PC 로 익힌 위치가 휴대폰에서 통하지 않습니다. */
