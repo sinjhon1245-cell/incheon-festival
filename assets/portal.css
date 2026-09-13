@@ -539,7 +539,6 @@ button.is-sample:hover { border-color: var(--primary); background: #fff; }
 .dl dt { min-width: 92px; flex: 0 0 auto; font-size: 12.5px; font-weight: 600; color: var(--muted); }
 .dl dd { flex: 1; margin: 0; font-size: 14.5px; line-height: 1.6; }
 
-.statusgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(104px, 1fr)); gap: 8px; }
 
 /* ── 알림 ─────────────────────────────────────────────────────── */
 .toast {
@@ -1082,6 +1081,129 @@ a.side__brand:hover b { color: var(--primary); }
 
 /* 홈의 처리 현황 한 줄 */
 .sumline--home { margin: -10px 2px 0; }
+
+
+/* ═══ 화면별 옅은 색 ═══════════════════════════════════════════════
+   흰색·남색·보라만 반복되면 메뉴를 옮겨도 같은 화면처럼 보입니다.
+   화면마다 아주 옅은 색 하나를 제목 표시와 구역 표시에만 씁니다.
+   상태 색(긴급 빨강 · 주의 주황 · 완료 초록)과 섞이지 않도록 숫자와
+   배지에는 쓰지 않습니다. */
+#view { --accent: var(--primary); --accent-t: var(--primary-t); }
+#view[data-view="schedule"]  { --accent: #2F6FD6; --accent-t: #EAF1FC; }
+#view[data-view="booths"]    { --accent: #0E8A86; --accent-t: #E2F3F2; }
+#view[data-view="notices"]   { --accent: #B7791F; --accent-t: #FBF2E0; }
+#view[data-view="requests"]  { --accent: #C2571A; --accent-t: #FCEEE4; }
+#view[data-view="tasks"]     { --accent: #4B4FC7; --accent-t: #ECEDFB; }
+#view[data-view="supplies"]  { --accent: #4E8A5E; --accent-t: #E9F3EC; }
+#view[data-view="resources"],
+#view[data-view="contacts"],
+#view[data-view="venue"],
+#view[data-view="faq"]       { --accent: #5A6B86; --accent-t: #EEF1F5; }
+
+.page__title { display: flex; align-items: center; gap: 10px; }
+.page__title::before {
+  content: ''; flex: 0 0 auto; width: 4px; height: 0.9em; border-radius: 4px;
+  background: var(--accent, var(--primary));
+}
+#view .section-title::before {
+  content: ''; flex: 0 0 auto; width: 7px; height: 7px; border-radius: 2px;
+  background: var(--accent, var(--primary));
+}
+.minigrid--sum .mini { box-shadow: inset 0 3px 0 var(--accent-t, var(--primary-t)); }
+
+/* 상태 색 */
+.mini--danger .mini__n { color: var(--danger); }
+.mini--task .mini__n, .stat--task .stat__n { color: #4B4FC7; }
+
+/* ═══ 남은 일 / 끝난 일 ════════════════════════════════════════════ */
+.countline { margin: -8px 2px 0; font-size: 14px; color: var(--muted); }
+.countline b { color: var(--ink); font-weight: 700; font-variant-numeric: tabular-nums; }
+
+.listsec { display: flex; flex-direction: column; gap: 10px; }
+.allclear {
+  margin: 0; padding: 14px 16px; background: #fff;
+  border: 1px dashed var(--line); border-radius: var(--r); font-size: 14px; color: var(--muted);
+}
+
+.donemark {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 12.5px; font-weight: 700; color: var(--ok);
+  background: var(--ok-t); padding: 3px 9px; border-radius: 999px;
+}
+
+/* 끝난 묶음. 흐리게 만들지 않고 아래로 내려 접어 둡니다. */
+.donebox {
+  background: #fff; border: 1px solid var(--line); border-radius: var(--r);
+}
+.donebox__sum {
+  list-style: none; cursor: pointer; min-height: 48px;
+  display: flex; align-items: center; gap: 10px; padding: 12px 16px;
+  border-radius: var(--r);
+}
+.donebox__sum::-webkit-details-marker { display: none; }
+.donebox__t { font-size: 15.5px; font-weight: 700; color: var(--ink); }
+.donebox__n {
+  font-size: 12.5px; font-weight: 700; color: var(--ok);
+  background: var(--ok-t); padding: 2px 9px; border-radius: 999px;
+}
+.donebox__open { margin-left: auto; font-size: 13.5px; font-weight: 600; color: var(--primary); }
+.donebox__open::after { content: '펼쳐보기'; }
+.donebox[open] .donebox__open::after { content: '접기'; }
+.donebox__sum:hover { background: var(--bg-soft); }
+.donebox__body { padding: 4px 14px 14px; }
+
+/* 끝난 카드: 배경만 아주 옅게 바꾸고 글자는 그대로 읽히게 둡니다. */
+.req.is-done, .task.is-done, .supply.is-done { background: #FAFBFC; }
+
+/* ═══ 부스 · 물품 · 자료 · 연락처 카드 ═══════════════════════════ */
+.booth__prog {
+  font-size: 13.5px; color: var(--muted-2); line-height: 1.5;
+  display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden;
+}
+
+.supply__line { font-size: 14px; color: var(--ink-2); line-height: 1.6; }
+.supply__line b { font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; }
+
+.rescard, .contact {
+  background: #fff; border: 1px solid var(--line); border-radius: var(--r);
+  box-shadow: var(--sh); padding: 14px 16px; min-width: 0;
+  display: flex; flex-direction: column; gap: 6px;
+}
+.rescard > .tag { align-self: flex-start; }
+.rescard__top, .contact__top { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.rescard__title, .contact__name {
+  font-size: 15.5px; font-weight: 700; color: var(--ink); letter-spacing: -0.02em; line-height: 1.45;
+}
+.rescard__desc {
+  margin: 0; font-size: 14px; color: var(--muted); line-height: 1.6;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.rescard__act { margin-top: 4px; }
+.rescard__none { margin: 2px 0 0; font-size: 13px; color: var(--muted-2); }
+
+.contact__meta { font-size: 14px; color: var(--muted); }
+.contact__memo { font-size: 13.5px; color: var(--muted-2); line-height: 1.55; }
+.contact__top:empty { display: none; }
+.contact__phone {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  margin-top: 4px; padding-top: 10px; border-top: 1px solid var(--line-2);
+}
+.contact__num {
+  font-size: 16px; font-weight: 700; color: var(--ink);
+  font-variant-numeric: tabular-nums; letter-spacing: 0.01em;
+}
+.contact__act { margin-left: auto; display: flex; gap: 6px; }
+
+/* 선택 창의 단추가 셋이면 좁은 화면에서 줄바꿈합니다. */
+.modal__foot { flex-wrap: wrap; }
+
+@media (max-width: 560px) {
+  .contact__act { margin-left: 0; width: 100%; }
+  .contact__act .btn { flex: 1; min-height: 44px; }
+  .rescard__act .btn { width: 100%; min-height: 44px; justify-content: center; }
+  .donebox__sum { padding: 12px 14px; }
+  .modal__foot .btn { flex: 1 1 auto; min-height: 44px; }
+}
 
 /* ── 인쇄 ─────────────────────────────────────────────────────── */
 @media print {

@@ -450,6 +450,45 @@ window.UI = (function () {
     });
   }
 
+  /* ── 여러 갈래 선택 ──────────────────────────────────────────
+     "일부만 받음 / 모두 받음 / 취소" 처럼 확인이 두 갈래를 넘을 때.
+     고른 값을 돌려주고, 취소하거나 ESC 로 닫으면 null 입니다. */
+  function choose(opts) {
+    return new Promise(function (resolve) {
+      var choices = opts.choices || [];
+      open(
+        '<div class="modal__scrim" data-cancel></div>' +
+        '<div class="modal__panel modal__panel--sm" role="dialog" aria-modal="true" aria-labelledby="modal-title">' +
+          '<div class="modal__head">' +
+            '<h2 class="modal__title" id="modal-title">' + esc(opts.title) + '</h2>' +
+            '<button class="iconbtn" type="button" data-cancel aria-label="닫기">✕</button>' +
+          '</div>' +
+          '<div class="modal__body"><p class="modal__desc">' + esc(opts.message || '') + '</p></div>' +
+          '<div class="modal__foot">' +
+            '<button class="btn btn--ghost" type="button" data-cancel>취소</button>' +
+            choices.map(function (c, i) {
+              return '<button class="btn ' + (c.primary ? 'btn--primary' : 'btn--ghost') + '" type="button" ' +
+                'data-choice="' + i + '">' + esc(c.label) + '</button>';
+            }).join('') +
+          '</div>' +
+        '</div>',
+        function (h, panel) {
+          var main = panel.querySelector('.btn--primary[data-choice]') || panel.querySelector('[data-choice]');
+          if (main) main.focus();
+          Array.prototype.forEach.call(h.querySelectorAll('[data-cancel]'), function (b) {
+            b.addEventListener('click', function () { close(); resolve(null); });
+          });
+          Array.prototype.forEach.call(panel.querySelectorAll('[data-choice]'), function (b) {
+            b.addEventListener('click', function () {
+              close(); resolve(choices[Number(b.getAttribute('data-choice'))].value);
+            });
+          });
+        },
+        function () { close(); resolve(null); }
+      );
+    });
+  }
+
   /* ── 확인 대화상자 ──────────────────────────────────────────── */
   function confirm(opts) {
     return new Promise(function (resolve) {
@@ -479,5 +518,5 @@ window.UI = (function () {
     });
   }
 
-  return { form: form, confirm: confirm, close: close };
+  return { form: form, confirm: confirm, choose: choose, close: close };
 })();

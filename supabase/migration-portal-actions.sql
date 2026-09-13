@@ -6,12 +6,16 @@
 --     운영 요청 → 해결 완료
 --     담당 업무 → 시작 / 완료
 --     운영 물품 → 일부 수령 / 수령 완료
---     부스     → 이미 있는 set_booth_status 를 그대로 씁니다
+--     부스     → 관계자 포털에서 상태 변경을 없앱니다.
+--               anon 의 set_booth_status 실행 권한을 거둡니다(함수는 남김).
 --
 -- 사용법: Supabase 대시보드 → SQL Editor 에 전체 붙여넣고 Run.
 --         여러 번 실행해도 안전하고, 기존 데이터를 지우지 않습니다.
 --
 -- 선행: migration-public-portal.sql, migration-operations.sql
+--
+-- 다시 실행하는 경우: 이전 판을 이미 실행했어도 이 파일을 통째로 다시
+-- 실행하면 됩니다. create or replace 와 if not exists 로 되어 있습니다.
 --
 -- ⚠️ 보안에서 가장 중요한 점
 --    표 전체에 anon UPDATE 정책을 만들지 않습니다. 그렇게 하면 주소를
@@ -51,20 +55,27 @@ create or replace function public.resolve_operation_request(p_id uuid)
 returns public.operation_requests
 language plpgsql
 security definer
-set search_path = public
+set search_path = ''
 as $$
 declare
+  cur     public.operation_requests;
   updated public.operation_requests;
 begin
-  update public.operation_requests
-     set status = '완료',
-         updated_at = now()
-   where id = p_id
-  returning * into updated;
-
-  if updated.id is null then
+  select * into cur from public.operation_requests where id = p_id for update;
+  if cur.id is null then
     raise exception '해당 요청을 찾을 수 없습니다.' using errcode = 'P0002';
   end if;
+
+  -- 이미 완료면 손대지 않고 그대로 돌려줍니다(수정 시각도 바꾸지 않음).
+  if cur.status = '완료' then
+    return cur;
+  end if;
+
+  update public.operation_requests
+     set status = '완료',
+         updated_at = pg_catalog.now()
+   where id = p_id
+  returning * into updated;
 
   return updated;
 end;
@@ -87,7 +98,7 @@ create or replace function public.set_operation_task_status(p_id uuid, p_status 
 returns public.operation_tasks
 language plpgsql
 security definer
-set search_path = public
+set search_path = ''
 as $$
 declare
   cur     public.operation_tasks;
@@ -119,7 +130,7 @@ begin
 
   update public.operation_tasks
      set status = p_status,
-         updated_at = now()
+         updated_at = pg_catalog.now()
    where id = p_id
   returning * into updated;
 
@@ -142,7 +153,7 @@ create or replace function public.set_supply_target_status(p_id uuid, p_status t
 returns public.supply_targets
 language plpgsql
 security definer
-set search_path = public
+set search_path = ''
 as $$
 declare
   cur     public.supply_targets;
@@ -173,7 +184,7 @@ begin
 
   update public.supply_targets
      set status = p_status,
-         updated_at = now()
+         updated_at = pg_catalog.now()
    where id = p_id
   returning * into updated;
 
@@ -190,12 +201,38 @@ grant execute on function public.set_supply_target_status(uuid, text) to anon, a
 
 
 -- ═══════════════════════════════════════════════════════════════
--- 5. 확인
+-- 5. 부스 상태 — 관계자 포털에서 거둡니다
 --
--- anon 이 쓸 수 있는 함수는 아래 넷뿐이어야 합니다.
+-- 부스 운영 상태는 현장에서 아무도 갱신하지 않아 포털에서 뺐습니다.
+-- 쓰지 않는 변경 권한을 anon 에게 열어 둘 이유가 없습니다.
+-- 함수는 지우지 않습니다. 예전 SQL 을 다시 돌렸을 때 오류가 나지 않게
+-- 하고, 관리자(authenticated)는 필요하면 계속 부를 수 있게 둡니다.
+-- 표의 status 칸과 데이터도 그대로 둡니다.
+-- ═══════════════════════════════════════════════════════════════
+do $$
+begin
+  if exists (
+    select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public' and p.proname = 'set_booth_status'
+  ) then
+    revoke execute on function public.set_booth_status(uuid, text) from anon;
+    revoke execute on function public.set_booth_status(uuid, text) from public;
+    grant  execute on function public.set_booth_status(uuid, text) to authenticated;
+  end if;
+end $$;
+
+
+-- ═══════════════════════════════════════════════════════════════
+-- 6. 확인
+--
+-- anon 이 실행할 수 있는 상태 함수는 아래 셋이어야 합니다
+-- (set_booth_status 는 anon_실행 = false 여야 정상).
 -- 표에 anon UPDATE 정책이 하나도 없다는 것도 함께 확인합니다.
 -- ═══════════════════════════════════════════════════════════════
-select p.proname as "열어 둔 함수"
+select p.proname as "함수",
+       has_function_privilege('anon', p.oid, 'execute') as "anon_실행",
+       p.prosecdef as "security_definer",
+       p.proconfig as "설정"
 from pg_proc p
 join pg_namespace n on n.oid = p.pronamespace
 where n.nspname = 'public'

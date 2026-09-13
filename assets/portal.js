@@ -45,13 +45,10 @@
   var NAV_GROUPS = ['운영', '정보'];
 
   var SCHEDULE_CATS = ['무대', '강연', '부스', '운영', '행사 지원'];
-  var BOOTH_STATES  = ['준비 전', '준비 완료', '운영 중', '일시 중단', '운영 종료'];
   /* 새 요청에서 고를 수 있는 유형입니다. 이미 등록된 요청의 유형은
      이 목록과 상관없이 그대로 표시됩니다(r.kind 를 그대로 씁니다). */
   var REQ_KINDS     = ['전기', '네트워크', '기자재', '시설', '안전', '물품', '기타'];
   var REQ_PRIORITY  = ['긴급', '높음', '보통'];
-  var REQ_STATES    = ['접수', '확인 중', '처리 중', '완료'];
-  var SUPPLY_KINDS  = ['기관', '팀', '부스'];
   var SUPPLY_STATES = ['미배부', '일부 배부', '배부 완료'];
 
   /* 상태 → 배지 색. 색만으로 뜻을 전하지 않도록 글자는 항상 함께 씁니다. */
@@ -77,11 +74,10 @@
     error: null, loading: false
   };
   var view = 'dashboard';
-  var ui = { boothQ: '', boothStatus: '전체', boothZone: '전체',
+  var ui = { boothQ: '', boothZone: '전체',
              schedCat: '전체', schedQ: '', schedHalf: '전체', schedKey: false,
-             reqStatus: '전체',
              taskMode: '업무별', taskArea: '전체', taskQ: '', taskPerson: '',
-             supplyStatus: '전체', supplyKind: '전체', supplyQ: '',
+             supplyQ: '', resourceQ: '',
              contactQ: '', contactCat: '전체', faqCat: '전체' };
   var clockTimer = null;
 
@@ -361,12 +357,11 @@
         ['부스 운영 안내', '부스 운영자 안내 자료', '부스 준비·운영·철수 관련 내용을 확인할 수 있습니다.'],
         ['안전관리 자료', '행사 안전관리 안내', '비상상황과 안전사고 대응 절차를 확인하는 자료입니다.']
       ].map(function (r) {
-        return '<div class="rowcard is-sample"><div class="rowcard__body">' +
-          '<div class="rowcard__name">' + esc(r[1]) + ' ' + SAMPLE + '</div>' +
-          '<div class="rowcard__meta">' + esc(r[0]) + ' · ' + esc(r[2]) + '</div></div>' +
-          // 예시라 열 수 있는 자료가 없습니다. 눌리지 않게 막아 둡니다.
-          '<div class="rowcard__act"><button class="btn btn--ghost btn--sm" type="button" disabled ' +
-          'aria-disabled="true">열기</button></div></div>';
+        // 예시에는 열 수 있는 파일이 없어 단추를 만들지 않습니다.
+        return '<div class="rescard is-sample">' +
+          '<span class="rescard__top"><span class="tag tag--soft">' + esc(r[0]) + '</span>' + SAMPLE + '</span>' +
+          '<div class="rescard__title">' + esc(r[1]) + '</div>' +
+          '<p class="rescard__desc">' + esc(r[2]) + '</p></div>';
       }).join(''), true);
   }
 
@@ -378,12 +373,11 @@
         ['전산 지원', '네트워크·기기 지원', '인터넷, 노트북, 장비 관련 지원'],
         ['안전 지원', '안전 및 응급 대응', '안전사고 및 응급 상황 지원']
       ].map(function (c) {
-        return '<div class="rowcard is-sample"><div class="rowcard__body">' +
-          '<div class="rowcard__name">' + esc(c[1]) + ' ' + SAMPLE + '</div>' +
-          '<div class="rowcard__meta">' + esc(c[0]) + ' · ' + esc(c[2]) + '</div></div>' +
-          // 전화번호는 확정된 값이 없어 만들지 않습니다.
-          '<div class="rowcard__act"><button class="btn btn--ghost btn--sm" type="button" disabled ' +
-          'aria-disabled="true">전화</button></div></div>';
+        // 확정된 번호가 없어 번호와 전화 단추를 만들지 않습니다.
+        return '<div class="contact is-sample">' +
+          '<div class="contact__top"><span class="tag tag--soft">' + esc(c[0]) + '</span>' + SAMPLE + '</div>' +
+          '<div class="contact__name">' + esc(c[1]) + '</div>' +
+          '<div class="contact__meta">' + esc(c[2]) + '</div></div>';
       }).join(''), true);
   }
 
@@ -429,6 +423,33 @@
       '<p class="state__title">' + esc(title) + '</p>' +
       '<p class="state__hint">검색어나 필터를 바꿔 보세요.</p></div>';
   }
+  /* 상태를 판단해야 하는 화면(홈·요청·업무·물품)에만 붙이는 작은 요약.
+     정보 화면(자료실·연락망)에는 쓰지 않습니다. 거기서는 개수 한 줄이면
+     충분하고, 숫자 칸을 늘어놓으면 운영 화면과 구분이 흐려집니다. */
+  function summaryGrid(items) {
+    return '<div class="minigrid minigrid--sum">' + items.map(function (c) {
+      return '<div class="mini' + (c.tone ? ' mini--' + c.tone : '') + '">' +
+        '<span class="mini__n">' + c.n + '</span>' +
+        '<span class="mini__l">' + esc(c.l) + '</span></div>';
+    }).join('') + '</div>';
+  }
+
+  /* 끝난 것은 아래로 내리고 접어 둡니다. 현장에서 먼저 봐야 하는 것은
+     아직 남은 일입니다. 접기는 details 를 그대로 씁니다 — 키보드로
+     열고 닫는 동작이 이미 붙어 있습니다. 흐리게 만들지는 않습니다. */
+  function doneSection(title, items, html) {
+    if (!items) return '';
+    return '<details class="donebox">' +
+      '<summary class="donebox__sum"><span class="donebox__t">' + esc(title) + '</span>' +
+      '<span class="donebox__n">' + items + '건</span>' +
+      '<span class="donebox__open" aria-hidden="true"></span></summary>' +
+      '<div class="donebox__body">' + html + '</div></details>';
+  }
+
+  function doneMark(text) {
+    return '<span class="donemark"><span aria-hidden="true">✓</span> ' + esc(text) + '</span>';
+  }
+
   function pageHead(title, desc, actions) {
     return '<div class="page__head"><div><h1 class="page__title">' + esc(title) + '</h1>' +
       (desc ? '<p class="page__desc">' + esc(desc) + '</p>' : '') + '</div>' +
@@ -550,25 +571,22 @@
       : '';
 
     /* 운영 숫자 — 전부 DB 집계 */
-    var byStatus = {};
-    BOOTH_STATES.forEach(function (st) { byStatus[st] = S.booths.filter(function (b) { return b.status === st; }).length; });
     var openReq = S.requests.filter(function (r) { return r.status !== '완료'; }).length;
-    var todayCount = S.schedule.filter(function (i) { return i.status !== '취소'; }).length;
+    // 등록된 업무·대상이 하나도 없으면 0 이 아니라 '-' 입니다.
+    // 0 이라고 적으면 '다 끝났다' 로 읽힙니다.
+    var leftTasks = !S.tasks.length ? '-'
+      : S.tasks.filter(function (t) { return taskStatus(t) !== '완료'; }).length;
+    var leftSupply = !S.supplyTargets.length ? '-'
+      : S.supplyTargets.filter(function (t) { return t.status !== '배부 완료'; }).length;
 
-    // 운영 인력은 연락망에서 '운영 인력' 으로 표시한 사람 수입니다.
-    // 아직 그 칸이 없으면(마이그레이션 전) 0 이 아니라 '-' 로 둡니다.
-    // 0 명이라고 적으면 아무도 없는 것처럼 읽히기 때문입니다.
-    var staff = staffList();
-
-    /* 첫 화면에서 바로 판단해야 하는 것만 남깁니다. 숫자를 여덟 개
-       늘어놓으면 다 비슷해 보여서 하나도 눈에 안 들어옵니다.
-       일정 수·장소 수처럼 지금 당장 결정에 쓰이지 않는 값은 각
-       메뉴에서 봅니다. */
+    /* 홈이 답해야 하는 질문 네 가지입니다.
+       문제가 남았나 · 할 일이 남았나 · 못 받은 곳이 있나 · 부스는 몇 곳인가.
+       부스 운영 상태는 현장에서 갱신하지 않아 판단에 쓸 수 없어 뺐습니다. */
     var stats = [
-      { n: S.booths.length, l: '전체 부스', go: 'booths', f: null },
-      { n: byStatus['운영 중'], l: '운영 중', go: 'booths', f: '운영 중', tone: 'ok' },
-      { n: openReq, l: '미처리 요청', go: 'requests', f: '미완료', tone: openReq ? 'warn' : null },
-      { n: staff ? staff.length : '-', l: '운영 인력', go: 'tasks', f: null }
+      { n: openReq, l: '미처리 요청', go: 'requests', tone: openReq ? 'warn' : null },
+      { n: leftTasks, l: '남은 업무', go: 'tasks', tone: leftTasks > 0 ? 'task' : null },
+      { n: leftSupply, l: '배부 확인 필요', go: 'supplies', tone: leftSupply > 0 ? 'warn' : null },
+      { n: S.booths.length, l: '전체 부스', go: 'booths' }
     ];
     var statsHtml = '<div class="statgrid">' + stats.map(function (st) {
       return '<button class="stat' + (st.tone ? ' stat--' + st.tone : '') + '" type="button" data-go="' + st.go + '"' +
@@ -600,25 +618,6 @@
 
     /* 운영 안내 — 관리자가 행사 기본정보에 적어 둔 짧은 안내입니다.
        줄바꿈을 그대로 살립니다. 비어 있으면 자리를 두지 않습니다. */
-    /* 현장에서 처리한 결과가 홈에 바로 보이게 합니다. 숫자 카드를
-       더 세우지 않고 한 줄로 적습니다 — 훑어보는 자리라 두 줄이면
-       충분하고, 자세한 것은 각 메뉴에서 봅니다. */
-    var progress = [];
-    if (S.tasks.length) {
-      progress.push('담당 업무 <b>' +
-        S.tasks.filter(function (t) { return taskStatus(t) === '완료'; }).length +
-        '</b> / ' + S.tasks.length + ' 완료');
-    }
-    if (S.supplyTargets.length) {
-      progress.push('운영 물품 <b>' +
-        S.supplyTargets.filter(function (t) { return t.status === '배부 완료'; }).length +
-        '</b> / ' + S.supplyTargets.length + ' 배부 완료');
-    }
-    var progressHtml = progress.length
-      ? '<p class="sumline sumline--home">' +
-        progress.join('<span aria-hidden="true">·</span>') + '</p>'
-      : '';
-
     var guide = (s.ops_guide || '').trim();
     // 대시보드는 훑는 화면입니다. 안내가 길면 앞 세 줄만 두고
     // 나머지는 드로어에서 읽게 합니다.
@@ -680,7 +679,7 @@
       ? '<div class="grid-2">' + urgentHtml + keyHtml + '</div>'
       : (urgentHtml || keyHtml);
 
-    return '<div class="page">' + hero + statsHtml + progressHtml + pairA + pairB + guideHtml +
+    return '<div class="page">' + hero + statsHtml + pairA + pairB + guideHtml +
       '<div class="page__actions" style="margin-left:0"><button class="btn btn--primary" type="button" data-newreq>+ 현장 문제 보고</button>' +
       '<button class="btn btn--ghost" type="button" data-go="contacts">연락망</button></div>' +
       '</div>';
@@ -827,59 +826,51 @@
   }
 
   /* ── 화면: 부스 현황 ────────────────────────────────────────── */
+  /* 부스 화면은 상태를 관리하는 곳이 아니라 부스를 찾는 곳입니다.
+     다섯 갈래 운영 상태는 현장에서 아무도 갱신하지 않아 늘 '준비 전'
+     한 줄로만 남았고, 그 숫자가 화면 윗부분을 차지했습니다.
+     배치도 → 구역 → 검색 → 목록 순으로 좁혀 가게만 둡니다.
+     booths.status 칸은 표에 그대로 남아 있습니다. */
+  function zoneName(key) {
+    var z = S.zones.filter(function (x) { return x.key === key; })[0];
+    return z ? z.key + '구역' + (z.label ? ' · ' + z.label : '') : (key ? key + '구역' : '');
+  }
+
   function viewBooths() {
-    var counts = { 전체: S.booths.length };
-    BOOTH_STATES.forEach(function (st) { counts[st] = S.booths.filter(function (b) { return b.status === st; }).length; });
-    var statusChips = ['전체'].concat(BOOTH_STATES).map(function (c) { return { label: c, n: counts[c] }; });
-
-    /* 한 줄 요약. 상자에 넣지 않습니다 — 이 화면의 주인공은 배치도와
-       부스 목록이고, 이 숫자는 그 사이를 잇는 한 줄이면 충분합니다.
-       0 인 상태는 적지 않습니다. 없는 것을 세어 봐야 읽을 것만 늡니다. */
-    var sumLine = '<p class="sumline">' +
-      ['전체 <b>' + counts['전체'] + '</b>'].concat(
-        BOOTH_STATES.filter(function (st) { return counts[st]; }).map(function (st) {
-          return esc(st) + ' <b>' + counts[st] + '</b>';
-        })).join('<span aria-hidden="true">·</span>') + '</p>';
-
     var q = ui.boothQ.trim().toLowerCase();
 
-    /* 구역별 현황. 배치도 다음에 두어 '배치도 → 구역 → 부스' 순으로
-       좁혀 가게 합니다. 누르면 그 구역만 남습니다. */
-    /* 구역은 몇 개인지보다 그 구역만 보기로 쓰입니다. 큰 카드 넉 장을
-       세우면 배치도와 목록 사이가 멀어지기만 합니다. */
+    // 구역은 개수보다 '그 구역만 보기' 로 쓰입니다.
     var zoneHtml = S.zones.length
       ? '<div class="chiprow" role="group" aria-label="구역">' +
         ['전체'].concat(S.zones.map(function (z) { return z.key + '존'; })).map(function (lab) {
           var n = lab === '전체' ? S.booths.length
             : S.booths.filter(function (b) { return b.zone_key + '존' === lab; }).length;
+          var text = lab === '전체' ? '전체' : lab.replace('존', '구역');
           return '<button class="chip' + (ui.boothZone === lab ? ' is-on' : '') + '" type="button" ' +
             'data-boothzone="' + esc(lab) + '" aria-pressed="' + (ui.boothZone === lab) + '">' +
-            esc(lab) + '<span class="chip__n">' + n + '</span></button>';
+            esc(text) + '<span class="chip__n">' + n + '</span></button>';
         }).join('') + '</div>'
       : '';
 
     var list = S.booths.filter(function (b) {
-      if (ui.boothStatus !== '전체' && b.status !== ui.boothStatus) return false;
       if (ui.boothZone !== '전체' && (b.zone_key + '존') !== ui.boothZone) return false;
       if (!q) return true;
-      return ((b.code || '') + ' ' + b.name + ' ' + (b.org || '') + ' ' + (b.program || '') + ' ' + (b.manager || ''))
+      return ((b.code || '') + ' ' + b.name + ' ' + (b.org || '') + ' ' + (b.program || ''))
         .toLowerCase().indexOf(q) >= 0;
     });
 
     var body = list.length ? '<div class="boothgrid">' + list.map(function (b) {
-      var card = '<button class="booth" type="button" data-booth="' + esc(b.id) + '">' +
+      return '<button class="booth" type="button" data-booth="' + esc(b.id) + '">' +
         '<span class="booth__top"><span class="booth__code">' + esc(b.code || (b.zone_key + '-' + b.no)) + '</span>' +
-        badge(b.status || '준비 전') + '</span>' +
+        '<span class="tag tag--soft">' + esc(zoneName(b.zone_key)) + '</span></span>' +
         '<span class="booth__name">' + esc(b.name) + '</span>' +
-        // 담당자·전기·네트워크는 상세에 있습니다. 목록에서 필요한 것은
-        // 번호·이름·기관·상태까지입니다.
         '<span class="booth__org">' + esc(b.org || '운영기관 미정') + '</span>' +
+        (b.program ? '<span class="booth__prog">' + esc(b.program) + '</span>' : '') +
         '</button>';
-      return actionCard(card, boothActions(b));
     }).join('') + '</div>'
       : S.booths.length
         ? noMatchBox('조건에 맞는 부스가 없습니다.')
-        : emptyBox('등록된 부스 정보가 없습니다.', '부스가 등록되면 위치와 운영 상태를 확인할 수 있습니다.');
+        : emptyBox('등록된 부스 정보가 없습니다.', '부스가 등록되면 위치와 운영기관을 확인할 수 있습니다.');
 
     var s = S.settings || {};
     var map = mediaBox({
@@ -889,37 +880,36 @@
     });
 
     return '<div class="page">' +
-      pageHead('부스 운영 현황',
-        '부스 위치와 운영 상태를 확인합니다. 카드를 누르면 상세 정보와 상태 변경이 열립니다.') +
-      map + sumLine + zoneHtml +
+      pageHead('부스 현황', '부스 위치와 운영기관을 확인합니다. 카드를 누르면 상세 정보가 열립니다.') +
+      map +
+      '<p class="countline">전체 부스 <b>' + S.booths.length + '</b>개</p>' +
+      zoneHtml +
       '<div class="tools"><div class="search"><label class="sr-only" for="booth-q">부스 검색</label>' +
-      '<input class="input" id="booth-q" type="search" placeholder="부스번호 · 학교 · 기관 · 프로그램 검색" value="' + esc(ui.boothQ) + '" /></div>' +
-      chips(statusChips, ui.boothStatus, 'data-boothstatus', 'chiprow--sub') + '</div>' +
-      (list.length ? '<p class="resultline">' + list.length + '건</p>' : '') +
+      '<input class="input" id="booth-q" type="search" placeholder="부스명 · 운영기관 검색" value="' + esc(ui.boothQ) + '" /></div></div>' +
+      (list.length && list.length !== S.booths.length ? '<p class="resultline">' + list.length + '건</p>' : '') +
       body + '</div>';
   }
 
   function boothDetail(id) {
     var b = S.booths.filter(function (x) { return x.id === id; })[0];
     if (!b) return;
-    var z = S.zones.filter(function (x) { return x.key === b.zone_key; })[0];
     var rows = [
       ['부스 번호', b.code || (b.zone_key + '-' + b.no)],
       ['부스명', b.name],
       ['운영기관', b.org],
-      ['구역', z ? z.key + '존 · ' + z.label : b.zone_key],
+      ['구역', zoneName(b.zone_key)],
       ['담당자', b.manager],
       ['운영 프로그램', b.program],
       ['운영 시간', b.hours],
-      ['전기 사용', b.needs_power ? '필요' : '불필요'],
-      ['네트워크', b.needs_network ? '필요' : '불필요'],
+      // 필요할 때만 적습니다. '불필요' 두 줄은 읽을 거리만 늘립니다.
+      ['전기 사용', b.needs_power ? '필요' : ''],
+      ['네트워크', b.needs_network ? '필요' : ''],
       ['필요 물품', b.supplies],
       ['운영 메모', b.memo],
       ['특이사항', b.notes]
     ].filter(function (r) { return r[1]; });
 
-    var html = '<div><div class="notice__top">' + badge(b.status || '준비 전') +
-      '<span class="notice__meta">최근 변경 ' + esc(fmtDay(b.updated_at)) + '</span></div></div>';
+    var html = '';
 
     // 부스 사진은 있을 때만 보여 줍니다. 상세는 목록과 달리 자리를
     // 미리 잡아 둘 이유가 없어, 없으면 그냥 넘어갑니다.
@@ -942,13 +932,7 @@
       return '<div class="dl__row"><dt>' + esc(r[0]) + '</dt><dd>' + esc(r[1]) + '</dd></div>';
     }).join('') + '</dl>';
 
-    html += '<div><p class="field__label" style="margin-bottom:8px">운영 상태 변경</p><div class="statusgrid">' +
-      BOOTH_STATES.map(function (st) {
-        return '<button class="btn ' + (st === b.status ? 'btn--primary' : 'btn--ghost') + ' btn--sm" type="button" ' +
-          'data-setbooth="' + esc(b.id) + '" data-status="' + esc(st) + '">' + esc(st) + '</button>';
-      }).join('') + '</div></div>';
-
-    openDrawer(b.code || b.name, html);
+    openDrawer(b.code || b.name, html, { footer: true });
   }
 
   /* ── 화면: 공지 ─────────────────────────────────────────────── */
@@ -1006,31 +990,46 @@
   }
 
   /* ── 화면: 운영 요청 ────────────────────────────────────────── */
+  function requestCard(r) {
+    var done = r.status === '완료';
+    var card = '<button class="req' + (done ? ' is-done' : '') + '" type="button" data-req="' + esc(r.id) + '">' +
+      '<span class="req__top">' + (done ? doneMark('해결 완료') : badge(r.priority) + badge(r.status)) +
+      '<span class="tag tag--soft">' + esc(r.kind) + '</span></span>' +
+      '<span class="req__title">' + esc(r.title) + '</span>' +
+      '<span class="req__meta">' + esc(r.location || '위치 미지정') + ' · ' + esc(fmtDay(r.created_at)) +
+      (r.assignee_team ? ' · ' + esc(r.assignee_team) : '') + '</span></button>';
+    // 끝난 요청에는 단추를 두지 않습니다.
+    return done ? card : actionCard(card, actBtn('data-reqdone="' + esc(r.id) + '"', '해결 완료'));
+  }
+
   function viewRequests() {
-    var counts = { 전체: S.requests.length, 미완료: S.requests.filter(function (r) { return r.status !== '완료'; }).length };
-    REQ_STATES.forEach(function (st) { counts[st] = S.requests.filter(function (r) { return r.status === st; }).length; });
-    var cs = ['전체', '미완료'].concat(REQ_STATES).map(function (c) { return { label: c, n: counts[c] }; });
+    var rank = { '긴급': 0, '높음': 1, '보통': 2 };
+    var open = S.requests.filter(function (r) { return r.status !== '완료'; })
+      .sort(function (a, b) {
+        var ra = a.priority in rank ? rank[a.priority] : 9, rb = b.priority in rank ? rank[b.priority] : 9;
+        if (ra !== rb) return ra - rb;
+        return new Date(b.created_at) - new Date(a.created_at);
+      });
+    var done = S.requests.filter(function (r) { return r.status === '완료'; });
+    var urgent = open.filter(function (r) { return r.priority === '긴급'; }).length;
 
-    var list = S.requests.filter(function (r) {
-      if (ui.reqStatus === '전체') return true;
-      if (ui.reqStatus === '미완료') return r.status !== '완료';
-      return r.status === ui.reqStatus;
-    });
-
-    var body = list.length ? '<div class="tl">' + list.map(function (r) {
-      var card = '<button class="req" type="button" data-req="' + esc(r.id) + '">' +
-        '<span class="req__top">' + badge(r.priority) + badge(r.status) +
-        '<span class="badge badge--plain">' + esc(r.kind) + '</span></span>' +
-        '<span class="req__title">' + esc(r.title) + '</span>' +
-        '<span class="req__meta">' + esc(r.location || '위치 미지정') + ' · ' + esc(fmtDay(r.created_at)) +
-        (r.assignee_team ? ' · ' + esc(r.assignee_team) : '') + '</span></button>';
-      // 끝난 요청에는 단추를 두지 않습니다. 상태 배지가 이미 말합니다.
-      return actionCard(card, r.status === '완료' ? '' :
-        actBtn('data-reqdone="' + esc(r.id) + '"', '해결 완료'));
-    }).join('') + '</div>'
-      : S.requests.length
-        ? noMatchBox('조건에 맞는 요청이 없습니다.')
-        : sampleRequests();
+    var body;
+    if (!S.requests.length) {
+      body = sampleRequests();
+    } else {
+      body = summaryGrid([
+          { n: open.length, l: '미처리', tone: open.length ? 'warn' : null },
+          { n: urgent, l: '긴급', tone: urgent ? 'danger' : null },
+          { n: done.length, l: '완료', tone: done.length ? 'ok' : null }
+        ]) +
+        '<section class="listsec"><h2 class="section-title">처리가 필요한 요청' +
+        '<span class="section-title__n">' + open.length + '</span></h2>' +
+        (open.length
+          ? '<div class="tl">' + open.map(requestCard).join('') + '</div>'
+          : '<p class="allclear">' + doneMark('남은 요청이 없습니다.') + '</p>') +
+        '</section>' +
+        doneSection('해결 완료', done.length, '<div class="tl">' + done.map(requestCard).join('') + '</div>');
+    }
 
     return '<div class="page">' +
       pageHead('운영 요청',
@@ -1038,7 +1037,7 @@
         '<button class="btn btn--primary btn--sm" type="button" data-newreq>+ 현장 문제 보고</button>') +
       // 비상 연락처가 아직 확정되지 않아 번호는 넣지 않습니다.
       '<p class="pagenote">안전과 관련된 긴급 상황은 요청 등록과 함께 운영본부에 직접 알려 주세요.</p>' +
-      '<div class="tools">' + chips(cs, ui.reqStatus, 'data-reqstatus') + '</div>' + body + '</div>';
+      body + '</div>';
   }
 
   function requestDetail(id) {
@@ -1087,21 +1086,38 @@
 
   /* ── 화면: 자료실 · 연락망 · 행사장 · FAQ ───────────────────── */
   function viewResources() {
-    var list = S.resources.filter(function (r) { return r.is_public !== false; });
+    var all = S.resources.filter(function (r) { return r.is_public !== false; });
+    var q = ui.resourceQ.trim().toLowerCase();
+    var list = all.filter(function (r) {
+      if (!q) return true;
+      return (r.title + ' ' + (r.category || '') + ' ' + (r.description || '')).toLowerCase().indexOf(q) >= 0;
+    });
+
+    /* 주소가 있을 때만 '자료 열기'. 새 탭으로 엽니다 — 포털을 떠나면
+       보던 화면으로 돌아오기 번거롭습니다. 주소가 없으면 누를 수 없는
+       단추를 두지 않습니다. */
     var body = list.length ? '<div class="tl tl--2">' + list.map(function (r) {
-      return '<div class="rowcard"><div class="rowcard__body">' +
-        '<div class="rowcard__name">' + esc(r.title) + '</div>' +
-        '<div class="rowcard__meta">' + esc(r.category || '기타') +
-        (r.description ? ' · ' + esc(r.description) : '') + '</div></div>' +
-        '<div class="rowcard__act">' + (r.url
-          ? '<a class="btn btn--ghost btn--sm" href="' + esc(r.url) + '" target="_blank" rel="noopener">열기</a>'
-          : '<span class="badge badge--plain">준비 중</span>') + '</div></div>';
+      return '<div class="rescard">' +
+        '<span class="tag tag--soft">' + esc(r.category || '기타') + '</span>' +
+        '<div class="rescard__title">' + esc(r.title) + '</div>' +
+        (r.description ? '<p class="rescard__desc">' + esc(r.description) + '</p>' : '') +
+        (r.url
+          ? '<div class="rescard__act"><a class="btn btn--ghost btn--sm" href="' + esc(r.url) + '" ' +
+            'target="_blank" rel="noopener noreferrer" aria-label="' + esc(r.title) + ' 자료 열기 (새 탭)">' +
+            '자료 열기 <span aria-hidden="true">↗</span></a></div>'
+          : '<p class="rescard__none">연결된 파일이 아직 없습니다.</p>') +
+        '</div>';
     }).join('') + '</div>'
-      : S.resources.length
-        ? noMatchBox('공개된 자료가 없습니다.')
-        : sampleResources();
+      : all.length
+        ? noMatchBox('조건에 맞는 자료가 없습니다.')
+        : S.resources.length ? noMatchBox('공개된 자료가 없습니다.') : sampleResources();
+
     return '<div class="page">' +
       pageHead('관계자 자료실', '행사 운영에 필요한 안내문과 매뉴얼, 서식을 모아 둡니다.') +
+      (all.length ? '<p class="countline">등록 자료 <b>' + all.length + '</b>개</p>' +
+        '<div class="tools"><div class="search"><label class="sr-only" for="resource-q">자료 검색</label>' +
+        '<input class="input" id="resource-q" type="search" placeholder="자료명 · 종류 검색" value="' +
+        esc(ui.resourceQ) + '" /></div></div>' : '') +
       body + '</div>';
   }
 
@@ -1112,25 +1128,63 @@
     var list = S.contacts.filter(function (c) {
       if (ui.contactCat !== '전체' && c.category !== ui.contactCat) return false;
       if (!q) return true;
-      return (c.name + ' ' + (c.org || '') + ' ' + (c.duty || '') + ' ' + (c.category || '')).toLowerCase().indexOf(q) >= 0;
+      return (c.name + ' ' + (c.org || '') + ' ' + (c.duty || '') + ' ' + (c.category || '') + ' ' + (c.phone || ''))
+        .toLowerCase().indexOf(q) >= 0;
     });
+
+    /* 연락망은 번호를 찾아 바로 거는 곳입니다. 번호를 감추고 단추만
+       두면 PC 에서는 번호를 알 방법이 없습니다. 번호를 적고, 휴대폰은
+       전화, PC 는 복사로 씁니다. 번호가 없으면 단추도 없습니다. */
     var body = list.length ? '<div class="tl tl--2">' + list.map(function (c) {
-      return '<div class="rowcard"><div class="rowcard__body">' +
-        '<div class="rowcard__name">' + esc(c.name) +
-        (c.duty ? ' <span class="badge badge--plain">' + esc(c.duty) + '</span>' : '') + '</div>' +
-        '<div class="rowcard__meta">' + esc(c.org || '') + (c.memo ? ' · ' + esc(c.memo) : '') + '</div></div>' +
-        '<div class="rowcard__act">' + (c.phone
-          ? '<a class="btn btn--primary btn--sm" href="' + esc(C.telHref(c.phone)) + '">전화</a>'
-          : '<span class="badge badge--plain">번호 없음</span>') + '</div></div>';
+      var tel = C.telHref(c.phone);
+      return '<div class="contact">' +
+        '<div class="contact__top">' + (c.category ? '<span class="tag tag--soft">' + esc(c.category) + '</span>' : '') + '</div>' +
+        '<div class="contact__name">' + esc(c.name) + '</div>' +
+        ((c.org || c.duty) ? '<div class="contact__meta">' + esc([c.org, c.duty].filter(Boolean).join(' · ')) + '</div>' : '') +
+        (c.memo ? '<div class="contact__memo">' + esc(c.memo) + '</div>' : '') +
+        (tel
+          ? '<div class="contact__phone"><span class="contact__num">' + esc(c.phone) + '</span>' +
+            '<span class="contact__act">' +
+            '<a class="btn btn--ghost btn--sm" href="' + esc(tel) + '" aria-label="' + esc(c.name) + '에게 전화">전화</a>' +
+            '<button class="btn btn--ghost btn--sm" type="button" data-copyphone="' + esc(c.phone) + '" ' +
+            'aria-label="' + esc(c.name) + ' 번호 복사">번호 복사</button></span></div>'
+          : '') +
+        '</div>';
     }).join('') + '</div>'
       : S.contacts.length
         ? noMatchBox('조건에 맞는 연락처가 없습니다.')
         : sampleContacts();
+
     return '<div class="page">' +
-      pageHead('운영 연락망', '운영 담당자와 지원팀 연락처입니다. 전화 버튼을 누르면 바로 연결됩니다.') +
-      '<div class="tools"><div class="search"><label class="sr-only" for="contact-q">연락처 검색</label>' +
-      '<input class="input" id="contact-q" type="search" placeholder="이름 · 소속 · 담당업무 검색" value="' + esc(ui.contactQ) + '" /></div>' +
-      (cats.length > 1 ? chips(cats, ui.contactCat, 'data-contactcat') : '') + '</div>' + body + '</div>';
+      pageHead('운영 연락망', '운영 담당자와 지원팀 연락처입니다.') +
+      (S.contacts.length ? '<p class="countline">등록 연락처 <b>' + S.contacts.length + '</b>명</p>' +
+        '<div class="tools"><div class="search"><label class="sr-only" for="contact-q">연락처 검색</label>' +
+        '<input class="input" id="contact-q" type="search" placeholder="이름 · 소속 · 담당업무 검색" value="' + esc(ui.contactQ) + '" /></div>' +
+        (cats.length > 2 ? chips(cats, ui.contactCat, 'data-contactcat', 'chiprow--sub') : '') + '</div>' : '') +
+      body + '</div>';
+  }
+
+  /* 번호 복사. 복사 기능을 쓸 수 없는 환경(주소가 https 가 아니거나
+     권한이 막힌 경우)에서는 번호를 선택된 상태로 띄워 직접 복사하게 합니다. */
+  function copyPhone(num) {
+    function fallback() {
+      var box = document.createElement('textarea');
+      box.value = num; box.setAttribute('readonly', '');
+      box.style.position = 'fixed'; box.style.top = '-1000px';
+      document.body.appendChild(box); box.select();
+      var ok = false;
+      try { ok = document.execCommand('copy'); } catch (x) { ok = false; }
+      document.body.removeChild(box);
+      if (ok) toast('전화번호를 복사했습니다.');
+      else window.prompt('아래 번호를 복사해 주세요.', num);
+    }
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(num).then(function () {
+        toast('전화번호를 복사했습니다.');
+      }).catch(fallback);
+    } else {
+      fallback();
+    }
   }
 
   function viewVenue() {
@@ -1375,22 +1429,39 @@
       seen[k].items.push(t);
     });
 
-    return tools + '<p class="resultline">' + list.length + '건</p>' +
-      groups.map(function (g) {
-        return '<section class="taskgroup">' +
-          '<h2 class="section-title">' + esc(g.area) +
-          '<span class="section-title__n">' + g.items.length + '</span></h2>' +
-          '<div class="tl tl--2">' + g.items.map(taskCard).join('') + '</div></section>';
-      }).join('');
+    var activeGroups = groups.map(function (g) {
+      return { area: g.area, items: g.items.filter(function (t) { return taskStatus(t) !== '완료'; }) };
+    }).filter(function (g) { return g.items.length; });
+    var doneItems = list.filter(function (t) { return taskStatus(t) === '완료'; });
+
+    var count = function (st) { return S.tasks.filter(function (t) { return taskStatus(t) === st; }).length; };
+    var summary = summaryGrid([
+      { n: S.tasks.length, l: '전체 업무' },
+      { n: count('예정'), l: '예정', tone: count('예정') ? 'task' : null },
+      { n: count('진행 중'), l: '진행 중', tone: count('진행 중') ? 'info' : null },
+      { n: count('완료'), l: '완료', tone: count('완료') ? 'ok' : null }
+    ]);
+
+    return summary + tools +
+      (activeGroups.length
+        ? activeGroups.map(function (g) {
+            return '<section class="taskgroup">' +
+              '<h2 class="section-title">' + esc(g.area) +
+              '<span class="section-title__n">' + g.items.length + '</span></h2>' +
+              '<div class="tl tl--2">' + g.items.map(taskCard).join('') + '</div></section>';
+          }).join('')
+        : '<p class="allclear">' + doneMark('남은 업무가 없습니다.') + '</p>') +
+      doneSection('완료된 업무', doneItems.length,
+        '<div class="tl tl--2">' + doneItems.map(taskCard).join('') + '</div>');
   }
 
   function taskCard(t) {
     var people = assignsOf(t.id).map(assignPerson).filter(function (p) { return p.name; });
     var time = taskTime(t);
-    var card = '<button class="task" type="button" data-task="' + esc(t.id) + '">' +
+    var card = '<button class="task' + (taskStatus(t) === '완료' ? ' is-done' : '') + '" type="button" data-task="' + esc(t.id) + '">' +
       '<span class="task__top">' +
       (time ? '<span class="task__time">' + esc(time) + '</span>' : '') +
-      badge(taskStatus(t)) +
+      (taskStatus(t) === '완료' ? doneMark('업무 완료') : badge(taskStatus(t))) +
       '<span class="tag tag--soft">' + esc(t.area || '기타') + '</span></span>' +
       '<span class="task__title">' + esc(t.title) + '</span>' +
       (t.place ? '<span class="task__meta">' + esc(t.place) + '</span>' : '') +
@@ -1536,7 +1607,7 @@
      사람 명단을 통째로 펼치지 않고 기관·팀·부스 단위로만 봅니다 —
      포털은 링크만 알면 열리므로 개인 명단을 올릴 자리가 아닙니다.
 
-     포털에서는 조회만 합니다. 배부 상태는 관리자에서 바꿉니다. */
+     포털에서는 수령 상태(일부 배부 · 배부 완료)만 표시합니다. 수량과 물품은 관리자 몫입니다. */
   function allocsOf(targetId) {
     return S.supplyAllocs.filter(function (a) { return a.target_id === targetId; })
       .map(function (a) {
@@ -1570,7 +1641,7 @@
   /* ── 화면: 운영 물품 ────────────────────────────────────────── */
   function viewSupplies() {
     var head = pageHead('운영 물품',
-      '기관·팀·부스별 물품 배부 현황을 확인합니다. 배부 상태는 관리자에서 변경합니다.');
+      '기관·팀·부스별 물품 배부 현황입니다. 물품을 받았으면 수령 상태를 확인해 주세요. 수량과 물품은 관리자가 관리합니다.');
 
     if (!S.supplyTargets.length) {
       return '<div class="page">' + head +
@@ -1584,63 +1655,62 @@
       byStatus[st] = S.supplyTargets.filter(function (t) { return t.status === st; }).length;
     });
 
-    var summary = '<div class="minigrid">' +
-      '<div class="mini"><span class="mini__n">' + S.supplyTargets.length + '</span>' +
-      '<span class="mini__l">배부 대상</span></div>' +
-      '<div class="mini mini--ok"><span class="mini__n">' + byStatus['배부 완료'] + '</span>' +
-      '<span class="mini__l">배부 완료</span></div>' +
-      '<div class="mini mini--info"><span class="mini__n">' + byStatus['일부 배부'] + '</span>' +
-      '<span class="mini__l">일부 배부</span></div>' +
-      '<div class="mini mini--warn"><span class="mini__n">' + byStatus['미배부'] + '</span>' +
-      '<span class="mini__l">미배부</span></div></div>';
+    var summary = summaryGrid([
+      { n: S.supplyTargets.length, l: '전체 대상' },
+      { n: byStatus['미배부'], l: '미배부', tone: byStatus['미배부'] ? 'warn' : null },
+      { n: byStatus['일부 배부'], l: '일부 배부', tone: byStatus['일부 배부'] ? 'info' : null },
+      { n: byStatus['배부 완료'], l: '배부 완료', tone: byStatus['배부 완료'] ? 'ok' : null }
+    ]);
 
     var q = ui.supplyQ.trim().toLowerCase();
     var list = S.supplyTargets.filter(function (t) {
-      if (ui.supplyStatus !== '전체' && t.status !== ui.supplyStatus) return false;
-      if (ui.supplyKind !== '전체' && t.kind !== ui.supplyKind) return false;
       if (!q) return true;
       var items = allocsOf(t.id).map(function (a) { return a.name; }).join(' ');
       return (t.name + ' ' + (t.manager || '') + ' ' + (t.kind || '') + ' ' + items)
         .toLowerCase().indexOf(q) >= 0;
     });
-
-    var statusChips = ['전체'].concat(SUPPLY_STATES).map(function (c) {
-      return { label: c, n: c === '전체' ? S.supplyTargets.length : byStatus[c] };
-    });
-    var kindChips = ['전체'].concat(SUPPLY_KINDS.filter(function (k) {
-      return S.supplyTargets.some(function (t) { return t.kind === k; });
-    }));
+    // 미배부를 일부 배부보다 먼저 둡니다. 아무것도 못 받은 곳이 더 급합니다.
+    var rankS = { '미배부': 0, '일부 배부': 1 };
+    var need = list.filter(function (t) { return t.status !== '배부 완료'; })
+      .sort(function (a, b) { return (rankS[a.status || '미배부'] || 0) - (rankS[b.status || '미배부'] || 0); });
+    var done = list.filter(function (t) { return t.status === '배부 완료'; });
 
     var tools = '<div class="tools"><div class="search">' +
       '<label class="sr-only" for="supply-q">물품 검색</label>' +
       '<input class="input" id="supply-q" type="search" placeholder="대상 · 담당자 · 물품 검색" value="' +
-      esc(ui.supplyQ) + '" /></div>' +
-      chips(statusChips, ui.supplyStatus, 'data-supplystatus') +
-      (kindChips.length > 2 ? chips(kindChips, ui.supplyKind, 'data-supplykind') : '') + '</div>';
+      esc(ui.supplyQ) + '" /></div></div>';
 
-    var body = list.length ? '<div class="tl tl--2">' + list.map(function (t) {
-      var items = allocsOf(t.id);
-      var card = '<button class="supply" type="button" data-supply="' + esc(t.id) + '">' +
-        '<span class="supply__top">' + badge(t.status || '미배부') +
-        '<span class="badge badge--plain">' + esc(t.kind || '팀') + '</span>' +
-        (t.headcount ? '<span class="notice__meta">' + t.headcount + '명</span>' : '') + '</span>' +
-        '<span class="supply__name">' + esc(t.name) + '</span>' +
-        (t.manager ? '<span class="supply__meta">담당 ' + esc(t.manager) + '</span>' : '') +
-        // 수량은 상세에서 봅니다. 목록에서는 무엇을 받는가까지만 알면
-        // 되고, 숫자가 늘어서면 대상 이름이 묻힙니다.
-        (items.length
-          ? '<span class="supply__items">' + items.slice(0, 3).map(function (a) {
-              return '<span class="chipitem">' + esc(a.name) + '</span>';
-            }).join('') +
-            (items.length > 3 ? '<span class="chipitem chipitem--more">+' + (items.length - 3) + '</span>' : '') +
-            '</span>'
-          : '<span class="supply__meta supply__meta--none">배부 물품 미등록</span>') +
-        '</button>';
-      return actionCard(card, supplyActions(t));
-    }).join('') + '</div>' : noMatchBox('조건에 맞는 배부 대상이 없습니다.');
+    var body = !list.length ? noMatchBox('조건에 맞는 배부 대상이 없습니다.') :
+      '<section class="listsec"><h2 class="section-title">배부 확인 필요' +
+      '<span class="section-title__n">' + need.length + '</span></h2>' +
+      (need.length
+        ? '<div class="tl tl--2">' + need.map(supplyCard).join('') + '</div>'
+        : '<p class="allclear">' + doneMark('확인할 대상이 없습니다.') + '</p>') +
+      '</section>' +
+      doneSection('배부 완료', done.length, '<div class="tl tl--2">' + done.map(supplyCard).join('') + '</div>');
 
-    return '<div class="page">' + head + summary + tools +
-      (list.length ? '<p class="resultline">' + list.length + '건</p>' : '') + body + '</div>';
+    return '<div class="page">' + head + summary + tools + body + '</div>';
+  }
+
+  /* 물품은 '명찰 6 · 생수 12' 한 줄로 적습니다. 목록에서 알고 싶은 것은
+     무엇을 몇 개 받기로 했는가이고, 넷째부터는 +N 으로 줄입니다. */
+  function supplyCard(t) {
+    var items = allocsOf(t.id);
+    var st = t.status || '미배부';
+    var card = '<button class="supply' + (st === '배부 완료' ? ' is-done' : '') + '" type="button" data-supply="' + esc(t.id) + '">' +
+      '<span class="supply__top">' + (st === '배부 완료' ? doneMark('배부 완료') : badge(st)) +
+      '<span class="tag tag--soft">' + esc(t.kind || '팀') + '</span>' +
+      (t.headcount ? '<span class="notice__meta">' + t.headcount + '명</span>' : '') + '</span>' +
+      '<span class="supply__name">' + esc(t.name) + '</span>' +
+      (t.manager ? '<span class="supply__meta">담당 ' + esc(t.manager) + '</span>' : '') +
+      (items.length
+        ? '<span class="supply__line">' + items.slice(0, 3).map(function (a) {
+            return esc(a.name) + ' <b>' + a.qty + '</b>';
+          }).join('<span aria-hidden="true"> · </span>') +
+          (items.length > 3 ? ' <span class="muted">+' + (items.length - 3) + '</span>' : '') + '</span>'
+        : '<span class="supply__meta supply__meta--none">배부 물품 미등록</span>') +
+      '</button>';
+    return st === '배부 완료' ? card : actionCard(card, supplyActions(t));
   }
 
   function supplyDetail(id) {
@@ -1688,6 +1758,9 @@
     var host = $('#view');
     if (S.loading) { host.innerHTML = stateBox('데이터를 불러오는 중입니다.'); return; }
     if (S.error)   { host.innerHTML = stateBox(S.error, 'error', true); return; }
+    // 화면마다 아주 옅은 색 하나를 씁니다(portal.css 의 [data-view]).
+    // 상태 색(긴급·주의·완료)과는 따로 둡니다.
+    host.setAttribute('data-view', view);
     host.innerHTML = (VIEWS[view] || viewDashboard)();
     fitMedia(host);
     var nav = NAV.filter(function (n) { return n.id === view; })[0];
@@ -1774,8 +1847,6 @@
       var go2 = t.closest('[data-go]');
       if (go2) {
         var f = go2.getAttribute('data-filter');
-        if (f && go2.dataset.go === 'booths') ui.boothStatus = f === '준비 전' ? '준비 전' : f;
-        if (f && go2.dataset.go === 'requests') ui.reqStatus = f;
         // 하이라이트에서 건너왔다면 일정 화면을 핵심 일정만 켠 채로
         // 엽니다. 전체 목록에서 방금 본 일정을 다시 찾게 하지 않습니다.
         if (go2.hasAttribute('data-schedkey')) {
@@ -1793,20 +1864,15 @@
       }
       if (t.closest('[data-close-zoom]')) { closeZoom(); return; }
 
-      var chip = t.closest('[data-boothstatus],[data-boothzone],[data-schedcat],[data-schedhalf],' +
-        '[data-reqstatus],[data-contactcat],[data-faqcat],[data-taskarea],' +
-        '[data-supplystatus],[data-supplykind]');
+      var chip = t.closest('[data-boothzone],[data-schedcat],[data-schedhalf],' +
+        '[data-contactcat],[data-faqcat],[data-taskarea]');
       if (chip) {
-        if (chip.hasAttribute('data-boothstatus')) ui.boothStatus = chip.getAttribute('data-boothstatus');
         if (chip.hasAttribute('data-boothzone'))   ui.boothZone   = chip.getAttribute('data-boothzone');
         if (chip.hasAttribute('data-schedcat'))    ui.schedCat    = chip.getAttribute('data-schedcat');
-        if (chip.hasAttribute('data-reqstatus'))   ui.reqStatus   = chip.getAttribute('data-reqstatus');
         if (chip.hasAttribute('data-contactcat'))  ui.contactCat  = chip.getAttribute('data-contactcat');
         if (chip.hasAttribute('data-faqcat'))      ui.faqCat      = chip.getAttribute('data-faqcat');
         if (chip.hasAttribute('data-schedhalf'))   ui.schedHalf   = chip.getAttribute('data-schedhalf');
         if (chip.hasAttribute('data-taskarea'))    ui.taskArea    = chip.getAttribute('data-taskarea');
-        if (chip.hasAttribute('data-supplystatus')) ui.supplyStatus = chip.getAttribute('data-supplystatus');
-        if (chip.hasAttribute('data-supplykind'))  ui.supplyKind  = chip.getAttribute('data-supplykind');
         render();
         return;
       }
@@ -1835,11 +1901,6 @@
       if (tm) { ui.taskMode = tm.getAttribute('data-taskmode'); ui.taskQ = ''; render(); return; }
       if (t.closest('[data-newreq]')) { openRequestForm(); return; }
 
-      var sb = t.closest('[data-setbooth]');
-      if (sb) { setBoothStatus(sb.getAttribute('data-setbooth'), sb.getAttribute('data-status'), sb); return; }
-
-      var bp = t.closest('[data-boothpick]');
-      if (bp) { openBoothPicker(bp.getAttribute('data-boothpick')); return; }
 
       var rd = t.closest('[data-reqdone]');
       if (rd) { resolveRequest(rd.getAttribute('data-reqdone'), rd); return; }
@@ -1847,8 +1908,11 @@
       var tn = t.closest('[data-tasknext]');
       if (tn) { setTaskStatus(tn.getAttribute('data-tasknext'), tn.getAttribute('data-to'), tn); return; }
 
-      var ss = t.closest('[data-supplyset]');
-      if (ss) { setSupplyStatus(ss.getAttribute('data-supplyset'), ss.getAttribute('data-to'), ss); return; }
+      var sc = t.closest('[data-supplycheck]');
+      if (sc) { checkSupply(sc.getAttribute('data-supplycheck'), sc); return; }
+
+      var cp = t.closest('[data-copyphone]');
+      if (cp) { copyPhone(cp.getAttribute('data-copyphone')); return; }
 
       var fq = t.closest('.faq__q');
       if (fq) {
@@ -1865,6 +1929,7 @@
       if (e.target.id === 'booth-q')   { ui.boothQ = e.target.value; softRender('#booth-q'); }
       if (e.target.id === 'sched-q')   { ui.schedQ = e.target.value; softRender('#sched-q'); }
       if (e.target.id === 'contact-q') { ui.contactQ = e.target.value; softRender('#contact-q'); }
+      if (e.target.id === 'resource-q') { ui.resourceQ = e.target.value; softRender('#resource-q'); }
       if (e.target.id === 'task-q')    { ui.taskQ = e.target.value; softRender('#task-q'); }
       if (e.target.id === 'supply-q')  { ui.supplyQ = e.target.value; softRender('#supply-q'); }
     });
@@ -1962,9 +2027,9 @@
       rpc: 'resolve_operation_request',
       args: { p_id: id },
       confirm: {
-        title: '해결 완료로 처리할까요?',
-        message: '“' + r.title + '” 요청을 완료로 바꿉니다. ' +
-                 '완료된 요청은 미처리 요청 수에서 빠집니다.',
+        title: '이 요청이 해결되었나요?',
+        message: '“' + r.title + '” 을 해결 완료로 표시합니다. ' +
+                 '완료된 요청은 미처리 요청 수에서 빠지고 아래 “해결 완료” 로 옮겨집니다.',
         confirmLabel: '해결 완료'
       },
       okText: '해결 완료로 처리했습니다.',
@@ -2012,22 +2077,10 @@
 
   /* ── 운영 물품: 수령 확인 ───────────────────────────────────── */
   function setSupplyStatus(id, next, btn) {
-    var t = S.supplyTargets.filter(function (x) { return x.id === id; })[0];
-    if (!t) return;
     runAction({
       btn: btn,
       rpc: 'set_supply_target_status',
       args: { p_id: id, p_status: next },
-      confirm: next === '배부 완료' ? {
-        title: '등록된 물품을 모두 받았나요?',
-        message: '“' + t.name + '” 의 배부 상태를 수령 완료로 바꿉니다.',
-        confirmLabel: '수령 완료'
-      } : {
-        title: '일부 물품이 아직 오지 않았나요?',
-        message: '“' + t.name + '” 을 일부 배부로 표시합니다. ' +
-                 '빠진 물품은 운영본부에 알려 주세요.',
-        confirmLabel: '일부 배부로 표시'
-      },
       okText: next === '배부 완료' ? '수령 완료로 표시했습니다.' : '일부 배부로 표시했습니다.',
       apply: function (row) {
         S.supplyTargets = S.supplyTargets.map(function (x) { return x.id === id ? row : x; });
@@ -2035,74 +2088,28 @@
     });
   }
 
+  /* 단추는 하나만 둡니다. 받은 정도를 고르는 일은 창 안에서 합니다.
+     이미 일부 배부라면 '일부만 받음' 은 같은 말이라 빼고 묻습니다. */
+  function checkSupply(id, btn) {
+    var t = S.supplyTargets.filter(function (x) { return x.id === id; })[0];
+    if (!t || btn.disabled) return;
+    var partial = (t.status || '미배부') === '일부 배부';
+    var items = allocsOf(t.id).map(function (a) { return a.name + ' ' + a.qty + a.unit; }).join(', ');
+    UI.choose({
+      title: '물품을 모두 받았나요?',
+      message: '“' + t.name + '”' + (items ? ' — ' + items : '') +
+        (partial ? ' · 지금은 일부 배부로 표시돼 있습니다.' : ''),
+      choices: (partial ? [] : [{ value: '일부 배부', label: '일부만 받음' }])
+        .concat([{ value: '배부 완료', label: '모두 받음', primary: true }])
+    }).then(function (v) { if (v) setSupplyStatus(id, v, btn); });
+  }
+
   function supplyActions(t) {
-    var st = t.status || '미배부';
-    if (st === '배부 완료') return '';
-    var all = actBtn('data-supplyset="' + esc(t.id) + '" data-to="배부 완료"', '모두 받음');
-    // 미배부일 때만 '누락 있음' 을 함께 둡니다. 이미 일부 배부라면
-    // 같은 말을 한 번 더 하는 단추가 됩니다.
-    return st === '미배부'
-      ? all + actBtn('data-supplyset="' + esc(t.id) + '" data-to="일부 배부"', '누락 있음', 'ghost')
-      : all;
-  }
-
-  /* ── 부스: 빠른 전환 + 전체 선택 ─────────────────────────────
-     다섯 단추를 늘 펼쳐 두면 카드가 단추밭이 됩니다. 지금 상태에서
-     가장 자주 가는 다음 한 걸음만 꺼내 두고, 나머지는 창에서 고릅니다. */
-  var BOOTH_NEXT = {
-    '준비 전':   { to: '준비 완료', label: '준비 완료' },
-    '준비 완료': { to: '운영 중',   label: '운영 시작' },
-    '운영 중':   { to: '일시 중단', label: '일시 중단' },
-    '일시 중단': { to: '운영 중',   label: '운영 재개' }
-  };
-
-  function boothActions(b) {
-    var st = b.status || '준비 전';
-    var next = BOOTH_NEXT[st];
-    return (next ? actBtn('data-setbooth="' + esc(b.id) + '" data-status="' + esc(next.to) + '"', next.label) : '') +
-      actBtn('data-boothpick="' + esc(b.id) + '"', '상태 변경', 'ghost');
-  }
-
-  /* 전체 상태 고르기. 기존 입력 창을 그대로 씁니다 — 초점 가두기와
-     ESC 닫기가 이미 붙어 있어 따로 만들 이유가 없습니다. */
-  function openBoothPicker(id) {
-    var b = S.booths.filter(function (x) { return x.id === id; })[0];
-    if (!b) return;
-    UI.form({
-      title: (b.code || b.name) + ' 상태 변경',
-      desc: '운영 상태만 바뀝니다. 다른 정보는 관리자에서 수정합니다.',
-      fields: [{ k: 'status', label: '운영 상태', type: 'select', options: BOOTH_STATES }],
-      values: { status: b.status || '준비 전' },
-      submitLabel: '변경'
-    }).then(function (v) {
-      if (!v || v.status === (b.status || '준비 전')) return;
-      // 창이 닫힌 뒤라 누를 단추가 없습니다. 잠글 대상만 흉내 냅니다.
-      setBoothStatus(id, v.status, { disabled: false });
-    });
+    if ((t.status || '미배부') === '배부 완료') return '';
+    return actBtn('data-supplycheck="' + esc(t.id) + '"', '수령 상태 확인');
   }
 
   /* ── 쓰기 동작 ──────────────────────────────────────────────── */
-  /* 부스 상태는 표를 직접 고치지 않고 전용 함수로 바꿉니다.
-     비로그인 상태에서 booths 표에 쓰기 권한을 열면 담당자 연락처까지
-     바꿀 수 있게 되기 때문입니다. set_booth_status 는 status 한 칸만
-     건드리고, 허용된 값인지도 서버에서 다시 확인합니다. */
-  function setBoothStatus(id, status, btn) {
-    if (btn.disabled) return;
-    btn.disabled = true;
-    C.rpc('set_booth_status', { p_id: id, p_status: status }).then(function (row) {
-      S.booths = S.booths.map(function (b) { return b.id === id ? row : b; });
-      toast('부스 상태를 “' + status + '”(으)로 바꿨습니다.');
-      // 상세가 열려 있을 때만 다시 그립니다. 목록에서 누른 경우까지
-      // 드로어를 열면 누르지도 않은 창이 튀어나옵니다.
-      if (!$('#drawer').hidden) boothDetail(id);
-      render();
-    }).catch(function (e) {
-      console.error('[portal] 부스 상태 변경 실패', e);
-      toast(actionMessage(e), true);
-      btn.disabled = false;
-    });
-  }
-
   function submitRequest() {
     var loc = $('#rq-loc'), title = $('#rq-title'), err = $('#rq-err'), btn = $('#rq-submit');
     err.hidden = true;

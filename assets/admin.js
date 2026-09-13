@@ -21,7 +21,6 @@
 
   var SCHEDULE_CATS = ['무대', '강연', '부스', '운영', '행사 지원'];
   var SCHEDULE_STATES = ['예정', '진행 중', '종료', '취소', '변경'];
-  var BOOTH_STATES = ['준비 전', '준비 완료', '운영 중', '일시 중단', '운영 종료'];
   /* 새로 고를 수 있는 분류입니다. '주차' 는 뺐지만 이미 그렇게
      등록된 요청은 그대로 두고 그대로 보여 줍니다(keepValue). */
   var REQ_KINDS = ['전기', '네트워크', '기자재', '시설', '안전', '물품', '기타'];
@@ -186,12 +185,11 @@
     booths: {
       label: '부스', table: 'booths', addLabel: '+ 부스 추가',
       desc: '부스 정보와 운영 상태를 관리합니다.',
-      blank: { no: 1, zone_key: 'A', name: '', org: '', status: '준비 전' },
+      blank: { no: 1, zone_key: 'A', name: '', org: '' },
       title: function (r) { return (r.code || (r.zone_key + '-' + r.no)) + ' · ' + (r.name || '(이름 없음)'); },
       meta: function (r) { return (r.org || '운영기관 미정') + (r.manager ? ' · 담당 ' + r.manager : ''); },
       tags: function (r) {
-        return badge(r.status || '준비 전') +
-          (r.needs_power ? tag('전기') : '') + (r.needs_network ? tag('네트워크') : '');
+        return (r.needs_power ? tag('전기') : '') + (r.needs_network ? tag('네트워크') : '');
       },
       fields: [
         { type: 'group', label: '기본 정보' },
@@ -199,7 +197,6 @@
         { k: 'zone_key',      label: '구역', type: 'zone' },
         { k: 'name',          label: '부스명', wide: true, required: true },
         { k: 'org',           label: '운영기관', wide: true },
-        { k: 'status',        label: '운영 상태', type: 'select', options: opts(BOOTH_STATES) },
         { k: 'manager',       label: '담당자' },
 
         { type: 'group', label: '운영 정보' },
