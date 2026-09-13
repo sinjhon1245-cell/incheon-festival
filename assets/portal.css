@@ -1043,6 +1043,46 @@ button.supply:hover { border-color: var(--primary); }
 a.side__brand { text-decoration: none; color: inherit; border-radius: 10px; }
 a.side__brand:hover b { color: var(--primary); }
 
+
+/* ═══ 현장 상태 처리 ═══════════════════════════════════════════════
+   카드 자체가 button 이라(누르면 상세가 열립니다) 그 안에 또 button 을
+   넣을 수 없습니다. 바깥에서 한 겹 감싸고 아래에 액션 줄을 답니다.
+   테두리와 그림자는 바깥이 맡고 안쪽 카드는 투명해집니다 — 상자가
+   두 겹으로 보이지 않게 하려는 것입니다. */
+.actcard {
+  background: #fff; border: 1px solid var(--line); border-radius: var(--r);
+  box-shadow: var(--sh); overflow: hidden; min-width: 0;
+  transition: border-color 130ms ease;
+}
+.actcard:hover { border-color: var(--primary); }
+
+.actcard > .req,
+.actcard > .booth,
+.actcard > .task,
+.actcard > .supply {
+  border: 0; box-shadow: none; border-radius: 0; background: transparent; width: 100%;
+}
+.actcard > .req:hover,
+.actcard > .booth:hover,
+.actcard > .task:hover,
+.actcard > .supply:hover { border-color: transparent; box-shadow: none; }
+
+/* 액션 줄. 카드 아래에 붙여 두고 위에 옅은 선을 그어 본문과 나눕니다. */
+.actcard__act {
+  display: flex; gap: 8px; padding: 0 15px 13px;
+  border-top: 1px solid var(--line-2); margin-top: 2px; padding-top: 11px;
+}
+/* 손가락으로 누르는 자리라 좁히지 않습니다. 단추가 하나면 가로를 채우고,
+   둘이면 반씩 나눠 갖습니다. */
+.actcard__act .btn { flex: 1; min-height: 40px; }
+@media (max-width: 560px) {
+  /* 손가락으로 누르는 화면에서는 44px 아래로 내리지 않습니다. */
+  .actcard__act .btn { min-height: 44px; }
+}
+
+/* 홈의 처리 현황 한 줄 */
+.sumline--home { margin: -10px 2px 0; }
+
 /* ── 인쇄 ─────────────────────────────────────────────────────── */
 @media print {
   .side, .tabbar, .topbar, .fab, .page__actions, .tools { display: none !important; }

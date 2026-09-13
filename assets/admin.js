@@ -30,6 +30,7 @@
   var NOTICE_LEVELS = ['긴급', '중요', '일반'];
   var FAQ_CATS = ['부스 운영', '시설·장소', '안전', '물품·지원', '기타'];
   var SUPPLY_KINDS  = ['기관', '팀', '부스'];
+  var TASK_STATES   = ['예정', '진행 중', '완료'];
   var SUPPLY_STATES = ['미배부', '일부 배부', '배부 완료'];
   // 역할 구분은 DB 에서 값을 제한하지 않습니다. 현장에서 쓰는 말이
   // 해마다 달라서, 여기서는 추천값으로만 보여 줍니다.
@@ -329,7 +330,7 @@
     operation_tasks: {
       label: '담당 업무', table: 'operation_tasks', addLabel: '+ 업무 추가', soft: true,
       desc: '행사 당일 업무와 담당자를 관리합니다.',
-      blank: { area: '운영', title: '', start_time: '', end_time: '' },
+      blank: { area: '운영', title: '', start_time: '', end_time: '', status: '예정' },
       title: function (r) { return r.title || '(업무명 없음)'; },
       lead: function (r) {
         return r.start_time ? r.start_time + (r.end_time ? '–' + r.end_time : '–') : '시간 미정';
@@ -340,7 +341,7 @@
         return (r.place || '장소 미정') + ' · ' +
           (who.length ? who.join(', ') : '담당자 미배정');
       },
-      tags: function (r) { return tag(r.area || '기타'); },
+      tags: function (r) { return badge(r.status || '예정') + tag(r.area || '기타'); },
       groupBy: function (r) { return r.area || '기타'; },
       fields: [
         { type: 'group', label: '업무' },
@@ -350,6 +351,9 @@
         { k: 'start_time',  label: '시작시간', type: 'time' },
         { k: 'end_time',    label: '종료시간', type: 'time' },
         { k: 'place',       label: '장소', wide: true },
+        // 포털에서는 예정 → 진행 중 → 완료 한 방향으로만 갑니다.
+        // 되돌리는 것은 여기서만 할 수 있습니다.
+        { k: 'status',      label: '진행 상태', type: 'select', options: opts(TASK_STATES) },
 
         { type: 'group', label: '담당자' },
         { k: '__assigns', type: 'rows', label: '배정된 담당자',

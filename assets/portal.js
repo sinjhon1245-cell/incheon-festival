@@ -600,6 +600,25 @@
 
     /* 운영 안내 — 관리자가 행사 기본정보에 적어 둔 짧은 안내입니다.
        줄바꿈을 그대로 살립니다. 비어 있으면 자리를 두지 않습니다. */
+    /* 현장에서 처리한 결과가 홈에 바로 보이게 합니다. 숫자 카드를
+       더 세우지 않고 한 줄로 적습니다 — 훑어보는 자리라 두 줄이면
+       충분하고, 자세한 것은 각 메뉴에서 봅니다. */
+    var progress = [];
+    if (S.tasks.length) {
+      progress.push('담당 업무 <b>' +
+        S.tasks.filter(function (t) { return taskStatus(t) === '완료'; }).length +
+        '</b> / ' + S.tasks.length + ' 완료');
+    }
+    if (S.supplyTargets.length) {
+      progress.push('운영 물품 <b>' +
+        S.supplyTargets.filter(function (t) { return t.status === '배부 완료'; }).length +
+        '</b> / ' + S.supplyTargets.length + ' 배부 완료');
+    }
+    var progressHtml = progress.length
+      ? '<p class="sumline sumline--home">' +
+        progress.join('<span aria-hidden="true">·</span>') + '</p>'
+      : '';
+
     var guide = (s.ops_guide || '').trim();
     // 대시보드는 훑는 화면입니다. 안내가 길면 앞 세 줄만 두고
     // 나머지는 드로어에서 읽게 합니다.
@@ -661,7 +680,7 @@
       ? '<div class="grid-2">' + urgentHtml + keyHtml + '</div>'
       : (urgentHtml || keyHtml);
 
-    return '<div class="page">' + hero + statsHtml + pairA + pairB + guideHtml +
+    return '<div class="page">' + hero + statsHtml + progressHtml + pairA + pairB + guideHtml +
       '<div class="page__actions" style="margin-left:0"><button class="btn btn--primary" type="button" data-newreq>+ 현장 문제 보고</button>' +
       '<button class="btn btn--ghost" type="button" data-go="contacts">연락망</button></div>' +
       '</div>';
@@ -848,7 +867,7 @@
     });
 
     var body = list.length ? '<div class="boothgrid">' + list.map(function (b) {
-      return '<button class="booth" type="button" data-booth="' + esc(b.id) + '">' +
+      var card = '<button class="booth" type="button" data-booth="' + esc(b.id) + '">' +
         '<span class="booth__top"><span class="booth__code">' + esc(b.code || (b.zone_key + '-' + b.no)) + '</span>' +
         badge(b.status || '준비 전') + '</span>' +
         '<span class="booth__name">' + esc(b.name) + '</span>' +
@@ -856,6 +875,7 @@
         // 번호·이름·기관·상태까지입니다.
         '<span class="booth__org">' + esc(b.org || '운영기관 미정') + '</span>' +
         '</button>';
+      return actionCard(card, boothActions(b));
     }).join('') + '</div>'
       : S.booths.length
         ? noMatchBox('조건에 맞는 부스가 없습니다.')
@@ -998,12 +1018,15 @@
     });
 
     var body = list.length ? '<div class="tl">' + list.map(function (r) {
-      return '<button class="req" type="button" data-req="' + esc(r.id) + '">' +
+      var card = '<button class="req" type="button" data-req="' + esc(r.id) + '">' +
         '<span class="req__top">' + badge(r.priority) + badge(r.status) +
         '<span class="badge badge--plain">' + esc(r.kind) + '</span></span>' +
         '<span class="req__title">' + esc(r.title) + '</span>' +
         '<span class="req__meta">' + esc(r.location || '위치 미지정') + ' · ' + esc(fmtDay(r.created_at)) +
         (r.assignee_team ? ' · ' + esc(r.assignee_team) : '') + '</span></button>';
+      // 끝난 요청에는 단추를 두지 않습니다. 상태 배지가 이미 말합니다.
+      return actionCard(card, r.status === '완료' ? '' :
+        actBtn('data-reqdone="' + esc(r.id) + '"', '해결 완료'));
     }).join('') + '</div>'
       : S.requests.length
         ? noMatchBox('조건에 맞는 요청이 없습니다.')
@@ -1364,10 +1387,11 @@
   function taskCard(t) {
     var people = assignsOf(t.id).map(assignPerson).filter(function (p) { return p.name; });
     var time = taskTime(t);
-    return '<button class="task" type="button" data-task="' + esc(t.id) + '">' +
+    var card = '<button class="task" type="button" data-task="' + esc(t.id) + '">' +
       '<span class="task__top">' +
       (time ? '<span class="task__time">' + esc(time) + '</span>' : '') +
-      '<span class="badge badge--plain">' + esc(t.area || '기타') + '</span></span>' +
+      badge(taskStatus(t)) +
+      '<span class="tag tag--soft">' + esc(t.area || '기타') + '</span></span>' +
       '<span class="task__title">' + esc(t.title) + '</span>' +
       (t.place ? '<span class="task__meta">' + esc(t.place) + '</span>' : '') +
       // 맡은 몫까지 목록에 적으면 카드마다 높이가 달라져 훑기 어렵습니다.
@@ -1378,6 +1402,7 @@
           }).join('') + '</span>'
         : '<span class="task__meta task__meta--none">담당자 미배정</span>') +
       '</button>';
+    return actionCard(card, taskActions(t));
   }
 
   function taskDetail(id) {
@@ -1389,8 +1414,8 @@
       ['장소', t.place]
     ].filter(function (r) { return r[1]; });
 
-    var html = '<div class="notice__top"><span class="badge badge--plain">' +
-      esc(t.area || '기타') + '</span></div>';
+    var html = '<div class="notice__top">' + badge(taskStatus(t)) +
+      '<span class="tag tag--soft">' + esc(t.area || '기타') + '</span></div>';
 
     if (rows.length) {
       html += '<dl class="dl">' + rows.map(function (r) {
@@ -1499,7 +1524,8 @@
           '<div class="tmlrow__time">' + esc(taskTime(it.task) || '시간 미정') + '</div>' +
           '<div class="tmlrow__body"><div class="tmlrow__title">' + esc(it.task.title) + '</div>' +
           '<div class="tmlrow__meta">' + esc(it.task.place || '장소 미정') +
-          (it.role ? ' · ' + esc(it.role) : '') + '</div></div></div>';
+          (it.role ? ' · ' + esc(it.role) : '') + '</div>' +
+          '<div class="tmlrow__tags">' + badge(taskStatus(it.task)) + '</div></div></div>';
       }).join('') + '</div></div>';
 
     openDrawer(p.person.name, html, { footer: true });
@@ -1594,7 +1620,7 @@
 
     var body = list.length ? '<div class="tl tl--2">' + list.map(function (t) {
       var items = allocsOf(t.id);
-      return '<button class="supply" type="button" data-supply="' + esc(t.id) + '">' +
+      var card = '<button class="supply" type="button" data-supply="' + esc(t.id) + '">' +
         '<span class="supply__top">' + badge(t.status || '미배부') +
         '<span class="badge badge--plain">' + esc(t.kind || '팀') + '</span>' +
         (t.headcount ? '<span class="notice__meta">' + t.headcount + '명</span>' : '') + '</span>' +
@@ -1610,6 +1636,7 @@
             '</span>'
           : '<span class="supply__meta supply__meta--none">배부 물품 미등록</span>') +
         '</button>';
+      return actionCard(card, supplyActions(t));
     }).join('') + '</div>' : noMatchBox('조건에 맞는 배부 대상이 없습니다.');
 
     return '<div class="page">' + head + summary + tools +
@@ -1811,6 +1838,18 @@
       var sb = t.closest('[data-setbooth]');
       if (sb) { setBoothStatus(sb.getAttribute('data-setbooth'), sb.getAttribute('data-status'), sb); return; }
 
+      var bp = t.closest('[data-boothpick]');
+      if (bp) { openBoothPicker(bp.getAttribute('data-boothpick')); return; }
+
+      var rd = t.closest('[data-reqdone]');
+      if (rd) { resolveRequest(rd.getAttribute('data-reqdone'), rd); return; }
+
+      var tn = t.closest('[data-tasknext]');
+      if (tn) { setTaskStatus(tn.getAttribute('data-tasknext'), tn.getAttribute('data-to'), tn); return; }
+
+      var ss = t.closest('[data-supplyset]');
+      if (ss) { setSupplyStatus(ss.getAttribute('data-supplyset'), ss.getAttribute('data-to'), ss); return; }
+
       var fq = t.closest('.faq__q');
       if (fq) {
         var box = fq.closest('.faq');
@@ -1854,22 +1893,214 @@
     if (again) { again.focus(); if (pos != null) try { again.setSelectionRange(pos, pos); } catch (x) {} }
   }
 
+  /* ══ 현장 상태 처리 ════════════════════════════════════════════
+     관계자가 현장에서 직접 바꿀 수 있는 것은 "상태" 뿐입니다.
+     이름·수량·담당자 같은 값은 관리자 몫이고, 서버에서도 그렇게
+     막혀 있습니다 — 표에 쓰기 권한을 여는 대신 상태 한 칸만 바꾸는
+     함수를 열어 두었습니다(set_booth_status 와 같은 방식).
+
+     네 화면이 같은 길을 씁니다.
+       누름 → (필요하면) 확인 → 버튼 잠금 → 서버 → 화면 갱신 → 알림
+     실패하면 아무것도 바꾸지 않고 이유만 알립니다. 미리 바꿔 두었다가
+     되돌리면, 잠깐 보였던 값이 맞는지 사람이 알 수 없게 됩니다. */
+  function runAction(opts) {
+    var btn = opts.btn;
+    if (btn.disabled) return;            // 두 번 눌러도 한 번만 갑니다
+
+    function go() {
+      btn.disabled = true;
+      var was = btn.textContent;
+      btn.textContent = '처리 중…';
+      C.rpc(opts.rpc, opts.args).then(function (row) {
+        opts.apply(row);
+        toast(opts.okText);
+        render();
+        if (opts.after) opts.after(row);
+      }).catch(function (e) {
+        console.error('[portal] 상태 변경 실패', opts.rpc, e);
+        toast(actionMessage(e), true);
+        btn.disabled = false;
+        btn.textContent = was;
+      });
+    }
+
+    if (!opts.confirm) { go(); return; }
+    UI.confirm(opts.confirm).then(function (ok) { if (ok) go(); });
+  }
+
+  /* 서버가 막은 경우를 사람 말로 옮깁니다. 기능이 아직 없는 것과
+     규칙에 어긋난 것을 구분해야 무엇을 해야 할지 알 수 있습니다. */
+  function actionMessage(e) {
+    var m = (e && e.message) || '';
+    var code = (e && e.code) || '';
+    if (code === '42883' || /function .* does not exist/i.test(m)) {
+      return '이 기능이 아직 준비되지 않았습니다. supabase/migration-portal-actions.sql 을 실행해 주세요.';
+    }
+    if (code === '22023') return m;      // 함수가 남긴 안내를 그대로 보여 줍니다
+    if (code === 'P0002') return '이미 지워졌거나 찾을 수 없습니다. 새로고침해 주세요.';
+    return C.dataMessage(e);
+  }
+
+  /* 카드 아래에 붙는 액션 줄. 카드 자체가 button 이라 그 안에 또
+     button 을 넣을 수 없습니다. 바깥에서 한 번 감싸고 아래에 답니다. */
+  function actionCard(card, actions) {
+    if (!actions) return card;
+    return '<div class="actcard">' + card +
+      '<div class="actcard__act">' + actions + '</div></div>';
+  }
+  function actBtn(attrs, label, kind) {
+    return '<button class="btn btn--' + (kind || 'primary') + ' btn--sm" type="button" ' +
+      attrs + '>' + esc(label) + '</button>';
+  }
+
+  /* ── 운영 요청: 해결 완료 ───────────────────────────────────── */
+  function resolveRequest(id, btn) {
+    var r = S.requests.filter(function (x) { return x.id === id; })[0];
+    if (!r) return;
+    runAction({
+      btn: btn,
+      rpc: 'resolve_operation_request',
+      args: { p_id: id },
+      confirm: {
+        title: '해결 완료로 처리할까요?',
+        message: '“' + r.title + '” 요청을 완료로 바꿉니다. ' +
+                 '완료된 요청은 미처리 요청 수에서 빠집니다.',
+        confirmLabel: '해결 완료'
+      },
+      okText: '해결 완료로 처리했습니다.',
+      apply: function (row) {
+        S.requests = S.requests.map(function (x) { return x.id === id ? row : x; });
+      }
+    });
+  }
+
+  /* ── 담당 업무: 시작 / 완료 ─────────────────────────────────── */
+  function taskStatus(t) { return t.status || '예정'; }
+
+  function setTaskStatus(id, next, btn) {
+    var t = S.tasks.filter(function (x) { return x.id === id; })[0];
+    if (!t) return;
+    runAction({
+      btn: btn,
+      rpc: 'set_operation_task_status',
+      args: { p_id: id, p_status: next },
+      // 시작은 바로, 완료는 한 번 묻습니다. 되돌리려면 관리자를 거쳐야
+      // 해서, 끝냈다는 표시는 신중해야 합니다.
+      confirm: next === '완료' ? {
+        title: '이 업무를 완료 처리할까요?',
+        message: '“' + t.title + '” 업무를 완료로 바꿉니다. ' +
+                 '되돌리려면 관리자에게 요청해야 합니다.',
+        confirmLabel: '완료'
+      } : null,
+      okText: next === '완료' ? '업무를 완료했습니다.' : '업무를 시작했습니다.',
+      apply: function (row) {
+        S.tasks = S.tasks.map(function (x) { return x.id === id ? row : x; });
+      }
+    });
+  }
+
+  function taskActions(t) {
+    var st = taskStatus(t);
+    if (st === '예정') {
+      return actBtn('data-tasknext="' + esc(t.id) + '" data-to="진행 중"', '업무 시작');
+    }
+    if (st === '진행 중') {
+      return actBtn('data-tasknext="' + esc(t.id) + '" data-to="완료"', '업무 완료');
+    }
+    return '';   // 완료된 업무에는 단추를 두지 않습니다
+  }
+
+  /* ── 운영 물품: 수령 확인 ───────────────────────────────────── */
+  function setSupplyStatus(id, next, btn) {
+    var t = S.supplyTargets.filter(function (x) { return x.id === id; })[0];
+    if (!t) return;
+    runAction({
+      btn: btn,
+      rpc: 'set_supply_target_status',
+      args: { p_id: id, p_status: next },
+      confirm: next === '배부 완료' ? {
+        title: '등록된 물품을 모두 받았나요?',
+        message: '“' + t.name + '” 의 배부 상태를 수령 완료로 바꿉니다.',
+        confirmLabel: '수령 완료'
+      } : {
+        title: '일부 물품이 아직 오지 않았나요?',
+        message: '“' + t.name + '” 을 일부 배부로 표시합니다. ' +
+                 '빠진 물품은 운영본부에 알려 주세요.',
+        confirmLabel: '일부 배부로 표시'
+      },
+      okText: next === '배부 완료' ? '수령 완료로 표시했습니다.' : '일부 배부로 표시했습니다.',
+      apply: function (row) {
+        S.supplyTargets = S.supplyTargets.map(function (x) { return x.id === id ? row : x; });
+      }
+    });
+  }
+
+  function supplyActions(t) {
+    var st = t.status || '미배부';
+    if (st === '배부 완료') return '';
+    var all = actBtn('data-supplyset="' + esc(t.id) + '" data-to="배부 완료"', '모두 받음');
+    // 미배부일 때만 '누락 있음' 을 함께 둡니다. 이미 일부 배부라면
+    // 같은 말을 한 번 더 하는 단추가 됩니다.
+    return st === '미배부'
+      ? all + actBtn('data-supplyset="' + esc(t.id) + '" data-to="일부 배부"', '누락 있음', 'ghost')
+      : all;
+  }
+
+  /* ── 부스: 빠른 전환 + 전체 선택 ─────────────────────────────
+     다섯 단추를 늘 펼쳐 두면 카드가 단추밭이 됩니다. 지금 상태에서
+     가장 자주 가는 다음 한 걸음만 꺼내 두고, 나머지는 창에서 고릅니다. */
+  var BOOTH_NEXT = {
+    '준비 전':   { to: '준비 완료', label: '준비 완료' },
+    '준비 완료': { to: '운영 중',   label: '운영 시작' },
+    '운영 중':   { to: '일시 중단', label: '일시 중단' },
+    '일시 중단': { to: '운영 중',   label: '운영 재개' }
+  };
+
+  function boothActions(b) {
+    var st = b.status || '준비 전';
+    var next = BOOTH_NEXT[st];
+    return (next ? actBtn('data-setbooth="' + esc(b.id) + '" data-status="' + esc(next.to) + '"', next.label) : '') +
+      actBtn('data-boothpick="' + esc(b.id) + '"', '상태 변경', 'ghost');
+  }
+
+  /* 전체 상태 고르기. 기존 입력 창을 그대로 씁니다 — 초점 가두기와
+     ESC 닫기가 이미 붙어 있어 따로 만들 이유가 없습니다. */
+  function openBoothPicker(id) {
+    var b = S.booths.filter(function (x) { return x.id === id; })[0];
+    if (!b) return;
+    UI.form({
+      title: (b.code || b.name) + ' 상태 변경',
+      desc: '운영 상태만 바뀝니다. 다른 정보는 관리자에서 수정합니다.',
+      fields: [{ k: 'status', label: '운영 상태', type: 'select', options: BOOTH_STATES }],
+      values: { status: b.status || '준비 전' },
+      submitLabel: '변경'
+    }).then(function (v) {
+      if (!v || v.status === (b.status || '준비 전')) return;
+      // 창이 닫힌 뒤라 누를 단추가 없습니다. 잠글 대상만 흉내 냅니다.
+      setBoothStatus(id, v.status, { disabled: false });
+    });
+  }
+
   /* ── 쓰기 동작 ──────────────────────────────────────────────── */
   /* 부스 상태는 표를 직접 고치지 않고 전용 함수로 바꿉니다.
      비로그인 상태에서 booths 표에 쓰기 권한을 열면 담당자 연락처까지
      바꿀 수 있게 되기 때문입니다. set_booth_status 는 status 한 칸만
      건드리고, 허용된 값인지도 서버에서 다시 확인합니다. */
   function setBoothStatus(id, status, btn) {
+    if (btn.disabled) return;
     btn.disabled = true;
     C.rpc('set_booth_status', { p_id: id, p_status: status }).then(function (row) {
       S.booths = S.booths.map(function (b) { return b.id === id ? row : b; });
       toast('부스 상태를 “' + status + '”(으)로 바꿨습니다.');
-      boothDetail(id);
+      // 상세가 열려 있을 때만 다시 그립니다. 목록에서 누른 경우까지
+      // 드로어를 열면 누르지도 않은 창이 튀어나옵니다.
+      if (!$('#drawer').hidden) boothDetail(id);
       render();
     }).catch(function (e) {
-      toast(C.dataMessage(e), true);
       console.error('[portal] 부스 상태 변경 실패', e);
-    }).then(function () { btn.disabled = false; });
+      toast(actionMessage(e), true);
+      btn.disabled = false;
+    });
   }
 
   function submitRequest() {
