@@ -539,167 +539,215 @@
     }).join('') + '</div>';
   }
 
-  /* ── 화면: 대시보드 ─────────────────────────────────────────── */
+  /* ── 화면: 홈(운영 브리핑) ─────────────────────────────────────
+     포털을 열고 몇 초 안에 답해야 하는 질문 순서대로 쌓습니다.
+       1. 어떤 행사이고 지금 어느 시점인가      → 머리
+       2. 문제·업무·물품·부스는 어떤 상태인가   → 숫자 넉 장
+       3. 다음에 무엇이 있고 무엇을 할 수 있나  → 브리핑 + 빠른 실행
+       4. 지금 읽어야 할 공지가 있나            → 있을 때만
+     비어 있는 묶음은 자리를 두지 않습니다. 빈 카드가 쌓이면 무엇이
+     중요한지 가려집니다. */
+  var DASH_ICONS = {
+    req:    '<path d="M12 4 3.5 19h17z"/><path d="M12 10v4M12 16.8v.2"/>',
+    task:   '<rect x="4.5" y="4.5" width="15" height="15" rx="2.5"/><path d="m8.5 12 2.5 2.5 4.5-5"/>',
+    supply: '<path d="M4 8 12 4l8 4v8l-8 4-8-4z"/><path d="M4 8l8 4 8-4M12 12v8"/>',
+    booth:  '<rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/>' +
+            '<rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/>'
+  };
+  function dashIcon(key) {
+    return '<svg class="dash__ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" ' +
+      'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">' + DASH_ICONS[key] + '</svg>';
+  }
+
+  var WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
+  function fmtEventDay(d) {
+    return d ? (d.getMonth() + 1) + '.' + d.getDate() + '. ' + WEEKDAYS[d.getDay()] : '';
+  }
+
   function viewDashboard() {
     var ev = eventInfo();
     var s = S.settings || {};
     var nn = nowNext(ev);
+    // 행사 당일이라도 끝난 시각이 지나면 '종료' 로 봅니다.
+    var mode = ev.phase === 'after' ? 'after' : ev.phase === 'during' ? 'during' : 'before';
 
-    /* 상태는 작은 표시 하나로. 크게 적으면 행사명과 무게를 다툽니다.
-       D-day 는 행사 전에만 같은 표시 안에 덧붙입니다. */
-    var phaseHtml = ev.phase === 'during'
-      ? '<span class="phase phase--live">진행 중 · ' +
-        C.pad2(ev.now.getHours()) + ':' + C.pad2(ev.now.getMinutes()) + '</span>'
-      : ev.phase === 'after'
+    /* 1. 머리 — 행사명이 주인공, 상태는 작은 표시 하나 */
+    var phaseHtml = mode === 'during'
+      ? '<span class="phase phase--live">진행 중</span>'
+      : mode === 'after'
         ? '<span class="phase phase--done">행사 종료</span>'
         : ev.phase === 'before'
           ? '<span class="phase">행사 전 · D-' + Math.max(0, ev.dday) + '</span>'
           : '';
-
-    // '행사 운영 홈' 머리말과 설명 문단은 뺐습니다. 메뉴가 이미 '홈' 이고,
-    // 날마다 여는 사람에게 같은 설명은 숫자를 아래로 밀어낼 뿐입니다.
-    var hero = '<section class="hero"><div class="hero__main">' +
-      '<h1 class="hero__name">' +
+    var meta = [s.date_label, s.time_label, s.venue].filter(Boolean).map(esc).join(' · ');
+    var head = '<header class="dash__head">' +
+      '<div class="dash__title"><h1 class="dash__name">' +
       esc(s.event_title || '2026년 인천 AI·SW미래채움 교육페스티벌') + '</h1>' +
-      '<div class="hero__meta">' + esc(s.date_label || '') +
-      (s.time_label ? ' · ' + esc(s.time_label) : '') +
-      (s.venue ? ' · ' + esc(s.venue) : '') + '</div></div>' +
-      (phaseHtml ? '<div class="hero__state">' + phaseHtml + '</div>' : '') + '</section>';
+      (meta ? '<p class="dash__meta">' + meta + '</p>' : '') + '</div>' +
+      (phaseHtml ? '<div class="dash__phase">' + phaseHtml + '</div>' : '') + '</header>';
 
-    /* 긴급 공지 — 있으면 최상단 */
-    var urgent = S.notices.filter(function (n) { return n.level === '긴급'; });
-    /* 긴급과 중요를 함께 봅니다. 홈에서 알아야 하는 것은 '지금 읽어야
-       할 공지가 있는가' 이고, 등급을 가려 읽는 일은 공지 화면의 몫입니다. */
+    /* 2. 숫자 넉 장 — 카드 전체가 해당 화면으로 가는 링크입니다.
+       '—' 는 등록된 것이 없다는 뜻이고, 0 은 모두 끝났다는 뜻입니다.
+       둘을 아래 한 줄 설명으로 반드시 구분합니다. */
+    var openReqs = S.requests.filter(function (r) { return r.status !== '완료'; });
+    var urgentReq = openReqs.filter(function (r) { return r.priority === '긴급'; }).length;
+    var leftTasks = S.tasks.filter(function (t) { return taskStatus(t) !== '완료'; });
+    var runningTasks = leftTasks.filter(function (t) { return taskStatus(t) === '진행 중'; }).length;
+    var leftSupply = S.supplyTargets.filter(function (t) { return t.status !== '배부 완료'; });
+
+    var stats = [
+      { key: 'req', go: 'requests', l: '미처리 요청',
+        n: openReqs.length,
+        sub: openReqs.length
+          ? (urgentReq ? '긴급 ' + urgentReq + '건 포함' : '확인이 필요합니다')
+          : (S.requests.length ? '모두 처리됨' : '접수된 요청 없음'),
+        tone: urgentReq ? 'alert' : '' },
+      { key: 'task', go: 'tasks', l: '남은 업무',
+        n: S.tasks.length ? leftTasks.length : null,
+        sub: !S.tasks.length ? '아직 미등록'
+          : !leftTasks.length ? '모두 완료'
+          : runningTasks ? '진행 중 ' + runningTasks + '건' : '전체 ' + S.tasks.length + '건 중' },
+      { key: 'supply', go: 'supplies', l: '배부 확인 필요',
+        n: S.supplyTargets.length ? leftSupply.length : null,
+        sub: !S.supplyTargets.length ? '아직 미등록'
+          : !leftSupply.length ? '모두 배부 완료'
+          : '전체 ' + S.supplyTargets.length + '곳 중' },
+      { key: 'booth', go: 'booths', l: '전체 부스',
+        n: S.booths.length || null,
+        sub: S.booths.length ? '부스 현황 보기' : '아직 미등록' }
+    ];
+    var statsHtml = '<nav class="dash__stats" aria-label="운영 현황">' + stats.map(function (st) {
+      var none = st.n == null;
+      return '<a class="stat stat--' + st.key + (none ? ' is-none' : '') + '" href="#' + st.go + '">' +
+        '<span class="stat__row"><span class="stat__n">' +
+        (none ? '<span aria-hidden="true">—</span><span class="sr-only">없음</span>' : st.n) + '</span>' +
+        dashIcon(st.key) + '</span>' +
+        '<span class="stat__l">' + esc(st.l) + '</span>' +
+        '<span class="stat__sub' + (st.tone ? ' stat__sub--' + st.tone : '') + '">' + esc(st.sub) +
+        '<span class="stat__go" aria-hidden="true">→</span></span>' +
+        '</a>';
+    }).join('') + '</nav>';
+
+    /* 3. 운영 브리핑 — 시점에 따라 담는 내용만 바뀝니다 */
+    function slot(label, item, opts) {
+      opts = opts || {};
+      if (!item) {
+        return '<div class="brief__slot"><p class="brief__label">' + esc(label) + '</p>' +
+          '<p class="brief__empty">' + esc(opts.empty || '등록된 일정이 없습니다.') + '</p></div>';
+      }
+      var time = opts.range && item.end_time
+        ? esc(item.start_time) + '–' + esc(item.end_time)
+        : esc(item.start_time || item.time_label || '');
+      return '<div class="brief__slot' + (opts.live ? ' is-live' : '') + '">' +
+        '<p class="brief__label">' + esc(label) + (opts.after ? '<span class="brief__after">' + esc(opts.after) + '</span>' : '') + '</p>' +
+        (opts.day ? '<p class="brief__day">' + esc(opts.day) + '</p>' : '') +
+        (time ? '<p class="brief__time">' + time + '</p>' : '') +
+        '<p class="brief__what">' + esc(item.title) + '</p>' +
+        (item.place ? '<p class="brief__where">' + esc(item.place) + '</p>' : '') + '</div>';
+    }
+
+    var modeLabel = mode === 'during' ? '지금 운영' : mode === 'after' ? '행사 종료' : '행사 준비';
+    var briefBody, briefLink = '<button class="linkbtn" type="button" data-go="schedule">전체 일정 →</button>';
+
+    if (mode === 'after') {
+      // 끝난 일정을 다시 크게 보여 줄 필요는 없습니다. 남은 운영만 봅니다.
+      var leftRows = [];
+      if (openReqs.length) leftRows.push({ go: 'requests', l: '미처리 요청', n: openReqs.length });
+      if (leftTasks.length) leftRows.push({ go: 'tasks', l: '미완료 업무', n: leftTasks.length });
+      briefBody = '<p class="brief__lead">행사가 종료되었습니다.</p>' +
+        (leftRows.length
+          ? '<div class="brief__slot"><p class="brief__label">남은 운영 확인</p>' +
+            '<ul class="brief__left">' + leftRows.map(function (r) {
+              return '<li><a class="brief__leftrow" href="#' + r.go + '">' +
+                '<span>' + esc(r.l) + '</span><b>' + r.n + '건</b>' +
+                '<span class="brief__arrow" aria-hidden="true">→</span></a></li>';
+            }).join('') + '</ul></div>'
+          : '<p class="brief__empty">모든 운영 항목이 완료되었습니다.</p>');
+      briefLink = '';
+    } else if (mode === 'during' && !nn.preview) {
+      var liveSlot = nn.live
+        ? slot('지금 진행 중', nn.live, { range: true, live: true })
+        : slot('지금 진행 중', null, {
+            empty: nn.next && nn.gap != null ? '진행 중인 일정이 없습니다. 다음 일정까지 ' + C.minLabel(nn.gap) + '.'
+              : '진행 중인 일정이 없습니다.' });
+      var nextSlot = slot('다음 일정', nn.next, {
+        after: nn.next && nn.gap != null ? C.minLabel(nn.gap) + ' 후' : '',
+        empty: '오늘 남은 일정이 없습니다.' });
+      briefBody = '<div class="brief__split">' + liveSlot + nextSlot + '</div>';
+    } else {
+      // 행사 전: 당일 가장 먼저 시작하는 일정 하나
+      briefBody = slot('다음 주요 일정', nn.next, { day: fmtEventDay(ev.start) });
+      if (!nn.next) briefLink = '';
+    }
+
+    var brief = '<section class="brief" aria-labelledby="brief-t">' +
+      '<div class="brief__head"><h2 class="brief__t" id="brief-t">운영 브리핑</h2>' +
+      '<span class="brief__mode">' + modeLabel + '</span>' + briefLink + '</div>' +
+      briefBody + '</section>';
+
+    // 버튼은 셋까지. 보고만 채운 버튼이고 나머지는 기존 화면 바로가기입니다.
+    var quick = '<section class="quick" aria-labelledby="quick-t">' +
+      '<h2 class="quick__t" id="quick-t">빠른 실행</h2>' +
+      '<div class="quick__list">' +
+      '<button class="btn btn--primary quick__main" type="button" data-newreq>+ 현장 문제 보고</button>' +
+      '<a class="btn btn--ghost" href="#contacts">연락망</a>' +
+      '<a class="btn btn--ghost" href="#booths">부스 찾기</a>' +
+      '</div></section>';
+
+    /* 4. 중요 공지 — 긴급·중요가 있을 때만. 없으면 묶음 자체를 두지 않습니다. */
     var keyNotices = S.notices.filter(function (n) {
       return n.level === '긴급' || n.level === '중요';
     }).slice(0, 3);
-
-    var urgentHtml = keyNotices.length
-      ? '<section class="homebox">' +
-        '<h2 class="section-title">중요 공지' +
-        '<button class="linkbtn" type="button" data-go="notices">공지 전체 보기</button></h2>' +
-        '<div class="minilist">' + keyNotices.map(function (n) {
-          return '<button class="minirow" type="button" data-notice="' + esc(n.id) + '">' +
-            '<span class="minirow__top">' + badge(n.level) +
-            '<span class="minirow__when">' + esc(fmtDay(n.created_at)) + '</span></span>' +
-            '<span class="minirow__title">' + esc(n.title) + '</span></button>';
+    var noticeHtml = keyNotices.length
+      ? '<section class="dash__block" aria-labelledby="dn-t">' +
+        '<div class="dash__blockhead"><h2 class="dash__blockt" id="dn-t">중요 공지</h2>' +
+        '<button class="linkbtn" type="button" data-go="notices">공지 전체 →</button></div>' +
+        '<div class="dlist">' + keyNotices.map(function (n) {
+          return '<button class="dlist__row" type="button" data-notice="' + esc(n.id) + '">' +
+            badge(n.level) +
+            '<span class="dlist__title">' + esc(n.title) + '</span>' +
+            '<span class="dlist__when">' + esc(fmtDay(n.created_at)) + '</span></button>';
         }).join('') + '</div></section>'
       : '';
 
-    /* 운영 숫자 — 전부 DB 집계 */
-    var openReq = S.requests.filter(function (r) { return r.status !== '완료'; }).length;
-    // 등록된 업무·대상이 하나도 없으면 0 이 아니라 '-' 입니다.
-    // 0 이라고 적으면 '다 끝났다' 로 읽힙니다.
-    var leftTasks = !S.tasks.length ? '-'
-      : S.tasks.filter(function (t) { return taskStatus(t) !== '완료'; }).length;
-    var leftSupply = !S.supplyTargets.length ? '-'
-      : S.supplyTargets.filter(function (t) { return t.status !== '배부 완료'; }).length;
-
-    /* 홈이 답해야 하는 질문 네 가지입니다.
-       문제가 남았나 · 할 일이 남았나 · 못 받은 곳이 있나 · 부스는 몇 곳인가.
-       부스 운영 상태는 현장에서 갱신하지 않아 판단에 쓸 수 없어 뺐습니다. */
-    var stats = [
-      // 카드마다 윗줄 색 하나로만 구분합니다(숫자·배경은 칠하지 않음).
-      { n: openReq, l: '미처리 요청', go: 'requests', key: 'req' },
-      { n: leftTasks, l: '남은 업무', go: 'tasks', key: 'task' },
-      { n: leftSupply, l: '배부 확인 필요', go: 'supplies', key: 'supply' },
-      { n: S.booths.length, l: '전체 부스', go: 'booths', key: 'booth' }
-    ];
-    var statsHtml = '<div class="statgrid">' + stats.map(function (st) {
-      return '<button class="stat stat--' + st.key + '" type="button" data-go="' + st.go + '"' +
-        (st.f ? ' data-filter="' + esc(st.f) + '"' : '') + '>' +
-        '<span class="stat__n">' + st.n + '</span>' +
-        '<span class="stat__l">' + esc(st.l) + '</span></button>';
-    }).join('') + '</div>';
-
-    /* 오늘의 하이라이트 — 관리자가 '핵심 일정' 으로 표시한 것만.
-       표시된 일정이 없으면 이 자리를 아예 두지 않습니다. 빈 제목만
-       남으면 무언가 빠진 화면처럼 보입니다. */
-    var keyItems = S.schedule.filter(function (i) {
-      return i.is_highlight && i.status !== '취소';
-    }).slice(0, 3);
+    /* 오늘의 주요 일정 — 행사 당일에만. 몇 주 전에는 쓸모가 없습니다. */
+    var keyItems = mode === 'during' && ev.sameDay ? S.schedule.filter(function (i) {
+      // 이미 끝난 일정은 빼고 지금·앞으로 볼 것만 둡니다.
+      return i.is_highlight && i.status !== '취소' && liveStatus(i, ev) !== '종료';
+    }).slice(0, 3) : [];
     var keyHtml = keyItems.length
-      ? '<section class="homebox"><h2 class="section-title">오늘의 주요 일정' +
-        '<button class="linkbtn" type="button" data-go="schedule" data-schedkey="1">전체 일정 보기</button>' +
-        '</h2><div class="minilist">' + keyItems.map(function (i) {
+      ? '<section class="dash__block" aria-labelledby="dk-t">' +
+        '<div class="dash__blockhead"><h2 class="dash__blockt" id="dk-t">오늘의 주요 일정</h2>' +
+        '<button class="linkbtn" type="button" data-go="schedule" data-schedkey="1">전체 →</button></div>' +
+        '<div class="dlist">' + keyItems.map(function (i) {
           var st = liveStatus(i, ev);
-          return '<button class="minirow' + (st === '진행 중' ? ' minirow--now' : '') + '" type="button" ' +
-            'data-go="schedule" data-schedkey="1">' +
-            '<span class="minirow__top"><span class="minirow__when">' + esc(i.start_time || '') +
-            (i.end_time ? '–' + esc(i.end_time) : '') + '</span>' +
-            (st === '진행 중' ? badge('진행 중') : '') + '</span>' +
-            '<span class="minirow__title">' + esc(i.title) + '</span>' +
-            '<span class="minirow__meta">' + esc(i.place || '장소 미정') + '</span></button>';
+          return '<button class="dlist__row" type="button" data-go="schedule" data-schedkey="1">' +
+            '<span class="dlist__time">' + esc(i.start_time || '') + '</span>' +
+            '<span class="dlist__title">' + esc(i.title) + '</span>' +
+            (st === '진행 중' ? badge('진행 중') : '<span class="dlist__when">' + esc(i.place || '') + '</span>') +
+            '</button>';
         }).join('') + '</div></section>'
       : '';
 
-    /* 운영 안내 — 관리자가 행사 기본정보에 적어 둔 짧은 안내입니다.
-       줄바꿈을 그대로 살립니다. 비어 있으면 자리를 두지 않습니다. */
+    var lists = noticeHtml && keyHtml
+      ? '<div class="dash__pair">' + noticeHtml + keyHtml + '</div>'
+      : (noticeHtml || keyHtml);
+
+    /* 5. 운영 안내 — 가장 아래, 카드 없이 제목과 구분선만 */
     var guide = (s.ops_guide || '').trim();
-    // 대시보드는 훑는 화면입니다. 안내가 길면 앞 세 줄만 두고
-    // 나머지는 드로어에서 읽게 합니다.
     var guideLong = guide.split(String.fromCharCode(10)).length > 3 || guide.length > 110;
     var guideHtml = guide
-      ? '<section class="guidebox">' +
-        '<h2 class="section-title">운영 안내</h2>' +
+      ? '<section class="dash__guide" aria-labelledby="dg-t">' +
+        '<div class="dash__blockhead"><h2 class="dash__blockt" id="dg-t">운영 안내</h2>' +
+        (guideLong ? '<button class="linkbtn" type="button" data-guide>전체 보기</button>' : '') + '</div>' +
         '<div class="noticebody' + (guideLong ? ' is-clamped' : '') + '">' + esc(guide) + '</div>' +
-        (guideLong ? '<div><button class="linkbtn" type="button" data-guide>전체 보기</button></div>' : '') +
         '</section>'
       : '';
 
-    /* 지금 / 다음 */
-    var nowHtml, nowCount = 1;
-    if (nn.preview) {
-      // 행사 전입니다. 아래에 첫 일정을 함께 보여 주는데, 아무 설명
-      // 없이 시각과 제목만 두면 지금 진행 중인 일정으로 오해합니다.
-      // 그래서 "첫 일정" 이라고 분명히 적습니다.
-      // 행사가 끝났으면 '첫 일정' 은 의미가 없어 자리를 두지 않습니다.
-      // 행사 전에는 첫 일정 한 장만. 긴 설명은 반복해서 볼 정보가 아닙니다.
-      nowHtml = (ev.phase === 'after' || !nn.next) ? '' :
-        '<section class="card card__pad nowcard nowcard--idle">' +
-        '<div class="nowcard__kicker">첫 일정 · 행사 당일에는 지금/다음 일정이 표시됩니다</div>' +
-        '<div class="nowcard__time">' + esc(nn.next.start_time || nn.next.time_label) + '</div>' +
-        '<div class="nowcard__title">' + esc(nn.next.title) + '</div>' +
-        (nn.next.place ? '<div class="nowcard__meta">' + esc(nn.next.place) + '</div>' : '') +
-        '</section>';
-    } else if (nn.live) {
-      nowHtml = '<section class="card card__pad nowcard">' +
-        '<div class="nowcard__kicker">지금 진행 중</div>' +
-        '<div class="nowcard__time">' + esc(nn.live.start_time) + '–' + esc(nn.live.end_time) + '</div>' +
-        '<div class="nowcard__title">' + esc(nn.live.title) + '</div>' +
-        '<div class="nowcard__meta">' + esc(nn.live.place || '장소 미정') + '</div></section>';
-    } else {
-      nowHtml = '<section class="card card__pad nowcard nowcard--idle">' +
-        '<div class="nowcard__kicker">현재 진행 중인 일정 없음</div>' +
-        '<p class="nowcard__meta" style="margin-top:6px">' +
-        (nn.gap != null ? '다음 일정까지 ' + C.minLabel(nn.gap) + ' 남았습니다.' : '남은 일정이 없습니다.') +
-        '</p></section>';
-    }
-    if (nn.next && !nn.preview) {
-      nowCount = 2;
-      nowHtml += '<section class="card card__pad nowcard nowcard--idle">' +
-        '<div class="nowcard__kicker">다음 일정</div>' +
-        '<div class="nowcard__time">' + esc(nn.next.start_time) + '</div>' +
-        '<div class="nowcard__title">' + esc(nn.next.title) + '</div>' +
-        '<div class="nowcard__meta">' + esc(nn.next.place || '') + '</div>' +
-        (nn.gap != null ? '<div class="nowcard__left">' + C.minLabel(nn.gap) + ' 후</div>' : '') +
-        '</section>';
-    }
-
-    /* 짧은 것끼리 한 줄에 놓습니다. 넓은 화면에서 전부 전체 폭으로
-       쌓으면 카드 하나에 한 줄씩만 담긴 채 화면이 길어집니다.
-       좁은 화면에서는 CSS 가 알아서 한 칸으로 내려 줍니다. */
-    // 한 칸짜리를 두 칸 격자에 넣으면 옆이 비어 보입니다.
-    // 둘 다 있을 때만 나눕니다.
-    var pairA = nowCount === 2 ? '<div class="grid-2">' + nowHtml + '</div>' : nowHtml;
-    var pairB = (urgentHtml && keyHtml)
-      ? '<div class="grid-2">' + urgentHtml + keyHtml + '</div>'
-      : (urgentHtml || keyHtml);
-
-    return '<div class="page">' + hero + statsHtml + pairA + pairB + guideHtml +
-      '<div class="page__actions" style="margin-left:0"><button class="btn btn--primary" type="button" data-newreq>+ 현장 문제 보고</button>' +
-      '<button class="btn btn--ghost" type="button" data-go="contacts">연락망</button></div>' +
-      '</div>';
+    return '<div class="page dash">' +
+      '<div class="dash__top">' + head + statsHtml + '</div>' +
+      '<div class="dash__main">' + brief + quick + '</div>' +
+      lists + guideHtml + '</div>';
   }
 
   function fmtWhen(iso) {
