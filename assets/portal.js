@@ -5,7 +5,7 @@
    모든 데이터는 Supabase 에서 옵니다.
 
    이 화면에는 로그인이 없습니다. 주소를 아는 관계자는 바로 들어와
-   열람하고, 운영 요청 등록과 부스 상태 변경까지 할 수 있습니다.
+   열람하고, 운영 요청 등록 · 해결 완료와 담당 업무 시작/완료를 할 수 있습니다.
    그 밖의 편집은 전부 /admin 에서 관리자만 합니다 — 화면에서
    감추는 게 아니라 데이터베이스 정책이 막습니다.
    =================================================================== */
@@ -74,7 +74,7 @@
     error: null, loading: false
   };
   var view = 'dashboard';
-  var ui = { boothQ: '', boothZone: '전체',
+  var ui = { boothQ: '', boothZone: '전체', boothType: '전체',
              schedCat: '전체', schedQ: '', schedHalf: '전체', schedKey: false,
              taskMode: '업무별', taskArea: '전체', taskQ: '', taskPerson: '',
              supplyQ: '', resourceQ: '',
@@ -359,8 +359,8 @@
       ].map(function (r) {
         // 예시에는 열 수 있는 파일이 없어 단추를 만들지 않습니다.
         return '<div class="rescard is-sample">' +
-          '<span class="rescard__top"><span class="tag tag--soft">' + esc(r[0]) + '</span>' + SAMPLE + '</span>' +
-          '<div class="rescard__title">' + esc(r[1]) + '</div>' +
+          '<div class="rescard__title">' + esc(r[1]) + ' ' + SAMPLE + '</div>' +
+          '<div class="rescard__kind">' + esc(r[0]) + '</div>' +
           '<p class="rescard__desc">' + esc(r[2]) + '</p></div>';
       }).join(''), true);
   }
@@ -547,8 +547,8 @@
       (s.time_label ? ' · ' + esc(s.time_label) : '') +
       (s.venue ? ' · ' + esc(s.venue) : '') + '</div></div>' +
       '<div class="hero__state">' + phaseHtml + '</div></section>' +
-      '<p class="pageintro">행사 준비 상황과 당일 운영을 한곳에서 확인합니다. ' +
-      '일정·부스 상태·공지는 관리자가 등록하는 대로 바로 반영됩니다.</p>';
+      '<p class="pageintro">행사 준비 상황과 당일 운영 정보를 한곳에서 확인합니다. ' +
+      '일정·공지·업무·물품 현황은 관리자에서 등록한 내용이 바로 반영됩니다.</p>';
 
     /* 긴급 공지 — 있으면 최상단 */
     var urgent = S.notices.filter(function (n) { return n.level === '긴급'; });
@@ -583,13 +583,14 @@
        문제가 남았나 · 할 일이 남았나 · 못 받은 곳이 있나 · 부스는 몇 곳인가.
        부스 운영 상태는 현장에서 갱신하지 않아 판단에 쓸 수 없어 뺐습니다. */
     var stats = [
-      { n: openReq, l: '미처리 요청', go: 'requests', tone: openReq ? 'warn' : null },
-      { n: leftTasks, l: '남은 업무', go: 'tasks', tone: leftTasks > 0 ? 'task' : null },
-      { n: leftSupply, l: '배부 확인 필요', go: 'supplies', tone: leftSupply > 0 ? 'warn' : null },
-      { n: S.booths.length, l: '전체 부스', go: 'booths' }
+      // 카드마다 윗줄 색 하나로만 구분합니다(숫자·배경은 칠하지 않음).
+      { n: openReq, l: '미처리 요청', go: 'requests', key: 'req' },
+      { n: leftTasks, l: '남은 업무', go: 'tasks', key: 'task' },
+      { n: leftSupply, l: '배부 확인 필요', go: 'supplies', key: 'supply' },
+      { n: S.booths.length, l: '전체 부스', go: 'booths', key: 'booth' }
     ];
     var statsHtml = '<div class="statgrid">' + stats.map(function (st) {
-      return '<button class="stat' + (st.tone ? ' stat--' + st.tone : '') + '" type="button" data-go="' + st.go + '"' +
+      return '<button class="stat stat--' + st.key + '" type="button" data-go="' + st.go + '"' +
         (st.f ? ' data-filter="' + esc(st.f) + '"' : '') + '>' +
         '<span class="stat__n">' + st.n + '</span>' +
         '<span class="stat__l">' + esc(st.l) + '</span></button>';
@@ -831,6 +832,32 @@
      한 줄로만 남았고, 그 숫자가 화면 윗부분을 차지했습니다.
      배치도 → 구역 → 검색 → 목록 순으로 좁혀 가게만 둡니다.
      booths.status 칸은 표에 그대로 남아 있습니다. */
+  /* 운영기관 유형(초등·중등·고등·기관·기업·기타).
+     구역은 '어디에 있나', 유형은 '누가 운영하나' 로 뜻이 다릅니다.
+     관리자가 고른 값(org_type)을 먼저 씁니다. 비어 있으면 기관 이름이
+     '…초등학교/…중학교/…고등학교' 로 끝날 때만 화면에서 짐작하고,
+     그 값은 저장하지 않습니다. 확실하지 않으면 표시하지 않습니다 —
+     '기관' 이라고 단정하면 틀린 정보를 보여 주게 됩니다. */
+  var ORG_TYPES = ['초등', '중등', '고등', '기관', '기업', '기타'];
+  var ORG_TONE  = { '초등': 'el', '중등': 'mid', '고등': 'high', '기관': 'org', '기업': 'biz', '기타': 'etc' };
+
+  function orgType(b) {
+    if (b.org_type && ORG_TYPES.indexOf(b.org_type) >= 0) return b.org_type;
+    var o = String(b.org || '').replace(/\s+/g, '');
+    if (/초등학교$/.test(o)) return '초등';
+    if (/중학교$/.test(o)) return '중등';
+    if (/고등학교$|공업고등학교$|예술고등학교$/.test(o)) return '고등';
+    return '';
+  }
+  function orgBadge(type) {
+    return type ? '<span class="orgtag orgtag--' + ORG_TONE[type] + '">' + esc(type) + '</span>' : '';
+  }
+  // 필터에서는 기관·기업·기타를 하나로 묶습니다. 수가 적어 칩을 셋으로
+  // 나누면 줄만 길어집니다. 카드에는 실제 값을 그대로 적습니다.
+  function orgGroup(type) {
+    return (type === '초등' || type === '중등' || type === '고등') ? type : (type ? '기관·기타' : '');
+  }
+
   function zoneName(key) {
     var z = S.zones.filter(function (x) { return x.key === key; })[0];
     return z ? z.key + '구역' + (z.label ? ' · ' + z.label : '') : (key ? key + '구역' : '');
@@ -845,27 +872,44 @@
         ['전체'].concat(S.zones.map(function (z) { return z.key + '존'; })).map(function (lab) {
           var n = lab === '전체' ? S.booths.length
             : S.booths.filter(function (b) { return b.zone_key + '존' === lab; }).length;
-          var text = lab === '전체' ? '전체' : lab.replace('존', '구역');
+          var text = lab === '전체' ? '전체' : lab.replace('존', '');
           return '<button class="chip' + (ui.boothZone === lab ? ' is-on' : '') + '" type="button" ' +
             'data-boothzone="' + esc(lab) + '" aria-pressed="' + (ui.boothZone === lab) + '">' +
             esc(text) + '<span class="chip__n">' + n + '</span></button>';
         }).join('') + '</div>'
       : '';
 
+    /* 구분은 한 단계 작은 보조 필터입니다. 유형을 알 수 있는 부스가
+       하나도 없으면 줄 자체를 두지 않습니다. */
+    var groupsPresent = ['초등', '중등', '고등', '기관·기타'].filter(function (g) {
+      return S.booths.some(function (b) { return orgGroup(orgType(b)) === g; });
+    });
+    var typeHtml = groupsPresent.length
+      ? '<div class="filterrow"><span class="filterrow__l">구분</span>' +
+        chips(['전체'].concat(groupsPresent).map(function (g) {
+          return { label: g, n: g === '전체' ? S.booths.length
+            : S.booths.filter(function (b) { return orgGroup(orgType(b)) === g; }).length };
+        }), ui.boothType, 'data-boothtype', 'chiprow--sub') + '</div>'
+      : '';
+
     var list = S.booths.filter(function (b) {
       if (ui.boothZone !== '전체' && (b.zone_key + '존') !== ui.boothZone) return false;
+      if (ui.boothType !== '전체' && orgGroup(orgType(b)) !== ui.boothType) return false;
       if (!q) return true;
-      return ((b.code || '') + ' ' + b.name + ' ' + (b.org || '') + ' ' + (b.program || ''))
+      return ((b.code || '') + ' ' + b.name + ' ' + (b.org || '') + ' ' + (b.program || '') + ' ' + orgType(b))
         .toLowerCase().indexOf(q) >= 0;
     });
 
     var body = list.length ? '<div class="boothgrid">' + list.map(function (b) {
+      // 읽는 순서: 번호 · 유형 → 부스명 · 기관 → 위치.
+      // 유형은 옅게 채운 표시, 구역은 테두리만 있는 위치 표시로 문법을 나눕니다.
       return '<button class="booth" type="button" data-booth="' + esc(b.id) + '">' +
         '<span class="booth__top"><span class="booth__code">' + esc(b.code || (b.zone_key + '-' + b.no)) + '</span>' +
-        '<span class="tag tag--soft">' + esc(zoneName(b.zone_key)) + '</span></span>' +
+        orgBadge(orgType(b)) + '</span>' +
         '<span class="booth__name">' + esc(b.name) + '</span>' +
         '<span class="booth__org">' + esc(b.org || '운영기관 미정') + '</span>' +
         (b.program ? '<span class="booth__prog">' + esc(b.program) + '</span>' : '') +
+        (b.zone_key ? '<span class="booth__zone"><span class="zonetag">' + esc(zoneName(b.zone_key)) + '</span></span>' : '') +
         '</button>';
     }).join('') + '</div>'
       : S.booths.length
@@ -883,7 +927,8 @@
       pageHead('부스 현황', '부스 위치와 운영기관을 확인합니다. 카드를 누르면 상세 정보가 열립니다.') +
       map +
       '<p class="countline">전체 부스 <b>' + S.booths.length + '</b>개</p>' +
-      zoneHtml +
+      (zoneHtml ? '<div class="filterrow"><span class="filterrow__l">구역</span>' + zoneHtml + '</div>' : '') +
+      typeHtml +
       '<div class="tools"><div class="search"><label class="sr-only" for="booth-q">부스 검색</label>' +
       '<input class="input" id="booth-q" type="search" placeholder="부스명 · 운영기관 검색" value="' + esc(ui.boothQ) + '" /></div></div>' +
       (list.length && list.length !== S.booths.length ? '<p class="resultline">' + list.length + '건</p>' : '') +
@@ -897,6 +942,7 @@
       ['부스 번호', b.code || (b.zone_key + '-' + b.no)],
       ['부스명', b.name],
       ['운영기관', b.org],
+      ['운영기관 유형', orgType(b)],
       ['구역', zoneName(b.zone_key)],
       ['담당자', b.manager],
       ['운영 프로그램', b.program],
@@ -1098,8 +1144,8 @@
        단추를 두지 않습니다. */
     var body = list.length ? '<div class="tl tl--2">' + list.map(function (r) {
       return '<div class="rescard">' +
-        '<span class="tag tag--soft">' + esc(r.category || '기타') + '</span>' +
         '<div class="rescard__title">' + esc(r.title) + '</div>' +
+        '<div class="rescard__kind">' + esc(r.category || '기타') + '</div>' +
         (r.description ? '<p class="rescard__desc">' + esc(r.description) + '</p>' : '') +
         (r.url
           ? '<div class="rescard__act"><a class="btn btn--ghost btn--sm" href="' + esc(r.url) + '" ' +
@@ -1607,7 +1653,7 @@
      사람 명단을 통째로 펼치지 않고 기관·팀·부스 단위로만 봅니다 —
      포털은 링크만 알면 열리므로 개인 명단을 올릴 자리가 아닙니다.
 
-     포털에서는 수령 상태(일부 배부 · 배부 완료)만 표시합니다. 수량과 물품은 관리자 몫입니다. */
+     포털에서는 보기만 합니다. 배부 상태·수량·물품은 운영본부가 관리자에서 정합니다. */
   function allocsOf(targetId) {
     return S.supplyAllocs.filter(function (a) { return a.target_id === targetId; })
       .map(function (a) {
@@ -1641,7 +1687,7 @@
   /* ── 화면: 운영 물품 ────────────────────────────────────────── */
   function viewSupplies() {
     var head = pageHead('운영 물품',
-      '기관·팀·부스별 물품 배부 현황입니다. 물품을 받았으면 수령 상태를 확인해 주세요. 수량과 물품은 관리자가 관리합니다.');
+      '기관·팀·부스별 물품 배부 현황을 확인합니다. 배부 상태는 운영본부에서 관리합니다.');
 
     if (!S.supplyTargets.length) {
       return '<div class="page">' + head +
@@ -1710,7 +1756,8 @@
           (items.length > 3 ? ' <span class="muted">+' + (items.length - 3) + '</span>' : '') + '</span>'
         : '<span class="supply__meta supply__meta--none">배부 물품 미등록</span>') +
       '</button>';
-    return st === '배부 완료' ? card : actionCard(card, supplyActions(t));
+    // 관계자는 보기만 합니다. 배부 상태는 운영본부가 관리자에서 정합니다.
+    return card;
   }
 
   function supplyDetail(id) {
@@ -1865,9 +1912,10 @@
       if (t.closest('[data-close-zoom]')) { closeZoom(); return; }
 
       var chip = t.closest('[data-boothzone],[data-schedcat],[data-schedhalf],' +
-        '[data-contactcat],[data-faqcat],[data-taskarea]');
+        '[data-contactcat],[data-faqcat],[data-taskarea],[data-boothtype]');
       if (chip) {
         if (chip.hasAttribute('data-boothzone'))   ui.boothZone   = chip.getAttribute('data-boothzone');
+        if (chip.hasAttribute('data-boothtype'))   ui.boothType   = chip.getAttribute('data-boothtype');
         if (chip.hasAttribute('data-schedcat'))    ui.schedCat    = chip.getAttribute('data-schedcat');
         if (chip.hasAttribute('data-contactcat'))  ui.contactCat  = chip.getAttribute('data-contactcat');
         if (chip.hasAttribute('data-faqcat'))      ui.faqCat      = chip.getAttribute('data-faqcat');
@@ -1908,8 +1956,6 @@
       var tn = t.closest('[data-tasknext]');
       if (tn) { setTaskStatus(tn.getAttribute('data-tasknext'), tn.getAttribute('data-to'), tn); return; }
 
-      var sc = t.closest('[data-supplycheck]');
-      if (sc) { checkSupply(sc.getAttribute('data-supplycheck'), sc); return; }
 
       var cp = t.closest('[data-copyphone]');
       if (cp) { copyPhone(cp.getAttribute('data-copyphone')); return; }
@@ -1962,9 +2008,9 @@
      관계자가 현장에서 직접 바꿀 수 있는 것은 "상태" 뿐입니다.
      이름·수량·담당자 같은 값은 관리자 몫이고, 서버에서도 그렇게
      막혀 있습니다 — 표에 쓰기 권한을 여는 대신 상태 한 칸만 바꾸는
-     함수를 열어 두었습니다(set_booth_status 와 같은 방식).
+     함수만 열어 두었습니다.
 
-     네 화면이 같은 길을 씁니다.
+     요청·업무 두 화면이 같은 길을 씁니다.
        누름 → (필요하면) 확인 → 버튼 잠금 → 서버 → 화면 갱신 → 알림
      실패하면 아무것도 바꾸지 않고 이유만 알립니다. 미리 바꿔 두었다가
      되돌리면, 잠깐 보였던 값이 맞는지 사람이 알 수 없게 됩니다. */
@@ -2073,40 +2119,6 @@
       return actBtn('data-tasknext="' + esc(t.id) + '" data-to="완료"', '업무 완료');
     }
     return '';   // 완료된 업무에는 단추를 두지 않습니다
-  }
-
-  /* ── 운영 물품: 수령 확인 ───────────────────────────────────── */
-  function setSupplyStatus(id, next, btn) {
-    runAction({
-      btn: btn,
-      rpc: 'set_supply_target_status',
-      args: { p_id: id, p_status: next },
-      okText: next === '배부 완료' ? '수령 완료로 표시했습니다.' : '일부 배부로 표시했습니다.',
-      apply: function (row) {
-        S.supplyTargets = S.supplyTargets.map(function (x) { return x.id === id ? row : x; });
-      }
-    });
-  }
-
-  /* 단추는 하나만 둡니다. 받은 정도를 고르는 일은 창 안에서 합니다.
-     이미 일부 배부라면 '일부만 받음' 은 같은 말이라 빼고 묻습니다. */
-  function checkSupply(id, btn) {
-    var t = S.supplyTargets.filter(function (x) { return x.id === id; })[0];
-    if (!t || btn.disabled) return;
-    var partial = (t.status || '미배부') === '일부 배부';
-    var items = allocsOf(t.id).map(function (a) { return a.name + ' ' + a.qty + a.unit; }).join(', ');
-    UI.choose({
-      title: '물품을 모두 받았나요?',
-      message: '“' + t.name + '”' + (items ? ' — ' + items : '') +
-        (partial ? ' · 지금은 일부 배부로 표시돼 있습니다.' : ''),
-      choices: (partial ? [] : [{ value: '일부 배부', label: '일부만 받음' }])
-        .concat([{ value: '배부 완료', label: '모두 받음', primary: true }])
-    }).then(function (v) { if (v) setSupplyStatus(id, v, btn); });
-  }
-
-  function supplyActions(t) {
-    if ((t.status || '미배부') === '배부 완료') return '';
-    return actBtn('data-supplycheck="' + esc(t.id) + '"', '수령 상태 확인');
   }
 
   /* ── 쓰기 동작 ──────────────────────────────────────────────── */

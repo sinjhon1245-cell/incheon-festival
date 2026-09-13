@@ -3,11 +3,13 @@
 --
 --   관계자 포털에서 로그인 없이 "상태만" 바꿀 수 있게 합니다.
 --
---     운영 요청 → 해결 완료
---     담당 업무 → 시작 / 완료
---     운영 물품 → 일부 수령 / 수령 완료
---     부스     → 관계자 포털에서 상태 변경을 없앱니다.
---               anon 의 set_booth_status 실행 권한을 거둡니다(함수는 남김).
+--     운영 요청 → 해결 완료          (anon 가능)
+--     담당 업무 → 시작 / 완료        (anon 가능)
+--     운영 물품 → 조회만. 배부 상태는 운영본부가 관리자에서 정합니다.
+--               anon 의 set_supply_target_status 실행 권한을 거둡니다.
+--     부스     → 조회만. anon 의 set_booth_status 실행 권한을 거둡니다.
+--
+--   함께 들어 있는 표 변경: booths.org_type (운영기관 유형) 칼럼 추가
 --
 -- 사용법: Supabase 대시보드 → SQL Editor 에 전체 붙여넣고 Run.
 --         여러 번 실행해도 안전하고, 기존 데이터를 지우지 않습니다.
@@ -19,10 +21,10 @@
 --
 -- ⚠️ 보안에서 가장 중요한 점
 --    표 전체에 anon UPDATE 정책을 만들지 않습니다. 그렇게 하면 주소를
---    아는 사람이 담당자 연락처나 수량까지 바꿀 수 있습니다. 대신 아래
---    함수 세 개만 열어 둡니다. 각 함수는 security definer 라 RLS 를
---    지나치지만, 하는 일이 "status 한 칸 수정" 뿐이라 다른 칸을 건드릴
---    방법이 없습니다. 이미 쓰고 있는 set_booth_status 와 같은 방식입니다.
+--    아는 사람이 담당자 연락처나 수량까지 바꿀 수 있습니다. 대신 anon 에게는
+--    아래 함수 두 개(요청 해결 완료 · 업무 상태)만 열어 둡니다. 각 함수는
+--    security definer 라 RLS 를 지나치지만, 하는 일이 "status 한 칸 수정"
+--    뿐이라 다른 칸을 건드릴 방법이 없습니다.
 -- ===================================================================
 
 
@@ -143,11 +145,12 @@ grant execute on function public.set_operation_task_status(uuid, text) to anon, 
 
 
 -- ═══════════════════════════════════════════════════════════════
--- 4. 운영 물품 — 일부 수령 / 수령 완료
+-- 4. 운영 물품 상태 함수 — 관리자 전용으로 둡니다
 --
--- 관계자는 "받았다" 는 말만 합니다. '미배부' 로 되돌리는 것은 허용하지
--- 않습니다 — 잘못 눌렀다면 관리자가 고칩니다. 수량·물품·대상은 이
--- 함수가 손대지 않으므로 관계자가 바꿀 방법이 없습니다.
+-- 배부 상태는 운영본부가 판단합니다. 관계자 포털에서는 조회만 하므로
+-- anon 이 이 함수를 부를 이유가 없습니다. 이 파일의 이전 판을 이미
+-- 실행해 anon 에게 열려 있더라도, 다시 실행하면 아래 revoke 로 거둡니다.
+-- 함수 자체는 호환을 위해 남깁니다(관리자는 표를 직접 고칩니다).
 -- ═══════════════════════════════════════════════════════════════
 create or replace function public.set_supply_target_status(p_id uuid, p_status text)
 returns public.supply_targets
@@ -197,7 +200,8 @@ end;
 $$;
 
 revoke all on function public.set_supply_target_status(uuid, text) from public;
-grant execute on function public.set_supply_target_status(uuid, text) to anon, authenticated;
+revoke execute on function public.set_supply_target_status(uuid, text) from anon;
+grant execute on function public.set_supply_target_status(uuid, text) to authenticated;
 
 
 -- ═══════════════════════════════════════════════════════════════
@@ -223,10 +227,29 @@ end $$;
 
 
 -- ═══════════════════════════════════════════════════════════════
--- 6. 확인
+-- 6. 부스 운영기관 유형 (booths.org_type)
 --
--- anon 이 실행할 수 있는 상태 함수는 아래 셋이어야 합니다
--- (set_booth_status 는 anon_실행 = false 여야 정상).
+-- 구역(A·B·C…)은 "어디에 있나", 유형은 "누가 운영하나" 입니다.
+-- 같은 A구역에 초등·중등 부스가 함께 있을 수 있어 칸을 따로 둡니다.
+-- 칸을 더하기만 합니다. 기존 줄은 비어 있는 채로 두고, 값을 짐작해
+-- 채우지 않습니다 — 관리자가 고른 값만 믿습니다. 비어 있으면 포털이
+-- 기관 이름(…초등학교 등)으로 화면에서만 짐작하고 저장하지 않습니다.
+-- ═══════════════════════════════════════════════════════════════
+alter table public.booths
+  add column if not exists org_type text;
+
+alter table public.booths drop constraint if exists booths_org_type_check;
+alter table public.booths
+  add constraint booths_org_type_check
+  check (org_type is null or org_type in ('초등', '중등', '고등', '기관', '기업', '기타'));
+
+
+-- ═══════════════════════════════════════════════════════════════
+-- 7. 확인
+--
+-- anon_실행 이 true 인 함수는 resolve_operation_request 와
+-- set_operation_task_status 둘뿐이어야 합니다.
+-- set_booth_status · set_supply_target_status 는 false 여야 정상입니다.
 -- 표에 anon UPDATE 정책이 하나도 없다는 것도 함께 확인합니다.
 -- ═══════════════════════════════════════════════════════════════
 select p.proname as "함수",

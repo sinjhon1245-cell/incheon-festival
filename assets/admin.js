@@ -29,6 +29,7 @@
   var NOTICE_LEVELS = ['긴급', '중요', '일반'];
   var FAQ_CATS = ['부스 운영', '시설·장소', '안전', '물품·지원', '기타'];
   var SUPPLY_KINDS  = ['기관', '팀', '부스'];
+  var ORG_TYPES     = ['초등', '중등', '고등', '기관', '기업', '기타'];
   var TASK_STATES   = ['예정', '진행 중', '완료'];
   var SUPPLY_STATES = ['미배부', '일부 배부', '배부 완료'];
   // 역할 구분은 DB 에서 값을 제한하지 않습니다. 현장에서 쓰는 말이
@@ -184,12 +185,13 @@
 
     booths: {
       label: '부스', table: 'booths', addLabel: '+ 부스 추가',
-      desc: '부스 정보와 운영 상태를 관리합니다.',
+      desc: '부스 정보와 운영기관을 관리합니다.',
       blank: { no: 1, zone_key: 'A', name: '', org: '' },
       title: function (r) { return (r.code || (r.zone_key + '-' + r.no)) + ' · ' + (r.name || '(이름 없음)'); },
       meta: function (r) { return (r.org || '운영기관 미정') + (r.manager ? ' · 담당 ' + r.manager : ''); },
       tags: function (r) {
-        return (r.needs_power ? tag('전기') : '') + (r.needs_network ? tag('네트워크') : '');
+        return (r.org_type ? tag(r.org_type) : '') +
+          (r.needs_power ? tag('전기') : '') + (r.needs_network ? tag('네트워크') : '');
       },
       fields: [
         { type: 'group', label: '기본 정보' },
@@ -197,6 +199,11 @@
         { k: 'zone_key',      label: '구역', type: 'zone' },
         { k: 'name',          label: '부스명', wide: true, required: true },
         { k: 'org',           label: '운영기관', wide: true },
+        { k: 'org_type',      label: '운영기관 유형', type: 'select',
+          options: [['', '(선택 안 함)']].concat(opts(ORG_TYPES)),
+          hint: '포털 카드에 초등·중등·고등 표시로 보입니다',
+          // migration-portal-actions.sql 을 돌리기 전에는 칸이 없습니다.
+          needsColumn: true },
         { k: 'manager',       label: '담당자' },
 
         { type: 'group', label: '운영 정보' },
@@ -216,6 +223,8 @@
       ],
       beforeSave: function (v) {
         if (!v.code) v.code = v.zone_key + '-' + String(v.no).padStart(2, '0');
+        // '선택 안 함' 은 빈 글자가 아니라 null 로 보냅니다(표의 허용값 검사).
+        if ('org_type' in v && !v.org_type) v.org_type = null;
         return v;
       }
     },
@@ -891,7 +900,13 @@
     ent.fields.forEach(function (f) {
       if (f.type === 'datetime') values[f.k] = toLocalInput(values[f.k]);
     });
-    var kept = keepOldValue(ent, values);
+    var kept = keepOldValue(ent, values).filter(function (f) {
+      /* 아직 표에 없는 칸은 편집창에서 뺍니다. 없는 칸을 보내면 저장이
+         통째로 거절됩니다. 줄이 하나도 없으면 알 수 없으니 그대로 둡니다. */
+      if (!f.needsColumn) return true;
+      var rows = cache[key] || [];
+      return !rows.length || rows.some(function (r) { return f.k in r; });
+    });
 
     // 딸린 줄(담당자·물품)을 지금 값에서 읽어 함께 싣습니다.
     var ch = ent.children;

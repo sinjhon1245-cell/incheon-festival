@@ -1205,6 +1205,97 @@ a.side__brand:hover b { color: var(--primary); }
   .modal__foot .btn { flex: 1 1 auto; min-height: 44px; }
 }
 
+
+/* ═══ 읽기 위계 보강 ═══════════════════════════════════════════════ */
+
+/* 제목 표시 막대를 조금 또렷하게. 색 블록이 되지 않을 만큼만. */
+.page__title::before { width: 5px; height: 1em; border-radius: 3px; }
+
+/* ── 홈 숫자 카드 ────────────────────────────────────────────────
+   넉 장이 똑같이 하얘서 구분이 안 됐습니다. 윗줄 3px 하나로만 나눕니다.
+   숫자와 배경은 칠하지 않습니다 — 상태 색(긴급·완료)과 섞이지 않게. */
+.stat { box-shadow: var(--sh); position: relative; overflow: hidden; }
+.stat::before {
+  content: ''; position: absolute; left: 0; right: 0; top: 0; height: 3px;
+  background: var(--stat-accent, var(--line));
+}
+.stat--req    { --stat-accent: #E08A3C; }
+.stat--task   { --stat-accent: #5B5FD0; }
+.stat--supply { --stat-accent: #3E9C8A; }
+.stat--booth  { --stat-accent: #5B45E0; }
+.stat--task .stat__n { color: var(--ink); }
+
+/* ── 부스 카드 ───────────────────────────────────────────────────
+   색은 운영기관 유형 하나에만 씁니다.
+     유형  : 옅게 채운 표시 — '누가 운영하나'
+     구역  : 테두리만 있는 표시 — '어디에 있나'
+     번호  : 색 없는 회색 바탕
+   셋이 같은 모양이면 어느 색이 무슨 뜻인지 알 수 없습니다. */
+.booth__top { flex-wrap: wrap; gap: 6px; }
+.booth__code {
+  color: var(--ink); background: var(--bg-sink);
+  font-size: 12.5px; font-weight: 700; padding: 3px 8px; border-radius: 7px;
+}
+.booth__name { font-size: 16px; line-height: 1.4; }
+.booth__org { font-size: 14px; color: var(--ink-2); margin-top: -2px; }
+.booth__zone { margin-top: 2px; }
+
+.orgtag {
+  display: inline-flex; align-items: center;
+  font-size: 12px; font-weight: 700; padding: 3px 8px; border-radius: 7px;
+  background: var(--org-bg); color: var(--org-fg);
+}
+.orgtag--el   { --org-bg: #EAF2FF; --org-fg: #315F9B; }
+.orgtag--mid  { --org-bg: #E6F5F2; --org-fg: #26766C; }
+.orgtag--high { --org-bg: #F0EBFC; --org-fg: #654CA3; }
+.orgtag--org  { --org-bg: #EEF1F5; --org-fg: #596579; }
+.orgtag--biz  { --org-bg: #FBF1DF; --org-fg: #91631D; }
+.orgtag--etc  { --org-bg: #F1F2F4; --org-fg: #6B7280; }
+
+.zonetag {
+  display: inline-flex; align-items: center; max-width: 100%;
+  font-size: 12.5px; font-weight: 600; color: var(--muted);
+  border: 1px solid var(--line); border-radius: 999px; padding: 2px 9px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* ── 필터 줄: 구역이 1차, 구분은 한 단계 작게 ─────────────────── */
+.filterrow { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.filterrow__l {
+  flex: 0 0 auto; width: 30px;
+  font-size: 12.5px; font-weight: 700; color: var(--muted-2);
+}
+.filterrow .chiprow { flex: 1; min-width: 0; }
+.filterrow + .filterrow { margin-top: -14px; }
+
+/* ── 섹션 제목: 제목 · 개수 · 펼치기가 한 줄 ─────────────────── */
+.section-title { flex-wrap: nowrap; }
+#view .section-title::before { width: 6px; height: 6px; opacity: 0.85; }
+.section-title__n { flex: 0 0 auto; }
+
+/* ── 운영 물품 카드: 단추가 빠진 자리를 줄입니다 ───────────────── */
+.supply { gap: 5px; padding: 14px 16px; }
+.supply__name { font-size: 16px; line-height: 1.4; }
+.supply__meta { font-size: 13.5px; margin-top: -2px; }
+.supply__line { margin-top: 3px; padding-top: 8px; border-top: 1px solid var(--line-2); }
+.supply__top .badge { font-size: 12px; }
+
+/* ── 자료실: 제목 먼저, 종류는 작은 글자 ───────────────────────── */
+.rescard__kind { font-size: 12.5px; font-weight: 600; color: var(--muted-2); margin-top: -3px; }
+
+/* ── 연락망: 번호 유무에 따라 높이가 들쭉날쭉하지 않게 ──────────── */
+.tl--2 > .contact { align-self: stretch; }
+.contact__phone { margin-top: auto; }
+.contact { min-height: 132px; }
+
+@media (max-width: 560px) {
+  .filterrow { align-items: flex-start; }
+  .filterrow__l { padding-top: 8px; }
+  /* 구역·구분 칩은 옆으로 밀지 않고 줄을 바꿉니다. 수가 적어 두 줄이면 끝납니다. */
+  .filterrow .chiprow { flex-wrap: wrap; overflow: visible; row-gap: 6px; }
+  .contact { min-height: 0; }
+}
+
 /* ── 인쇄 ─────────────────────────────────────────────────────── */
 @media print {
   .side, .tabbar, .topbar, .fab, .page__actions, .tools { display: none !important; }

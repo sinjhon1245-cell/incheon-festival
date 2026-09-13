@@ -216,8 +216,8 @@ window.Core = (function () {
 
   /* 데이터베이스 함수(RPC) 호출.
      "이 칼럼 하나만 바꿀 수 있어야 한다" 같은 제한된 쓰기에 씁니다.
-     부스 상태 변경이 그렇습니다 — 표 전체에 쓰기 권한을 열지 않고
-     set_booth_status 함수 하나만 열어 둡니다. */
+     요청 해결 완료와 업무 상태가 그렇습니다 — 표 전체에 쓰기 권한을
+     열지 않고 상태 한 칸만 바꾸는 함수만 열어 둡니다. */
   function rpc(name, args) {
     var c = db();
     if (!c) return Promise.reject(new Error('Supabase 설정이 없습니다.'));
