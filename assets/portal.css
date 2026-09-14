@@ -30,6 +30,12 @@
   --info:    #1F5FA8;  --info-t:    #E7F0FB;
   --off:     #6B7794;  --off-t:     #EEF0F5;
 
+  /* 배부 단계 — 예정(준비·대기) · 중(진행) · 완료(성공).
+     윗줄·점·왼쪽 선에만 씁니다. 카드 전체를 칠하지 않습니다. */
+  --st-plan: #D99A3E;  --st-plan-ink: #93600F;  --st-plan-t: #FFFBF4;
+  --st-part: #4E7DBD;  --st-part-ink: #2F5FA8;  --st-part-t: #F8FAFE;
+  --st-done: #4E9B73;  --st-done-ink: #2D7853;  --st-done-t: #F7FBF9;
+
   --r:    12px;
   --r-lg: 16px;
   /* 카드가 많은 화면이라 그림자가 겹치면 화면이 탁해집니다.
@@ -1664,10 +1670,12 @@ a.side__brand:hover b { color: var(--primary); }
   display: flex; align-items: center; gap: 6px;
   font-size: 12.5px; font-weight: 700; color: var(--muted);
 }
-.brief__slot.is-live .brief__label { color: var(--ok); }
-.brief__slot.is-live .brief__label::before {
-  content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--ok);
+.brief__live {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 11.5px; font-weight: 700; color: var(--ok); background: var(--ok-t);
+  padding: 1px 8px 1px 7px; border-radius: 999px; white-space: nowrap;
 }
+.brief__live::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--ok); }
 .brief__after { font-weight: 600; color: var(--muted-2); }
 .brief__after::before { content: "· "; }
 .brief .brief__day { font-size: 13.5px; font-weight: 600; color: var(--ink-2); margin-top: 8px; }
@@ -1684,13 +1692,26 @@ a.side__brand:hover b { color: var(--primary); }
 .brief .brief__empty { font-size: 14px; color: var(--muted); margin-top: 8px; }
 .brief .brief__lead { font-size: 16px; font-weight: 700; color: var(--ink); margin-top: 12px; }
 
-.brief__split { display: grid; grid-template-columns: minmax(0, 1fr); }
-.brief__split > .brief__slot + .brief__slot { border-top: 1px solid #E8E4F8; padding-top: 14px; }
+/* 현재 + 다음. 현재는 옅은 보라 바탕 칸, 다음은 바탕 없이 한 단계 작게.
+   좁으면 위아래(현재 → 구분선 → 다음), 넓으면 약 63 : 37 로 나란히. */
+.brief__pair {
+  display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px;
+  margin-top: 12px; align-items: start;
+}
+.brief__pair > .brief__slot { margin-top: 0; }
+.brief__slot--now {
+  background: #F2EFFE; border-radius: 10px; padding: 12px 14px 13px;
+}
+.brief__slot--next { padding: 0 2px; }
+.brief .brief__slot--next .brief__time { font-size: 18px; font-weight: 750; margin-top: 6px; }
+.brief .brief__slot--next .brief__what { font-size: 15px; font-weight: 650; margin-top: 2px; color: var(--ink-2); }
+.brief .brief__slot--next .brief__where { font-size: 13.5px; }
 @container (min-width: 520px) {
-  .brief__split { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
-  .brief__split > .brief__slot + .brief__slot {
-    border-top: 0; padding-top: 0; border-left: 1px solid #E8E4F8; padding-left: 20px;
-  }
+  .brief__pair { grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr); gap: 18px; }
+  .brief__slot--next { padding: 12px 0 0 18px; border-left: 1px solid #E8E4F8; align-self: stretch; }
+}
+@container (max-width: 519px) {
+  .brief__slot--next { border-top: 1px solid #E8E4F8; padding-top: 12px; }
 }
 
 .brief__left {
@@ -1942,10 +1963,27 @@ a.side__brand:hover b { color: var(--primary); }
   .sumcard__n { font-size: 23px; }
 }
 
-/* ── 운영 물품 카드: 상태를 왼쪽 선 한 줄로도 ────────────────────── */
-.supply--plan { box-shadow: inset 3px 0 0 #D9A24A; }
-.supply--part { box-shadow: inset 3px 0 0 #5B8FD0; }
+/* ── 운영 물품 요약: 배부 예정 · 배부 중 · 배부 완료 ───────────────
+   화면 색(윗줄) 대신 단계 색을 윗줄 3px · 점 · 숫자에만 씁니다.
+   바탕은 흰색에 가까운 옅은 톤까지만. */
+.sumgrid--supply { max-width: 780px; }
+.sumcard--st-plan { --accent: var(--st-plan); background: var(--st-plan-t); }
+.sumcard--st-part { --accent: var(--st-part); background: var(--st-part-t); }
+.sumcard--st-done { --accent: var(--st-done); background: var(--st-done-t); }
+.sumcard--st-plan .sumcard__n { color: var(--st-plan-ink); }
+.sumcard--st-part .sumcard__n { color: var(--st-part-ink); }
+.sumcard--st-done .sumcard__n { color: var(--st-done-ink); }
+.sumcard.is-none .sumcard__n { color: var(--muted-2); }
+.sumcard__l { display: flex; align-items: center; gap: 6px; }
+.sumcard__dot { width: 7px; height: 7px; border-radius: 50%; flex: none; background: var(--accent, var(--primary)); }
+
+/* ── 운영 물품 카드: 상태를 왼쪽 선 한 줄로도 (요약과 같은 색) ──── */
+.supply--plan { box-shadow: inset 3px 0 0 var(--st-plan); }
+.supply--part { box-shadow: inset 3px 0 0 var(--st-part); }
+.supply--done { box-shadow: inset 3px 0 0 var(--st-done); }
 .supply__top .supply__kind { margin-left: 2px; }
+.supply__sample { margin-left: auto; }
+.supply__sample .badge { font-size: 11px; padding: 1px 7px; }
 #view[data-view="supplies"] .tools { gap: 10px; }
 
 /* ── 일정 상단: 행사 준비 칸 ─────────────────────────────────────── */

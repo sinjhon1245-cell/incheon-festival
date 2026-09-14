@@ -71,7 +71,8 @@
     '긴급': 'danger', '중요': 'warn', '일반': 'info',
     '높음': 'warn', '보통': 'info',
     '접수': 'warn', '확인 중': 'info', '처리 중': 'info', '완료': 'ok',
-    '미배부': 'warn', '일부 배부': 'info', '배부 완료': 'ok'
+    '미배부': 'warn', '일부 배부': 'info', '배부 완료': 'ok',
+    '배부 예정': 'warn', '배부 중': 'info'
   };
   function badge(text, extra) {
     var t = TONE[text] || 'off';
@@ -420,12 +421,12 @@
   /* 상태를 판단해야 하는 화면(홈·요청·업무·물품)에만 붙이는 작은 요약.
      정보 화면(자료실·연락망)에는 쓰지 않습니다. 거기서는 개수 한 줄이면
      충분하고, 숫자 칸을 늘어놓으면 운영 화면과 구분이 흐려집니다. */
-  function summaryGrid(items) {
-    return '<div class="sumgrid" style="--n:' + items.length + '">' + items.map(function (c) {
+  function summaryGrid(items, extra) {
+    return '<div class="sumgrid' + (extra ? ' ' + extra : '') + '" style="--n:' + items.length + '">' + items.map(function (c) {
       var none = c.n == null;
       return '<div class="sumcard' + (c.tone ? ' sumcard--' + c.tone : '') + (none ? ' is-none' : '') + '">' +
         '<span class="sumcard__n">' + (none ? '<span aria-hidden="true">—</span><span class="sr-only">없음</span>' : c.n) + '</span>' +
-        '<span class="sumcard__l">' + esc(c.l) + '</span>' +
+        '<span class="sumcard__l">' + (c.dot ? '<span class="sumcard__dot" aria-hidden="true"></span>' : '') + esc(c.l) + '</span>' +
         (c.sub ? '<span class="sumcard__sub">' + esc(c.sub) + '</span>' : '') + '</div>';
     }).join('') + '</div>';
   }
@@ -611,18 +612,26 @@
         '</a>';
     }).join('') + '</nav>';
 
-    /* 3. 운영 브리핑 — 시점에 따라 담는 내용만 바뀝니다 */
+    /* 3. 운영 브리핑 — 시점에 따라 담는 내용만 바뀝니다.
+       현재·다음 판단은 일정 화면 상단과 같은 scheduleBrief() 하나로 합니다.
+         행사 전             → 다음 주요 일정(크게)
+         당일 · 진행 중 있음 → 현재 주요 일정(크게) + 다음 주요 일정(작게)
+         당일 · 진행 중 없음 → 다음 주요 일정만. 빈 '현재' 칸은 두지 않습니다.
+         당일 · 모두 끝남    → 오늘 일정 종료 한 줄
+         행사 종료           → 남은 운영 확인 */
     function slot(label, item, opts) {
       opts = opts || {};
+      var cls = 'brief__slot' + (opts.size ? ' brief__slot--' + opts.size : '');
       if (!item) {
-        return '<div class="brief__slot"><p class="brief__label">' + esc(label) + '</p>' +
+        return '<div class="' + cls + '"><p class="brief__label">' + esc(label) + '</p>' +
           '<p class="brief__empty">' + esc(opts.empty || '등록된 일정이 없습니다.') + '</p></div>';
       }
       var time = opts.range && item.end_time
         ? esc(item.start_time) + '–' + esc(item.end_time)
         : esc(item.start_time || item.time_label || '');
-      return '<div class="brief__slot' + (opts.live ? ' is-live' : '') + '">' +
-        '<p class="brief__label">' + esc(label) + (opts.after ? '<span class="brief__after">' + esc(opts.after) + '</span>' : '') + '</p>' +
+      return '<div class="' + cls + '"' + (opts.live ? ' aria-current="time"' : '') + '>' +
+        '<p class="brief__label">' + (opts.live ? '<span class="brief__live">진행 중</span>' : '') +
+        esc(label) + (opts.after ? '<span class="brief__after">' + esc(opts.after) + '</span>' : '') + '</p>' +
         (opts.day ? '<p class="brief__day">' + esc(opts.day) + '</p>' : '') +
         (time ? '<p class="brief__time">' + time + '</p>' : '') +
         '<p class="brief__what">' + esc(item.title) + '</p>' +
@@ -632,7 +641,6 @@
     var br = scheduleBrief(ev);
     var modeLabel = br.phaseLabel;
     var briefBody, briefLink = '<button class="linkbtn" type="button" data-go="schedule">전체 일정 보기 →</button>';
-    var lastSlot = br.last ? slot('마지막 일정', br.last, { range: true, after: hhmm(spanOf(br.last).b) + ' 종료' }) : '';
 
     if (mode === 'after') {
       // 끝난 일정을 다시 크게 보여 줄 필요는 없습니다. 남은 운영만 봅니다.
@@ -651,19 +659,21 @@
             }).join('') + '</ul></div>'
           : '<p class="brief__empty">모든 운영 항목이 완료되었습니다.</p>');
       briefLink = '';
-    } else if (br.state === 'live' || br.state === 'waiting') {
-      var liveSlot = br.live
-        ? slot('현재 일정', br.live, { range: true, live: true,
-            after: br.liveLeft > 0 ? C.minLabel(br.liveLeft) + ' 남음' : '곧 종료' })
-        : slot('현재 일정', null, { empty: '진행 중인 일정이 없습니다. ' +
-            (br.isFirst ? '첫 일정' : '다음 일정') + '까지 ' + C.minLabel(br.nextIn) + '.' });
-      var nextSlot = slot(br.isFirst && !br.live ? '첫 일정' : '다음 일정', br.next, {
-        range: true, after: br.nextIn != null ? C.minLabel(br.nextIn) + ' 후' : '',
-        empty: '오늘 남은 일정이 없습니다.' });
-      briefBody = '<div class="brief__split">' + liveSlot + nextSlot + '</div>';
+    } else if (br.state === 'live') {
+      // 현재가 주인공, 다음은 한 단계 작게. 좁으면 위아래, 넓으면 약 63 : 37.
+      briefBody = '<div class="brief__pair">' +
+        slot('현재 주요 일정', br.live, { range: true, live: true, size: 'now',
+          after: br.liveLeft > 0 ? C.minLabel(br.liveLeft) + ' 남음' : '곧 종료' }) +
+        slot('다음 주요 일정', br.next, { range: true, size: 'next',
+          after: br.nextIn != null ? C.minLabel(br.nextIn) + ' 후' : '',
+          empty: '오늘 남은 일정이 없습니다.' }) + '</div>';
+    } else if (br.state === 'waiting') {
+      briefBody = slot('다음 주요 일정', br.next, { range: true,
+        after: (br.isFirst ? '첫 일정 · ' : '') + C.minLabel(br.nextIn) + ' 후 시작' });
     } else if (br.state === 'ended') {
-      briefBody = '<div class="brief__split">' +
-        slot('오늘 일정', null, { empty: '오늘 일정이 모두 끝났습니다.' }) + lastSlot + '</div>';
+      briefBody = '<p class="brief__lead">오늘 일정이 모두 종료되었습니다.</p>' +
+        (br.last ? '<p class="brief__lastline">마지막 일정 · ' + esc(br.last.title) + ' ' +
+          timeRange(br.last) + '</p>' : '');
     } else {
       // 행사 전: 관리자가 표시한 주요 일정(없으면 첫 일정) 하나
       briefBody = slot('다음 주요 일정', br.key, { range: true, day: fmtEventDay(ev.start) });
@@ -1915,9 +1925,11 @@
   function sampleSupplies() {
     return sampleWrap('예시 화면입니다. 물품이 등록되면 실제 배부 현황으로 바뀝니다.',
       SAMPLE_SUPPLIES.map(function (t) {
+        // 예시 표시는 오른쪽 끝에 작게 한 번만. 상태 배지와 같은 무게로 늘어서지 않게 합니다.
         return '<div class="supply supply--' + SUPPLY_TONE[t.status] + ' is-sample">' +
-          '<div class="supply__top">' + badge(t.status) +
-          '<span class="supply__kind">' + esc(t.kind) + '</span>' + SAMPLE + '</div>' +
+          '<div class="supply__top">' + badge(supplyLabel(t.status)) +
+          '<span class="supply__kind">' + esc(t.kind) + '</span>' +
+          '<span class="supply__sample">' + SAMPLE + '</span></div>' +
           '<div class="supply__name">' + esc(t.name) + '</div>' +
           '<div class="supply__meta">담당 —</div>' +
           '<div class="supply__line">' + t.items.map(esc).join('<span aria-hidden="true"> · </span>') + '</div></div>';
@@ -1926,13 +1938,18 @@
 
   /* ── 화면: 운영 물품 ────────────────────────────────────────── */
   /* 화면에서 쓰는 이름. 표의 값(미배부·일부 배부·배부 완료)은 그대로 두고
-     요약에서만 '배부 예정 · 배부 중 · 배부 완료' 로 읽히게 합니다. */
+     포털의 요약·필터·카드·상세에서는 '배부 예정 · 배부 중 · 배부 완료' 로 읽히게 합니다.
+     관리자 화면은 표의 값을 그대로 씁니다. */
   var SUPPLY_VIEW = [
-    { label: '배부 예정', status: '미배부' },
-    { label: '배부 중', status: '일부 배부' },
-    { label: '배부 완료', status: '배부 완료' }
+    { label: '배부 예정', status: '미배부',   tone: 'plan', sub: '아직 전달 전', none: '실제 등록 시 표시' },
+    { label: '배부 중',   status: '일부 배부', tone: 'part', sub: '일부 전달됨',  none: '일부 배부 상태' },
+    { label: '배부 완료', status: '배부 완료', tone: 'done', sub: '전달 완료',    none: '완료 상태' }
   ];
   var SUPPLY_TONE = { '미배부': 'plan', '일부 배부': 'part', '배부 완료': 'done' };
+  function supplyLabel(status) {
+    var v = SUPPLY_VIEW.filter(function (x) { return x.status === (status || '미배부'); })[0];
+    return v ? v.label : status;
+  }
 
   function viewSupplies() {
     var head = pageHead('운영 물품', '기관·팀·부스별 배부 현황입니다. 배부 상태는 운영본부가 관리합니다.');
@@ -1945,14 +1962,14 @@
     function countOf(st) { return all.filter(function (t) { return (t.status || '미배부') === st; }).length; }
     var plan = countOf('미배부'), part = countOf('일부 배부'), done = countOf('배부 완료');
 
-    // 숫자 넉 장. 등록 전에는 0 대신 — 로 두어 '다 끝났다' 로 읽히지 않게 합니다.
+    // 숫자 석 장(배부 예정 · 배부 중 · 배부 완료). 등록 전에는 0 대신 — 로 두어
+    // '다 끝났다' 로 읽히지 않게 하고, 설명 한 줄로 무엇이 올 자리인지 알립니다.
     var has = all.length > 0;
-    var summary = summaryGrid([
-      { n: has ? all.length : null, l: '전체 대상', sub: has ? '배부 확인 필요 ' + (plan + part) : '아직 미등록' },
-      { n: has ? plan : null, l: '배부 예정', sub: '미배부', tone: plan ? 'warn' : null },
-      { n: has ? part : null, l: '배부 중', sub: '일부 배부', tone: part ? 'info' : null },
-      { n: has ? done : null, l: '배부 완료', sub: !has ? '' : done === all.length ? '모두 완료' : '전체 ' + all.length + '곳 중', tone: done ? 'ok' : null }
-    ]);
+    var counts = { '미배부': plan, '일부 배부': part, '배부 완료': done };
+    var summary = summaryGrid(SUPPLY_VIEW.map(function (v) {
+      return { n: has ? counts[v.status] : null, l: v.label, sub: has ? v.sub : v.none,
+        tone: 'st-' + v.tone, dot: true };
+    }), 'sumgrid--supply');
 
     if (!has) return '<div class="page">' + head + summary + sampleSupplies() + '</div>';
 
@@ -2004,7 +2021,7 @@
     var items = allocsOf(t.id);
     var st = t.status || '미배부';
     var card = '<button class="supply supply--' + (SUPPLY_TONE[st] || 'plan') + (st === '배부 완료' ? ' is-done' : '') + '" type="button" data-supply="' + esc(t.id) + '">' +
-      '<span class="supply__top">' + (st === '배부 완료' ? doneMark('배부 완료') : badge(st)) +
+      '<span class="supply__top">' + (st === '배부 완료' ? doneMark('배부 완료') : badge(supplyLabel(st))) +
       '<span class="supply__kind">' + esc([t.kind || '팀', t.headcount ? t.headcount + '명' : ''].filter(Boolean).join(' · ')) + '</span></span>' +
       '<span class="supply__name">' + esc(t.name) + '</span>' +
       (t.manager ? '<span class="supply__meta">담당 ' + esc(t.manager) + '</span>' : '') +
@@ -2030,7 +2047,7 @@
       ['메모', t.memo]
     ].filter(function (r) { return r[1]; });
 
-    var html = '<div class="notice__top">' + badge(t.status || '미배부') +
+    var html = '<div class="notice__top">' + badge(supplyLabel(t.status)) +
       '<span class="notice__meta">최근 변경 ' + esc(fmtDay(t.updated_at)) + '</span></div>';
 
     if (rows.length) {
