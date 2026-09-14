@@ -769,19 +769,119 @@
      를 매번 머리로 계산해야 합니다.
 
      행사 당일에는 현재 시각 선을 실제 위치에 그어 줍니다. 색으로만
-     알리지 않고 '지금 13:27' 처럼 글자로도 적습니다 — 색을 구분하기
+     알리지 않고 '지금 13:27:05' 처럼 글자로도 적습니다 — 색을 구분하기
      어려운 사람도 같은 정보를 얻어야 합니다. */
+  function hms(d) {
+    return C.pad2(d.getHours()) + ':' + C.pad2(d.getMinutes()) + ':' + C.pad2(d.getSeconds());
+  }
+  function timeRange(i) {
+    return esc(i.start_time || '') + (i.end_time ? '–' + esc(i.end_time) : '');
+  }
+
+  /* 일정 하나의 시작·끝(분). 끝이 없으면 30분짜리로 봅니다. */
+  function spanOf(i) {
+    var a = C.toMin(i.start_time);
+    if (a == null) return null;
+    var b = C.toMin(i.end_time);
+    return { a: a, b: b == null ? a + 30 : b };
+  }
+
+  /* 실시간 판정. 필터와 상관없이 '전체 일정' 으로 합니다 — 검색어 때문에
+     지금 진행 중인 일정이 요약에서 사라지면 안 됩니다.
+     판정은 분 단위입니다. 초는 시계 표시에만 씁니다. */
+  function scheduleNow(ev) {
+    var nowMin = ev.now.getHours() * 60 + ev.now.getMinutes();
+    var live = null, next = null, first = null, lastEnd = null, liveCount = 0;
+    S.schedule.forEach(function (i) {
+      if (i.status === '취소') return;
+      var sp = spanOf(i);
+      if (!sp) return;
+      if (!first || sp.a < spanOf(first).a) first = i;
+      if (lastEnd == null || sp.b > lastEnd) lastEnd = sp.b;
+      // 겹치면 가장 늦게 시작한 것, 같으면 먼저 끝나는 것을 앞에 둡니다.
+      if (nowMin >= sp.a && nowMin < sp.b) {
+        liveCount++;
+        var ls = live && spanOf(live);
+        if (!live || sp.a > ls.a || (sp.a === ls.a && sp.b < ls.b)) live = i;
+      }
+      if (sp.a > nowMin && (!next || sp.a < spanOf(next).a)) next = i;
+    });
+    return { nowMin: nowMin, live: live, liveCount: liveCount, next: next, first: first, lastEnd: lastEnd };
+  }
+
+  /* 상단 실시간 요약: 현재 시각 · 현재 진행 중 · 다음 일정.
+     1초마다 이 칸의 시계 글자만 바뀌고, 분이 바뀔 때 이 칸만 다시 그립니다. */
+  function scheduleLiveHtml(ev) {
+    var sn = scheduleNow(ev);
+    var clockSub = ev.sameDay
+      ? (ev.phase === 'after' ? '행사 종료' : '행사 진행일')
+      : ev.phase === 'before' ? '행사 전 · D-' + Math.max(0, ev.dday)
+        : ev.phase === 'after' ? '행사 종료' : '';
+    var clock = '<div class="schedlive__clock">' +
+      '<span class="schedlive__label">현재 시각</span>' +
+      '<span class="schedlive__time" data-clock>' + hms(ev.now) + '</span>' +
+      (clockSub ? '<span class="schedlive__sub">' + esc(clockSub) + '</span>' : '') + '</div>';
+
+    function item(i, extra, day) {
+      return '<p class="schedlive__title">' + esc(i.title) + '</p>' +
+        '<p class="schedlive__meta"><span class="schedlive__range">' + (day ? esc(day) + ' · ' : '') + timeRange(i) + '</span>' +
+        (i.place ? ' · ' + esc(i.place) : '') + '</p>' +
+        (extra ? '<p class="schedlive__left">' + extra + '</p>' : '');
+    }
+    function cell(cls, label, inner) {
+      return '<div class="schedlive__cell ' + cls + '"><p class="schedlive__label">' + label + '</p>' + inner + '</div>';
+    }
+
+    var cells;
+    if (!S.schedule.length) {
+      cells = cell('schedlive__cell--wide', '일정', '<p class="schedlive__empty">등록된 일정이 없습니다.</p>');
+    } else if (!ev.sameDay) {
+      // 행사 당일이 아니면 실시간 칸을 만들지 않습니다. 몇 주 전부터
+      // '진행 중 없음' 을 크게 보여 줄 이유가 없습니다.
+      if (ev.phase === 'after') {
+        cells = cell('schedlive__cell--wide', '전체 일정', '<p class="schedlive__empty">행사 일정이 모두 끝났습니다.</p>');
+      } else {
+        var key = S.schedule.filter(function (i) { return i.is_highlight && i.status !== '취소'; })
+          .sort(function (a, b) { return (C.toMin(a.start_time) || 0) - (C.toMin(b.start_time) || 0); })[0] || sn.first;
+        cells = key
+          ? cell('schedlive__cell--wide', '다음 주요 일정',
+              item(key, '', ev.start ? fmtEventDay(ev.start) : ''))
+          : cell('schedlive__cell--wide', '일정', '<p class="schedlive__empty">시작 시각이 정해진 일정이 없습니다.</p>');
+      }
+    } else if (sn.live) {
+      var left = spanOf(sn.live).b - sn.nowMin;
+      cells =
+        cell('schedlive__cell--live', '<span class="livepill">현재 진행 중</span>',
+          item(sn.live, (left > 0 ? '<b>' + C.minLabel(left) + '</b> 남음' : '곧 종료') +
+            (sn.liveCount > 1 ? ' · 동시 진행 ' + (sn.liveCount - 1) + '건 더' : '')) +
+          '<button class="linkbtn schedlive__jump" type="button" data-nowjump>타임라인에서 보기 ↓</button>') +
+        cell('schedlive__cell--next', '다음 일정',
+          sn.next ? item(sn.next, C.minLabel(spanOf(sn.next).a - sn.nowMin) + ' 후 시작')
+            : '<p class="schedlive__empty">오늘 남은 일정이 없습니다.</p>');
+    } else if (sn.next) {
+      var before = sn.first === sn.next;
+      cells =
+        cell('schedlive__cell--idle', '현재 진행 중',
+          '<p class="schedlive__empty">현재 진행 중 일정 없음</p>') +
+        cell('schedlive__cell--next schedlive__cell--focus', before ? '첫 일정' : '다음 일정',
+          item(sn.next, '<b>' + C.minLabel(spanOf(sn.next).a - sn.nowMin) + '</b> 후 시작'));
+    } else {
+      cells = cell('schedlive__cell--wide', '오늘 일정 종료',
+        '<p class="schedlive__empty">마지막 일정 ' +
+        (sn.lastEnd != null ? C.pad2(Math.floor(sn.lastEnd / 60)) + ':' + C.pad2(sn.lastEnd % 60) + ' 종료' : '종료') +
+        '</p>');
+    }
+    return clock + cells;
+  }
+
   function viewSchedule() {
     var ev = eventInfo();
-
     var hasKey = S.schedule.some(function (i) { return i.is_highlight; });
-    var q = ui.schedQ.trim().toLowerCase();
 
     function half(i) {
       var m = C.toMin(i.start_time);
       return m == null ? null : (m < 12 * 60 ? '오전' : '오후');
     }
-
     var cats = ['전체'].concat(SCHEDULE_CATS).map(function (c) {
       return { label: c, n: c === '전체' ? S.schedule.length
         : S.schedule.filter(function (i) { return i.category === c; }).length };
@@ -790,6 +890,36 @@
       return { label: h, n: h === '전체' ? S.schedule.length
         : S.schedule.filter(function (i) { return half(i) === h; }).length };
     });
+
+    var keyToggle = hasKey
+      ? '<button class="chip chip--toggle' + (ui.schedKey ? ' is-on' : '') + '" type="button" ' +
+        'data-schedkeytoggle aria-pressed="' + (ui.schedKey ? 'true' : 'false') + '">핵심 일정만 보기</button>'
+      : '';
+
+    return '<div class="page sched">' +
+      pageHead('운영 일정', ev.sameDay
+        ? '요약은 전체 일정 기준, 목록은 선택한 조건 기준입니다.'
+        : '행사 전체 일정을 시간순으로 확인합니다.') +
+      '<section class="schedlive' + (ev.sameDay ? ' is-today' : '') + '" id="sched-live" aria-label="실시간 일정 요약">' +
+      scheduleLiveHtml(ev) + '</section>' +
+      '<div class="tools"><div class="search"><label class="sr-only" for="sched-q">일정 검색</label>' +
+      '<input class="input" id="sched-q" type="search" placeholder="일정·장소·담당 검색" value="' + esc(ui.schedQ) + '" /></div>' +
+      // 오전·오후와 핵심 일정이 한 줄. 당일에 가장 자주 누르는 것입니다.
+      '<div class="filterline">' + chips(halves, ui.schedHalf, 'data-schedhalf') +
+      (keyToggle ? '<div class="chiprow chiprow--end">' + keyToggle + '</div>' : '') + '</div>' +
+      // 분류는 한 단계 아래. 같은 크기로 두면 무엇이 먼저인지 알 수 없습니다.
+      chips(cats, ui.schedCat, 'data-schedcat', 'chiprow--sub') + '</div>' +
+      '<div id="sched-list" class="sched__list">' + scheduleListHtml(ev, half) + '</div></div>';
+  }
+
+  /* 타임라인 목록. 분이 바뀌면 이 부분만 다시 그립니다(검색창은 그대로). */
+  function scheduleListHtml(ev, half) {
+    half = half || function (i) {
+      var m = C.toMin(i.start_time);
+      return m == null ? null : (m < 12 * 60 ? '오전' : '오후');
+    };
+    var q = ui.schedQ.trim().toLowerCase();
+    var filtered = ui.schedCat !== '전체' || ui.schedHalf !== '전체' || ui.schedKey || !!q;
 
     var list = S.schedule.filter(function (i) {
       if (ui.schedCat !== '전체' && i.category !== ui.schedCat) return false;
@@ -806,13 +936,13 @@
       return (a.sort_order || 0) - (b.sort_order || 0);
     });
 
-    /* 현재 시각 머리말. 당일에는 크게, 그 밖의 날에는 작게 둡니다. */
+    if (!list.length) {
+      return S.schedule.length
+        ? noMatchBox('조건에 맞는 일정이 없습니다.')
+        : emptyBox('등록된 일정이 없습니다.', '일정이 등록되면 시간순으로 표시됩니다.');
+    }
+
     var nowMin = ev.now.getHours() * 60 + ev.now.getMinutes();
-    var nowLabel = C.pad2(ev.now.getHours()) + ':' + C.pad2(ev.now.getMinutes());
-    var clock = '<div class="nowbar' + (ev.sameDay ? ' nowbar--live' : '') + '">' +
-      '<span class="nowbar__l">현재 시각</span>' +
-      '<span class="nowbar__t">' + esc(nowLabel) + '</span>' +
-      (ev.sameDay ? '<span class="nowbar__tag">행사 진행일</span>' : '') + '</div>';
 
     /* 시간대별로 묶습니다. 시작 시각이 없는 일정은 맨 뒤에 따로 모읍니다. */
     var groups = [], seen = {};
@@ -823,71 +953,84 @@
       seen[key].items.push(i);
     });
 
+    /* 현재 시각 선은 '이미 시작한 일정' 과 '아직 시작 전인 일정' 사이에
+       긋습니다. 그래서 진행 중인 카드 바로 아래에 붙습니다. */
     var marked = false;
+    function shouldMark(i) {
+      if (!ev.sameDay || marked) return false;
+      var a = C.toMin(i.start_time);
+      if (a == null || a > nowMin) { marked = true; return true; }
+      return false;
+    }
+
     var body = groups.map(function (g) {
-      var rows = g.items.map(function (i) {
-        var st = liveStatus(i, ev);
-        var cls = st === '진행 중' ? ' tmlrow--now' : st === '종료' ? ' tmlrow--done' : '';
-        if (st === '취소' || st === '변경') cls = ' tmlrow--off';
-        return '<article class="tmlrow' + cls + '">' +
-          '<div class="tmlrow__time">' + esc(i.start_time || '') +
-          (i.end_time ? '<span class="tmlrow__to">' + esc(i.end_time) + '</span>' : '') + '</div>' +
-          '<div class="tmlrow__body">' +
-          '<h3 class="tmlrow__title">' + esc(i.title) +
-          (i.is_highlight ? '<span class="keymark" title="핵심 일정">핵심</span>' : '') + '</h3>' +
-          '<p class="tmlrow__meta">' + esc(i.place || '장소 미정') +
-          (i.team ? ' · ' + esc(i.team) : '') + (i.owner ? ' · ' + esc(i.owner) : '') + '</p>' +
-          (i.memo ? '<p class="tmlrow__memo">' + esc(i.memo) + '</p>' : '') +
-          '<div class="tmlrow__tags">' + badge(st) +
-          '<span class="tag tag--soft">' + esc(i.category) + '</span>' +
-          '</div></div></article>';
+      var lineBefore = '';
+      var rows = g.items.map(function (i, idx) {
+        var line = '';
+        if (shouldMark(i)) {
+          if (idx === 0) lineBefore = nowLine(ev.now); else line = nowLine(ev.now);
+        }
+        return line + scheduleRow(i, ev, nowMin);
       }).join('');
-
-      /* 현재 시각 선. 아직 긋지 않았고 이 시간대가 지금보다 뒤라면
-         이 묶음 앞에 긋습니다. */
-      var line = '';
-      if (ev.sameDay && !marked && g.at != null && g.at + 60 > nowMin) {
-        if (g.at > nowMin) { line = nowLine(nowLabel); marked = true; }
-      }
-
-      return line + '<section class="tmlgroup">' +
+      return lineBefore + '<section class="tmlgroup">' +
         '<h2 class="tmlgroup__hour">' + esc(g.key) + '</h2>' +
         '<div class="tmlgroup__rows">' + rows + '</div></section>';
     }).join('');
 
-    // 모든 일정이 이미 지났으면 맨 끝에 긋습니다.
-    if (ev.sameDay && !marked && groups.length) body += nowLine(nowLabel);
+    // 모든 일정이 이미 시작했으면 맨 끝에 긋습니다.
+    if (ev.sameDay && !marked) body += nowLine(ev.now);
 
-    var listHtml = list.length
-      ? '<div class="tml">' + body + '</div>'
-      : S.schedule.length
-        ? noMatchBox('조건에 맞는 일정이 없습니다.')
-        : emptyBox('등록된 일정이 없습니다.', '일정이 등록되면 시간순으로 표시됩니다.');
-
-    var keyToggle = hasKey
-      ? '<button class="chip chip--toggle' + (ui.schedKey ? ' is-on' : '') + '" type="button" ' +
-        'data-schedkeytoggle aria-pressed="' + (ui.schedKey ? 'true' : 'false') + '">핵심 일정만 보기</button>'
-      : '';
-
-    return '<div class="page">' +
-      pageHead('운영 일정', ev.sameDay
-        ? '현재 시각을 기준으로 진행 중인 일정이 강조됩니다.'
-        : '행사 전체 일정을 시간순으로 확인합니다.') +
-      clock +
-      '<div class="tools"><div class="search"><label class="sr-only" for="sched-q">일정 검색</label>' +
-      '<input class="input" id="sched-q" type="search" placeholder="일정·장소·담당 검색" value="' + esc(ui.schedQ) + '" /></div>' +
-      // 오전·오후와 핵심 일정이 한 줄. 당일에 가장 자주 누르는 것입니다.
-      '<div class="filterline">' + chips(halves, ui.schedHalf, 'data-schedhalf') +
-      (keyToggle ? '<div class="chiprow chiprow--end">' + keyToggle + '</div>' : '') + '</div>' +
-      // 분류는 한 단계 아래. 같은 크기로 두면 무엇이 먼저인지 알 수 없습니다.
-      chips(cats, ui.schedCat, 'data-schedcat', 'chiprow--sub') + '</div>' +
-      (list.length ? '<p class="resultline">' + list.length + '건</p>' : '') +
-      listHtml + '</div>';
+    return '<p class="resultline">' + list.length + '건' +
+      (filtered ? ' · 선택한 조건' : '') + '</p>' +
+      '<div class="tml tml--sched">' + body + '</div>';
   }
 
-  function nowLine(label) {
-    return '<div class="nowline" role="separator" aria-label="현재 시각 ' + esc(label) + '">' +
-      '<span class="nowline__t">지금 ' + esc(label) + '</span></div>';
+  function scheduleRow(i, ev, nowMin) {
+    var st = liveStatus(i, ev);
+    var cls = st === '진행 중' ? ' tmlrow--now' : st === '종료' ? ' tmlrow--done' : '';
+    if (st === '취소' || st === '변경') cls = ' tmlrow--off';
+    var sp = spanOf(i);
+    var liveLabel = st === '진행 중' && sp
+      ? '<p class="tmlrow__livehead"><span class="livepill">진행 중</span>' +
+        (sp.b - nowMin > 0 ? C.minLabel(sp.b - nowMin) + ' 남음' : '곧 종료') + '</p>'
+      : '';
+    // '진행 중' 은 위 라벨이 이미 말하므로 아래 배지에서 뺍니다.
+    var stBadge = st === '진행 중' ? '' : badge(st);
+    return '<article class="tmlrow' + cls + '"' + (st === '진행 중' ? ' aria-current="time"' : '') + '>' +
+      '<div class="tmlrow__time">' + esc(i.start_time || '미정') +
+      (i.end_time ? '<span class="tmlrow__to">' + esc(i.end_time) + '</span>' : '') + '</div>' +
+      '<div class="tmlrow__body">' + liveLabel +
+      '<h3 class="tmlrow__title">' + esc(i.title) +
+      (i.is_highlight ? '<span class="keymark" title="핵심 일정">핵심</span>' : '') + '</h3>' +
+      '<p class="tmlrow__meta">' + esc(i.place || '장소 미정') +
+      (i.team ? ' · ' + esc(i.team) : '') + (i.owner ? ' · ' + esc(i.owner) : '') + '</p>' +
+      (i.memo ? '<p class="tmlrow__memo">' + esc(i.memo) + '</p>' : '') +
+      '<div class="tmlrow__tags">' + stBadge +
+      (i.category ? '<span class="tag tag--soft">' + esc(i.category) + '</span>' : '') +
+      '</div></div></article>';
+  }
+
+  function nowLine(d) {
+    return '<div class="nowline" id="sched-nowline" role="separator" aria-label="현재 시각">' +
+      '<span class="nowline__dot" aria-hidden="true"></span>' +
+      '<span class="nowline__t">지금 <span data-clock>' + hms(d) + '</span></span></div>';
+  }
+
+  /* 1초마다: 시계 글자만. 분이 바뀔 때: 요약과 목록만 다시 그립니다.
+     페이지 전체(검색창·필터)는 건드리지 않아 입력과 초점이 유지됩니다. */
+  var schedLastMin = null;
+  function tickSchedule(d) {
+    var nodes = document.querySelectorAll('#view [data-clock]');
+    var text = hms(d);
+    for (var k = 0; k < nodes.length; k++) nodes[k].textContent = text;
+    var m = d.getHours() * 60 + d.getMinutes();
+    if (schedLastMin === null) { schedLastMin = m; return; }
+    if (m === schedLastMin) return;
+    schedLastMin = m;
+    var ev = eventInfo();
+    var live = $('#sched-live'), listEl = $('#sched-list');
+    if (live) live.innerHTML = scheduleLiveHtml(ev);
+    if (listEl) listEl.innerHTML = scheduleListHtml(ev);
   }
 
   /* ── 화면: 부스 현황 ────────────────────────────────────────── */
@@ -2002,6 +2145,15 @@
 
       // 보기 방식 전환(업무별 ↔ 개인별). 검색어는 두 화면이 찾는
       // 대상이 달라서 함께 비웁니다.
+      // 요약에서 타임라인의 지금 위치로. 사용자가 누를 때만 움직입니다.
+      if (t.closest('[data-nowjump]')) {
+        var target = document.querySelector('#view .tmlrow--now') || $('#sched-nowline');
+        if (target) {
+          var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+          target.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'center' });
+        }
+        return;
+      }
       if (t.closest('[data-schedkeytoggle]')) { ui.schedKey = !ui.schedKey; render(); return; }
 
       if (t.closest('[data-guide]')) {
@@ -2236,8 +2388,10 @@
       $('#topbar-clock').textContent = C.pad2(d.getHours()) + ':' + C.pad2(d.getMinutes());
       // 검색어를 입력하는 중에 다시 그리면 글자가 끊깁니다.
       var typing = document.activeElement && document.activeElement.tagName === 'INPUT';
+      // 일정 화면은 시계·요약·목록만 부분 갱신합니다(1초마다 전체를 다시 그리지 않음).
+      if (view === 'schedule') { tickSchedule(d); return; }
       if (d.getSeconds() % 30 !== 0 || typing) return;
-      if (view === 'dashboard' || view === 'schedule') render();
+      if (view === 'dashboard') render();
     }
     tick();
     clockTimer = setInterval(tick, 1000);

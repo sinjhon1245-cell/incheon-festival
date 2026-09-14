@@ -632,25 +632,6 @@ button.is-sample:hover { border-color: var(--primary); background: #fff; }
 .mini--btn.is-on { border-color: var(--primary); background: var(--primary-t); }
 .mini--btn.is-on .mini__n { color: var(--primary); }
 
-/* ── 현재 시각 막대 ──────────────────────────────────────────── */
-.nowbar {
-  display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
-  background: #fff; border: 1px solid var(--line); border-radius: var(--r);
-  padding: 12px 15px; box-shadow: var(--sh);
-}
-.nowbar__l { font-size: 12.5px; font-weight: 600; color: var(--muted); }
-.nowbar__t {
-  font-size: 26px; font-weight: 800; letter-spacing: -0.04em;
-  color: var(--ink); font-variant-numeric: tabular-nums; line-height: 1.1;
-}
-.nowbar__tag {
-  margin-left: auto; font-size: 11.5px; font-weight: 700;
-  color: var(--primary); background: var(--primary-t);
-  padding: 4px 9px; border-radius: 999px;
-}
-.nowbar--live { border-color: var(--primary); }
-.nowbar--live .nowbar__t { color: var(--primary); }
-
 /* ── 타임라인 ─────────────────────────────────────────────────── */
 .tml { display: flex; flex-direction: column; gap: 4px; }
 .tmlgroup { display: grid; grid-template-columns: 54px 1fr; gap: 10px; align-items: start; }
@@ -862,7 +843,6 @@ button.supply:hover { border-color: var(--primary); }
   .nowline { margin-left: 52px; }
   .minigrid { grid-template-columns: repeat(auto-fit, minmax(92px, 1fr)); }
   .keyrow { grid-template-columns: 1fr; }
-  .nowbar__t { font-size: 22px; }
 }
 
 
@@ -1802,3 +1782,129 @@ a.side__brand:hover b { color: var(--primary); }
 }
 /* 업무(남색 계열 보라)와 부스가 같은 보라로 겹쳐 보여, 홈에서는 부스를 짙은 남색으로 */
 .dash .stat--booth { --stat-accent: #34457A; }
+
+/* ═══ 일정: 실시간 요약 · 타임라인 ═════════════════════════════════
+   열자마자 "지금 몇 시 · 무엇이 진행 중 · 다음은 무엇" 이 읽혀야 합니다.
+   색은 일정 화면의 파랑(--accent) 한 계열로만 씁니다. 붉은 경고색,
+   깜빡임, 두꺼운 그림자는 쓰지 않습니다. */
+.sched { container-type: inline-size; }
+
+.schedlive {
+  display: grid; grid-template-columns: minmax(0, 1fr);
+  background: #fff; border: 1px solid var(--line); border-radius: var(--r);
+  overflow: hidden;
+}
+.schedlive p { margin: 0; }
+/* 넓으면 시각 · 진행 중 · 다음 세 칸, 중간 폭이면 시각을 왼쪽에 세우고
+   진행 중 / 다음을 오른쪽에 위아래로. 세 칸이 좁아 제목이 꺾이지 않게. */
+@container (min-width: 900px) {
+  .schedlive { grid-template-columns: 196px minmax(0, 1.3fr) minmax(0, 1fr); }
+  .schedlive__cell--wide { grid-column: 2 / -1; }
+}
+@container (min-width: 560px) and (max-width: 899px) {
+  .schedlive { grid-template-columns: 180px minmax(0, 1fr); }
+  .schedlive__clock { grid-row: span 2; }
+  .schedlive__cell { border-left: 1px solid var(--line-2); }
+  .schedlive__cell:nth-child(2) { border-top: 0; }
+  .schedlive__cell--wide { grid-row: span 2; }
+}
+
+.schedlive__clock {
+  display: flex; flex-direction: column; justify-content: center; gap: 2px;
+  padding: 14px 18px; background: var(--accent-t);
+}
+.schedlive__label {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 12.5px; font-weight: 700; color: var(--muted);
+}
+.schedlive__time {
+  font-size: 30px; font-weight: 800; letter-spacing: -0.03em; line-height: 1.15;
+  color: #1D4F9C; font-variant-numeric: tabular-nums;
+}
+.schedlive__sub { font-size: 12.5px; font-weight: 600; color: #3E6DB5; }
+
+.schedlive__cell {
+  display: flex; flex-direction: column; gap: 3px; min-width: 0;
+  padding: 14px 18px; border-top: 1px solid var(--line-2);
+}
+@container (min-width: 900px) {
+  .schedlive__cell { border-top: 0; border-left: 1px solid var(--line-2); }
+}
+.schedlive__cell--live { box-shadow: inset 3px 0 0 var(--accent); background: #F8FBFF; }
+.schedlive__cell--focus .schedlive__title { font-size: 17px; }
+.schedlive__cell--idle .schedlive__empty { color: var(--muted-2); }
+.schedlive__title {
+  font-size: 17px; font-weight: 700; letter-spacing: -0.03em; line-height: 1.4;
+  color: var(--ink); margin-top: 3px !important;
+}
+.schedlive__cell--next:not(.schedlive__cell--focus) .schedlive__title { font-size: 15.5px; }
+.schedlive__meta { font-size: 13.5px; color: var(--muted); line-height: 1.5; }
+.schedlive__range { font-weight: 600; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.schedlive__left { font-size: 13px; color: #2F5FA8; margin-top: 2px !important; }
+.schedlive__left b { font-weight: 800; font-variant-numeric: tabular-nums; }
+.schedlive__empty { font-size: 14.5px; font-weight: 600; color: var(--ink-2); margin-top: 3px !important; }
+.schedlive__jump { align-self: flex-start; margin: 2px 0 0 -6px; font-size: 13px; color: var(--accent); }
+.schedlive__jump:hover { background: var(--accent-t); }
+
+.livepill {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 12px; font-weight: 700; color: #fff; background: var(--accent);
+  padding: 2px 9px 2px 8px; border-radius: 999px; white-space: nowrap;
+}
+.livepill::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: #fff; }
+
+/* 타임라인 카드: 왼쪽 시간 / 오른쪽 본문을 선으로 나눕니다. */
+.tml--sched .tmlrow { gap: 0; padding: 0; box-shadow: none; align-items: stretch; }
+.tml--sched .tmlrow__time {
+  min-width: 72px; padding: 13px 12px 13px 15px; border-right: 1px solid var(--line-2);
+  font-size: 16px; font-weight: 800; letter-spacing: -0.02em; line-height: 1.3;
+}
+.tml--sched .tmlrow__to { font-size: 12.5px; font-weight: 600; margin-top: 2px; }
+.tml--sched .tmlrow__body { padding: 12px 15px 13px; gap: 4px; }
+.tml--sched .tmlrow__title { font-size: 16px; }
+.tml--sched .tmlrow__meta { font-size: 14px; }
+.tml--sched .tmlrow__tags { margin-top: 3px; }
+.tml--sched .tmlrow:hover { border-color: #C9D9F2; }
+
+.tml--sched .tmlrow--now {
+  border-color: #BFD3F2; background: #F7FAFF;
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+.tml--sched .tmlrow--now .tmlrow__time { color: #1D4F9C; border-right-color: #DCE7F7; }
+.tml--sched .tmlrow--now::before { background: var(--accent); box-shadow: 0 0 0 3px var(--accent-t); }
+.tmlrow__livehead {
+  display: flex; align-items: center; gap: 8px; margin: 0 0 2px;
+  font-size: 12.5px; font-weight: 600; color: #2F5FA8; font-variant-numeric: tabular-nums;
+}
+.tml--sched .tmlrow--done { background: #FAFBFD; }
+.tml--sched .tmlrow--done .tmlrow__time { color: var(--muted-2); }
+
+/* 현재 시각 선 — 점 · 얇은 선 · '지금 13:12:08' */
+.tml--sched .nowline { position: relative; gap: 8px; margin: 2px 0 8px 58px; }
+.tml--sched .tmlgroup__rows > .nowline { margin: -2px 0 -2px -18px; }
+.nowline::after { background: var(--accent); height: 2px; opacity: 0.55; }
+.nowline__dot {
+  width: 9px; height: 9px; border-radius: 50%; flex: none;
+  background: var(--accent); box-shadow: 0 0 0 3px var(--accent-t);
+}
+.nowline__t {
+  order: 1; background: var(--accent); color: #fff;
+  font-size: 12px; font-weight: 700; padding: 3px 10px;
+}
+.nowline::after { order: 2; }
+
+@media (max-width: 420px) {
+  .schedlive__clock { flex-direction: row; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; padding: 12px 15px; }
+  .schedlive__time { font-size: 26px; }
+  .schedlive__sub { margin-left: auto; }
+  .schedlive__cell { padding: 12px 15px; }
+  .schedlive__title { font-size: 16px; }
+  .tml--sched .tmlrow { flex-direction: row; }
+  .tml--sched .tmlrow__time { display: block; min-width: 58px; padding: 12px 9px 12px 11px; font-size: 15px; }
+  .tml--sched .tmlrow__to { display: block; }
+  .tml--sched .tmlrow__to::before { content: none; }
+  .tml--sched .tmlrow__body { padding: 11px 12px 12px; }
+  .tml--sched .tmlrow__title { font-size: 15.5px; }
+  .tml--sched .nowline { margin-left: 46px; }
+  .tml--sched .tmlgroup__rows > .nowline { margin-left: -15px; }
+}
