@@ -289,6 +289,14 @@ code {
   border-style: dashed; box-shadow: none; cursor: default;
   background: var(--bg-soft);
 }
+/* 각 카드 기본 규칙(.notice, .req, .booth …)이 border를 한 번에 지정하는
+   shorthand라 이 파일 뒤쪽에서 다시 나오면 위 .is-sample의 점선 지정을
+   덮어씁니다. 카드 종류를 모두 나열해 우선순위를 확실히 이깁니다. */
+.notice.is-sample, .req.is-sample, .rescard.is-sample, .contact.is-sample,
+.rowcard.is-sample, .faq.is-sample, .tmlrow.is-sample, .booth.is-sample,
+.task.is-sample, .supply.is-sample {
+  border-style: dashed; box-shadow: none; background: var(--bg-soft);
+}
 /* 눌러서 상세까지 볼 수 있는 예시는 손 모양과 옅은 강조를 줍니다.
    요란한 움직임 없이 "누를 수 있다" 만 전합니다. */
 button.is-sample { cursor: pointer; transition: border-color 130ms ease, background 130ms ease; }

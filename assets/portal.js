@@ -418,6 +418,71 @@
       }).join(''));
   }
 
+  /* 운영 일정 예시. 참가자 프로그램만 늘어놓지 않고 운영 준비·교대처럼
+     관계자가 실제로 하는 일도 섞습니다. 10분짜리 체험부터 개막 행사 같은
+     1시간짜리까지 길이가 섞여도 타임라인이 읽기 좋은지 보여 주는 목적도
+     있습니다. 실제 시각이 아니므로 진행 중 표시나 남은 시간은 붙이지 않습니다. */
+  var SAMPLE_SCHEDULE = [
+    { hour: '08:00', time: '08:30–09:00', title: '운영본부 개소 및 장비 점검', place: '운영본부', cat: '운영' },
+    { hour: '09:00', time: '09:00–10:00', title: '부스 운영자 입장 및 세팅', place: '체험 부스 구역', cat: '운영' },
+    { hour: '10:00', time: '10:00–10:20', title: '행사 시작 및 현장 운영 확인', place: '운영본부', cat: '행사 지원' },
+    { hour: '12:00', time: '12:00–13:00', title: '점심 및 부스 운영 교대', place: '각 부스', cat: '운영' },
+    { hour: '14:00', time: '14:00–15:00', title: '개막 행사', place: '메인무대', cat: '무대' },
+    { hour: '15:00', time: '15:00–16:00', title: '초청 강연', place: '메인무대', cat: '강연' }
+  ];
+
+  // 실제 scheduleRow()와 같은 구조(tmlgroup/tmlrow)를 그대로 써서 예시와
+  // 실제 화면이 같은 모양으로 보이게 합니다. 진행 상태·핵심 표시는 없습니다.
+  function sampleSchedule() {
+    var groups = [], seen = {};
+    SAMPLE_SCHEDULE.forEach(function (i) {
+      if (!seen[i.hour]) { seen[i.hour] = { key: i.hour, items: [] }; groups.push(seen[i.hour]); }
+      seen[i.hour].items.push(i);
+    });
+    var body = groups.map(function (g) {
+      var rows = g.items.map(function (i) {
+        var parts = i.time.split('–');
+        return '<article class="tmlrow is-sample">' +
+          '<div class="tmlrow__time">' + esc(parts[0]) +
+          (parts[1] ? '<span class="tmlrow__to">' + esc(parts[1]) + '</span>' : '') + '</div>' +
+          '<div class="tmlrow__body">' +
+          '<h3 class="tmlrow__title">' + esc(i.title) + '</h3>' +
+          '<p class="tmlrow__meta">' + esc(i.place) + '</p>' +
+          '<div class="tmlrow__tags"><span class="tag tag--soft">' + esc(i.cat) + '</span>' + SAMPLE_END + '</div>' +
+          '</div></article>';
+      }).join('');
+      return '<section class="tmlgroup"><h2 class="tmlgroup__hour">' + esc(g.key) + '</h2>' +
+        '<div class="tmlgroup__rows">' + rows + '</div></section>';
+    }).join('');
+    return '<div class="sample"><p class="samplenote">' + esc(SAMPLE_NOTE) + '</p>' +
+      '<div class="tml tml--sched" aria-label="예시 일정">' + body + '</div></div>';
+  }
+
+  /* 부스 예시. 학교 부스만 있다고 가정하지 않도록 초·중·고와 기관형 부스를
+     함께 보여 줍니다 — 실제 행사에도 학교 부스와 협동조합·기관 부스가
+     함께 있을 수 있습니다. 실제 기관명 대신 ○○·△△·□□ 로 일반화합니다. */
+  var SAMPLE_BOOTHS = [
+    { code: 'A-18', type: '초등', name: '레고와 코딩으로 만드는 AI 놀이터', org: '○○초등학교', zone: 'AI스쿨존' },
+    { code: 'A-12', type: '중등', name: 'AI 모션 센서를 활용한 인터랙티브 체험', org: '△△중학교', zone: 'AI스쿨존' },
+    { code: 'A-63', type: '고등', name: '아두이노 기반 스마트 시스템 체험', org: '□□고등학교', zone: 'AI스쿨존' },
+    { code: '미래채움-03', type: '기관', name: 'AI 기반 환경문제 해결 체험', org: 'SW교육협동조합', zone: '미래채움존' }
+  ];
+
+  // 실제 카드(.booth)와 같은 마크업을 쓰되 .boothgrid 에 담아 실제 부스
+  // 목록과 같은 열 배치로 보이게 합니다. orgBadge()는 아래에서 정의됩니다.
+  function sampleBooths() {
+    return '<div class="sample"><p class="samplenote">' + esc(SAMPLE_NOTE) + '</p>' +
+      '<div class="boothgrid" aria-label="예시 부스 목록">' +
+      SAMPLE_BOOTHS.map(function (b) {
+        return '<div class="booth is-sample">' +
+          '<span class="booth__top"><span class="booth__code">' + esc(b.code) + '</span>' +
+          orgBadge(b.type) + SAMPLE_END + '</span>' +
+          '<span class="booth__name">' + esc(b.name) + '</span>' +
+          '<span class="booth__org">' + esc(b.org) + '</span>' +
+          '<span class="booth__foot">' + esc(b.zone) + '</span></div>';
+      }).join('') + '</div></div>';
+  }
+
   function noMatchBox(title) {
     return '<div class="state state--empty">' +
       '<span class="state__icon">' + ICON_SEARCH + '</span>' +
@@ -620,9 +685,12 @@
 
     /* 3. 운영 브리핑 — 시점에 따라 담는 내용만 바뀝니다.
        현재·다음 판단은 일정 화면 상단과 같은 scheduleBrief() 하나로 합니다.
-         행사 전             → 다음 주요 일정(크게)
-         당일 · 진행 중 있음 → 현재 주요 일정(크게) + 다음 주요 일정(작게)
-         당일 · 진행 중 없음 → 다음 주요 일정만. 빈 '현재' 칸은 두지 않습니다.
+       '주요 일정'은 관리자가 따로 표시(is_highlight)한 일정만 가리키는 말이라
+       여기서는 쓰지 않습니다 — 지금 진행 중인 일정은 '현재 일정', 바로 다음
+       시작하는 일정은 '다음 일정'.
+         행사 전             → 다음 일정(크게)
+         당일 · 진행 중 있음 → 현재 일정(크게) + 다음 일정(작게)
+         당일 · 진행 중 없음 → 다음 일정만. 빈 '현재' 칸은 두지 않습니다.
          당일 · 모두 끝남    → 오늘 일정 종료 한 줄
          행사 종료           → 남은 운영 확인 */
     function slot(label, item, opts) {
@@ -668,21 +736,21 @@
     } else if (br.state === 'live') {
       // 현재가 주인공, 다음은 한 단계 작게. 좁으면 위아래, 넓으면 약 63 : 37.
       briefBody = '<div class="brief__pair">' +
-        slot('현재 주요 일정', br.live, { range: true, live: true, size: 'now',
+        slot('현재 일정', br.live, { range: true, live: true, size: 'now',
           after: br.liveLeft > 0 ? C.minLabel(br.liveLeft) + ' 남음' : '곧 종료' }) +
-        slot('다음 주요 일정', br.next, { range: true, size: 'next',
+        slot('다음 일정', br.next, { range: true, size: 'next',
           after: br.nextIn != null ? C.minLabel(br.nextIn) + ' 후' : '',
           empty: '오늘 남은 일정이 없습니다.' }) + '</div>';
     } else if (br.state === 'waiting') {
-      briefBody = slot('다음 주요 일정', br.next, { range: true,
+      briefBody = slot('다음 일정', br.next, { range: true,
         after: (br.isFirst ? '첫 일정 · ' : '') + C.minLabel(br.nextIn) + ' 후 시작' });
     } else if (br.state === 'ended') {
       briefBody = '<p class="brief__lead">오늘 일정이 모두 종료되었습니다.</p>' +
         (br.last ? '<p class="brief__lastline">마지막 일정 · ' + esc(br.last.title) + ' ' +
           timeRange(br.last) + '</p>' : '');
     } else {
-      // 행사 전: 관리자가 표시한 주요 일정(없으면 첫 일정) 하나
-      briefBody = slot('다음 주요 일정', br.key, { range: true, day: fmtEventDay(ev.start) });
+      // 행사 전: 관리자가 표시한 주요 일정(없으면 첫 일정) 하나를 '다음 일정'으로 보여 줍니다.
+      briefBody = slot('다음 일정', br.key, { range: true, day: fmtEventDay(ev.start) });
       if (!br.key) briefLink = '';
       /* 행사 당일 화면 예시 — 행사 전에만. 등록된 일정 중 이어지는 두 개를 빌려
          당일에 '현재 + 다음' 이 어떻게 보이는지만 보여 줍니다. 진행 중 표시·남은
@@ -692,8 +760,8 @@
         briefBody += '<div class="brief__demo" role="group" aria-label="행사 당일 화면 예시">' +
           '<p class="brief__demohead">' + SAMPLE_END + '행사 당일에는 이렇게 표시됩니다</p>' +
           '<div class="brief__pair brief__pair--demo">' +
-          slot('현재 주요 일정', demo[0], { range: true, size: 'now' }) +
-          slot('다음 주요 일정', demo[1], { range: true, size: 'next' }) + '</div></div>';
+          slot('현재 일정', demo[0], { range: true, size: 'now' }) +
+          slot('다음 일정', demo[1], { range: true, size: 'next' }) + '</div></div>';
       }
     }
 
@@ -829,7 +897,7 @@
   /* 일정 브리핑 판단 — 일정 화면 상단과 홈의 운영 브리핑이 함께 씁니다.
      두 화면이 서로 다른 말을 하지 않도록 판단은 여기 한 곳에서만 합니다.
        empty    등록된 일정 없음
-       before   행사일 전          → 다음 주요 일정
+       before   행사일 전          → 다음 일정
        live     당일 · 진행 중 있음 → 현재 일정 + 다음 일정
        waiting  당일 · 진행 중 없음 → 다음 일정(첫 일정 전이면 첫 일정)
        ended    당일 · 모두 끝남    → 오늘 일정 종료 + 마지막 일정
@@ -914,11 +982,11 @@
         cells = cell('schedlive__cell--wide', '일정', note('등록된 일정이 없습니다.'));
         break;
       case 'before':
-        // 행사일 전에는 실시간 칸을 과장하지 않고 준비 상태와 주요 일정 하나만.
+        // 행사일 전에는 실시간 칸을 과장하지 않고 준비 상태와 다음 일정 하나만.
         cells = cell('schedlive__cell--prep', '행사 준비',
             '<p class="schedlive__dday">D-' + Math.max(0, ev.dday || 0) + '</p>' +
             '<p class="schedlive__meta">' + [st.date_label, st.time_label].filter(Boolean).map(esc).join(' · ') + '</p>') +
-          cell('schedlive__cell--next schedlive__cell--focus', '다음 주요 일정',
+          cell('schedlive__cell--next schedlive__cell--focus', '다음 일정',
             br.key ? item(br.key, { day: ev.start ? fmtEventDay(ev.start) : '', cat: true })
               : note('시작 시각이 정해진 일정이 없습니다.'));
         break;
@@ -1014,9 +1082,11 @@
     });
 
     if (!list.length) {
-      return S.schedule.length
+      // 등록된 일정이 없을 때만 예시를 보여 줍니다. 검색·필터를 걸어서
+      // 0건이 된 경우(등록 일정이 없어도)에는 예시가 다시 나오지 않아야 합니다.
+      return S.schedule.length || filtered
         ? noMatchBox('조건에 맞는 일정이 없습니다.')
-        : emptyBox('등록된 일정이 없습니다.', '일정이 등록되면 시간순으로 표시됩니다.');
+        : sampleSchedule();
     }
 
     var nowMin = ev.now.getHours() * 60 + ev.now.getMinutes();
@@ -1199,9 +1269,12 @@
           : '') +
         '</button>';
     }).join('') + '</div>'
-      : S.booths.length
+      // 등록된 부스가 없을 때만 예시를 보여 줍니다. 검색·필터를 걸어서 0건이 된
+      // 경우에는(등록 부스가 없어도) 예시가 다시 나타나면 안 되므로 조건에 맞는
+      // 결과 없음으로 안내합니다.
+      : S.booths.length || ui.boothZone !== '전체' || ui.boothType !== '전체' || q
         ? noMatchBox('조건에 맞는 부스가 없습니다.')
-        : emptyBox('등록된 부스 정보가 없습니다.', '부스가 등록되면 위치와 운영기관을 확인할 수 있습니다.');
+        : sampleBooths();
 
     var s = S.settings || {};
     var map = mediaBox({
@@ -1213,7 +1286,9 @@
     return '<div class="page">' +
       pageHead('부스 현황', '부스 위치와 운영기관을 확인합니다.') +
       map +
-      '<p class="countline">전체 부스 <b>' + S.booths.length + '</b>개</p>' +
+      // 등록된 부스가 없을 때 "전체 부스 0개"를 예시 카드 위에 그대로 두면
+      // 숫자와 목록이 서로 다른 말을 하게 됩니다 — 실제 부스가 있을 때만 적습니다.
+      (S.booths.length ? '<p class="countline">전체 부스 <b>' + S.booths.length + '</b>개</p>' : '') +
       (zoneHtml ? '<div class="filterrow"><span class="filterrow__l">구역</span>' + zoneHtml + '</div>' : '') +
       typeHtml +
       '<div class="tools"><div class="search"><label class="sr-only" for="booth-q">부스 검색</label>' +
