@@ -1966,7 +1966,7 @@ a.side__brand:hover b { color: var(--primary); }
 /* ── 운영 물품 요약: 배부 예정 · 배부 중 · 배부 완료 ───────────────
    화면 색(윗줄) 대신 단계 색을 윗줄 3px · 점 · 숫자에만 씁니다.
    바탕은 흰색에 가까운 옅은 톤까지만. */
-.sumgrid--supply { max-width: 780px; }
+.sumgrid--supply .sumcard { min-height: 102px; }
 .sumcard--st-plan { --accent: var(--st-plan); background: var(--st-plan-t); }
 .sumcard--st-part { --accent: var(--st-part); background: var(--st-part-t); }
 .sumcard--st-done { --accent: var(--st-done); background: var(--st-done-t); }
@@ -1982,8 +1982,6 @@ a.side__brand:hover b { color: var(--primary); }
 .supply--part { box-shadow: inset 3px 0 0 var(--st-part); }
 .supply--done { box-shadow: inset 3px 0 0 var(--st-done); }
 .supply__top .supply__kind { margin-left: 2px; }
-.supply__sample { margin-left: auto; }
-.supply__sample .badge { font-size: 11px; padding: 1px 7px; }
 #view[data-view="supplies"] .tools { gap: 10px; }
 
 /* ── 일정 상단: 행사 준비 칸 ─────────────────────────────────────── */
@@ -1995,3 +1993,55 @@ a.side__brand:hover b { color: var(--primary); }
 
 /* ── 홈 브리핑: 종료 후 마지막 일정 한 줄 ────────────────────────── */
 .brief .brief__lastline { font-size: 13.5px; color: var(--muted); margin-top: 4px; }
+
+/* ═══ 예시 화면 공통 ═══════════════════════════════════════════════
+   목록 위 안내 한 줄 + 카드마다 오른쪽 끝의 작은 '예시'.
+   상태 배지보다 약하게: 채움 없이 옅은 테두리와 작은 글자만. */
+.sampletag {
+  flex: none; margin-left: auto;
+  font-size: 11px; font-weight: 600; line-height: 1.5; color: var(--primary);
+  border: 1px dashed #C9C0F5; border-radius: 999px; padding: 0 7px;
+  white-space: nowrap;
+}
+.is-sample .rowcard__name { width: 100%; }
+.is-sample .rescard__top .rescard__kind { margin-top: 0; }
+.supply__note { font-size: 12.5px; color: var(--st-part-ink); font-weight: 600; }
+
+/* 짧은 예시 석 장: 1024px 이상에서 한 칸이 230px 을 넘으면 세 칸(아래 태블릿 규칙 참고).
+   실제 목록은 기존 두 칸 규칙(.tl--2)을 그대로 씁니다. */
+.tl--3s {
+  display: grid; gap: 14px; align-items: stretch;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, max(230px, calc(33.333% - 10px))), 1fr));
+}
+
+/* 운영 물품 예시 현황 — 숫자 위에 한 번만 표시, 카드 테두리는 점선 */
+.sumwrap { display: flex; flex-direction: column; gap: 8px; }
+.sumwrap__label {
+  display: flex; align-items: center; gap: 7px; margin: 0;
+  font-size: 13px; font-weight: 700; color: var(--ink-2);
+}
+.sumwrap__label .sampletag { margin-left: 0; }
+.sumgrid--sample .sumcard { border-style: dashed; }
+
+/* ── 홈 브리핑: 행사 당일 화면 예시 ──────────────────────────────
+   카드 안에 카드를 겹치지 않도록 테두리 없이 점선 구분과 옅은 바탕만. */
+.brief__demo { margin-top: 16px; padding-top: 12px; border-top: 1px dashed #D9D2F7; }
+.brief .brief__demohead {
+  display: flex; align-items: center; gap: 7px;
+  font-size: 12.5px; font-weight: 600; color: var(--muted);
+}
+.brief__demohead .sampletag { margin-left: 0; }
+.brief__pair--demo { margin-top: 10px; }
+.brief__pair--demo .brief__slot--now { background: rgba(255, 255, 255, 0.7); border: 1px dashed #DDD6F8; }
+.brief .brief__pair--demo .brief__time { font-size: 18px; font-weight: 750; margin-top: 4px; }
+.brief .brief__pair--demo .brief__what { font-size: 15px; }
+.brief .brief__pair--demo .brief__slot--next .brief__time { font-size: 16px; }
+.brief .brief__pair--demo .brief__slot--next .brief__what { font-size: 14px; }
+@container (min-width: 520px) {
+  .brief__pair--demo { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .brief__pair--demo .brief__slot--next { padding-top: 12px; }
+}
+/* 태블릿 이하에서는 세 칸을 쓰지 않습니다(한 칸 300px 이상일 때만 두 칸). */
+@media (max-width: 1023px) {
+  .tl--3s { grid-template-columns: repeat(auto-fill, minmax(min(100%, max(300px, calc(50% - 7px))), 1fr)); }
+}

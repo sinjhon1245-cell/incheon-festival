@@ -277,11 +277,17 @@
      테두리를 점선으로 둡니다. 흐리게 만들지는 않습니다 —
      구성을 읽을 수 있어야 하기 때문입니다. */
   var SAMPLE = '<span class="badge badge--plain badge--sample">예시</span>';
+  // 카드 줄 오른쪽 끝에 작게. 실제 상태 배지보다 약하게 보입니다.
+  var SAMPLE_END = '<span class="sampletag">예시</span>';
+  var SAMPLE_NOTE = '예시 화면입니다. 실제 데이터가 등록되면 자동으로 바뀝니다.';
 
-  function sampleWrap(note, cards, two) {
+  /* cols: 1(한 줄씩) · 2(기존 두 칸 규칙) · 3(짧은 예시 석 장 — 폭이 넉넉할 때만 세 칸).
+     head: 안내문과 목록 사이에 끼울 것(예: 예시 현황 숫자). */
+  function sampleWrap(note, cards, cols, head) {
+    var cls = cols === 3 ? ' tl--3s' : cols ? ' tl--2' : '';
     return '<div class="sample">' +
-      '<p class="samplenote">' + esc(note) + '</p>' +
-      '<div class="tl' + (two ? ' tl--2' : '') + '" aria-label="예시 목록">' +
+      '<p class="samplenote">' + esc(note) + '</p>' + (head || '') +
+      '<div class="tl' + cls + '" aria-label="예시 목록">' +
       cards + '</div></div>';
   }
 
@@ -292,122 +298,122 @@
       (hint ? '<p class="state__hint">' + esc(hint) + '</p>' : '') + '</div>';
   }
 
-  /* 화면별 예시. 확정되지 않은 사실(시간·장소·전화번호 등)은 쓰지
-     않고, "무엇이 이 자리에 오는지" 만 보여 줍니다. */
+  /* 화면별 예시. 행사 운영에서 실제로 생길 법한 사례로 두되,
+     사람 이름·전화번호·확정되지 않은 시각은 만들지 않습니다.
+     역할명·부스 번호처럼 "무엇이 이 자리에 오는지" 만 보여 줍니다. */
   /* 예시 공지는 목록과 상세가 같은 원본을 씁니다. 눌러서 상세까지
-     볼 수 있어야 실제 화면 흐름을 이해할 수 있습니다.
-     확정되지 않은 시각·장소·연락처는 쓰지 않습니다. */
+     볼 수 있어야 실제 화면 흐름을 이해할 수 있습니다. */
   var SAMPLE_NOTICES = [
     { level: '중요', sample: true,
       title: '부스 운영자 사전 안내',
-      summary: '행사 전 부스 세팅 시간과 준비사항을 안내합니다.',
+      summary: '부스 세팅 시간과 준비사항을 확인해 주세요.',
       body: '행사 전 부스 운영자가 확인해야 할 세팅 시간, 준비물, 반입 방법, ' +
             '운영 유의사항 등이 등록되면 이곳에서 자세히 확인할 수 있습니다.' },
     { level: '일반', sample: true,
-      title: '행사장 출입 및 물품 반입 안내',
-      summary: '행사장 출입과 물품 반입 안내가 등록되면 이곳에서 확인할 수 있습니다.',
-      body: '행사장 출입 방법, 물품 반입 동선, 반입 가능 시간과 관련된 안내가 ' +
+      title: '물품 반입 및 설치 안내',
+      summary: '운영 물품 반입 시간과 설치 기준을 안내합니다.',
+      body: '물품 반입 동선, 반입 가능 시간, 부스 설치 기준과 관련된 안내가 ' +
             '확정되면 이곳에서 확인할 수 있습니다.' },
     { level: '긴급', sample: true,
-      title: '긴급 운영 공지',
-      summary: '행사 당일 긴급 변경사항은 이 영역에 우선 표시됩니다.',
+      title: '행사 당일 운영 변경 안내',
+      summary: '일정 또는 장소 변경 시 최우선으로 표시됩니다.',
       body: '행사 당일 일정 변경, 장소 변경, 안전 관련 안내 등 ' +
             '즉시 확인해야 하는 내용이 긴급 공지로 표시됩니다.' }
   ];
 
   function sampleNotices() {
-    return sampleWrap(
-      '등록된 공지가 없습니다. 아래는 어떤 공지가 올라오는지 보여 주는 예시이며, 실제 공지가 등록되면 사라집니다. 눌러서 상세 화면도 볼 수 있습니다.',
+    return sampleWrap(SAMPLE_NOTE + ' 눌러서 상세도 볼 수 있습니다.',
       SAMPLE_NOTICES.map(function (n, i) {
         // button 이라 마우스·Enter·Space 가 모두 됩니다.
         return '<button class="notice is-sample' + (n.level === '긴급' ? ' notice--urgent' : '') +
           '" type="button" data-samplenotice="' + i + '">' +
-          '<span class="notice__top">' + badge(n.level) + SAMPLE + '</span>' +
+          '<span class="notice__top">' + badge(n.level) + SAMPLE_END + '</span>' +
           '<span class="notice__title">' + esc(n.title) + '</span>' +
           '<span class="notice__body">' + esc(n.summary) + '</span></button>';
-      }).join(''), true);
+      }).join(''), 2);
   }
 
+  /* 요청은 실제 카드처럼 우선순위·상태·유형 · 제목 · 위치 한 줄. */
+  var SAMPLE_REQUESTS = [
+    { pri: '높음', st: '접수',  kind: '전기',     title: 'A-03 부스 멀티탭 추가 요청',
+      body: '체험용 기기 전원이 부족해 멀티탭 1개가 더 필요합니다.', where: 'A-03 부스' },
+    { pri: '보통', st: '처리 중', kind: '네트워크', title: 'B-02 체험용 노트북 와이파이 연결 확인',
+      body: '노트북 2대가 행사장 와이파이에 연결되지 않습니다.', where: 'B-02 부스 · 전산지원' },
+    { pri: '보통', st: '완료',  kind: '시설',     title: '안내 데스크 테이블 1개 추가 요청',
+      body: '안내 자료 배치를 위해 테이블이 더 필요합니다.', where: '안내 데스크 · 운영지원' }
+  ];
+
   function sampleRequests() {
-    return sampleWrap(
-      '등록된 운영 요청이 없습니다. 아래는 어떤 요청을 등록할 수 있는지 보여 주는 예시입니다.',
-      [
-        ['전기', 'A구역 멀티탭 추가 요청', '부스 운영 중 전원 사용을 위해 멀티탭이 필요합니다.'],
-        ['네트워크', '와이파이 연결 확인 요청', '체험 부스에서 네트워크 연결이 불안정합니다.'],
-        ['시설', '테이블 추가 요청', '운영 물품 배치를 위해 테이블 1개가 더 필요합니다.']
-      ].map(function (r) {
+    return sampleWrap(SAMPLE_NOTE,
+      SAMPLE_REQUESTS.map(function (r) {
+        var done = r.st === '완료';
         return '<div class="req is-sample">' +
-          '<span class="req__top">' + badge('보통') + badge('접수') +
-          '<span class="badge badge--plain">' + esc(r[0]) + '</span>' + SAMPLE + '</span>' +
-          '<span class="req__title">' + esc(r[1]) + '</span>' +
-          '<span class="req__meta">' + esc(r[2]) + '</span></div>';
+          '<span class="req__top">' + (done ? doneMark('해결 완료') : badge(r.pri) + badge(r.st)) +
+          '<span class="tag tag--soft">' + esc(r.kind) + '</span>' + SAMPLE_END + '</span>' +
+          '<span class="req__title">' + esc(r.title) + '</span>' +
+          '<span class="req__body">' + esc(r.body) + '</span>' +
+          '<span class="req__meta">' + esc(r.where) + '</span></div>';
       }).join(''));
   }
 
   function sampleResources() {
-    return sampleWrap(
-      '등록된 자료가 없습니다. 아래는 어떤 자료가 올라오는지 보여 주는 예시입니다.',
+    return sampleWrap(SAMPLE_NOTE,
       [
-        ['운영 매뉴얼', '행사 운영 매뉴얼', '행사 운영 절차와 기본 안내를 확인하는 자료입니다.'],
-        ['부스 운영 안내', '부스 운영자 안내 자료', '부스 준비·운영·철수 관련 내용을 확인할 수 있습니다.'],
-        ['안전관리 자료', '행사 안전관리 안내', '비상상황과 안전사고 대응 절차를 확인하는 자료입니다.']
+        ['운영 매뉴얼', '행사 운영 매뉴얼', '운영 절차와 시간대별 역할을 정리한 자료입니다.'],
+        ['부스 운영', '부스 운영자 안내', '부스 준비 · 운영 · 철수 기준을 확인합니다.'],
+        ['안전관리', '안전·비상대응 안내', '안전사고와 비상상황 대응 절차를 확인합니다.']
       ].map(function (r) {
-        // 예시에는 열 수 있는 파일이 없어 단추를 만들지 않습니다.
+        // 예시에는 열 수 있는 파일이 없어 '자료 열기' 단추를 만들지 않습니다.
         return '<div class="rescard is-sample">' +
-          '<div class="rescard__title">' + esc(r[1]) + ' ' + SAMPLE + '</div>' +
-          '<div class="rescard__kind">' + esc(r[0]) + '</div>' +
+          '<div class="rescard__top"><span class="rescard__kind">' + esc(r[0]) + '</span>' + SAMPLE_END + '</div>' +
+          '<div class="rescard__title">' + esc(r[1]) + '</div>' +
           '<p class="rescard__desc">' + esc(r[2]) + '</p></div>';
-      }).join(''), true);
+      }).join(''), 3);
   }
 
   function sampleContacts() {
-    return sampleWrap(
-      '등록된 연락처가 없습니다. 아래는 어떤 담당이 등록되는지 보여 주는 예시입니다.',
+    return sampleWrap(SAMPLE_NOTE,
       [
-        ['운영본부', '행사 운영 총괄', '행사 진행과 전체 운영 관련 문의'],
-        ['전산 지원', '네트워크·기기 지원', '인터넷, 노트북, 장비 관련 지원'],
-        ['안전 지원', '안전 및 응급 대응', '안전사고 및 응급 상황 지원']
+        ['운영본부', '행사 운영 총괄', '행사 진행과 전체 운영 문의'],
+        ['전산지원', '네트워크·기기 지원', '인터넷 · 노트북 · 장비 문제'],
+        ['안전지원', '안전 및 응급 대응', '안전사고 · 응급 상황']
       ].map(function (c) {
-        // 확정된 번호가 없어 번호와 전화 단추를 만들지 않습니다.
+        // 이름·번호는 만들지 않습니다. 번호가 등록되면 전화·복사 단추가 생깁니다.
         return '<div class="contact is-sample">' +
-          '<div class="contact__top"><span class="tag tag--soft">' + esc(c[0]) + '</span>' + SAMPLE + '</div>' +
+          '<div class="contact__top"><span class="tag tag--soft">' + esc(c[0]) + '</span>' + SAMPLE_END + '</div>' +
           '<div class="contact__name">' + esc(c[1]) + '</div>' +
-          '<div class="contact__meta">' + esc(c[2]) + '</div></div>';
-      }).join(''), true);
+          '<div class="contact__meta">' + esc(c[2]) + '</div>' +
+          '<div class="contact__memo">번호 등록 후 전화 · 복사 가능</div></div>';
+      }).join(''), 3);
   }
 
   function samplePlaces() {
-    return sampleWrap(
-      '등록된 공간 안내가 없습니다. 아래는 어떤 공간이 등록되는지 보여 주는 예시입니다.',
+    return sampleWrap(SAMPLE_NOTE,
       [
-        ['운영본부', '행사 운영 총괄 및 현장 지원'],
-        ['메인 무대', '개막식, 공연, 주요 프로그램 진행 공간'],
-        ['체험 부스 구역', 'AI·SW 체험 부스 운영 공간'],
-        ['안내 데스크', '참가자 안내 및 문의 접수'],
-        ['휴게 공간', '관계자 및 참가자 휴식 공간'],
-        ['화장실', '행사장 내 편의시설 위치 안내']
+        ['운영본부', '운영 총괄 · 현장 지원 · 물품 수령'],
+        ['메인 무대', '개막식 · 공연 · 시상 진행'],
+        ['안내 데스크', '참가자 안내 · 분실물 · 문의 접수'],
+        ['안전 지원', '응급 처치 · 안전 요원 대기']
       ].map(function (p) {
         // 층수나 위치는 확정되지 않아 적지 않습니다.
         return '<div class="rowcard is-sample"><div class="rowcard__body">' +
-          '<div class="rowcard__name">' + esc(p[0]) + ' ' + SAMPLE + '</div>' +
+          '<div class="rowcard__name">' + esc(p[0]) + SAMPLE_END + '</div>' +
           '<div class="rowcard__meta">' + esc(p[1]) + '</div></div></div>';
-      }).join(''), true);
+      }).join(''), 2);
   }
 
   function sampleFaqs() {
-    return sampleWrap(
-      '공개된 운영 FAQ가 없습니다. 아래는 어떤 질문이 오르는지 보여 주는 예시이며, 답변이 확정되면 실제 FAQ 로 바뀝니다.',
+    return sampleWrap(SAMPLE_NOTE,
       [
-        ['부스 운영자는 몇 시까지 도착해야 하나요?', '실제 운영 시간이 확정되면 이곳에 안내됩니다.'],
-        ['부스에서 전기를 사용할 수 있나요?', '전기 사용 기준과 제공 사항이 확정되면 안내됩니다.'],
-        ['운영 중 문제가 생기면 어떻게 하나요?', '운영 요청 메뉴로 등록하거나 운영본부에 지원을 요청할 수 있습니다.'],
-        ['행사 운영 중 지원이 필요하면 어떻게 하나요?', '지원 요청 방법이 확정되면 이곳에 안내됩니다.'],
-        ['안전사고가 발생하면 어떻게 해야 하나요?', '행사 안전 운영 기준이 확정되면 안내됩니다.']
+        // 확정되지 않은 답은 확정된 것처럼 쓰지 않습니다. 포털 기능 안내만 단정합니다.
+        ['부스 운영자는 몇 시까지 도착해야 하나요?', '도착 시간이 확정되면 이곳과 공지에 안내됩니다.'],
+        ['운영 중 전기나 네트워크 문제가 생기면 어떻게 하나요?', '운영 요청 메뉴에서 위치와 내용을 등록할 수 있습니다.'],
+        ['운영 물품은 어디에서 확인하나요?', '운영 물품 메뉴에서 기관·팀·부스별 배부 현황을 확인할 수 있습니다.'],
+        ['안전사고 발생 시 누구에게 연락하나요?', '안전 담당 연락처가 확정되면 연락망에 안내됩니다.']
       ].map(function (f) {
         // 접었다 펴는 동작 없이 질문과 답을 함께 보여 줍니다.
-        // 예시는 눌러도 할 일이 없습니다.
         return '<div class="faq is-sample">' +
-          '<div class="faq__q faq__q--static"><span>' + esc(f[0]) + '</span>' + SAMPLE + '</div>' +
+          '<div class="faq__q faq__q--static"><span>' + esc(f[0]) + '</span>' + SAMPLE_END + '</div>' +
           '<div class="faq__a">' + esc(f[1]) + '</div></div>';
       }).join(''));
   }
@@ -678,6 +684,17 @@
       // 행사 전: 관리자가 표시한 주요 일정(없으면 첫 일정) 하나
       briefBody = slot('다음 주요 일정', br.key, { range: true, day: fmtEventDay(ev.start) });
       if (!br.key) briefLink = '';
+      /* 행사 당일 화면 예시 — 행사 전에만. 등록된 일정 중 이어지는 두 개를 빌려
+         당일에 '현재 + 다음' 이 어떻게 보이는지만 보여 줍니다. 진행 중 표시·남은
+         시간은 붙이지 않습니다 — 지금 진행 중인 일정으로 읽히면 안 됩니다. */
+      var demo = br.state === 'before' && schedulePreviewPair();
+      if (demo) {
+        briefBody += '<div class="brief__demo" role="group" aria-label="행사 당일 화면 예시">' +
+          '<p class="brief__demohead">' + SAMPLE_END + '행사 당일에는 이렇게 표시됩니다</p>' +
+          '<div class="brief__pair brief__pair--demo">' +
+          slot('현재 주요 일정', demo[0], { range: true, size: 'now' }) +
+          slot('다음 주요 일정', demo[1], { range: true, size: 'next' }) + '</div></div>';
+      }
     }
 
     var brief = '<section class="brief" aria-labelledby="brief-t">' +
@@ -841,6 +858,23 @@
     return b;
   }
   function hhmm(min) { return C.pad2(Math.floor(min / 60)) + ':' + C.pad2(min % 60); }
+
+  /* 홈 '행사 당일 예시' 에 쓸 두 일정. 새 일정을 지어내지 않고 등록된 일정에서
+     앞 일정이 끝나는 시각에 바로 시작하는 짝을 고릅니다. 같은 장소에서 이어지는
+     짝(무대 순서처럼)을 먼저, 없으면 아무 이어지는 짝, 그것도 없으면 첫 두 일정. */
+  function schedulePreviewPair() {
+    var list = S.schedule.filter(function (i) { return i.status !== '취소' && spanOf(i); })
+      .sort(function (x, y) { return spanOf(x).a - spanOf(y).a; });
+    if (list.length < 2) return null;
+    var pairs = [];
+    list.forEach(function (i) {
+      list.forEach(function (j) {
+        if (i !== j && spanOf(j).a === spanOf(i).b) pairs.push([i, j]);
+      });
+    });
+    var same = pairs.filter(function (p) { return p[0].place && p[0].place === p[1].place; });
+    return same[0] || pairs[0] || list.slice(0, 2);
+  }
 
   /* 상단 실시간 요약: 현재 시각 · 현재 일정 · 다음 일정.
      상황에 따라 두 칸의 내용만 바뀌고 틀(시각 | 왼쪽 | 오른쪽)은 같습니다.
@@ -1636,40 +1670,37 @@
 
   /* 예시 — 실제 사람 이름을 쓰지 않습니다. 확정되지 않은 시각·장소를
      지어내지도 않습니다. 무엇이 이 자리에 들어오는지만 보여 줍니다. */
+  /* 예정 · 진행 중 · 완료가 한 번씩 보이게 합니다. 담당은 사람 이름 대신 팀 이름.
+     행사 당일 아침 운영 흐름을 본뜬 예시 시각이며, 실제 일정이 아닙니다. */
   var SAMPLE_TASKS = [
-    { area: '기념식', title: '좌석 및 안내 준비', when: '행사 시작 전', place: '운영본부',
-      people: ['담당자 1', '담당자 2'] },
-    { area: '부스 운영', title: '부스 세팅 지원', when: '부스 운영 전', place: '부스 구역',
-      people: ['담당자 1'] },
-    { area: '안전', title: '안전 점검 및 현장 순회', when: '운영 시간 중', place: '행사장 전체',
-      people: ['담당자 1', '담당자 2'] }
+    { st: '예정',   time: '08:30–09:00', area: '운영', title: '운영본부 개소 준비', place: '운영본부', team: '운영지원팀' },
+    { st: '진행 중', time: '09:00–09:30', area: '부스', title: '부스 세팅 확인', place: '체험 부스 구역', team: '부스지원팀' },
+    { st: '완료',   time: '08:00–08:30', area: '물품', title: '운영 물품 수령 확인', place: '운영본부', team: '운영지원팀' }
   ];
 
   function sampleTasks() {
-    return sampleWrap(
-      '등록된 담당 업무가 없습니다. 아래는 업무와 담당자가 어떻게 표시되는지 보여 주는 예시이며, ' +
-      '실제 업무가 등록되면 사라집니다. 시간과 장소는 관리자에서 등록한 값이 표시됩니다.',
+    return sampleWrap(SAMPLE_NOTE,
       SAMPLE_TASKS.map(function (t) {
-        return '<div class="task is-sample">' +
-          '<div class="task__top"><span class="task__time">' + esc(t.when) + '</span>' +
-          '<span class="badge badge--plain">' + esc(t.area) + '</span>' + SAMPLE + '</div>' +
+        var done = t.st === '완료';
+        return '<div class="task is-sample' + (done ? ' is-done' : '') + '">' +
+          '<div class="task__top"><span class="task__time">' + esc(t.time) + '</span>' +
+          (done ? doneMark('업무 완료') : badge(t.st)) +
+          '<span class="tag tag--soft">' + esc(t.area) + '</span>' + SAMPLE_END + '</div>' +
           '<div class="task__title">' + esc(t.title) + '</div>' +
           '<div class="task__meta">' + esc(t.place) + '</div>' +
-          '<div class="task__people">' + t.people.map(function (n) {
-            return '<span class="person">' + esc(n) + '</span>';
-          }).join('') + '</div></div>';
-      }).join(''), true);
+          '<div class="task__people"><span class="person">담당 ' + esc(t.team) + '</span></div></div>';
+      }).join(''), 2);
   }
 
   function samplePeople() {
-    return sampleWrap(
-      '등록된 담당 업무가 없습니다. 담당자가 배정되면 아래처럼 사람별로 맡은 업무를 시간순으로 확인할 수 있습니다.',
-      ['담당자 1', '담당자 2', '담당자 3'].map(function (n, i) {
+    return sampleWrap(SAMPLE_NOTE,
+      [['운영지원팀', '운영본부 개소 준비 · 운영 물품 수령 확인', 2],
+       ['부스지원팀', '부스 세팅 확인', 1]].map(function (p) {
         return '<div class="rowcard is-sample"><div class="rowcard__body">' +
-          '<div class="rowcard__name">' + esc(n) + ' ' + SAMPLE + '</div>' +
-          '<div class="rowcard__meta">소속이 등록되면 표시됩니다 · 담당 업무 ' + (i + 1) + '건</div>' +
+          '<div class="rowcard__name">' + esc(p[0]) + SAMPLE_END + '</div>' +
+          '<div class="rowcard__meta">담당 업무 ' + p[2] + '건 · ' + esc(p[1]) + '</div>' +
           '</div></div>';
-      }).join(''), true);
+      }).join(''), 2);
   }
 
   /* ── 화면: 담당 업무 ────────────────────────────────────────── */
@@ -1916,24 +1947,37 @@
       .filter(function (a) { return a.name; });
   }
 
+  /* 담당은 사람 이름 대신 역할명. 수량은 화면 모양을 보여 주는 예시 값입니다. */
   var SAMPLE_SUPPLIES = [
-    { name: '체험 부스', kind: '부스', status: '미배부', items: ['운영키트'] },
-    { name: '부스 운영 기관', kind: '기관', status: '일부 배부', items: ['명찰', '식권'] },
-    { name: '운영본부', kind: '팀', status: '배부 완료', items: ['명찰', '운영키트', '생수'] }
+    { name: '체험 부스 A-01', kind: '부스', status: '미배부', manager: '운영교사',
+      items: [['운영키트', 1], ['명찰', 2], ['생수', 4]] },
+    { name: '부스 운영 기관', kind: '기관', status: '일부 배부', manager: '부스지원팀',
+      items: [['명찰', 4], ['식권', 4]], note: '일부 품목 전달됨' },
+    { name: '운영본부', kind: '팀', status: '배부 완료', manager: '운영총괄',
+      items: [['명찰', 6], ['운영키트', 2], ['생수', 12]] }
   ];
 
+  /* 예시 현황 숫자는 위 예시 카드에서 셉니다. 실제 표가 한 건이라도 생기면
+     viewSupplies 가 이 함수를 부르지 않으므로 숫자도 함께 사라집니다. */
   function sampleSupplies() {
-    return sampleWrap('예시 화면입니다. 물품이 등록되면 실제 배부 현황으로 바뀝니다.',
+    var summary = '<div class="sumwrap"><p class="sumwrap__label">' + SAMPLE_END + ' 예시 현황</p>' +
+      supplySummary(function (st) {
+        return SAMPLE_SUPPLIES.filter(function (t) { return t.status === st; }).length;
+      }, 'sumgrid--sample') + '</div>';
+    return sampleWrap(SAMPLE_NOTE,
       SAMPLE_SUPPLIES.map(function (t) {
+        var done = t.status === '배부 완료';
         // 예시 표시는 오른쪽 끝에 작게 한 번만. 상태 배지와 같은 무게로 늘어서지 않게 합니다.
-        return '<div class="supply supply--' + SUPPLY_TONE[t.status] + ' is-sample">' +
-          '<div class="supply__top">' + badge(supplyLabel(t.status)) +
-          '<span class="supply__kind">' + esc(t.kind) + '</span>' +
-          '<span class="supply__sample">' + SAMPLE + '</span></div>' +
+        return '<div class="supply supply--' + SUPPLY_TONE[t.status] + ' is-sample' + (done ? ' is-done' : '') + '">' +
+          '<div class="supply__top">' + (done ? doneMark('배부 완료') : badge(supplyLabel(t.status))) +
+          '<span class="supply__kind">' + esc(t.kind) + '</span>' + SAMPLE_END + '</div>' +
           '<div class="supply__name">' + esc(t.name) + '</div>' +
-          '<div class="supply__meta">담당 —</div>' +
-          '<div class="supply__line">' + t.items.map(esc).join('<span aria-hidden="true"> · </span>') + '</div></div>';
-      }).join(''), true);
+          '<div class="supply__meta">담당 ' + esc(t.manager) + '</div>' +
+          '<div class="supply__line">' + t.items.map(function (a) {
+            return esc(a[0]) + ' <b>' + a[1] + '</b>';
+          }).join('<span aria-hidden="true"> · </span>') + '</div>' +
+          (t.note ? '<div class="supply__note">' + esc(t.note) + '</div>' : '') + '</div>';
+      }).join(''), 3, summary);
   }
 
   /* ── 화면: 운영 물품 ────────────────────────────────────────── */
@@ -1941,10 +1985,16 @@
      포털의 요약·필터·카드·상세에서는 '배부 예정 · 배부 중 · 배부 완료' 로 읽히게 합니다.
      관리자 화면은 표의 값을 그대로 씁니다. */
   var SUPPLY_VIEW = [
-    { label: '배부 예정', status: '미배부',   tone: 'plan', sub: '아직 전달 전', none: '실제 등록 시 표시' },
-    { label: '배부 중',   status: '일부 배부', tone: 'part', sub: '일부 전달됨',  none: '일부 배부 상태' },
-    { label: '배부 완료', status: '배부 완료', tone: 'done', sub: '전달 완료',    none: '완료 상태' }
+    { label: '배부 예정', status: '미배부',   tone: 'plan', sub: '아직 전달 전' },
+    { label: '배부 중',   status: '일부 배부', tone: 'part', sub: '일부 전달됨' },
+    { label: '배부 완료', status: '배부 완료', tone: 'done', sub: '전달 완료' }
   ];
+  // 배부 단계 숫자 석 장. countFor(표의 상태값) → 건수.
+  function supplySummary(countFor, extra) {
+    return summaryGrid(SUPPLY_VIEW.map(function (v) {
+      return { n: countFor(v.status), l: v.label, sub: v.sub, tone: 'st-' + v.tone, dot: true };
+    }), 'sumgrid--supply' + (extra ? ' ' + extra : ''));
+  }
   var SUPPLY_TONE = { '미배부': 'plan', '일부 배부': 'part', '배부 완료': 'done' };
   function supplyLabel(status) {
     var v = SUPPLY_VIEW.filter(function (x) { return x.status === (status || '미배부'); })[0];
@@ -1962,16 +2012,11 @@
     function countOf(st) { return all.filter(function (t) { return (t.status || '미배부') === st; }).length; }
     var plan = countOf('미배부'), part = countOf('일부 배부'), done = countOf('배부 완료');
 
-    // 숫자 석 장(배부 예정 · 배부 중 · 배부 완료). 등록 전에는 0 대신 — 로 두어
-    // '다 끝났다' 로 읽히지 않게 하고, 설명 한 줄로 무엇이 올 자리인지 알립니다.
-    var has = all.length > 0;
-    var counts = { '미배부': plan, '일부 배부': part, '배부 완료': done };
-    var summary = summaryGrid(SUPPLY_VIEW.map(function (v) {
-      return { n: has ? counts[v.status] : null, l: v.label, sub: has ? v.sub : v.none,
-        tone: 'st-' + v.tone, dot: true };
-    }), 'sumgrid--supply');
+    // 등록 전에는 예시 화면(예시 현황 숫자 포함)만. 실제 숫자와 섞지 않습니다.
+    if (!all.length) return '<div class="page">' + head + sampleSupplies() + '</div>';
 
-    if (!has) return '<div class="page">' + head + summary + sampleSupplies() + '</div>';
+    var counts = { '미배부': plan, '일부 배부': part, '배부 완료': done };
+    var summary = supplySummary(function (st) { return counts[st]; });
 
     var stateOn = SUPPLY_VIEW.filter(function (v) { return v.label === ui.supplyState; })[0];
     var q = ui.supplyQ.trim().toLowerCase();
