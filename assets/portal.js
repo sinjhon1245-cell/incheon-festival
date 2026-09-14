@@ -62,7 +62,6 @@
      이 목록과 상관없이 그대로 표시됩니다(r.kind 를 그대로 씁니다). */
   var REQ_KINDS     = ['전기', '네트워크', '기자재', '시설', '안전', '물품', '기타'];
   var REQ_PRIORITY  = ['긴급', '높음', '보통'];
-  var SUPPLY_STATES = ['미배부', '일부 배부', '배부 완료'];
 
   /* 상태 → 배지 색. 색만으로 뜻을 전하지 않도록 글자는 항상 함께 씁니다. */
   var TONE = {
@@ -90,7 +89,7 @@
   var ui = { boothQ: '', boothZone: '전체', boothType: '전체',
              schedCat: '전체', schedQ: '', schedHalf: '전체', schedKey: false,
              taskMode: '업무별', taskArea: '전체', taskQ: '', taskPerson: '',
-             supplyQ: '', resourceQ: '',
+             supplyQ: '', supplyState: '전체', resourceQ: '',
              contactQ: '', contactCat: '전체', faqCat: '전체' };
   var clockTimer = null;
 
@@ -196,24 +195,6 @@
     if (nowMin < a) return '예정';
     if (nowMin >= b) return '종료';
     return '진행 중';
-  }
-
-  function nowNext(ev) {
-    var list = S.schedule.filter(function (i) { return i.status !== '취소'; });
-    if (!ev.sameDay) {
-      return { live: null, next: list[0] || null, gap: null, preview: true };
-    }
-    var nowMin = ev.now.getHours() * 60 + ev.now.getMinutes();
-    var live = null, next = null;
-    list.forEach(function (i) {
-      var a = C.toMin(i.start_time), b = C.toMin(i.end_time);
-      if (a == null) return;
-      if (b == null) b = a + 30;
-      if (nowMin >= a && nowMin < b && !live) live = i;
-      if (a > nowMin && (!next || a < C.toMin(next.start_time))) next = i;
-    });
-    var gap = next ? C.toMin(next.start_time) - nowMin : null;
-    return { live: live, next: next, gap: gap, preview: false };
   }
 
   /* ── 데이터 ─────────────────────────────────────────────────── */
@@ -440,10 +421,12 @@
      정보 화면(자료실·연락망)에는 쓰지 않습니다. 거기서는 개수 한 줄이면
      충분하고, 숫자 칸을 늘어놓으면 운영 화면과 구분이 흐려집니다. */
   function summaryGrid(items) {
-    return '<div class="minigrid minigrid--sum">' + items.map(function (c) {
-      return '<div class="mini' + (c.tone ? ' mini--' + c.tone : '') + '">' +
-        '<span class="mini__n">' + c.n + '</span>' +
-        '<span class="mini__l">' + esc(c.l) + '</span></div>';
+    return '<div class="sumgrid" style="--n:' + items.length + '">' + items.map(function (c) {
+      var none = c.n == null;
+      return '<div class="sumcard' + (c.tone ? ' sumcard--' + c.tone : '') + (none ? ' is-none' : '') + '">' +
+        '<span class="sumcard__n">' + (none ? '<span aria-hidden="true">—</span><span class="sr-only">없음</span>' : c.n) + '</span>' +
+        '<span class="sumcard__l">' + esc(c.l) + '</span>' +
+        (c.sub ? '<span class="sumcard__sub">' + esc(c.sub) + '</span>' : '') + '</div>';
     }).join('') + '</div>';
   }
 
@@ -567,7 +550,6 @@
   function viewDashboard() {
     var ev = eventInfo();
     var s = S.settings || {};
-    var nn = nowNext(ev);
     // 행사 당일이라도 끝난 시각이 지나면 '종료' 로 봅니다.
     var mode = ev.phase === 'after' ? 'after' : ev.phase === 'during' ? 'during' : 'before';
 
@@ -611,7 +593,8 @@
         n: S.supplyTargets.length ? leftSupply.length : null,
         sub: !S.supplyTargets.length ? '아직 미등록'
           : !leftSupply.length ? '모두 배부 완료'
-          : '전체 ' + S.supplyTargets.length + '곳 중' },
+          : '배부 예정 ' + leftSupply.filter(function (t) { return (t.status || '미배부') === '미배부'; }).length +
+            ' · 배부 중 ' + leftSupply.filter(function (t) { return t.status === '일부 배부'; }).length },
       { key: 'booth', go: 'booths', l: '전체 부스',
         n: S.booths.length || null,
         sub: S.booths.length ? '부스 현황 보기' : '아직 미등록' }
@@ -646,15 +629,19 @@
         (item.place ? '<p class="brief__where">' + esc(item.place) + '</p>' : '') + '</div>';
     }
 
-    var modeLabel = mode === 'during' ? '지금 운영' : mode === 'after' ? '행사 종료' : '행사 준비';
-    var briefBody, briefLink = '<button class="linkbtn" type="button" data-go="schedule">전체 일정 →</button>';
+    var br = scheduleBrief(ev);
+    var modeLabel = br.phaseLabel;
+    var briefBody, briefLink = '<button class="linkbtn" type="button" data-go="schedule">전체 일정 보기 →</button>';
+    var lastSlot = br.last ? slot('마지막 일정', br.last, { range: true, after: hhmm(spanOf(br.last).b) + ' 종료' }) : '';
 
     if (mode === 'after') {
       // 끝난 일정을 다시 크게 보여 줄 필요는 없습니다. 남은 운영만 봅니다.
       var leftRows = [];
       if (openReqs.length) leftRows.push({ go: 'requests', l: '미처리 요청', n: openReqs.length });
       if (leftTasks.length) leftRows.push({ go: 'tasks', l: '미완료 업무', n: leftTasks.length });
+      if (leftSupply.length) leftRows.push({ go: 'supplies', l: '배부 확인 필요', n: leftSupply.length });
       briefBody = '<p class="brief__lead">행사가 종료되었습니다.</p>' +
+        (br.last ? '<p class="brief__lastline">마지막 일정 · ' + esc(br.last.title) + ' ' + timeRange(br.last) + '</p>' : '') +
         (leftRows.length
           ? '<div class="brief__slot"><p class="brief__label">남은 운영 확인</p>' +
             '<ul class="brief__left">' + leftRows.map(function (r) {
@@ -664,20 +651,23 @@
             }).join('') + '</ul></div>'
           : '<p class="brief__empty">모든 운영 항목이 완료되었습니다.</p>');
       briefLink = '';
-    } else if (mode === 'during' && !nn.preview) {
-      var liveSlot = nn.live
-        ? slot('지금 진행 중', nn.live, { range: true, live: true })
-        : slot('지금 진행 중', null, {
-            empty: nn.next && nn.gap != null ? '진행 중인 일정이 없습니다. 다음 일정까지 ' + C.minLabel(nn.gap) + '.'
-              : '진행 중인 일정이 없습니다.' });
-      var nextSlot = slot('다음 일정', nn.next, {
-        after: nn.next && nn.gap != null ? C.minLabel(nn.gap) + ' 후' : '',
+    } else if (br.state === 'live' || br.state === 'waiting') {
+      var liveSlot = br.live
+        ? slot('현재 일정', br.live, { range: true, live: true,
+            after: br.liveLeft > 0 ? C.minLabel(br.liveLeft) + ' 남음' : '곧 종료' })
+        : slot('현재 일정', null, { empty: '진행 중인 일정이 없습니다. ' +
+            (br.isFirst ? '첫 일정' : '다음 일정') + '까지 ' + C.minLabel(br.nextIn) + '.' });
+      var nextSlot = slot(br.isFirst && !br.live ? '첫 일정' : '다음 일정', br.next, {
+        range: true, after: br.nextIn != null ? C.minLabel(br.nextIn) + ' 후' : '',
         empty: '오늘 남은 일정이 없습니다.' });
       briefBody = '<div class="brief__split">' + liveSlot + nextSlot + '</div>';
+    } else if (br.state === 'ended') {
+      briefBody = '<div class="brief__split">' +
+        slot('오늘 일정', null, { empty: '오늘 일정이 모두 끝났습니다.' }) + lastSlot + '</div>';
     } else {
-      // 행사 전: 당일 가장 먼저 시작하는 일정 하나
-      briefBody = slot('다음 주요 일정', nn.next, { day: fmtEventDay(ev.start) });
-      if (!nn.next) briefLink = '';
+      // 행사 전: 관리자가 표시한 주요 일정(없으면 첫 일정) 하나
+      briefBody = slot('다음 주요 일정', br.key, { range: true, day: fmtEventDay(ev.start) });
+      if (!br.key) briefLink = '';
     }
 
     var brief = '<section class="brief" aria-labelledby="brief-t">' +
@@ -809,10 +799,45 @@
     return { nowMin: nowMin, live: live, liveCount: liveCount, next: next, first: first, lastEnd: lastEnd };
   }
 
-  /* 상단 실시간 요약: 현재 시각 · 현재 진행 중 · 다음 일정.
-     1초마다 이 칸의 시계 글자만 바뀌고, 분이 바뀔 때 이 칸만 다시 그립니다. */
-  function scheduleLiveHtml(ev) {
+  /* 일정 브리핑 판단 — 일정 화면 상단과 홈의 운영 브리핑이 함께 씁니다.
+     두 화면이 서로 다른 말을 하지 않도록 판단은 여기 한 곳에서만 합니다.
+       empty    등록된 일정 없음
+       before   행사일 전          → 다음 주요 일정
+       live     당일 · 진행 중 있음 → 현재 일정 + 다음 일정
+       waiting  당일 · 진행 중 없음 → 다음 일정(첫 일정 전이면 첫 일정)
+       ended    당일 · 모두 끝남    → 오늘 일정 종료 + 마지막 일정
+       after    행사일 뒤          → 행사 종료 + 마지막 일정 */
+  function scheduleBrief(ev) {
     var sn = scheduleNow(ev);
+    var last = null;
+    S.schedule.forEach(function (i) {
+      if (i.status === '취소' || !spanOf(i)) return;
+      if (!last || spanOf(i).b > spanOf(last).b) last = i;
+    });
+    var b = { live: sn.live, next: sn.next, first: sn.first, last: last, liveCount: sn.liveCount, key: null };
+    if (!S.schedule.length) b.state = 'empty';
+    else if (ev.sameDay) b.state = sn.live ? 'live' : sn.next ? 'waiting' : 'ended';
+    else if (ev.phase === 'after') b.state = 'after';
+    else {
+      b.state = 'before';
+      // 관리자가 '핵심' 으로 표시한 일정이 있으면 그중 가장 이른 것, 없으면 첫 일정
+      b.key = S.schedule.filter(function (i) { return i.is_highlight && i.status !== '취소' && spanOf(i); })
+        .sort(function (x, y) { return spanOf(x).a - spanOf(y).a; })[0] || sn.first;
+    }
+    b.liveLeft = b.live ? spanOf(b.live).b - sn.nowMin : null;
+    b.nextIn = b.next && ev.sameDay ? spanOf(b.next).a - sn.nowMin : null;
+    b.isFirst = !!b.next && b.next === sn.first;
+    b.phaseLabel = ev.phase === 'after' ? '행사 종료' : ev.phase === 'during' ? '행사 진행 중' : '행사 준비';
+    return b;
+  }
+  function hhmm(min) { return C.pad2(Math.floor(min / 60)) + ':' + C.pad2(min % 60); }
+
+  /* 상단 실시간 요약: 현재 시각 · 현재 일정 · 다음 일정.
+     상황에 따라 두 칸의 내용만 바뀌고 틀(시각 | 왼쪽 | 오른쪽)은 같습니다.
+     1초마다 시계 글자만 바뀌고, 분이 바뀔 때 이 칸만 다시 그립니다. */
+  function scheduleLiveHtml(ev) {
+    var br = scheduleBrief(ev);
+    var st = S.settings || {};
     var clockSub = ev.sameDay
       ? (ev.phase === 'after' ? '행사 종료' : '행사 진행일')
       : ev.phase === 'before' ? '행사 전 · D-' + Math.max(0, ev.dday)
@@ -822,54 +847,62 @@
       '<span class="schedlive__time" data-clock>' + hms(ev.now) + '</span>' +
       (clockSub ? '<span class="schedlive__sub">' + esc(clockSub) + '</span>' : '') + '</div>';
 
-    function item(i, extra, day) {
+    function item(i, o) {
+      o = o || {};
+      var meta = [(o.day ? esc(o.day) + ' · ' : '') + '<span class="schedlive__range">' + timeRange(i) + '</span>'];
+      if (i.place) meta.push(esc(i.place));
+      if (o.cat && i.category) meta.push(esc(i.category));
       return '<p class="schedlive__title">' + esc(i.title) + '</p>' +
-        '<p class="schedlive__meta"><span class="schedlive__range">' + (day ? esc(day) + ' · ' : '') + timeRange(i) + '</span>' +
-        (i.place ? ' · ' + esc(i.place) : '') + '</p>' +
-        (extra ? '<p class="schedlive__left">' + extra + '</p>' : '');
+        '<p class="schedlive__meta">' + meta.join(' · ') + '</p>' +
+        (o.extra ? '<p class="schedlive__left">' + o.extra + '</p>' : '');
     }
     function cell(cls, label, inner) {
       return '<div class="schedlive__cell ' + cls + '"><p class="schedlive__label">' + label + '</p>' + inner + '</div>';
     }
+    function note(text, sub) {
+      return '<p class="schedlive__empty">' + esc(text) + '</p>' +
+        (sub ? '<p class="schedlive__left">' + sub + '</p>' : '');
+    }
 
     var cells;
-    if (!S.schedule.length) {
-      cells = cell('schedlive__cell--wide', '일정', '<p class="schedlive__empty">등록된 일정이 없습니다.</p>');
-    } else if (!ev.sameDay) {
-      // 행사 당일이 아니면 실시간 칸을 만들지 않습니다. 몇 주 전부터
-      // '진행 중 없음' 을 크게 보여 줄 이유가 없습니다.
-      if (ev.phase === 'after') {
-        cells = cell('schedlive__cell--wide', '전체 일정', '<p class="schedlive__empty">행사 일정이 모두 끝났습니다.</p>');
-      } else {
-        var key = S.schedule.filter(function (i) { return i.is_highlight && i.status !== '취소'; })
-          .sort(function (a, b) { return (C.toMin(a.start_time) || 0) - (C.toMin(b.start_time) || 0); })[0] || sn.first;
-        cells = key
-          ? cell('schedlive__cell--wide', '다음 주요 일정',
-              item(key, '', ev.start ? fmtEventDay(ev.start) : ''))
-          : cell('schedlive__cell--wide', '일정', '<p class="schedlive__empty">시작 시각이 정해진 일정이 없습니다.</p>');
-      }
-    } else if (sn.live) {
-      var left = spanOf(sn.live).b - sn.nowMin;
-      cells =
-        cell('schedlive__cell--live', '<span class="livepill">현재 진행 중</span>',
-          item(sn.live, (left > 0 ? '<b>' + C.minLabel(left) + '</b> 남음' : '곧 종료') +
-            (sn.liveCount > 1 ? ' · 동시 진행 ' + (sn.liveCount - 1) + '건 더' : '')) +
-          '<button class="linkbtn schedlive__jump" type="button" data-nowjump>타임라인에서 보기 ↓</button>') +
-        cell('schedlive__cell--next', '다음 일정',
-          sn.next ? item(sn.next, C.minLabel(spanOf(sn.next).a - sn.nowMin) + ' 후 시작')
-            : '<p class="schedlive__empty">오늘 남은 일정이 없습니다.</p>');
-    } else if (sn.next) {
-      var before = sn.first === sn.next;
-      cells =
-        cell('schedlive__cell--idle', '현재 진행 중',
-          '<p class="schedlive__empty">현재 진행 중 일정 없음</p>') +
-        cell('schedlive__cell--next schedlive__cell--focus', before ? '첫 일정' : '다음 일정',
-          item(sn.next, '<b>' + C.minLabel(spanOf(sn.next).a - sn.nowMin) + '</b> 후 시작'));
-    } else {
-      cells = cell('schedlive__cell--wide', '오늘 일정 종료',
-        '<p class="schedlive__empty">마지막 일정 ' +
-        (sn.lastEnd != null ? C.pad2(Math.floor(sn.lastEnd / 60)) + ':' + C.pad2(sn.lastEnd % 60) + ' 종료' : '종료') +
-        '</p>');
+    switch (br.state) {
+      case 'empty':
+        cells = cell('schedlive__cell--wide', '일정', note('등록된 일정이 없습니다.'));
+        break;
+      case 'before':
+        // 행사일 전에는 실시간 칸을 과장하지 않고 준비 상태와 주요 일정 하나만.
+        cells = cell('schedlive__cell--prep', '행사 준비',
+            '<p class="schedlive__dday">D-' + Math.max(0, ev.dday || 0) + '</p>' +
+            '<p class="schedlive__meta">' + [st.date_label, st.time_label].filter(Boolean).map(esc).join(' · ') + '</p>') +
+          cell('schedlive__cell--next schedlive__cell--focus', '다음 주요 일정',
+            br.key ? item(br.key, { day: ev.start ? fmtEventDay(ev.start) : '', cat: true })
+              : note('시작 시각이 정해진 일정이 없습니다.'));
+        break;
+      case 'live':
+        cells = cell('schedlive__cell--live', '<span class="livepill">진행 중</span>현재 일정',
+            item(br.live, { cat: true, extra:
+              (br.liveLeft > 0 ? '남은 시간 <b>' + C.minLabel(br.liveLeft) + '</b>' : '곧 종료') +
+              (br.liveCount > 1 ? ' · 동시 진행 ' + (br.liveCount - 1) + '건 더' : '') }) +
+            '<button class="linkbtn schedlive__jump" type="button" data-nowjump>타임라인에서 보기 ↓</button>') +
+          cell('schedlive__cell--next', '다음 일정',
+            br.next ? item(br.next, { extra: C.minLabel(br.nextIn) + ' 후 시작' })
+              : note('오늘 남은 일정이 없습니다.'));
+        break;
+      case 'waiting':
+        cells = cell('schedlive__cell--idle', '현재 일정',
+            note('진행 중인 일정 없음', (br.isFirst ? '첫 일정까지 ' : '다음 일정까지 ') + C.minLabel(br.nextIn))) +
+          cell('schedlive__cell--next schedlive__cell--focus', br.isFirst ? '첫 일정' : '다음 일정',
+            item(br.next, { cat: true, extra: '<b>' + C.minLabel(br.nextIn) + '</b> 후 시작' }));
+        break;
+      case 'ended':
+        cells = cell('schedlive__cell--idle', '오늘 일정', note('오늘 일정이 모두 끝났습니다.')) +
+          cell('schedlive__cell--next', '마지막 일정',
+            br.last ? item(br.last, { extra: hhmm(spanOf(br.last).b) + ' 종료' }) : note('종료'));
+        break;
+      default: // after
+        cells = cell('schedlive__cell--idle', '전체 일정', note('행사 일정이 모두 끝났습니다.')) +
+          cell('schedlive__cell--next', '마지막 일정',
+            br.last ? item(br.last, { day: ev.start ? fmtEventDay(ev.start) : '' }) : note('종료'));
     }
     return clock + cells;
   }
@@ -1874,76 +1907,93 @@
   }
 
   var SAMPLE_SUPPLIES = [
-    { name: '운영본부', kind: '팀', status: '배부 완료', items: ['명찰', '운영키트', '생수'] },
+    { name: '체험 부스', kind: '부스', status: '미배부', items: ['운영키트'] },
     { name: '부스 운영 기관', kind: '기관', status: '일부 배부', items: ['명찰', '식권'] },
-    { name: '체험 부스', kind: '부스', status: '미배부', items: ['운영키트'] }
+    { name: '운영본부', kind: '팀', status: '배부 완료', items: ['명찰', '운영키트', '생수'] }
   ];
 
   function sampleSupplies() {
-    return sampleWrap(
-      '등록된 운영 물품이 없습니다. 아래는 배부 현황이 어떻게 표시되는지 보여 주는 예시이며, ' +
-      '실제 물품이 등록되면 사라집니다. 물품 종류와 수량은 관리자에서 등록한 값이 표시됩니다.',
+    return sampleWrap('예시 화면입니다. 물품이 등록되면 실제 배부 현황으로 바뀝니다.',
       SAMPLE_SUPPLIES.map(function (t) {
-        return '<div class="supply is-sample">' +
+        return '<div class="supply supply--' + SUPPLY_TONE[t.status] + ' is-sample">' +
           '<div class="supply__top">' + badge(t.status) +
-          '<span class="badge badge--plain">' + esc(t.kind) + '</span>' + SAMPLE + '</div>' +
+          '<span class="supply__kind">' + esc(t.kind) + '</span>' + SAMPLE + '</div>' +
           '<div class="supply__name">' + esc(t.name) + '</div>' +
-          '<div class="supply__items">' + t.items.map(function (n) {
-            return '<span class="chipitem">' + esc(n) + '<b>–</b></span>';
-          }).join('') + '</div></div>';
+          '<div class="supply__meta">담당 —</div>' +
+          '<div class="supply__line">' + t.items.map(esc).join('<span aria-hidden="true"> · </span>') + '</div></div>';
       }).join(''), true);
   }
 
   /* ── 화면: 운영 물품 ────────────────────────────────────────── */
-  function viewSupplies() {
-    var head = pageHead('운영 물품',
-      '기관·팀·부스별 물품 배부 현황을 확인합니다. 배부 상태는 운영본부에서 관리합니다.');
+  /* 화면에서 쓰는 이름. 표의 값(미배부·일부 배부·배부 완료)은 그대로 두고
+     요약에서만 '배부 예정 · 배부 중 · 배부 완료' 로 읽히게 합니다. */
+  var SUPPLY_VIEW = [
+    { label: '배부 예정', status: '미배부' },
+    { label: '배부 중', status: '일부 배부' },
+    { label: '배부 완료', status: '배부 완료' }
+  ];
+  var SUPPLY_TONE = { '미배부': 'plan', '일부 배부': 'part', '배부 완료': 'done' };
 
-    if (!S.supplyTargets.length) {
-      return '<div class="page">' + head +
-        (C.isTableMissing('supply_targets')
-          ? notReadyBox('운영 물품 기능이 아직 준비되지 않았습니다.')
-          : sampleSupplies()) + '</div>';
+  function viewSupplies() {
+    var head = pageHead('운영 물품', '기관·팀·부스별 배부 현황입니다. 배부 상태는 운영본부가 관리합니다.');
+
+    if (C.isTableMissing('supply_targets')) {
+      return '<div class="page">' + head + notReadyBox('운영 물품 기능이 아직 준비되지 않았습니다.') + '</div>';
     }
 
-    var byStatus = {};
-    SUPPLY_STATES.forEach(function (st) {
-      byStatus[st] = S.supplyTargets.filter(function (t) { return t.status === st; }).length;
-    });
+    var all = S.supplyTargets;
+    function countOf(st) { return all.filter(function (t) { return (t.status || '미배부') === st; }).length; }
+    var plan = countOf('미배부'), part = countOf('일부 배부'), done = countOf('배부 완료');
 
+    // 숫자 넉 장. 등록 전에는 0 대신 — 로 두어 '다 끝났다' 로 읽히지 않게 합니다.
+    var has = all.length > 0;
     var summary = summaryGrid([
-      { n: S.supplyTargets.length, l: '전체 대상' },
-      { n: byStatus['미배부'], l: '미배부', tone: byStatus['미배부'] ? 'warn' : null },
-      { n: byStatus['일부 배부'], l: '일부 배부', tone: byStatus['일부 배부'] ? 'info' : null },
-      { n: byStatus['배부 완료'], l: '배부 완료', tone: byStatus['배부 완료'] ? 'ok' : null }
+      { n: has ? all.length : null, l: '전체 대상', sub: has ? '배부 확인 필요 ' + (plan + part) : '아직 미등록' },
+      { n: has ? plan : null, l: '배부 예정', sub: '미배부', tone: plan ? 'warn' : null },
+      { n: has ? part : null, l: '배부 중', sub: '일부 배부', tone: part ? 'info' : null },
+      { n: has ? done : null, l: '배부 완료', sub: !has ? '' : done === all.length ? '모두 완료' : '전체 ' + all.length + '곳 중', tone: done ? 'ok' : null }
     ]);
 
+    if (!has) return '<div class="page">' + head + summary + sampleSupplies() + '</div>';
+
+    var stateOn = SUPPLY_VIEW.filter(function (v) { return v.label === ui.supplyState; })[0];
     var q = ui.supplyQ.trim().toLowerCase();
-    var list = S.supplyTargets.filter(function (t) {
+    var list = all.filter(function (t) {
+      if (stateOn && (t.status || '미배부') !== stateOn.status) return false;
       if (!q) return true;
       var items = allocsOf(t.id).map(function (a) { return a.name; }).join(' ');
       return (t.name + ' ' + (t.manager || '') + ' ' + (t.kind || '') + ' ' + items)
         .toLowerCase().indexOf(q) >= 0;
     });
-    // 미배부를 일부 배부보다 먼저 둡니다. 아무것도 못 받은 곳이 더 급합니다.
+    // 배부 예정을 배부 중보다 먼저 둡니다. 아무것도 못 받은 곳이 더 급합니다.
     var rankS = { '미배부': 0, '일부 배부': 1 };
     var need = list.filter(function (t) { return t.status !== '배부 완료'; })
       .sort(function (a, b) { return (rankS[a.status || '미배부'] || 0) - (rankS[b.status || '미배부'] || 0); });
-    var done = list.filter(function (t) { return t.status === '배부 완료'; });
+    var doneList = list.filter(function (t) { return t.status === '배부 완료'; });
 
     var tools = '<div class="tools"><div class="search">' +
       '<label class="sr-only" for="supply-q">물품 검색</label>' +
       '<input class="input" id="supply-q" type="search" placeholder="대상 · 담당자 · 물품 검색" value="' +
-      esc(ui.supplyQ) + '" /></div></div>';
+      esc(ui.supplyQ) + '" /></div>' +
+      chips([{ label: '전체', n: all.length }, { label: '배부 예정', n: plan },
+        { label: '배부 중', n: part }, { label: '배부 완료', n: done }], ui.supplyState, 'data-supplystate') +
+      '</div>';
 
-    var body = !list.length ? noMatchBox('조건에 맞는 배부 대상이 없습니다.') :
-      '<section class="listsec"><h2 class="section-title">배부 확인 필요' +
-      '<span class="section-title__n">' + need.length + '</span></h2>' +
-      (need.length
-        ? '<div class="tl tl--2">' + need.map(supplyCard).join('') + '</div>'
-        : '<p class="allclear">' + doneMark('확인할 대상이 없습니다.') + '</p>') +
-      '</section>' +
-      doneSection('배부 완료', done.length, '<div class="tl tl--2">' + done.map(supplyCard).join('') + '</div>');
+    var grid = function (arr) { return '<div class="tl tl--2">' + arr.map(supplyCard).join('') + '</div>'; };
+    var body;
+    if (!list.length) {
+      body = noMatchBox('조건에 맞는 배부 대상이 없습니다.');
+    } else if (stateOn && stateOn.status === '배부 완료') {
+      // 완료만 골랐으면 접지 않고 바로 펼쳐 보여 줍니다.
+      body = '<section class="listsec"><h2 class="section-title">배부 완료' +
+        '<span class="section-title__n">' + doneList.length + '</span></h2>' + grid(doneList) + '</section>';
+    } else {
+      body = '<section class="listsec"><h2 class="section-title">배부 확인 필요' +
+        '<span class="section-title__n">' + need.length + '</span></h2>' +
+        (need.length ? grid(need) : '<p class="allclear">' + doneMark('확인할 대상이 없습니다.') + '</p>') +
+        '</section>' +
+        (stateOn ? '' : doneSection('배부 완료', doneList.length, grid(doneList)));
+    }
 
     return '<div class="page">' + head + summary + tools + body + '</div>';
   }
@@ -1953,7 +2003,7 @@
   function supplyCard(t) {
     var items = allocsOf(t.id);
     var st = t.status || '미배부';
-    var card = '<button class="supply' + (st === '배부 완료' ? ' is-done' : '') + '" type="button" data-supply="' + esc(t.id) + '">' +
+    var card = '<button class="supply supply--' + (SUPPLY_TONE[st] || 'plan') + (st === '배부 완료' ? ' is-done' : '') + '" type="button" data-supply="' + esc(t.id) + '">' +
       '<span class="supply__top">' + (st === '배부 완료' ? doneMark('배부 완료') : badge(st)) +
       '<span class="supply__kind">' + esc([t.kind || '팀', t.headcount ? t.headcount + '명' : ''].filter(Boolean).join(' · ')) + '</span></span>' +
       '<span class="supply__name">' + esc(t.name) + '</span>' +
@@ -2121,7 +2171,7 @@
       if (t.closest('[data-close-zoom]')) { closeZoom(); return; }
 
       var chip = t.closest('[data-boothzone],[data-schedcat],[data-schedhalf],' +
-        '[data-contactcat],[data-faqcat],[data-taskarea],[data-boothtype]');
+        '[data-contactcat],[data-faqcat],[data-taskarea],[data-boothtype],[data-supplystate]');
       if (chip) {
         if (chip.hasAttribute('data-boothzone'))   ui.boothZone   = chip.getAttribute('data-boothzone');
         if (chip.hasAttribute('data-boothtype'))   ui.boothType   = chip.getAttribute('data-boothtype');
@@ -2130,6 +2180,7 @@
         if (chip.hasAttribute('data-faqcat'))      ui.faqCat      = chip.getAttribute('data-faqcat');
         if (chip.hasAttribute('data-schedhalf'))   ui.schedHalf   = chip.getAttribute('data-schedhalf');
         if (chip.hasAttribute('data-taskarea'))    ui.taskArea    = chip.getAttribute('data-taskarea');
+        if (chip.hasAttribute('data-supplystate')) ui.supplyState = chip.getAttribute('data-supplystate');
         render();
         return;
       }

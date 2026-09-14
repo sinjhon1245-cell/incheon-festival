@@ -1908,3 +1908,52 @@ a.side__brand:hover b { color: var(--primary); }
   .tml--sched .nowline { margin-left: 46px; }
   .tml--sched .tmlgroup__rows > .nowline { margin-left: -15px; }
 }
+
+/* ═══ 요약 숫자 카드 — 홈 숫자 카드와 같은 문법 ═══════════════════
+   요청·업무·물품 화면의 요약을 홈과 같은 모양(윗줄 색 · 숫자 · 이름 ·
+   설명 한 줄)으로 맞춥니다. 윗줄은 화면별 색(--accent), 숫자 색은 상태. */
+.sumgrid { display: grid; gap: 10px; grid-template-columns: repeat(var(--n, 4), minmax(0, 1fr)); }
+.sumcard {
+  position: relative; overflow: hidden; min-width: 0;
+  display: flex; flex-direction: column; gap: 1px;
+  background: #fff; border: 1px solid var(--line); border-radius: var(--r);
+  padding: 13px 15px 11px;
+}
+.sumcard::before {
+  content: ""; position: absolute; left: 0; right: 0; top: 0; height: 3px;
+  background: var(--accent, var(--primary)); opacity: 0.85;
+}
+.sumcard__n {
+  font-size: 25px; font-weight: 800; line-height: 1.15; letter-spacing: -0.03em;
+  color: var(--ink); font-variant-numeric: tabular-nums;
+}
+.sumcard__l { font-size: 14px; font-weight: 700; color: var(--ink-2); }
+.sumcard__sub { font-size: 12.5px; color: var(--muted); line-height: 1.45; }
+.sumcard.is-none .sumcard__n { color: var(--muted-2); font-weight: 700; }
+.sumcard--warn   .sumcard__n { color: var(--warn); }
+.sumcard--info   .sumcard__n { color: #2F5FA8; }
+.sumcard--ok     .sumcard__n { color: var(--ok); }
+.sumcard--danger .sumcard__n { color: var(--danger); }
+.sumcard--task   .sumcard__n { color: #4B4FC7; }
+@media (max-width: 420px) {
+  .sumgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
+  .sumgrid[style*="--n:3"] { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .sumgrid[style*="--n:3"] .sumcard { padding-inline: 11px; }
+  .sumcard__n { font-size: 23px; }
+}
+
+/* ── 운영 물품 카드: 상태를 왼쪽 선 한 줄로도 ────────────────────── */
+.supply--plan { box-shadow: inset 3px 0 0 #D9A24A; }
+.supply--part { box-shadow: inset 3px 0 0 #5B8FD0; }
+.supply__top .supply__kind { margin-left: 2px; }
+#view[data-view="supplies"] .tools { gap: 10px; }
+
+/* ── 일정 상단: 행사 준비 칸 ─────────────────────────────────────── */
+.schedlive .schedlive__dday {
+  font-size: 26px; font-weight: 800; letter-spacing: -0.03em; line-height: 1.2;
+  color: var(--ink); font-variant-numeric: tabular-nums; margin-top: 2px;
+}
+.schedlive__label .livepill { margin-right: 2px; }
+
+/* ── 홈 브리핑: 종료 후 마지막 일정 한 줄 ────────────────────────── */
+.brief .brief__lastline { font-size: 13.5px; color: var(--muted); margin-top: 4px; }
