@@ -2129,3 +2129,57 @@ button.boothops__row:hover { border-color: var(--primary); }
 .boothops__title { font-size: 14px; font-weight: 600; color: var(--ink); min-width: 0; }
 .boothops__hint { font-size: 12.5px; color: var(--muted); line-height: 1.6; margin-top: 6px !important; }
 .boothops .btn { margin-top: 8px; }
+
+/* ═══ 현장 운영 최종 정리 ═══════════════════════════════════════════
+   새 카드를 늘리지 않고 순서·굵기·옅은 색으로만 위계를 정리합니다. */
+
+/* 홈 긴급 공지 한 줄 — 경고 상자가 아니라 얇은 띠. 깜빡임 없음. */
+.urgentline {
+  display: flex; align-items: center; gap: 10px; width: 100%; min-width: 0;
+  padding: 10px 14px; border: 1px solid #F0CFD4; border-left: 3px solid var(--danger);
+  border-radius: var(--r); background: #FFFBFB; color: var(--ink);
+  font: inherit; text-align: left; cursor: pointer;
+}
+.urgentline:hover { border-color: var(--danger); }
+.urgentline:focus-visible { outline: 2px solid var(--danger); outline-offset: 2px; }
+.urgentline .badge { flex: none; }
+.urgentline__t {
+  flex: 1; min-width: 0; font-size: 14.5px; font-weight: 650; letter-spacing: -0.02em;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.urgentline__t b { font-weight: 750; }
+.urgentline__go { flex: none; color: var(--muted-2); }
+
+/* 마감 단계 — 브리핑 머리 옆 작은 표시 */
+.brief__closing {
+  font-size: 12px; font-weight: 700; color: #8A5A00; background: #FFF6E5;
+  border: 1px solid #F3DDB0; border-radius: 999px; padding: 1px 9px; white-space: nowrap;
+}
+.brief__closingnote { font-weight: 600; }
+@container (max-width: 519px) { .brief__closingnote { display: none; } }
+
+/* 빠른 실행은 브리핑 높이에 맞춰 늘이지 않습니다. */
+.quick { align-self: start; }
+
+/* 긴급 미처리 요청 — 배지 외에 왼쪽 옅은 선 하나만 */
+.req--urgent { border-color: #F0CFD4; box-shadow: inset 3px 0 0 var(--danger), var(--sh); }
+.req--urgent:hover { border-color: var(--danger); }
+
+/* 업무 시각은 알약 대신 굵은 글자 한 줄로 먼저 읽히게 */
+.task__time {
+  flex-basis: 100%; background: none; padding: 0; border-radius: 0;
+  font-size: 13.5px; font-weight: 750; color: var(--ink-2); letter-spacing: -0.01em;
+}
+.task.is-done .task__time { color: var(--muted-2); }
+
+/* 부스 상세 '이 부스 운영' */
+.boothops__sub { font-size: 12.5px; color: var(--muted); }
+.boothops__done { font-size: 12px; font-weight: 600; color: var(--muted-2); margin-left: 8px; }
+.boothops__all { align-self: flex-start; margin-left: -6px; font-size: 13px; }
+
+/* PC 사이드바 — 스크롤은 그대로, 막대는 조용하게 */
+.side__nav { scrollbar-width: thin; scrollbar-color: transparent transparent; overscroll-behavior: contain; }
+.side__nav:hover { scrollbar-color: #DADDE5 transparent; }
+.side__nav::-webkit-scrollbar { width: 6px; }
+.side__nav::-webkit-scrollbar-thumb { background: transparent; border-radius: 6px; }
+.side__nav:hover::-webkit-scrollbar-thumb { background: #DADDE5; }

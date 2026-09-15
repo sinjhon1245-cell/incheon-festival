@@ -572,23 +572,30 @@
      sups  [{ name, status }]
      canReport  실제 부스일 때만 '이 부스 문제 보고' 단추(위치를 미리 채움) */
   function boothOpsHtml(code, reqs, sups, canReport) {
-    var open = reqs.filter(function (r) { return r.status !== '완료'; });
-    var reqRows = reqs.map(function (r) {
+    var open = reqs.filter(function (r) { return r.status !== '완료'; }).sort(requestOrder);
+    var doneN = reqs.length - open.length;
+    // 미해결 요청만 셋까지. 완료된 요청은 건수만 적습니다 — 상세가 길어지면 부스 정보가 묻힙니다.
+    var reqRows = open.slice(0, 3).map(function (r) {
       var inner = (r.status === '완료' ? badge('완료') : badge(r.priority) + badge(r.status)) +
         '<span class="boothops__title">' + esc(r.title) + '</span>';
       return r.id
         ? '<button class="boothops__row" type="button" data-req="' + esc(r.id) + '">' + inner + '</button>'
         : '<div class="boothops__row">' + inner + '</div>';
     }).join('');
-    var supRows = sups.map(function (t) {
+    var supRows = sups.slice(0, 2).map(function (t) {
+      var names = (t.items || []).map(function (a) { return a.name || a[0]; }).filter(Boolean);
       return '<div class="boothops__row">' + badge(supplyLabel(t.status)) +
-        '<span class="boothops__title">' + esc(t.name) + '</span></div>';
+        '<span class="boothops__title">' + esc(t.name) + '</span>' +
+        (names.length ? '<span class="boothops__sub">' + esc(names[0] + (names.length > 1 ? ' 외 ' + (names.length - 1) + '종' : '')) + '</span>' : '') +
+        '</div>';
     }).join('');
     return '<section class="boothops" aria-label="이 부스 운영">' +
       '<h3 class="boothops__t">이 부스 운영</h3>' +
-      '<p class="boothops__l">운영 요청 <b>' + (open.length ? '미처리 ' + open.length + '건' : reqs.length ? '모두 처리됨' : '없음') + '</b></p>' +
+      '<p class="boothops__l">미해결 요청 <b>' + (open.length ? open.length + '건' : '없음') + '</b>' +
+      (doneN ? '<span class="boothops__done">완료 ' + doneN + '건</span>' : '') + '</p>' +
       reqRows +
-      '<p class="boothops__l">운영 물품 <b>' + (sups.length ? sups.length + '곳' : '연결된 배부 없음') + '</b></p>' +
+      (open.length > 3 && canReport ? '<a class="linkbtn boothops__all" href="#requests">전체 요청 보기 →</a>' : '') +
+      '<p class="boothops__l">물품 배부 <b>' + (sups.length ? '' : '연결된 배부 없음') + '</b></p>' +
       supRows +
       (canReport
         ? '<button class="btn btn--ghost btn--full" type="button" data-newreq data-reqloc="' + esc(code) + '">이 부스 문제 보고</button>'
@@ -770,6 +777,22 @@
       (meta ? '<p class="dash__meta">' + meta + '</p>' : '') + '</div>' +
       (phaseHtml ? '<div class="dash__phase">' + phaseHtml + '</div>' : '') + '</header>';
 
+    /* 1-1. 긴급 공지 — 행사 진행 중에만, 숫자보다 위에 한 줄.
+       큰 경고 상자를 만들지 않습니다. 한 건이면 그 공지로, 여러 건이면
+       공지 화면으로 보냅니다. */
+    var urgentNotices = S.notices.filter(function (n) { return n.level === '긴급'; }).sort(noticeOrder);
+    var urgentHtml = '';
+    if (mode === 'during' && urgentNotices.length) {
+      var un = urgentNotices[0];
+      urgentHtml = urgentNotices.length === 1
+        ? '<button class="urgentline" type="button" data-notice="' + esc(un.id) + '">' +
+          badge('긴급') + '<span class="urgentline__t">' + esc(un.title) + '</span>' +
+          '<span class="urgentline__go" aria-hidden="true">→</span></button>'
+        : '<button class="urgentline" type="button" data-go="notices">' +
+          badge('긴급') + '<span class="urgentline__t"><b>긴급 공지 ' + urgentNotices.length + '건</b> · ' +
+          esc(un.title) + '</span><span class="urgentline__go" aria-hidden="true">→</span></button>';
+    }
+
     /* 2. 숫자 넉 장 — 카드 전체가 해당 화면으로 가는 링크입니다.
        '—' 는 등록된 것이 없다는 뜻이고, 0 은 모두 끝났다는 뜻입니다.
        둘을 아래 한 줄 설명으로 반드시 구분합니다. */
@@ -875,7 +898,7 @@
               '<p class="brief__mwhat">' + esc(i.title) +
               (i.place ? '<span class="brief__mwhere"> · ' + esc(i.place) + '</span>' : '') + '</p></li>';
           }).join('') + '</ul>' +
-          (br.liveCount > 2 ? '<p class="brief__more">+ ' + (br.liveCount - 2) + '건 더 진행 중</p>' : '') +
+          (br.liveCount > 2 ? '<p class="brief__more">' + esc(moreLiveLabel(br.liveItems.slice(2))) + '</p>' : '') +
           '</div>'
         : slot('현재 일정', br.live, { range: true, live: true, size: 'now',
           after: br.liveLeft > 0 ? C.minLabel(br.liveLeft) + ' 남음' : '곧 종료' });
@@ -912,6 +935,7 @@
     var brief = '<section class="brief" aria-labelledby="brief-t">' +
       '<div class="brief__head"><h2 class="brief__t" id="brief-t">운영 브리핑</h2>' +
       '<span class="brief__mode">' + modeLabel + '</span>' +
+      (br.closing && mode === 'during' ? '<span class="brief__closing" title="' + esc(br.closingNote) + '">마감 단계<span class="brief__closingnote"> · ' + esc(br.closingNote) + '</span></span>' : '') +
       // 실제 일정이 없어 예시 날짜로 판단한 브리핑이면 '예시' 를 붙입니다.
       (br.sample && mode !== 'after' ? SAMPLE_END : '') + briefLink + '</div>' +
       briefBody + '</section>';
@@ -928,7 +952,12 @@
     /* 4. 중요 공지 — 긴급·중요가 있을 때만. 없으면 묶음 자체를 두지 않습니다. */
     var keyNotices = S.notices.filter(function (n) {
       return n.level === '긴급' || n.level === '중요';
-    }).slice(0, 3);
+    }).sort(noticeOrder);
+    // 긴급 공지가 한 건이고 위의 한 줄에 이미 올렸다면 아래 목록에서는 뺍니다.
+    if (urgentNotices.length === 1 && urgentHtml) {
+      keyNotices = keyNotices.filter(function (n) { return n !== urgentNotices[0]; });
+    }
+    keyNotices = keyNotices.slice(0, 3);
     var noticeHtml = keyNotices.length
       ? '<section class="dash__block" aria-labelledby="dn-t">' +
         '<div class="dash__blockhead"><h2 class="dash__blockt" id="dn-t">중요 공지</h2>' +
@@ -976,7 +1005,7 @@
       : '';
 
     return '<div class="page dash">' +
-      '<div class="dash__top">' + head + statsHtml + '</div>' +
+      '<div class="dash__top">' + head + urgentHtml + statsHtml + '</div>' +
       '<div class="dash__main">' + brief + quick + '</div>' +
       lists + guideHtml + '</div>';
   }
@@ -1116,12 +1145,32 @@
     b.liveLeft = b.live ? spanOf(b.live).b - sn.nowMin : null;
     b.nextIn = b.next && ev.sameDay ? spanOf(b.next).a - sn.nowMin : null;
     b.nextMore = sn.nextCount > 1 ? '같은 시각 ' + (sn.nextCount - 1) + '건 더' : '';
+    /* 마감 단계 — 오늘 프로그램(무대·강연·부스)이 끝나기 60분 전부터. 그 뒤에는
+       철수·회수 같은 운영 일정만 남습니다. 분류가 없는 일정뿐이면 오늘 마지막
+       일정의 끝을 기준으로 봅니다. 새 상태가 아니라 브리핑의 맥락 한 줄입니다. */
+    var progEnd = null;
+    src.items.forEach(function (i) {
+      if (i.status === '취소' || !spanOf(i) || ['무대', '강연', '부스'].indexOf(i.category) < 0) return;
+      if (progEnd == null || spanOf(i).b > progEnd) progEnd = spanOf(i).b;
+    });
+    if (progEnd == null) progEnd = sn.lastEnd;
+    b.closing = (b.state === 'live' || b.state === 'waiting') && progEnd != null && sn.nowMin >= progEnd - 60;
+    b.closingNote = b.closing
+      ? (sn.nowMin < progEnd ? '프로그램 ' + hhmm(progEnd) + ' 종료' : '프로그램 종료 · 철수·정리')
+      : '';
     b.isFirst = !!b.next && b.next === sn.first;
     b.nowMin = sn.nowMin;
     b.phaseLabel = ev.phase === 'after' ? '행사 종료' : ev.phase === 'during' ? '행사 진행 중' : '행사 준비';
     return b;
   }
   function hhmm(min) { return C.pad2(Math.floor(min / 60)) + ':' + C.pad2(min % 60); }
+  /* 요약에 다 못 올린 진행 중 일정. 모두 같은 분류면 '+ 운영 1건 더'. */
+  function moreLiveLabel(rest) {
+    if (!rest.length) return '';
+    var cat = rest[0].category;
+    var same = cat && rest.every(function (i) { return i.category === cat; });
+    return '+ ' + (same ? cat + ' ' : '') + rest.length + '건 더 진행 중';
+  }
   function leftLabel(i, nowMin) {
     var left = spanOf(i).b - nowMin;
     return left > 0 ? C.minLabel(left) + ' 남음' : '곧 종료';
@@ -1179,7 +1228,8 @@
     var st = S.settings || {};
     var dayIdx = ev.days ? ev.days.map(ymd).indexOf(ymd(ev.now)) : -1;
     var clockSub = ev.sameDay
-      ? (ev.phase === 'after' ? '행사 종료' : ev.days.length > 1 ? '행사 ' + (dayIdx + 1) + '일차' : '행사 진행일')
+      ? (ev.phase === 'after' ? '행사 종료'
+        : (ev.days.length > 1 ? '행사 ' + (dayIdx + 1) + '일차' : '행사 진행일') + (br.closing ? ' · 마감 단계' : ''))
       : ev.phase === 'before' ? '행사 전 · D-' + Math.max(0, ev.dday)
         : ev.phase === 'after' ? '행사 종료' : '';
     var tag = br.sample ? SAMPLE_END : '';
@@ -1214,7 +1264,7 @@
           (i.place ? ' · ' + esc(i.place) : '') +
           ' · <span class="schedlive__leftin">' + esc(leftLabel(i, br.nowMin)) + '</span></p></li>';
       }).join('') + '</ul>' +
-        (br.liveCount > shown.length ? '<p class="schedlive__more">+ ' + (br.liveCount - shown.length) + '건 더 진행 중</p>' : '');
+        (br.liveCount > shown.length ? '<p class="schedlive__more">' + esc(moreLiveLabel(br.liveItems.slice(shown.length))) + '</p>' : '');
     }
 
     var cells;
@@ -1402,7 +1452,9 @@
         (sp.b - nowMin > 0 ? C.minLabel(sp.b - nowMin) + ' 남음' : '곧 종료') + '</p>'
       : '';
     // '진행 중' 은 위 라벨이 이미 말하므로 아래 배지에서 뺍니다.
-    var stBadge = st === '진행 중' || !st || (i.sample && st === '예정') ? '' : badge(st);
+    // '예정' 은 기본값이라 카드마다 붙이면 분류와 함께 눈만 끕니다. 위치(현재 시각선 아래)로
+    // 이미 드러나므로 종료 · 취소 · 변경만 배지로 둡니다.
+    var stBadge = st === '진행 중' || !st || st === '예정' ? '' : badge(st);
     return '<article class="tmlrow' + cls + '"' + (st === '진행 중' ? ' aria-current="time"' : '') + '>' +
       '<div class="tmlrow__time">' + esc(i.start_time || '미정') +
       (i.end_time ? '<span class="tmlrow__to">' + esc(i.end_time) + '</span>' : '') + '</div>' +
@@ -1608,20 +1660,28 @@
     var key = code || b.name;
     html += boothOpsHtml(key,
       S.requests.filter(function (r) { return mentionsBooth((r.location || '') + ' ' + (r.title || ''), key); }),
-      S.supplyTargets.filter(function (t) { return mentionsBooth((t.name || '') + ' ' + (t.memo || ''), key); }),
+      S.supplyTargets.filter(function (t) { return mentionsBooth((t.name || '') + ' ' + (t.memo || ''), key); })
+        .map(function (t) { return { name: t.name, status: t.status, items: allocsOf(t.id) }; }),
       true);
 
     openDrawer(b.code || b.name, html, { footer: true });
   }
 
   /* ── 화면: 공지 ─────────────────────────────────────────────── */
+  /* 공지 순서 — 홈과 공지 화면이 함께 씁니다.
+     운영 중에는 등급이 먼저입니다: 긴급 → 중요 → 일반. 같은 등급 안에서만
+     고정 → 최신순. 고정한 오래된 일반 공지가 새 긴급 공지 위로 오면 안 됩니다. */
+  var NOTICE_RANK = { '긴급': 0, '중요': 1, '일반': 2 };
+  function noticeOrder(a, b) {
+    var ra = a.level in NOTICE_RANK ? NOTICE_RANK[a.level] : 9;
+    var rb = b.level in NOTICE_RANK ? NOTICE_RANK[b.level] : 9;
+    if (ra !== rb) return ra - rb;
+    if (!!b.pinned !== !!a.pinned) return b.pinned ? 1 : -1;
+    return new Date(b.created_at) - new Date(a.created_at);
+  }
+
   function viewNotices() {
-    var list = S.notices.slice().sort(function (a, b) {
-      if (!!b.pinned !== !!a.pinned) return b.pinned ? 1 : -1;
-      var rank = { '긴급': 0, '중요': 1, '일반': 2 };
-      if (rank[a.level] !== rank[b.level]) return rank[a.level] - rank[b.level];
-      return new Date(b.created_at) - new Date(a.created_at);
-    });
+    var list = S.notices.slice().sort(noticeOrder);
     var body = list.length ? '<div class="tl tl--2">' + list.map(function (n) {
       return '<button class="notice' + (n.level === '긴급' ? ' notice--urgent' : '') + '" type="button" data-notice="' + esc(n.id) + '">' +
         '<span class="notice__top">' + badge(n.level) +
@@ -1669,27 +1729,46 @@
   }
 
   /* ── 화면: 운영 요청 ────────────────────────────────────────── */
+  /* 등록 후 경과 시간. 미처리 요청은 '언제' 보다 '얼마나 기다렸나' 가 중요합니다.
+     오늘 등록된 것만 상대 시간으로, 그 밖에는 기존 날짜 표기. 화면을 그릴 때
+     계산합니다(매분 다시 그리지는 않습니다). */
+  function agoLabel(iso) {
+    var d = iso ? new Date(iso) : null;
+    if (!d || isNaN(d)) return '';
+    var now = new Date();
+    var min = Math.floor((now - d) / 60000);
+    if (min < 0 || d.toDateString() !== now.toDateString()) return fmtDay(iso);
+    if (min < 1) return '방금';
+    if (min < 60) return min + '분 전';
+    return Math.floor(min / 60) + '시간 전';
+  }
+
   function requestCard(r) {
     var done = r.status === '완료';
-    var card = '<button class="req' + (done ? ' is-done' : '') + '" type="button" data-req="' + esc(r.id) + '">' +
+    var urgent = !done && r.priority === '긴급';
+    var card = '<button class="req' + (done ? ' is-done' : '') + (urgent ? ' req--urgent' : '') +
+      '" type="button" data-req="' + esc(r.id) + '">' +
       '<span class="req__top">' + (done ? doneMark('해결 완료') : badge(r.priority) + badge(r.status)) +
       '<span class="tag tag--soft">' + esc(r.kind) + '</span></span>' +
       '<span class="req__title">' + esc(r.title) + '</span>' +
       (r.body ? '<span class="req__body">' + esc(r.body) + '</span>' : '') +
-      '<span class="req__meta">' + esc(r.location || '위치 미지정') + ' · ' + esc(fmtDay(r.created_at)) +
+      '<span class="req__meta">' + esc(r.location || '위치 미지정') + ' · ' +
+      esc(done ? fmtDay(r.created_at) : agoLabel(r.created_at)) +
       (r.assignee_team ? ' · ' + esc(r.assignee_team) : '') + '</span></button>';
     // 끝난 요청에는 단추를 두지 않습니다.
     return done ? card : actionCard(card, actBtn('data-reqdone="' + esc(r.id) + '"', '해결 완료'));
   }
 
+  /* 미처리 요청 순서 — 요청 화면과 부스 상세가 함께 씁니다. 긴급 → 높음 → 보통, 같으면 최신. */
+  var REQ_RANK = { '긴급': 0, '높음': 1, '보통': 2 };
+  function requestOrder(a, b) {
+    var ra = a.priority in REQ_RANK ? REQ_RANK[a.priority] : 9, rb = b.priority in REQ_RANK ? REQ_RANK[b.priority] : 9;
+    if (ra !== rb) return ra - rb;
+    return new Date(b.created_at) - new Date(a.created_at);
+  }
+
   function viewRequests() {
-    var rank = { '긴급': 0, '높음': 1, '보통': 2 };
-    var open = S.requests.filter(function (r) { return r.status !== '완료'; })
-      .sort(function (a, b) {
-        var ra = a.priority in rank ? rank[a.priority] : 9, rb = b.priority in rank ? rank[b.priority] : 9;
-        if (ra !== rb) return ra - rb;
-        return new Date(b.created_at) - new Date(a.created_at);
-      });
+    var open = S.requests.filter(function (r) { return r.status !== '완료'; }).sort(requestOrder);
     var done = S.requests.filter(function (r) { return r.status === '완료'; });
     var urgent = open.filter(function (r) { return r.priority === '긴급'; }).length;
 
@@ -1982,14 +2061,28 @@
     if (!t.start_time) return '';
     return t.start_time + (t.end_time ? '–' + t.end_time : '–');
   }
+  /* 업무 순서 — 업무별 · 개인별 · 개인 상세가 모두 이 순서를 씁니다.
+     진행 중인 업무가 이른 시각의 예정 업무 아래로 묻히지 않게 상태가 먼저입니다. */
+  var TASK_ORDER = { '진행 중': 0, '예정': 1, '완료': 2 };
   function tasksSorted() {
     return S.tasks.slice().sort(function (a, b) {
+      var sa = TASK_ORDER[taskStatus(a)], sb = TASK_ORDER[taskStatus(b)];
+      if (sa == null) sa = 1;
+      if (sb == null) sb = 1;
+      if (sa !== sb) return sa - sb;
       var x = C.toMin(a.start_time), y = C.toMin(b.start_time);
       if (x == null) x = 9999;
       if (y == null) y = 9999;
       if (x !== y) return x - y;
       return (a.sort_order || 0) - (b.sort_order || 0);
     });
+  }
+
+  // 개인별 카드의 ' · 진행 중 1 · 예정 2'. 완료만 남았으면 적지 않습니다.
+  function personTaskLine(list) {
+    var n = function (st) { return list.filter(function (it) { return taskStatus(it.task) === st; }).length; };
+    return [['진행 중', n('진행 중')], ['예정', n('예정')]].filter(function (x) { return x[1]; })
+      .map(function (x) { return ' · ' + x[0] + ' ' + x[1]; }).join('');
   }
 
   /* 사람별로 업무를 묶습니다. 개인별 역할 화면이 쓰는 원본입니다. */
@@ -2023,9 +2116,10 @@
   /* 부스 운영과 바로 이어지는 업무로 채웁니다. 부스 카드에 상태를 두지 않는
      대신, 부스가 준비됐는지는 이런 업무의 예정 · 진행 중 · 완료로 드러납니다. */
   var SAMPLE_TASKS = [
+    // 실제 목록과 같은 순서(진행 중 → 예정 → 완료)로 둡니다.
+    { st: '진행 중', time: '',         area: '부스', title: '부스 세팅 상태 순회 확인', place: 'AI스쿨존 · 미래채움존', team: '부스지원팀' },
     { st: '예정',   time: '09:20까지', area: '부스', title: '부스 운영자 입장 확인', place: 'AI스쿨존', team: '부스지원팀' },
     { st: '예정',   time: '09:40까지', area: '전산', title: 'A구역 전원·네트워크 점검', place: 'A구역', team: '전산지원팀' },
-    { st: '진행 중', time: '',         area: '부스', title: '부스 세팅 상태 순회 확인', place: 'AI스쿨존 · 미래채움존', team: '부스지원팀' },
     { st: '완료',   time: '',         area: '물품', title: '운영 물품 1차 배부', place: '운영본부', team: '운영지원팀' }
   ];
 
@@ -2242,7 +2336,7 @@
             (p.person.roleGroup ? ' <span class="badge badge--plain">' + esc(p.person.roleGroup) + '</span>' : '') +
             '</span>' +
             '<span class="rowcard__meta">' + esc(p.person.org || '소속 미정') +
-            ' · 담당 업무 ' + p.tasks.length + '건</span></span>' +
+            ' · 담당 업무 ' + p.tasks.length + '건' + personTaskLine(p.tasks) + '</span></span>' +
             '<span class="rowcard__act"><span class="rowcard__go" aria-hidden="true">›</span></span></button>';
         }).join('') + '</div>'
       : noMatchBox('조건에 맞는 담당자가 없습니다.');
