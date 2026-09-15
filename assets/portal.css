@@ -2053,3 +2053,57 @@ a.side__brand:hover b { color: var(--primary); }
 @media (max-width: 1023px) {
   .tl--3s { grid-template-columns: repeat(auto-fill, minmax(min(100%, max(300px, calc(50% - 7px))), 1fr)); }
 }
+
+/* ═══ 일정: 날짜 선택 · 동시 진행 ════════════════════════════════════
+   여러 날 행사에서 날짜는 가장 큰 갈래라 필터 칩보다 한 단계 굵게 둡니다.
+   넓으면 '11월 13일 금요일', 좁으면 '11.13. 금'. */
+.daytabs {
+  display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 4px;
+  padding: 4px; background: var(--bg-sink); border-radius: 12px;
+}
+.daytab {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  min-height: 40px; padding: 6px 10px; border: 1px solid transparent; border-radius: 9px;
+  background: transparent; color: var(--muted); cursor: pointer;
+  font: inherit; font-size: 14.5px; font-weight: 650; letter-spacing: -0.02em;
+}
+.daytab:hover { color: var(--ink-2); }
+.daytab.is-on { background: #fff; border-color: var(--line); color: var(--ink); box-shadow: 0 1px 2px rgba(16, 24, 40, 0.06); }
+.daytab:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.daytab__short { display: none; }
+.daytab__today {
+  font-size: 11px; font-weight: 700; color: var(--accent);
+  border: 1px solid #C9D9F2; border-radius: 999px; padding: 0 6px; line-height: 1.5;
+}
+@media (max-width: 600px) {
+  .daytab__long { display: none; }
+  .daytab__short { display: inline; }
+  .daytab { min-height: 36px; font-size: 14px; }
+}
+
+/* 실시간 요약의 '예시' 는 라벨 끝이 아니라 라벨 바로 옆에 */
+.schedlive__label .sampletag { margin-left: 0; }
+.brief__head .sampletag { margin-left: 0; }
+
+/* 현재 일정 여러 건 — 한 건마다 제목 한 줄 + 시각 · 장소 · 남은 시간 한 줄 */
+.schedlive__multi { list-style: none; margin: 2px 0 0; padding: 0; display: flex; flex-direction: column; }
+.schedlive__multi li { padding: 6px 0; min-width: 0; }
+.schedlive__multi li + li { border-top: 1px dashed #DCE7F7; }
+.schedlive__multi .schedlive__title { font-size: 15.5px; margin-top: 0 !important; line-height: 1.35; }
+.schedlive__leftin { color: #2F5FA8; font-weight: 600; white-space: nowrap; }
+.schedlive__more { font-size: 12.5px; font-weight: 600; color: var(--muted); }
+
+.brief__multi { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.brief__multi li { min-width: 0; }
+.brief__multi li + li { padding-top: 8px; border-top: 1px solid #E2DCFA; }
+.brief .brief__mtime { font-size: 15px; font-weight: 750; color: var(--ink); font-variant-numeric: tabular-nums; }
+.brief .brief__mwhat { font-size: 15px; font-weight: 650; color: var(--ink); margin-top: 1px; line-height: 1.4; }
+.brief__mwhere { font-weight: 500; color: var(--muted); }
+.brief .brief__more { font-size: 12.5px; font-weight: 600; color: var(--muted); margin-top: 6px; }
+
+@media (max-width: 420px) {
+  .schedlive__multi li { padding: 5px 0; }
+  .schedlive__multi .schedlive__title { font-size: 15px; }
+  .schedlive__cell--multi .schedlive__jump { display: none; }
+}
+.brief__mtime .brief__after { margin-left: 6px; font-size: 13px; }

@@ -88,7 +88,7 @@
   };
   var view = 'dashboard';
   var ui = { boothQ: '', boothZone: '전체', boothType: '전체',
-             schedCat: '전체', schedQ: '', schedHalf: '전체', schedKey: false,
+             schedCat: '전체', schedQ: '', schedHalf: '전체', schedKey: false, schedDay: '',
              taskMode: '업무별', taskArea: '전체', taskQ: '', taskPerson: '',
              supplyQ: '', supplyState: '전체', resourceQ: '',
              contactQ: '', contactCat: '전체', faqCat: '전체' };
@@ -175,20 +175,33 @@
     var now = new Date();
     if (!start) return { phase: 'unknown', now: now };
 
-    var sameDay = start.toDateString() === now.toDateString();
+    /* 행사일 목록. 여러 날 행사(예: 이틀)면 시작일부터 종료일까지 하루씩.
+       sameDay 는 '오늘이 행사일 중 하루인가' 입니다 — 첫날만 보면 둘째 날에
+       진행 중 판단이 꺼집니다. */
+    var days = [];
+    var endDay = dayStart(end < start ? start : end);
+    for (var d = dayStart(start); d <= endDay && days.length < 14; d = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1)) {
+      days.push(d);
+    }
+    var today = dayStart(now);
+    var sameDay = days.some(function (x) { return x.getTime() === today.getTime(); });
     var phase = 'before';
     if (now > end) phase = 'after';
     else if (now >= start || sameDay) phase = 'during';
 
-    var days = Math.ceil((new Date(start.getFullYear(), start.getMonth(), start.getDate()) -
-                          new Date(now.getFullYear(), now.getMonth(), now.getDate())) / 86400000);
-    return { phase: phase, start: start, end: end, now: now, sameDay: sameDay, dday: days };
+    var dday = Math.ceil((dayStart(start) - today) / 86400000);
+    return { phase: phase, start: start, end: end, now: now, sameDay: sameDay, dday: dday, days: days };
   }
+  function dayStart(d) { return new Date(d.getFullYear(), d.getMonth(), d.getDate()); }
+  function ymd(d) { return d.getFullYear() + '-' + C.pad2(d.getMonth() + 1) + '-' + C.pad2(d.getDate()); }
 
   /* 일정 하나의 실시간 상태. 행사 당일에만 시각으로 계산합니다. */
   function liveStatus(item, ev) {
     if (item.status === '취소' || item.status === '변경') return item.status;
     if (!ev.sameDay) return item.status || '예정';
+    // 날짜가 붙은 일정(여러 날 행사)은 오늘 것만 시각으로 판단합니다.
+    var day = itemDay(item), today = ymd(ev.now);
+    if (day && day !== today) return day < today ? '종료' : '예정';
     var nowMin = ev.now.getHours() * 60 + ev.now.getMinutes();
     var a = C.toMin(item.start_time), b = C.toMin(item.end_time);
     if (a == null) return item.status || '예정';
@@ -418,44 +431,81 @@
       }).join(''));
   }
 
-  /* 운영 일정 예시. 참가자 프로그램만 늘어놓지 않고 운영 준비·교대처럼
-     관계자가 실제로 하는 일도 섞습니다. 10분짜리 체험부터 개막 행사 같은
-     1시간짜리까지 길이가 섞여도 타임라인이 읽기 좋은지 보여 주는 목적도
-     있습니다. 실제 시각이 아니므로 진행 중 표시나 남은 시간은 붙이지 않습니다. */
-  var SAMPLE_SCHEDULE = [
-    { hour: '08:00', time: '08:30–09:00', title: '운영본부 개소 및 장비 점검', place: '운영본부', cat: '운영' },
-    { hour: '09:00', time: '09:00–10:00', title: '부스 운영자 입장 및 세팅', place: '체험 부스 구역', cat: '운영' },
-    { hour: '10:00', time: '10:00–10:20', title: '행사 시작 및 현장 운영 확인', place: '운영본부', cat: '행사 지원' },
-    { hour: '12:00', time: '12:00–13:00', title: '점심 및 부스 운영 교대', place: '각 부스', cat: '운영' },
-    { hour: '14:00', time: '14:00–15:00', title: '개막 행사', place: '메인무대', cat: '무대' },
-    { hour: '15:00', time: '15:00–16:00', title: '초청 강연', place: '메인무대', cat: '강연' }
-  ];
-
-  // 실제 scheduleRow()와 같은 구조(tmlgroup/tmlrow)를 그대로 써서 예시와
-  // 실제 화면이 같은 모양으로 보이게 합니다. 진행 상태·핵심 표시는 없습니다.
-  function sampleSchedule() {
-    var groups = [], seen = {};
-    SAMPLE_SCHEDULE.forEach(function (i) {
-      if (!seen[i.hour]) { seen[i.hour] = { key: i.hour, items: [] }; groups.push(seen[i.hour]); }
-      seen[i.hour].items.push(i);
+  /* 운영 일정 예시 — 이틀(11.13 · 11.14) 행사 기준.
+     2025 행사의 실제 흐름(개막식 순서, AI체험존 50분 회차, 둘째 날 강연·
+     시상식)을 시간 밀도의 참고로만 쓰고, 운영본부 개소·브리핑·세팅·교대·
+     마감 점검·철수처럼 관계자가 실제로 하는 일을 함께 넣습니다. 참가자용
+     프로그램 안내가 아니라 '지금 무엇을 운영해야 하나' 를 보여 주는 예시입니다.
+     2분짜리 영상부터 2시간 강연까지 길이가 섞이고, 메인무대와 AI체험존이
+     동시에 돌아가는 모습이 드러나게 합니다.
+     날짜는 예시 안에서만 씁니다. 실제 행사일은 settings 의 event_start ·
+     event_end 가 정합니다. 데이터베이스에는 넣지 않습니다. */
+  var SAMPLE_DAYS = ['2026-11-13', '2026-11-14'];
+  var SAMPLE_SCHEDULE = [].concat(
+    sampleDay('2026-11-13', [
+      ['08:30', '09:00', '운영본부 개소 및 장비 점검', '운영본부', '운영'],
+      ['09:00', '09:20', '운영요원 집결 및 당일 브리핑', '운영본부', '운영'],
+      ['09:20', '10:00', '부스 운영자 입장 및 세팅 확인', 'AI스쿨존 · 미래채움존', '운영'],
+      ['10:00', '10:20', '행사장 개장 및 1차 운영 점검', '전시장', '행사 지원'],
+      ['10:00', '10:50', 'AI체험존 1회차 운영', 'AI체험존', '부스'],
+      ['11:00', '11:50', 'AI체험존 2회차 운영', 'AI체험존', '부스'],
+      ['12:00', '12:50', 'AI체험존 3회차 운영', 'AI체험존', '부스'],
+      ['12:00', '13:00', '운영요원 점심 및 부스 교대', '운영본부 · 각 부스', '운영'],
+      ['13:00', '13:50', 'AI체험존 4회차 운영', 'AI체험존', '부스'],
+      ['13:10', '13:30', '개막식 운영 점검 및 주요 인사 동선 확인', '메인무대 · 운영본부', '행사 지원'],
+      ['13:30', '13:55', '개막 사전 공연', '메인무대', '무대'],
+      ['13:55', '14:00', '장내 정리 및 주요 인사 입장', '메인무대', '행사 지원'],
+      ['14:00', '14:05', '내·외빈 소개', '메인무대', '무대'],
+      ['14:05', '14:07', '오프닝 영상', '메인무대', '무대'],
+      ['14:07', '14:15', '주제 공연', '메인무대', '무대'],
+      ['14:15', '14:25', '환영사 및 축사', '메인무대', '무대'],
+      ['14:25', '14:30', '개막 세레모니', '메인무대', '무대'],
+      ['14:30', '15:00', '주요 인사 전시장 투어', '전시장', '행사 지원'],
+      ['15:00', '16:00', '특별 강연', '메인무대', '강연'],
+      ['15:00', '15:50', 'AI체험존 5회차 운영', 'AI체험존', '부스'],
+      ['16:00', '16:50', 'AI체험존 6회차 운영', 'AI체험존', '부스'],
+      ['16:30', '16:50', '1일차 마감 전 현장 점검', '전시장', '운영'],
+      ['16:50', '17:00', '1일차 부스 운영 마감', '각 부스', '운영'],
+      ['17:00', '17:20', '1일차 운영 결과 공유 및 정리', '운영본부', '운영']
+    ]),
+    sampleDay('2026-11-14', [
+      ['08:40', '09:00', '운영본부 개소 및 전일 특이사항 확인', '운영본부', '운영'],
+      ['09:00', '09:30', '부스 운영자 입장 및 재정비', 'AI스쿨존 · 미래채움존', '운영'],
+      ['09:30', '10:00', '행사장 안전·장비 점검', '전시장', '행사 지원'],
+      ['10:00', '11:00', '특별 강연', '메인무대', '강연'],
+      ['10:00', '10:50', 'AI체험존 1회차 운영', 'AI체험존', '부스'],
+      ['11:00', '11:50', 'AI체험존 2회차 운영', 'AI체험존', '부스'],
+      ['12:00', '12:50', 'AI체험존 3회차 운영', 'AI체험존', '부스'],
+      ['12:00', '13:00', '운영요원 점심 및 부스 교대', '운영본부 · 각 부스', '운영'],
+      ['13:00', '13:50', 'AI체험존 4회차 운영', 'AI체험존', '부스'],
+      ['13:30', '14:00', '시상식 및 오후 프로그램 사전 점검', '메인무대 · 운영본부', '행사 지원'],
+      ['14:00', '14:30', '시상식', '메인무대', '무대'],
+      ['14:00', '14:50', 'AI체험존 오후 회차 운영', 'AI체험존', '부스'],
+      ['14:30', '16:30', '특별 강연', '메인무대', '강연'],
+      ['15:00', '15:50', 'AI체험존 오후 회차 운영', 'AI체험존', '부스'],
+      ['16:00', '16:20', '부스 마감 및 철수 사전 안내', '전시장', '운영'],
+      ['16:00', '16:30', '체험존 운영 마감', 'AI체험존', '부스'],
+      ['16:30', '17:00', '질의응답 및 행사 마무리 프로그램', '메인무대', '무대'],
+      ['16:40', '17:00', '관람객 퇴장 및 부스 운영 종료 확인', '전시장', '행사 지원'],
+      ['17:00', '17:40', '부스 철수 및 운영 물품 회수', '각 부스 · 운영본부', '운영'],
+      ['17:40', '18:00', '최종 운영 확인 및 행사 종료', '운영본부', '운영']
+    ])
+  );
+  // 실제 일정 행(schedule_items)과 같은 모양으로 만들어 같은 판단·그리기를 씁니다.
+  // day 는 예시에만 있는 값입니다.
+  function sampleDay(day, rows) {
+    return rows.map(function (r, n) {
+      return { id: 'sample-' + day + '-' + n, day: day, start_time: r[0], end_time: r[1],
+               title: r[2], place: r[3], category: r[4], status: '예정', sample: true };
     });
-    var body = groups.map(function (g) {
-      var rows = g.items.map(function (i) {
-        var parts = i.time.split('–');
-        return '<article class="tmlrow is-sample">' +
-          '<div class="tmlrow__time">' + esc(parts[0]) +
-          (parts[1] ? '<span class="tmlrow__to">' + esc(parts[1]) + '</span>' : '') + '</div>' +
-          '<div class="tmlrow__body">' +
-          '<h3 class="tmlrow__title">' + esc(i.title) + '</h3>' +
-          '<p class="tmlrow__meta">' + esc(i.place) + '</p>' +
-          '<div class="tmlrow__tags"><span class="tag tag--soft">' + esc(i.cat) + '</span>' + SAMPLE_END + '</div>' +
-          '</div></article>';
-      }).join('');
-      return '<section class="tmlgroup"><h2 class="tmlgroup__hour">' + esc(g.key) + '</h2>' +
-        '<div class="tmlgroup__rows">' + rows + '</div></section>';
-    }).join('');
-    return '<div class="sample"><p class="samplenote">' + esc(SAMPLE_NOTE) + '</p>' +
-      '<div class="tml tml--sched" aria-label="예시 일정">' + body + '</div></div>';
+  }
+  // 행사 전 홈 '행사 당일에는 이렇게 표시됩니다' 에 쓰는 짝(첫날 14:30 · 15:00).
+  function samplePreviewPair() {
+    var d1 = SAMPLE_SCHEDULE.filter(function (i) { return i.day === SAMPLE_DAYS[0]; });
+    var at = function (t, place) {
+      return d1.filter(function (i) { return i.start_time === t && i.place === place; })[0];
+    };
+    return [at('14:30', '전시장'), at('15:00', '메인무대')];
   }
 
   /* 부스 예시. 학교 부스만 있다고 가정하지 않도록 초·중·고와 기관형 부스를
@@ -463,7 +513,8 @@
      함께 있을 수 있습니다. 실제 기관명 대신 ○○·△△·□□ 로 일반화합니다. */
   var SAMPLE_BOOTHS = [
     { code: 'A-18', type: '초등', name: '레고와 코딩으로 만드는 AI 놀이터', org: '○○초등학교', zone: 'AI스쿨존' },
-    { code: 'A-12', type: '중등', name: 'AI 모션 센서를 활용한 인터랙티브 체험', org: '△△중학교', zone: 'AI스쿨존' },
+    { code: 'A-23', type: '초등', name: '증강현실 AR 체험', org: '△△초등학교', zone: 'AI스쿨존' },
+    { code: 'A-12', type: '중등', name: 'AI 모션 센서를 활용한 인터랙티브 체험', org: '○○중학교', zone: 'AI스쿨존' },
     { code: 'A-63', type: '고등', name: '아두이노 기반 스마트 시스템 체험', org: '□□고등학교', zone: 'AI스쿨존' },
     { code: '미래채움-03', type: '기관', name: 'AI 기반 환경문제 해결 체험', org: 'SW교육협동조합', zone: '미래채움존' }
   ];
@@ -735,9 +786,21 @@
       briefLink = '';
     } else if (br.state === 'live') {
       // 현재가 주인공, 다음은 한 단계 작게. 좁으면 위아래, 넓으면 약 63 : 37.
-      briefBody = '<div class="brief__pair">' +
-        slot('현재 일정', br.live, { range: true, live: true, size: 'now',
-          after: br.liveLeft > 0 ? C.minLabel(br.liveLeft) + ' 남음' : '곧 종료' }) +
+      // 동시에 여러 건이면 홈에서는 두 건까지 한 줄씩만, 나머지는 '+ N건'.
+      var nowSlot = br.liveCount > 1
+        ? '<div class="brief__slot brief__slot--now" aria-current="time">' +
+          '<p class="brief__label"><span class="brief__live">진행 중</span>현재 일정 · ' + br.liveCount + '건</p>' +
+          '<ul class="brief__multi">' + br.liveItems.slice(0, 2).map(function (i) {
+            return '<li><p class="brief__mtime">' + timeRange(i) +
+              '<span class="brief__after">' + esc(leftLabel(i, br.nowMin)) + '</span></p>' +
+              '<p class="brief__mwhat">' + esc(i.title) +
+              (i.place ? '<span class="brief__mwhere"> · ' + esc(i.place) + '</span>' : '') + '</p></li>';
+          }).join('') + '</ul>' +
+          (br.liveCount > 2 ? '<p class="brief__more">+ ' + (br.liveCount - 2) + '건 더 진행 중</p>' : '') +
+          '</div>'
+        : slot('현재 일정', br.live, { range: true, live: true, size: 'now',
+          after: br.liveLeft > 0 ? C.minLabel(br.liveLeft) + ' 남음' : '곧 종료' });
+      briefBody = '<div class="brief__pair">' + nowSlot +
         slot('다음 일정', br.next, { range: true, size: 'next',
           after: br.nextIn != null ? C.minLabel(br.nextIn) + ' 후' : '',
           empty: '오늘 남은 일정이 없습니다.' }) + '</div>';
@@ -750,12 +813,14 @@
           timeRange(br.last) + '</p>' : '');
     } else {
       // 행사 전: 관리자가 표시한 주요 일정(없으면 첫 일정) 하나를 '다음 일정'으로 보여 줍니다.
-      briefBody = slot('다음 일정', br.key, { range: true, day: fmtEventDay(ev.start) });
+      briefBody = slot('다음 일정', br.key, { range: true,
+        day: br.key && itemDay(br.key) ? dayShort(itemDay(br.key)) : fmtEventDay(ev.start) });
       if (!br.key) briefLink = '';
-      /* 행사 당일 화면 예시 — 행사 전에만. 등록된 일정 중 이어지는 두 개를 빌려
-         당일에 '현재 + 다음' 이 어떻게 보이는지만 보여 줍니다. 진행 중 표시·남은
-         시간은 붙이지 않습니다 — 지금 진행 중인 일정으로 읽히면 안 됩니다. */
-      var demo = br.state === 'before' && schedulePreviewPair();
+      /* 행사 당일 화면 예시 — 행사 전에만. 예시 첫날의 이어지는 두 일정(전시장
+         투어 → 특별 강연)으로 당일에 '현재 + 다음' 이 어떻게 보이는지만 보여 줍니다.
+         진행 중 표시·남은 시간은 붙이지 않습니다 — 지금 진행 중인 일정으로
+         읽히면 안 됩니다. 실제 목록과 섞이지 않고 '예시' 묶음 안에만 있습니다. */
+      var demo = ev.phase === 'before' && samplePreviewPair();
       if (demo) {
         briefBody += '<div class="brief__demo" role="group" aria-label="행사 당일 화면 예시">' +
           '<p class="brief__demohead">' + SAMPLE_END + '행사 당일에는 이렇게 표시됩니다</p>' +
@@ -767,7 +832,9 @@
 
     var brief = '<section class="brief" aria-labelledby="brief-t">' +
       '<div class="brief__head"><h2 class="brief__t" id="brief-t">운영 브리핑</h2>' +
-      '<span class="brief__mode">' + modeLabel + '</span>' + briefLink + '</div>' +
+      '<span class="brief__mode">' + modeLabel + '</span>' +
+      // 실제 일정이 없어 예시 날짜로 판단한 브리핑이면 '예시' 를 붙입니다.
+      (br.sample && mode !== 'after' ? SAMPLE_END : '') + briefLink + '</div>' +
       briefBody + '</section>';
 
     // 버튼은 셋까지. 보고만 채운 버튼이고 나머지는 기존 화면 바로가기입니다.
@@ -871,77 +938,153 @@
     return { a: a, b: b == null ? a + 30 : b };
   }
 
-  /* 실시간 판정. 필터와 상관없이 '전체 일정' 으로 합니다 — 검색어 때문에
+  /* 일정의 날짜(YYYY-MM-DD). schedule_items 에는 아직 날짜 칸이 없어 실제
+     일정은 '' 이고, 이때는 행사일 모두에 해당하는 일정으로 봅니다.
+     예시 일정은 day 를 갖습니다. 나중에 event_date 칸이 생기면 그대로 읽습니다. */
+  function itemDay(i) { return (i && (i.event_date || i.day)) || ''; }
+  function onDay(i, day) { var d = itemDay(i); return !d || !day || d === day; }
+
+  /* 판단에 쓰는 오늘 일정.
+       실제 일정이 한 건이라도 있으면 실제 일정만 씁니다(예시와 섞지 않음).
+       실제 일정이 0건이고 오늘이 행사일이면서 예시 날짜와 같으면, 그날 예시로
+       같은 판단을 보여 줍니다. 이때 화면의 모든 칸에 '예시' 가 붙습니다. */
+  function scheduleSource(ev) {
+    var today = ymd(ev.now);
+    if (S.schedule.length) {
+      return { all: S.schedule, items: S.schedule.filter(function (i) { return onDay(i, today); }), sample: false };
+    }
+    if (ev.sameDay && SAMPLE_DAYS.indexOf(today) >= 0) {
+      return { all: SAMPLE_SCHEDULE, items: SAMPLE_SCHEDULE.filter(function (i) { return i.day === today; }), sample: true };
+    }
+    return { all: [], items: [], sample: false };
+  }
+
+  /* 동시에 진행 중인 일정의 순서: 가장 최근에 시작한 것 → 분류(무대·강연이
+     먼저) → 먼저 끝나는 것. 첫 항목이 대표(br.live)입니다. */
+  function liveOrder(x, y) {
+    var a = spanOf(x), b = spanOf(y);
+    if (a.a !== b.a) return b.a - a.a;
+    var cx = SCHEDULE_CATS.indexOf(x.category), cy = SCHEDULE_CATS.indexOf(y.category);
+    if (cx !== cy) return (cx < 0 ? 99 : cx) - (cy < 0 ? 99 : cy);
+    return a.b - b.b;
+  }
+
+  /* 실시간 판정. 필터와 상관없이 '오늘 전체 일정' 으로 합니다 — 검색어 때문에
      지금 진행 중인 일정이 요약에서 사라지면 안 됩니다.
-     판정은 분 단위입니다. 초는 시계 표시에만 씁니다. */
-  function scheduleNow(ev) {
+     판정은 분 단위입니다. 초는 시계 표시에만 씁니다.
+     현재 일정은 하나라고 가정하지 않습니다. 메인무대 강연과 AI체험존 회차가
+     같은 시각에 돌아가므로 진행 중인 일정을 모두 모읍니다(liveItems).
+     다음 일정은 진행 중 일정이 끝나기를 기다리지 않고, 지금 이후 가장 먼저
+     시작하는 일정입니다. */
+  function scheduleNow(items, ev) {
     var nowMin = ev.now.getHours() * 60 + ev.now.getMinutes();
-    var live = null, next = null, first = null, lastEnd = null, liveCount = 0;
-    S.schedule.forEach(function (i) {
+    var liveItems = [], next = null, first = null, lastEnd = null;
+    items.forEach(function (i) {
       if (i.status === '취소') return;
       var sp = spanOf(i);
       if (!sp) return;
       if (!first || sp.a < spanOf(first).a) first = i;
       if (lastEnd == null || sp.b > lastEnd) lastEnd = sp.b;
-      // 겹치면 가장 늦게 시작한 것, 같으면 먼저 끝나는 것을 앞에 둡니다.
-      if (nowMin >= sp.a && nowMin < sp.b) {
-        liveCount++;
-        var ls = live && spanOf(live);
-        if (!live || sp.a > ls.a || (sp.a === ls.a && sp.b < ls.b)) live = i;
-      }
-      if (sp.a > nowMin && (!next || sp.a < spanOf(next).a)) next = i;
+      if (nowMin >= sp.a && nowMin < sp.b) liveItems.push(i);
+      if (sp.a > nowMin && (!next || sp.a < spanOf(next).a ||
+          (sp.a === spanOf(next).a && liveOrder(i, next) < 0))) next = i;
     });
-    return { nowMin: nowMin, live: live, liveCount: liveCount, next: next, first: first, lastEnd: lastEnd };
+    liveItems.sort(liveOrder);
+    return { nowMin: nowMin, liveItems: liveItems, live: liveItems[0] || null,
+             liveCount: liveItems.length, next: next, first: first, lastEnd: lastEnd };
   }
 
   /* 일정 브리핑 판단 — 일정 화면 상단과 홈의 운영 브리핑이 함께 씁니다.
      두 화면이 서로 다른 말을 하지 않도록 판단은 여기 한 곳에서만 합니다.
        empty    등록된 일정 없음
        before   행사일 전          → 다음 일정
-       live     당일 · 진행 중 있음 → 현재 일정 + 다음 일정
+       live     당일 · 진행 중 있음 → 현재 일정(여러 건일 수 있음) + 다음 일정
        waiting  당일 · 진행 중 없음 → 다음 일정(첫 일정 전이면 첫 일정)
        ended    당일 · 모두 끝남    → 오늘 일정 종료 + 마지막 일정
-       after    행사일 뒤          → 행사 종료 + 마지막 일정 */
+       after    행사일 뒤          → 행사 종료 + 마지막 일정
+     br.live 는 기존 화면이 쓰던 대표 한 건이고, 전체는 br.liveItems 입니다. */
   function scheduleBrief(ev) {
-    var sn = scheduleNow(ev);
-    var last = null;
-    S.schedule.forEach(function (i) {
-      if (i.status === '취소' || !spanOf(i)) return;
-      if (!last || spanOf(i).b > spanOf(last).b) last = i;
-    });
-    var b = { live: sn.live, next: sn.next, first: sn.first, last: last, liveCount: sn.liveCount, key: null };
-    if (!S.schedule.length) b.state = 'empty';
-    else if (ev.sameDay) b.state = sn.live ? 'live' : sn.next ? 'waiting' : 'ended';
+    var src = scheduleSource(ev);
+    var sn = scheduleNow(src.items, ev);
+    function lastOf(list) {
+      var last = null;
+      list.forEach(function (i) {
+        if (i.status === '취소' || !spanOf(i)) return;
+        if (!last || itemDay(i) > itemDay(last) ||
+            (itemDay(i) === itemDay(last) && spanOf(i).b > spanOf(last).b)) last = i;
+      });
+      return last;
+    }
+    var b = { live: sn.live, liveItems: sn.liveItems, liveCount: sn.liveCount,
+              next: sn.next, first: sn.first, key: null, sample: src.sample };
+    b.last = ev.phase === 'after' ? lastOf(S.schedule) : lastOf(src.items);
+    if (!S.schedule.length && !src.sample) b.state = 'empty';
+    else if (ev.sameDay) b.state = !src.items.length ? 'empty' : sn.live ? 'live' : sn.next ? 'waiting' : 'ended';
     else if (ev.phase === 'after') b.state = 'after';
     else {
       b.state = 'before';
       // 관리자가 '핵심' 으로 표시한 일정이 있으면 그중 가장 이른 것, 없으면 첫 일정
-      b.key = S.schedule.filter(function (i) { return i.is_highlight && i.status !== '취소' && spanOf(i); })
-        .sort(function (x, y) { return spanOf(x).a - spanOf(y).a; })[0] || sn.first;
+      var timed = S.schedule.filter(function (i) { return i.status !== '취소' && spanOf(i); })
+        .sort(function (x, y) {
+          return itemDay(x) === itemDay(y) ? spanOf(x).a - spanOf(y).a : (itemDay(x) < itemDay(y) ? -1 : 1);
+        });
+      b.key = timed.filter(function (i) { return i.is_highlight; })[0] || timed[0] || null;
     }
     b.liveLeft = b.live ? spanOf(b.live).b - sn.nowMin : null;
     b.nextIn = b.next && ev.sameDay ? spanOf(b.next).a - sn.nowMin : null;
     b.isFirst = !!b.next && b.next === sn.first;
+    b.nowMin = sn.nowMin;
     b.phaseLabel = ev.phase === 'after' ? '행사 종료' : ev.phase === 'during' ? '행사 진행 중' : '행사 준비';
     return b;
   }
   function hhmm(min) { return C.pad2(Math.floor(min / 60)) + ':' + C.pad2(min % 60); }
+  function leftLabel(i, nowMin) {
+    var left = spanOf(i).b - nowMin;
+    return left > 0 ? C.minLabel(left) + ' 남음' : '곧 종료';
+  }
 
-  /* 홈 '행사 당일 예시' 에 쓸 두 일정. 새 일정을 지어내지 않고 등록된 일정에서
-     앞 일정이 끝나는 시각에 바로 시작하는 짝을 고릅니다. 같은 장소에서 이어지는
-     짝(무대 순서처럼)을 먼저, 없으면 아무 이어지는 짝, 그것도 없으면 첫 두 일정. */
-  function schedulePreviewPair() {
-    var list = S.schedule.filter(function (i) { return i.status !== '취소' && spanOf(i); })
-      .sort(function (x, y) { return spanOf(x).a - spanOf(y).a; });
-    if (list.length < 2) return null;
-    var pairs = [];
-    list.forEach(function (i) {
-      list.forEach(function (j) {
-        if (i !== j && spanOf(j).a === spanOf(i).b) pairs.push([i, j]);
-      });
-    });
-    var same = pairs.filter(function (p) { return p[0].place && p[0].place === p[1].place; });
-    return same[0] || pairs[0] || list.slice(0, 2);
+  /* 날짜 표기. 넓으면 '11월 13일 금요일', 좁으면 '11.13. 금'. */
+  function parseDay(day) {
+    var p = String(day).split('-');
+    return new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]));
+  }
+  function dayLong(day) {
+    var d = parseDay(day);
+    return (d.getMonth() + 1) + '월 ' + d.getDate() + '일 ' + WEEKDAYS[d.getDay()] + '요일';
+  }
+  function dayShort(day) {
+    var d = parseDay(day);
+    return (d.getMonth() + 1) + '.' + d.getDate() + '. ' + WEEKDAYS[d.getDay()];
+  }
+
+  /* 일정 화면의 날짜 선택.
+       예시(실제 일정 0건)   → 예시의 이틀
+       실제 일정에 날짜가 있음 → 그 날짜들
+       날짜가 없음(현재 표 구조) → 날짜를 나눌 수 없으므로 두지 않습니다
+     하루뿐이면 고를 것이 없으니 두지 않습니다. */
+  function scheduleDays() {
+    if (!S.schedule.length) return SAMPLE_DAYS.slice();
+    var seen = {};
+    S.schedule.forEach(function (i) { var d = itemDay(i); if (d) seen[d] = true; });
+    return Object.keys(seen).sort();
+  }
+  function selectedDay(ev, days) {
+    if (days.length < 2) return '';
+    if (ui.schedDay && days.indexOf(ui.schedDay) >= 0) return ui.schedDay;
+    var today = ymd(ev.now);
+    return days.indexOf(today) >= 0 ? today : days[0];
+  }
+  function dayTabs(ev, days, sel) {
+    if (days.length < 2) return '';
+    var today = ev.sameDay ? ymd(ev.now) : '';
+    return '<div class="daytabs" role="group" aria-label="날짜">' + days.map(function (d) {
+      var on = d === sel;
+      return '<button class="daytab' + (on ? ' is-on' : '') + '" type="button" data-schedday="' + esc(d) + '" ' +
+        'aria-pressed="' + on + '">' +
+        '<span class="daytab__long">' + esc(dayLong(d)) + '</span>' +
+        '<span class="daytab__short">' + esc(dayShort(d)) + '</span>' +
+        (d === today ? '<span class="daytab__today">오늘</span>' : '') + '</button>';
+    }).join('') + '</div>';
   }
 
   /* 상단 실시간 요약: 현재 시각 · 현재 일정 · 다음 일정.
@@ -950,10 +1093,12 @@
   function scheduleLiveHtml(ev) {
     var br = scheduleBrief(ev);
     var st = S.settings || {};
+    var dayIdx = ev.days ? ev.days.map(ymd).indexOf(ymd(ev.now)) : -1;
     var clockSub = ev.sameDay
-      ? (ev.phase === 'after' ? '행사 종료' : '행사 진행일')
+      ? (ev.phase === 'after' ? '행사 종료' : ev.days.length > 1 ? '행사 ' + (dayIdx + 1) + '일차' : '행사 진행일')
       : ev.phase === 'before' ? '행사 전 · D-' + Math.max(0, ev.dday)
         : ev.phase === 'after' ? '행사 종료' : '';
+    var tag = br.sample ? SAMPLE_END : '';
     var clock = '<div class="schedlive__clock">' +
       '<span class="schedlive__label">현재 시각</span>' +
       '<span class="schedlive__time" data-clock>' + hms(ev.now) + '</span>' +
@@ -969,11 +1114,23 @@
         (o.extra ? '<p class="schedlive__left">' + o.extra + '</p>' : '');
     }
     function cell(cls, label, inner) {
-      return '<div class="schedlive__cell ' + cls + '"><p class="schedlive__label">' + label + '</p>' + inner + '</div>';
+      return '<div class="schedlive__cell ' + cls + '"><p class="schedlive__label">' + label + tag + '</p>' + inner + '</div>';
     }
     function note(text, sub) {
       return '<p class="schedlive__empty">' + esc(text) + '</p>' +
         (sub ? '<p class="schedlive__left">' + sub + '</p>' : '');
+    }
+    /* 진행 중 여러 건: 셋까지 한 줄 제목 + 한 줄(시각 · 장소 · 남은 시간).
+       넷 이상이면 '+ N건 더 진행 중'. */
+    function liveList() {
+      var shown = br.liveItems.slice(0, 3);
+      return '<ul class="schedlive__multi">' + shown.map(function (i) {
+        return '<li><p class="schedlive__title">' + esc(i.title) + '</p>' +
+          '<p class="schedlive__meta"><span class="schedlive__range">' + timeRange(i) + '</span>' +
+          (i.place ? ' · ' + esc(i.place) : '') +
+          ' · <span class="schedlive__leftin">' + esc(leftLabel(i, br.nowMin)) + '</span></p></li>';
+      }).join('') + '</ul>' +
+        (br.liveCount > shown.length ? '<p class="schedlive__more">+ ' + (br.liveCount - shown.length) + '건 더 진행 중</p>' : '');
     }
 
     var cells;
@@ -987,14 +1144,14 @@
             '<p class="schedlive__dday">D-' + Math.max(0, ev.dday || 0) + '</p>' +
             '<p class="schedlive__meta">' + [st.date_label, st.time_label].filter(Boolean).map(esc).join(' · ') + '</p>') +
           cell('schedlive__cell--next schedlive__cell--focus', '다음 일정',
-            br.key ? item(br.key, { day: ev.start ? fmtEventDay(ev.start) : '', cat: true })
+            br.key ? item(br.key, { day: itemDay(br.key) ? dayShort(itemDay(br.key)) : ev.start ? fmtEventDay(ev.start) : '', cat: true })
               : note('시작 시각이 정해진 일정이 없습니다.'));
         break;
       case 'live':
-        cells = cell('schedlive__cell--live', '<span class="livepill">진행 중</span>현재 일정',
-            item(br.live, { cat: true, extra:
-              (br.liveLeft > 0 ? '남은 시간 <b>' + C.minLabel(br.liveLeft) + '</b>' : '곧 종료') +
-              (br.liveCount > 1 ? ' · 동시 진행 ' + (br.liveCount - 1) + '건 더' : '') }) +
+        cells = cell('schedlive__cell--live' + (br.liveCount > 1 ? ' schedlive__cell--multi' : ''),
+            '<span class="livepill">진행 중</span>현재 일정' + (br.liveCount > 1 ? ' · ' + br.liveCount + '건' : ''),
+            (br.liveCount > 1 ? liveList()
+              : item(br.live, { cat: true, extra: br.liveLeft > 0 ? '남은 시간 <b>' + C.minLabel(br.liveLeft) + '</b>' : '곧 종료' })) +
             '<button class="linkbtn schedlive__jump" type="button" data-nowjump>타임라인에서 보기 ↓</button>') +
           cell('schedlive__cell--next', '다음 일정',
             br.next ? item(br.next, { extra: C.minLabel(br.nextIn) + ' 후 시작' })
@@ -1014,26 +1171,33 @@
       default: // after
         cells = cell('schedlive__cell--idle', '전체 일정', note('행사 일정이 모두 끝났습니다.')) +
           cell('schedlive__cell--next', '마지막 일정',
-            br.last ? item(br.last, { day: ev.start ? fmtEventDay(ev.start) : '' }) : note('종료'));
+            br.last ? item(br.last, { day: itemDay(br.last) ? dayShort(itemDay(br.last)) : ev.start ? fmtEventDay(ev.start) : '' }) : note('종료'));
     }
     return clock + cells;
+  }
+
+  function scheduleHalf(i) {
+    var m = C.toMin(i.start_time);
+    return m == null ? null : (m < 12 * 60 ? '오전' : '오후');
   }
 
   function viewSchedule() {
     var ev = eventInfo();
     var hasKey = S.schedule.some(function (i) { return i.is_highlight; });
+    var days = scheduleDays();
+    var sel = selectedDay(ev, days);
+    // 칩 숫자는 실제 일정 기준이고, 예시만 보일 때는 숫자를 두지 않습니다('0' 옆에
+    // 예시 24건이 보이면 헷갈립니다). 날짜를 고르면 그날 것만 셉니다.
+    var base = S.schedule.filter(function (i) { return onDay(i, sel); });
+    var noCount = !S.schedule.length;
 
-    function half(i) {
-      var m = C.toMin(i.start_time);
-      return m == null ? null : (m < 12 * 60 ? '오전' : '오후');
-    }
     var cats = ['전체'].concat(SCHEDULE_CATS).map(function (c) {
-      return { label: c, n: c === '전체' ? S.schedule.length
-        : S.schedule.filter(function (i) { return i.category === c; }).length };
+      return { label: c, n: noCount ? null : c === '전체' ? base.length
+        : base.filter(function (i) { return i.category === c; }).length };
     });
     var halves = ['전체', '오전', '오후'].map(function (h) {
-      return { label: h, n: h === '전체' ? S.schedule.length
-        : S.schedule.filter(function (i) { return half(i) === h; }).length };
+      return { label: h, n: noCount ? null : h === '전체' ? base.length
+        : base.filter(function (i) { return scheduleHalf(i) === h; }).length };
     });
 
     var keyToggle = hasKey
@@ -1043,32 +1207,41 @@
 
     return '<div class="page sched">' +
       pageHead('운영 일정', ev.sameDay
-        ? '요약은 전체 일정 기준, 목록은 선택한 조건 기준입니다.'
+        ? '요약은 오늘 전체 일정 기준, 목록은 선택한 조건 기준입니다.'
         : '행사 전체 일정을 시간순으로 확인합니다.') +
+      // 예시 안내는 화면 위에 한 번만. 카드마다에는 작은 '예시' 표시만 둡니다.
+      (S.schedule.length ? '' : '<p class="samplenote">예시 화면입니다. 실제 운영 일정이 등록되면 자동으로 바뀝니다.</p>') +
       '<section class="schedlive' + (ev.sameDay ? ' is-today' : '') + '" id="sched-live" aria-label="실시간 일정 요약">' +
       scheduleLiveHtml(ev) + '</section>' +
-      '<div class="tools"><div class="search"><label class="sr-only" for="sched-q">일정 검색</label>' +
-      '<input class="input" id="sched-q" type="search" placeholder="일정·장소·담당 검색" value="' + esc(ui.schedQ) + '" /></div>' +
-      // 오전·오후와 핵심 일정이 한 줄. 당일에 가장 자주 누르는 것입니다.
+      // 순서: 날짜 → 오전·오후(+핵심) → 분류 → 검색. 여러 날 행사에서는 날짜가 가장 큰 갈래입니다.
+      '<div class="tools">' + dayTabs(ev, days, sel) +
       '<div class="filterline">' + chips(halves, ui.schedHalf, 'data-schedhalf') +
       (keyToggle ? '<div class="chiprow chiprow--end">' + keyToggle + '</div>' : '') + '</div>' +
       // 분류는 한 단계 아래. 같은 크기로 두면 무엇이 먼저인지 알 수 없습니다.
-      chips(cats, ui.schedCat, 'data-schedcat', 'chiprow--sub') + '</div>' +
-      '<div id="sched-list" class="sched__list">' + scheduleListHtml(ev, half) + '</div></div>';
+      chips(cats, ui.schedCat, 'data-schedcat', 'chiprow--sub') +
+      '<div class="search"><label class="sr-only" for="sched-q">일정 검색</label>' +
+      '<input class="input" id="sched-q" type="search" placeholder="일정·장소·담당 검색" value="' + esc(ui.schedQ) + '" /></div>' +
+      '</div>' +
+      '<div id="sched-list" class="sched__list">' + scheduleListHtml(ev) + '</div></div>';
   }
 
   /* 타임라인 목록. 분이 바뀌면 이 부분만 다시 그립니다(검색창은 그대로). */
-  function scheduleListHtml(ev, half) {
-    half = half || function (i) {
-      var m = C.toMin(i.start_time);
-      return m == null ? null : (m < 12 * 60 ? '오전' : '오후');
-    };
+  function scheduleListHtml(ev) {
     var q = ui.schedQ.trim().toLowerCase();
     var filtered = ui.schedCat !== '전체' || ui.schedHalf !== '전체' || ui.schedKey || !!q;
+    var sample = !S.schedule.length;
 
-    var list = S.schedule.filter(function (i) {
+    // 등록된 일정이 없을 때만 예시를 보여 줍니다. 검색·필터를 걸어서
+    // 0건이 된 경우(등록 일정이 없어도)에는 예시가 다시 나오지 않아야 합니다.
+    // 날짜 선택은 필터가 아니라 '어느 날을 볼지' 라서 예시에도 그대로 씁니다.
+    if (sample && filtered) return noMatchBox('조건에 맞는 일정이 없습니다.');
+
+    var days = scheduleDays();
+    var sel = selectedDay(ev, days);
+    var list = (sample ? SAMPLE_SCHEDULE : S.schedule).filter(function (i) {
+      if (!onDay(i, sel)) return false;
       if (ui.schedCat !== '전체' && i.category !== ui.schedCat) return false;
-      if (ui.schedHalf !== '전체' && half(i) !== ui.schedHalf) return false;
+      if (ui.schedHalf !== '전체' && scheduleHalf(i) !== ui.schedHalf) return false;
       if (ui.schedKey && !i.is_highlight) return false;
       if (!q) return true;
       return (i.title + ' ' + (i.place || '') + ' ' + (i.team || '') + ' ' + (i.owner || ''))
@@ -1078,18 +1251,18 @@
       if (x == null) x = 9999;
       if (y == null) y = 9999;
       if (x !== y) return x - y;
+      // 같은 시각에 시작하면 먼저 끝나는 것부터(짧은 체험 회차가 위로).
+      var ex = C.toMin(a.end_time), ey = C.toMin(b.end_time);
+      if (ex != null && ey != null && ex !== ey) return ex - ey;
       return (a.sort_order || 0) - (b.sort_order || 0);
     });
 
-    if (!list.length) {
-      // 등록된 일정이 없을 때만 예시를 보여 줍니다. 검색·필터를 걸어서
-      // 0건이 된 경우(등록 일정이 없어도)에는 예시가 다시 나오지 않아야 합니다.
-      return S.schedule.length || filtered
-        ? noMatchBox('조건에 맞는 일정이 없습니다.')
-        : sampleSchedule();
-    }
+    if (!list.length) return noMatchBox('조건에 맞는 일정이 없습니다.');
 
     var nowMin = ev.now.getHours() * 60 + ev.now.getMinutes();
+    // 현재 시각 선은 오늘 목록을 보고 있을 때만 긋습니다. 예시는 오늘이 예시 날짜일 때만.
+    var today = ymd(ev.now);
+    var showNow = ev.sameDay && (!sel || sel === today) && (!sample || SAMPLE_DAYS.indexOf(today) >= 0);
 
     /* 시간대별로 묶습니다. 시작 시각이 없는 일정은 맨 뒤에 따로 모읍니다. */
     var groups = [], seen = {};
@@ -1104,7 +1277,7 @@
        긋습니다. 그래서 진행 중인 카드 바로 아래에 붙습니다. */
     var marked = false;
     function shouldMark(i) {
-      if (!ev.sameDay || marked) return false;
+      if (!showNow || marked) return false;
       var a = C.toMin(i.start_time);
       if (a == null || a > nowMin) { marked = true; return true; }
       return false;
@@ -1117,7 +1290,7 @@
         if (shouldMark(i)) {
           if (idx === 0) lineBefore = nowLine(ev.now); else line = nowLine(ev.now);
         }
-        return line + scheduleRow(i, ev, nowMin);
+        return line + scheduleRow(i, ev, nowMin, showNow);
       }).join('');
       return lineBefore + '<section class="tmlgroup">' +
         '<h2 class="tmlgroup__hour">' + esc(g.key) + '</h2>' +
@@ -1125,24 +1298,27 @@
     }).join('');
 
     // 모든 일정이 이미 시작했으면 맨 끝에 긋습니다.
-    if (ev.sameDay && !marked) body += nowLine(ev.now);
+    if (showNow && !marked) body += nowLine(ev.now);
 
-    return '<p class="resultline">' + list.length + '건' +
-      (filtered ? ' · 선택한 조건' : '') + '</p>' +
-      '<div class="tml tml--sched">' + body + '</div>';
+    var head = sel ? dayLong(sel) + ' · ' : '';
+    return '<p class="resultline">' + esc(head) + list.length + '건' +
+      (sample ? ' · 예시' : filtered ? ' · 선택한 조건' : '') + '</p>' +
+      '<div class="tml tml--sched"' + (sample ? ' aria-label="예시 일정"' : '') + '>' + body + '</div>';
   }
 
-  function scheduleRow(i, ev, nowMin) {
-    var st = liveStatus(i, ev);
+  function scheduleRow(i, ev, nowMin, showNow) {
+    // 예시는 오늘이 그 예시 날짜일 때만 진행 상태를 붙이고, '예정' 배지는 두지 않습니다.
+    var st = i.sample ? (showNow ? liveStatus(i, ev) : '') : liveStatus(i, ev);
     var cls = st === '진행 중' ? ' tmlrow--now' : st === '종료' ? ' tmlrow--done' : '';
     if (st === '취소' || st === '변경') cls = ' tmlrow--off';
+    if (i.sample) cls += ' is-sample';
     var sp = spanOf(i);
     var liveLabel = st === '진행 중' && sp
       ? '<p class="tmlrow__livehead"><span class="livepill">진행 중</span>' +
         (sp.b - nowMin > 0 ? C.minLabel(sp.b - nowMin) + ' 남음' : '곧 종료') + '</p>'
       : '';
     // '진행 중' 은 위 라벨이 이미 말하므로 아래 배지에서 뺍니다.
-    var stBadge = st === '진행 중' ? '' : badge(st);
+    var stBadge = st === '진행 중' || !st || (i.sample && st === '예정') ? '' : badge(st);
     return '<article class="tmlrow' + cls + '"' + (st === '진행 중' ? ' aria-current="time"' : '') + '>' +
       '<div class="tmlrow__time">' + esc(i.start_time || '미정') +
       (i.end_time ? '<span class="tmlrow__to">' + esc(i.end_time) + '</span>' : '') + '</div>' +
@@ -1154,6 +1330,7 @@
       (i.memo ? '<p class="tmlrow__memo">' + esc(i.memo) + '</p>' : '') +
       '<div class="tmlrow__tags">' + stBadge +
       (i.category ? '<span class="tag tag--soft">' + esc(i.category) + '</span>' : '') +
+      (i.sample ? SAMPLE_END : '') +
       '</div></div></article>';
   }
 
@@ -2343,6 +2520,8 @@
         return;
       }
       if (t.closest('[data-schedkeytoggle]')) { ui.schedKey = !ui.schedKey; render(); return; }
+      var sd = t.closest('[data-schedday]');
+      if (sd) { ui.schedDay = sd.getAttribute('data-schedday'); render(); return; }
 
       if (t.closest('[data-guide]')) {
         openDrawer('운영 안내',
