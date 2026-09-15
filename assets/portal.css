@@ -2107,3 +2107,25 @@ a.side__brand:hover b { color: var(--primary); }
   .schedlive__cell--multi .schedlive__jump { display: none; }
 }
 .brief__mtime .brief__after { margin-left: 6px; font-size: 13px; }
+
+/* ═══ 부스 상세: 이 부스 운영 ═════════════════════════════════════
+   부스 자체에 상태를 두지 않고, 그 부스로 들어온 요청·물품 배부를
+   한 묶음으로 보여 줍니다. 카드 안에 카드를 겹치지 않고 구분선만. */
+.boothops {
+  display: flex; flex-direction: column; gap: 6px;
+  margin-top: 4px; padding-top: 14px; border-top: 1px solid var(--line-2);
+}
+.boothops p { margin: 0; }
+.boothops__t { margin: 0 0 2px; font-size: 14.5px; font-weight: 750; letter-spacing: -0.02em; color: var(--ink); }
+.boothops__l { font-size: 12.5px; font-weight: 600; color: var(--muted); margin-top: 6px !important; }
+.boothops__l b { font-weight: 700; color: var(--ink-2); margin-left: 4px; }
+.boothops__row {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap; width: 100%;
+  padding: 8px 10px; border: 1px solid var(--line-2); border-radius: 10px;
+  background: #fff; font: inherit; text-align: left; color: inherit;
+}
+button.boothops__row { cursor: pointer; }
+button.boothops__row:hover { border-color: var(--primary); }
+.boothops__title { font-size: 14px; font-weight: 600; color: var(--ink); min-width: 0; }
+.boothops__hint { font-size: 12.5px; color: var(--muted); line-height: 1.6; margin-top: 6px !important; }
+.boothops .btn { margin-top: 8px; }

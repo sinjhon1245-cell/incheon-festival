@@ -346,14 +346,16 @@
       }).join(''), 2);
   }
 
-  /* 요청은 실제 카드처럼 우선순위·상태·유형 · 제목 · 위치 한 줄. */
+  /* 요청은 실제 카드처럼 우선순위·상태·유형 · 제목 · 위치 한 줄.
+     현장 요청은 대부분 특정 부스에서 생기므로 부스번호가 드러나게 합니다.
+     부스 번호는 부스 예시(SAMPLE_BOOTHS)와 맞춥니다. */
   var SAMPLE_REQUESTS = [
-    { pri: '높음', st: '접수',  kind: '전기',     title: 'A-03 부스 멀티탭 추가 요청',
-      body: '체험용 기기 전원이 부족해 멀티탭 1개가 더 필요합니다.', where: 'A-03 부스' },
-    { pri: '보통', st: '처리 중', kind: '네트워크', title: 'B-02 체험용 노트북 와이파이 연결 확인',
-      body: '노트북 2대가 행사장 와이파이에 연결되지 않습니다.', where: 'B-02 부스 · 전산지원' },
-    { pri: '보통', st: '완료',  kind: '시설',     title: '안내 데스크 테이블 1개 추가 요청',
-      body: '안내 자료 배치를 위해 테이블이 더 필요합니다.', where: '안내 데스크 · 운영지원' }
+    { pri: '높음', st: '접수',  kind: '전기',     title: 'A-18 부스 멀티탭 추가 요청', booth: 'A-18',
+      body: '체험용 기기 전원이 부족해 멀티탭 1개가 더 필요합니다.', where: 'A-18 부스 · AI스쿨존' },
+    { pri: '보통', st: '처리 중', kind: '네트워크', title: 'A-12 부스 와이파이 연결 확인', booth: 'A-12',
+      body: '체험용 노트북 2대가 행사장 와이파이에 연결되지 않습니다.', where: 'A-12 부스 · 전산지원팀 확인 중' },
+    { pri: '보통', st: '완료',  kind: '시설',     title: '미래채움-03 부스 테이블 추가 요청', booth: '미래채움-03',
+      body: '체험 도구 배치를 위해 테이블 1개가 더 필요합니다.', where: '미래채움-03 부스 · 미래채움존' }
   ];
 
   function sampleRequests() {
@@ -386,10 +388,14 @@
 
   function sampleContacts() {
     return sampleWrap(SAMPLE_NOTE,
+      // 사람이 아니라 역할로 찾게 합니다. 부스에서 문제가 생겼을 때 어느 팀에
+      // 연락할지가 먼저 보이도록 부스 운영 책임 순서대로 둡니다.
       [
         ['운영본부', '행사 운영 총괄', '행사 진행과 전체 운영 문의'],
-        ['전산지원', '네트워크·기기 지원', '인터넷 · 노트북 · 장비 문제'],
-        ['안전지원', '안전 및 응급 대응', '안전사고 · 응급 상황']
+        ['부스지원팀', '부스 운영 지원', '운영자 입장 · 세팅 · 교대 · 마감 · 철수'],
+        ['전산지원팀', '전원·네트워크 지원', '전원 · 인터넷 · 노트북 · 장비 문제'],
+        ['운영지원팀', '운영 물품 지원', '물품 배부 · 추가 요청 · 회수'],
+        ['안전지원팀', '안전·응급 대응', '안전사고 · 응급 상황 · 관람객 동선']
       ].map(function (c) {
         // 이름·번호는 만들지 않습니다. 번호가 등록되면 전화·복사 단추가 생깁니다.
         return '<div class="contact is-sample">' +
@@ -438,6 +444,10 @@
      프로그램 안내가 아니라 '지금 무엇을 운영해야 하나' 를 보여 주는 예시입니다.
      2분짜리 영상부터 2시간 강연까지 길이가 섞이고, 메인무대와 AI체험존이
      동시에 돌아가는 모습이 드러나게 합니다.
+     부스는 참가 프로그램 목록이 아니라 현장 운영 단위라, 운영자 입장 확인 →
+     세팅·전원·네트워크 점검 → 물품 배부 → 운영 시작 → 순회 점검 → 교대 →
+     마감 → 철수·물품 회수 흐름을 함께 넣습니다. 비슷한 점검은 한 일정으로
+     묶고, 시작·교대·마감·철수처럼 시각이 중요한 것은 따로 둡니다.
      날짜는 예시 안에서만 씁니다. 실제 행사일은 settings 의 event_start ·
      event_end 가 정합니다. 데이터베이스에는 넣지 않습니다. */
   var SAMPLE_DAYS = ['2026-11-13', '2026-11-14'];
@@ -445,12 +455,16 @@
     sampleDay('2026-11-13', [
       ['08:30', '09:00', '운영본부 개소 및 장비 점검', '운영본부', '운영'],
       ['09:00', '09:20', '운영요원 집결 및 당일 브리핑', '운영본부', '운영'],
-      ['09:20', '10:00', '부스 운영자 입장 및 세팅 확인', 'AI스쿨존 · 미래채움존', '운영'],
-      ['10:00', '10:20', '행사장 개장 및 1차 운영 점검', '전시장', '행사 지원'],
+      ['09:20', '09:40', '부스 운영자 입장 확인', 'AI스쿨존 · 미래채움존', '운영'],
+      ['09:40', '10:00', '부스 세팅 및 전원·네트워크 점검', '각 부스', '운영'],
+      ['09:40', '10:00', '부스 운영 물품 배부', '운영본부', '운영'],
+      ['10:00', '10:20', '행사장 개장 및 부스 운영 시작', '전시장 · 각 부스', '운영'],
       ['10:00', '10:50', 'AI체험존 1회차 운영', 'AI체험존', '부스'],
+      ['10:20', '10:40', '1차 부스 운영 순회 점검', 'AI스쿨존 · 미래채움존', '운영'],
       ['11:00', '11:50', 'AI체험존 2회차 운영', 'AI체험존', '부스'],
       ['12:00', '12:50', 'AI체험존 3회차 운영', 'AI체험존', '부스'],
-      ['12:00', '13:00', '운영요원 점심 및 부스 교대', '운영본부 · 각 부스', '운영'],
+      ['12:00', '13:00', '운영요원 점심 및 부스 교대', '각 부스', '운영'],
+      ['13:00', '13:15', '오후 부스 운영 재개 확인', '각 부스', '운영'],
       ['13:00', '13:50', 'AI체험존 4회차 운영', 'AI체험존', '부스'],
       ['13:10', '13:30', '개막식 운영 점검 및 주요 인사 동선 확인', '메인무대 · 운영본부', '행사 지원'],
       ['13:30', '13:55', '개막 사전 공연', '메인무대', '무대'],
@@ -463,32 +477,39 @@
       ['14:30', '15:00', '주요 인사 전시장 투어', '전시장', '행사 지원'],
       ['15:00', '16:00', '특별 강연', '메인무대', '강연'],
       ['15:00', '15:50', 'AI체험존 5회차 운영', 'AI체험존', '부스'],
+      ['15:30', '15:50', '2차 부스 운영 순회 점검', '전시장', '운영'],
       ['16:00', '16:50', 'AI체험존 6회차 운영', 'AI체험존', '부스'],
-      ['16:30', '16:50', '1일차 마감 전 현장 점검', '전시장', '운영'],
+      ['16:30', '16:50', '부스 마감 전 운영 확인', '각 부스', '운영'],
       ['16:50', '17:00', '1일차 부스 운영 마감', '각 부스', '운영'],
-      ['17:00', '17:20', '1일차 운영 결과 공유 및 정리', '운영본부', '운영']
+      ['17:00', '17:20', '부스 기자재·운영 물품 확인', '각 부스 · 운영본부', '운영'],
+      ['17:20', '17:30', '1일차 운영 결과 공유', '운영본부', '운영']
     ]),
     sampleDay('2026-11-14', [
-      ['08:40', '09:00', '운영본부 개소 및 전일 특이사항 확인', '운영본부', '운영'],
-      ['09:00', '09:30', '부스 운영자 입장 및 재정비', 'AI스쿨존 · 미래채움존', '운영'],
-      ['09:30', '10:00', '행사장 안전·장비 점검', '전시장', '행사 지원'],
+      ['08:40', '09:00', '운영본부 개소 및 전일 부스 운영 특이사항 확인', '운영본부', '운영'],
+      ['09:00', '09:20', '부스 운영자 입장 확인', 'AI스쿨존 · 미래채움존', '운영'],
+      ['09:20', '09:40', '부스 재세팅 및 기자재 확인', '각 부스', '운영'],
+      ['09:40', '10:00', '전원·네트워크·안전 최종 점검', '전시장', '행사 지원'],
+      ['10:00', '10:15', '2일차 부스 운영 시작', '각 부스', '운영'],
       ['10:00', '11:00', '특별 강연', '메인무대', '강연'],
       ['10:00', '10:50', 'AI체험존 1회차 운영', 'AI체험존', '부스'],
+      ['10:30', '10:50', '1차 현장 순회 점검', '각 부스', '운영'],
       ['11:00', '11:50', 'AI체험존 2회차 운영', 'AI체험존', '부스'],
       ['12:00', '12:50', 'AI체험존 3회차 운영', 'AI체험존', '부스'],
-      ['12:00', '13:00', '운영요원 점심 및 부스 교대', '운영본부 · 각 부스', '운영'],
+      ['12:00', '13:00', '점심 및 부스 운영 교대', '각 부스', '운영'],
+      ['13:00', '13:15', '오후 운영 재개 확인', '각 부스', '운영'],
       ['13:00', '13:50', 'AI체험존 4회차 운영', 'AI체험존', '부스'],
       ['13:30', '14:00', '시상식 및 오후 프로그램 사전 점검', '메인무대 · 운영본부', '행사 지원'],
       ['14:00', '14:30', '시상식', '메인무대', '무대'],
       ['14:00', '14:50', 'AI체험존 오후 회차 운영', 'AI체험존', '부스'],
       ['14:30', '16:30', '특별 강연', '메인무대', '강연'],
       ['15:00', '15:50', 'AI체험존 오후 회차 운영', 'AI체험존', '부스'],
-      ['16:00', '16:20', '부스 마감 및 철수 사전 안내', '전시장', '운영'],
-      ['16:00', '16:30', '체험존 운영 마감', 'AI체험존', '부스'],
+      ['15:30', '15:50', '마감 전 운영 및 물품 확인', '각 부스', '운영'],
+      ['16:00', '16:20', '부스 철수 사전 안내', '각 부스', '운영'],
+      ['16:00', '16:30', '체험존 운영 마감 · 16:30 체험 접수 마감', 'AI체험존', '부스'],
       ['16:30', '17:00', '질의응답 및 행사 마무리 프로그램', '메인무대', '무대'],
-      ['16:40', '17:00', '관람객 퇴장 및 부스 운영 종료 확인', '전시장', '행사 지원'],
-      ['17:00', '17:40', '부스 철수 및 운영 물품 회수', '각 부스 · 운영본부', '운영'],
-      ['17:40', '18:00', '최종 운영 확인 및 행사 종료', '운영본부', '운영']
+      ['16:40', '17:00', '관람객 퇴장 및 부스 운영 종료 확인', '전시장', '운영'],
+      ['17:00', '17:40', '부스 철수 및 대여물품·운영물품 회수', '각 부스 · 운영본부', '운영'],
+      ['17:40', '18:00', '전원 차단·분실물·최종 현장 확인', '전시장 · 운영본부', '운영']
     ])
   );
   // 실제 일정 행(schedule_items)과 같은 모양으로 만들어 같은 판단·그리기를 씁니다.
@@ -524,14 +545,72 @@
   function sampleBooths() {
     return '<div class="sample"><p class="samplenote">' + esc(SAMPLE_NOTE) + '</p>' +
       '<div class="boothgrid" aria-label="예시 부스 목록">' +
-      SAMPLE_BOOTHS.map(function (b) {
-        return '<div class="booth is-sample">' +
+      SAMPLE_BOOTHS.map(function (b, n) {
+        // 눌러서 상세를 볼 수 있습니다 — 부스 → 관련 요청·물품 흐름을 미리 보여 줍니다.
+        return '<button class="booth is-sample" type="button" data-samplebooth="' + n + '">' +
           '<span class="booth__top"><span class="booth__code">' + esc(b.code) + '</span>' +
           orgBadge(b.type) + SAMPLE_END + '</span>' +
           '<span class="booth__name">' + esc(b.name) + '</span>' +
           '<span class="booth__org">' + esc(b.org) + '</span>' +
-          '<span class="booth__foot">' + esc(b.zone) + '</span></div>';
+          '<span class="booth__foot">' + esc(b.zone) + '</span></button>';
       }).join('') + '</div></div>';
+  }
+
+  /* ── 부스와 이어진 운영 ─────────────────────────────────────────
+     부스 카드에 '준비 전 / 운영 중' 같은 상태를 다시 두지 않습니다.
+     부스가 괜찮은지는 그 부스 번호로 들어온 운영 요청과 물품 배부에서
+     드러납니다. 표를 잇는 칸이 없으므로 글에 적힌 부스 번호로 찾습니다.
+     'A-1' 이 'A-18' 에 걸리지 않도록 번호 뒤에 숫자가 이어지면 뺍니다. */
+  function mentionsBooth(text, code) {
+    if (!code || !text) return false;
+    var safe = String(code).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return new RegExp('(^|[^0-9A-Za-z가-힣-])' + safe + '(?![0-9])').test(String(text));
+  }
+
+  /* 부스 상세 아래 '이 부스 운영' 묶음.
+     reqs  [{ title, status, priority, kind, id? }]  — id 가 있으면 눌러서 요청 상세로
+     sups  [{ name, status }]
+     canReport  실제 부스일 때만 '이 부스 문제 보고' 단추(위치를 미리 채움) */
+  function boothOpsHtml(code, reqs, sups, canReport) {
+    var open = reqs.filter(function (r) { return r.status !== '완료'; });
+    var reqRows = reqs.map(function (r) {
+      var inner = (r.status === '완료' ? badge('완료') : badge(r.priority) + badge(r.status)) +
+        '<span class="boothops__title">' + esc(r.title) + '</span>';
+      return r.id
+        ? '<button class="boothops__row" type="button" data-req="' + esc(r.id) + '">' + inner + '</button>'
+        : '<div class="boothops__row">' + inner + '</div>';
+    }).join('');
+    var supRows = sups.map(function (t) {
+      return '<div class="boothops__row">' + badge(supplyLabel(t.status)) +
+        '<span class="boothops__title">' + esc(t.name) + '</span></div>';
+    }).join('');
+    return '<section class="boothops" aria-label="이 부스 운영">' +
+      '<h3 class="boothops__t">이 부스 운영</h3>' +
+      '<p class="boothops__l">운영 요청 <b>' + (open.length ? '미처리 ' + open.length + '건' : reqs.length ? '모두 처리됨' : '없음') + '</b></p>' +
+      reqRows +
+      '<p class="boothops__l">운영 물품 <b>' + (sups.length ? sups.length + '곳' : '연결된 배부 없음') + '</b></p>' +
+      supRows +
+      (canReport
+        ? '<button class="btn btn--ghost btn--full" type="button" data-newreq data-reqloc="' + esc(code) + '">이 부스 문제 보고</button>'
+        : '<p class="boothops__hint">실제 부스에서는 여기서 위치가 채워진 운영 요청을 바로 등록합니다.</p>') +
+      '</section>';
+  }
+
+  function sampleBoothDetail(n) {
+    var b = SAMPLE_BOOTHS[n];
+    if (!b) return;
+    var rows = [['부스 번호', b.code], ['부스명', b.name], ['운영기관', b.org],
+                ['운영기관 유형', b.type], ['구역', b.zone]];
+    var html = '<p class="samplenote">' + esc(SAMPLE_NOTE) + '</p>' +
+      '<dl class="dl">' + rows.map(function (r) {
+        return '<div class="dl__row"><dt>' + esc(r[0]) + '</dt><dd>' + esc(r[1]) + '</dd></div>';
+      }).join('') + '</dl>' +
+      boothOpsHtml(b.code,
+        SAMPLE_REQUESTS.filter(function (r) { return r.booth === b.code; })
+          .map(function (r) { return { title: r.title, status: r.st, priority: r.pri }; }),
+        SAMPLE_SUPPLIES.filter(function (t) { return t.booth === b.code; }),
+        false);
+    openDrawer(b.code + ' · 예시', html, { footer: true });
   }
 
   function noMatchBox(title) {
@@ -802,7 +881,7 @@
           after: br.liveLeft > 0 ? C.minLabel(br.liveLeft) + ' 남음' : '곧 종료' });
       briefBody = '<div class="brief__pair">' + nowSlot +
         slot('다음 일정', br.next, { range: true, size: 'next',
-          after: br.nextIn != null ? C.minLabel(br.nextIn) + ' 후' : '',
+          after: br.nextIn != null ? C.minLabel(br.nextIn) + ' 후' + (br.nextMore ? ' · ' + br.nextMore : '') : '',
           empty: '오늘 남은 일정이 없습니다.' }) + '</div>';
     } else if (br.state === 'waiting') {
       briefBody = slot('다음 일정', br.next, { range: true,
@@ -990,8 +1069,12 @@
           (sp.a === spanOf(next).a && liveOrder(i, next) < 0))) next = i;
     });
     liveItems.sort(liveOrder);
+    // 다음 일정과 같은 시각에 함께 시작하는 일정 수(예: 부스 세팅 · 물품 배부).
+    var nextCount = next ? items.filter(function (i) {
+      return i.status !== '취소' && spanOf(i) && spanOf(i).a === spanOf(next).a;
+    }).length : 0;
     return { nowMin: nowMin, liveItems: liveItems, live: liveItems[0] || null,
-             liveCount: liveItems.length, next: next, first: first, lastEnd: lastEnd };
+             liveCount: liveItems.length, next: next, nextCount: nextCount, first: first, lastEnd: lastEnd };
   }
 
   /* 일정 브리핑 판단 — 일정 화면 상단과 홈의 운영 브리핑이 함께 씁니다.
@@ -1032,6 +1115,7 @@
     }
     b.liveLeft = b.live ? spanOf(b.live).b - sn.nowMin : null;
     b.nextIn = b.next && ev.sameDay ? spanOf(b.next).a - sn.nowMin : null;
+    b.nextMore = sn.nextCount > 1 ? '같은 시각 ' + (sn.nextCount - 1) + '건 더' : '';
     b.isFirst = !!b.next && b.next === sn.first;
     b.nowMin = sn.nowMin;
     b.phaseLabel = ev.phase === 'after' ? '행사 종료' : ev.phase === 'during' ? '행사 진행 중' : '행사 준비';
@@ -1154,14 +1238,14 @@
               : item(br.live, { cat: true, extra: br.liveLeft > 0 ? '남은 시간 <b>' + C.minLabel(br.liveLeft) + '</b>' : '곧 종료' })) +
             '<button class="linkbtn schedlive__jump" type="button" data-nowjump>타임라인에서 보기 ↓</button>') +
           cell('schedlive__cell--next', '다음 일정',
-            br.next ? item(br.next, { extra: C.minLabel(br.nextIn) + ' 후 시작' })
+            br.next ? item(br.next, { extra: C.minLabel(br.nextIn) + ' 후 시작' + (br.nextMore ? ' · ' + br.nextMore : '') })
               : note('오늘 남은 일정이 없습니다.'));
         break;
       case 'waiting':
         cells = cell('schedlive__cell--idle', '현재 일정',
             note('진행 중인 일정 없음', (br.isFirst ? '첫 일정까지 ' : '다음 일정까지 ') + C.minLabel(br.nextIn))) +
           cell('schedlive__cell--next schedlive__cell--focus', br.isFirst ? '첫 일정' : '다음 일정',
-            item(br.next, { cat: true, extra: '<b>' + C.minLabel(br.nextIn) + '</b> 후 시작' }));
+            item(br.next, { cat: true, extra: '<b>' + C.minLabel(br.nextIn) + '</b> 후 시작' + (br.nextMore ? ' · ' + br.nextMore : '') }));
         break;
       case 'ended':
         cells = cell('schedlive__cell--idle', '오늘 일정', note('오늘 일정이 모두 끝났습니다.')) +
@@ -1428,7 +1512,9 @@
       if (ui.boothZone !== '전체' && (b.zone_key + '존') !== ui.boothZone) return false;
       if (ui.boothType !== '전체' && orgGroup(orgType(b)) !== ui.boothType) return false;
       if (!q) return true;
-      return ((b.code || '') + ' ' + b.name + ' ' + (b.org || '') + ' ' + (b.program || '') + ' ' + orgType(b))
+      // 부스번호 · 부스명 · 운영기관 · 유형 · 구역(키와 이름) · 프로그램
+      return ((b.code || '') + ' ' + b.name + ' ' + (b.org || '') + ' ' + (b.program || '') + ' ' + orgType(b) +
+        ' ' + orgGroup(orgType(b)) + ' ' + (b.zone_key || '') + ' ' + zoneName(b.zone_key))
         .toLowerCase().indexOf(q) >= 0;
     });
 
@@ -1469,7 +1555,7 @@
       (zoneHtml ? '<div class="filterrow"><span class="filterrow__l">구역</span>' + zoneHtml + '</div>' : '') +
       typeHtml +
       '<div class="tools"><div class="search"><label class="sr-only" for="booth-q">부스 검색</label>' +
-      '<input class="input" id="booth-q" type="search" placeholder="부스명 · 운영기관 검색" value="' + esc(ui.boothQ) + '" /></div></div>' +
+      '<input class="input" id="booth-q" type="search" placeholder="부스번호 · 부스명 · 운영기관 · 구역 검색" value="' + esc(ui.boothQ) + '" /></div></div>' +
       (list.length && list.length !== S.booths.length ? '<p class="resultline">' + list.length + '건</p>' : '') +
       body + '</div>';
   }
@@ -1516,6 +1602,14 @@
     html += '<dl class="dl">' + rows.map(function (r) {
       return '<div class="dl__row"><dt>' + esc(r[0]) + '</dt><dd>' + esc(r[1]) + '</dd></div>';
     }).join('') + '</dl>';
+
+    // 부스 번호가 있어야 요청·물품과 이을 수 있습니다. 번호가 없으면 이름으로 찾습니다.
+    var code = b.code || (b.zone_key && b.no ? b.zone_key + '-' + b.no : '');
+    var key = code || b.name;
+    html += boothOpsHtml(key,
+      S.requests.filter(function (r) { return mentionsBooth((r.location || '') + ' ' + (r.title || ''), key); }),
+      S.supplyTargets.filter(function (t) { return mentionsBooth((t.name || '') + ' ' + (t.memo || ''), key); }),
+      true);
 
     openDrawer(b.code || b.name, html, { footer: true });
   }
@@ -1644,14 +1738,16 @@
     openDrawer(r.title, html);
   }
 
-  function openRequestForm() {
+  // loc: 부스 상세에서 열면 부스 번호를 미리 채웁니다.
+  function openRequestForm(loc) {
     var boothOpts = S.booths.map(function (b) {
       return '<option value="' + esc(b.code || b.name) + '">' + esc((b.code ? b.code + ' · ' : '') + b.name) + '</option>';
     }).join('');
     openDrawer('현장 문제 보고',
       '<form id="reqform" novalidate style="display:flex;flex-direction:column;gap:14px">' +
       '<div class="field"><label class="field__label" for="rq-loc">부스 또는 위치<span class="field__req">*</span></label>' +
-      '<input class="input" id="rq-loc" list="boothlist" required placeholder="예: A-17 또는 야외무대 옆" />' +
+      '<input class="input" id="rq-loc" list="boothlist" required placeholder="예: A-17 또는 야외무대 옆"' +
+      (loc ? ' value="' + esc(loc) + '"' : '') + ' />' +
       '<datalist id="boothlist">' + boothOpts + '</datalist></div>' +
       '<div class="field"><label class="field__label" for="rq-kind">유형</label>' +
       '<select class="select" id="rq-kind">' + REQ_KINDS.map(function (k) {
@@ -1924,10 +2020,13 @@
      지어내지도 않습니다. 무엇이 이 자리에 들어오는지만 보여 줍니다. */
   /* 예정 · 진행 중 · 완료가 한 번씩 보이게 합니다. 담당은 사람 이름 대신 팀 이름.
      행사 당일 아침 운영 흐름을 본뜬 예시 시각이며, 실제 일정이 아닙니다. */
+  /* 부스 운영과 바로 이어지는 업무로 채웁니다. 부스 카드에 상태를 두지 않는
+     대신, 부스가 준비됐는지는 이런 업무의 예정 · 진행 중 · 완료로 드러납니다. */
   var SAMPLE_TASKS = [
-    { st: '예정',   time: '08:30–09:00', area: '운영', title: '운영본부 개소 준비', place: '운영본부', team: '운영지원팀' },
-    { st: '진행 중', time: '09:00–09:30', area: '부스', title: '부스 세팅 확인', place: '체험 부스 구역', team: '부스지원팀' },
-    { st: '완료',   time: '08:00–08:30', area: '물품', title: '운영 물품 수령 확인', place: '운영본부', team: '운영지원팀' }
+    { st: '예정',   time: '09:20까지', area: '부스', title: '부스 운영자 입장 확인', place: 'AI스쿨존', team: '부스지원팀' },
+    { st: '예정',   time: '09:40까지', area: '전산', title: 'A구역 전원·네트워크 점검', place: 'A구역', team: '전산지원팀' },
+    { st: '진행 중', time: '',         area: '부스', title: '부스 세팅 상태 순회 확인', place: 'AI스쿨존 · 미래채움존', team: '부스지원팀' },
+    { st: '완료',   time: '',         area: '물품', title: '운영 물품 1차 배부', place: '운영본부', team: '운영지원팀' }
   ];
 
   function sampleTasks() {
@@ -1935,7 +2034,7 @@
       SAMPLE_TASKS.map(function (t) {
         var done = t.st === '완료';
         return '<div class="task is-sample' + (done ? ' is-done' : '') + '">' +
-          '<div class="task__top"><span class="task__time">' + esc(t.time) + '</span>' +
+          '<div class="task__top">' + (t.time ? '<span class="task__time">' + esc(t.time) + '</span>' : '') +
           (done ? doneMark('업무 완료') : badge(t.st)) +
           '<span class="tag tag--soft">' + esc(t.area) + '</span>' + SAMPLE_END + '</div>' +
           '<div class="task__title">' + esc(t.title) + '</div>' +
@@ -1946,8 +2045,9 @@
 
   function samplePeople() {
     return sampleWrap(SAMPLE_NOTE,
-      [['운영지원팀', '운영본부 개소 준비 · 운영 물품 수령 확인', 2],
-       ['부스지원팀', '부스 세팅 확인', 1]].map(function (p) {
+      [['부스지원팀', '부스 운영자 입장 확인 · 부스 세팅 상태 순회 확인', 2],
+       ['전산지원팀', 'A구역 전원·네트워크 점검', 1],
+       ['운영지원팀', '운영 물품 1차 배부', 1]].map(function (p) {
         return '<div class="rowcard is-sample"><div class="rowcard__body">' +
           '<div class="rowcard__name">' + esc(p[0]) + SAMPLE_END + '</div>' +
           '<div class="rowcard__meta">담당 업무 ' + p[2] + '건 · ' + esc(p[1]) + '</div>' +
@@ -2201,12 +2301,12 @@
 
   /* 담당은 사람 이름 대신 역할명. 수량은 화면 모양을 보여 주는 예시 값입니다. */
   var SAMPLE_SUPPLIES = [
-    { name: '체험 부스 A-01', kind: '부스', status: '미배부', manager: '운영교사',
-      items: [['운영키트', 1], ['명찰', 2], ['생수', 4]] },
-    { name: '부스 운영 기관', kind: '기관', status: '일부 배부', manager: '부스지원팀',
-      items: [['명찰', 4], ['식권', 4]], note: '일부 품목 전달됨' },
+    { name: 'A-18 체험 부스', kind: '부스', status: '미배부', manager: '부스지원팀', booth: 'A-18',
+      items: [['운영키트', 1], ['명찰', 2], ['식권', 2], ['생수', 4]] },
+    { name: 'AI스쿨존 운영기관', kind: '기관', status: '일부 배부', manager: '운영지원팀',
+      items: [['명찰', 4], ['식권', 4], ['운영안내문', 1]], note: '일부 품목 전달됨' },
     { name: '운영본부', kind: '팀', status: '배부 완료', manager: '운영총괄',
-      items: [['명찰', 6], ['운영키트', 2], ['생수', 12]] }
+      items: [['명찰', 6], ['무전기', 4], ['운영키트', 2], ['생수', 12]] }
   ];
 
   /* 예시 현황 숫자는 위 예시 카드에서 셉니다. 실제 표가 한 건이라도 생기면
@@ -2532,7 +2632,10 @@
 
       var tm = t.closest('[data-taskmode]');
       if (tm) { ui.taskMode = tm.getAttribute('data-taskmode'); ui.taskQ = ''; render(); return; }
-      if (t.closest('[data-newreq]')) { openRequestForm(); return; }
+      var nr = t.closest('[data-newreq]');
+      if (nr) { openRequestForm(nr.getAttribute('data-reqloc') || ''); return; }
+      var sb = t.closest('[data-samplebooth]');
+      if (sb) { sampleBoothDetail(Number(sb.getAttribute('data-samplebooth'))); return; }
 
 
       var rd = t.closest('[data-reqdone]');
