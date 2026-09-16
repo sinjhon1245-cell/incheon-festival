@@ -892,9 +892,13 @@
     } else if (br.state === 'live') {
       // 현재가 주인공, 다음은 한 단계 작게. 좁으면 위아래, 넓으면 약 63 : 37.
       // 동시에 여러 건이면 홈에서는 두 건까지 한 줄씩만, 나머지는 '+ N건'.
+      /* 실제 일정이 0건인데 오늘이 예시 날짜(11/13 · 11/14)라 예시로 판단한
+         경우에는 칸 이름 앞에 '예시' 를 답니다. 그리고 '진행 중' 알약은
+         떼어 냅니다 — 지금 실제로 진행 중인 일정이 아니기 때문입니다. */
       var nowSlot = br.liveCount > 1
-        ? '<div class="brief__slot brief__slot--now" aria-current="time">' +
-          '<p class="brief__label"><span class="brief__live">진행 중</span>현재 일정 · ' + br.liveCount + '건</p>' +
+        ? '<div class="brief__slot brief__slot--now"' + (br.sample ? '' : ' aria-current="time"') + '>' +
+          '<p class="brief__label">' + (br.sample ? '' : '<span class="brief__live">진행 중</span>') +
+          (br.sample ? '예시 현재 일정' : '현재 일정') + ' · ' + br.liveCount + '건</p>' +
           '<ul class="brief__multi">' + br.liveItems.slice(0, 2).map(function (i) {
             return '<li><p class="brief__mtime">' + timeRange(i) +
               '<span class="brief__after">' + esc(leftLabel(i, br.nowMin)) + '</span></p>' +
@@ -903,36 +907,49 @@
           }).join('') + '</ul>' +
           (br.liveCount > 2 ? '<p class="brief__more">' + esc(moreLiveLabel(br.liveItems.slice(2))) + '</p>' : '') +
           '</div>'
-        : slot('현재 일정', br.live, { range: true, live: true, size: 'now',
-          after: br.liveLeft > 0 ? C.minLabel(br.liveLeft) + ' 남음' : '곧 종료' });
+        : slot(br.sample ? '예시 현재 일정' : '현재 일정', br.live,
+          { range: true, live: !br.sample, size: 'now',
+            after: br.liveLeft > 0 ? C.minLabel(br.liveLeft) + ' 남음' : '곧 종료' });
       briefBody = '<div class="brief__pair">' + nowSlot +
-        slot('다음 일정', br.next, { range: true, size: 'next',
+        slot(br.sample ? '예시 다음 일정' : '다음 일정', br.next, { range: true, size: 'next',
           after: br.nextIn != null ? C.minLabel(br.nextIn) + ' 후' + (br.nextMore ? ' · ' + br.nextMore : '') : '',
           empty: '오늘 남은 일정이 없습니다.' }) + '</div>';
     } else if (br.state === 'waiting') {
-      briefBody = slot('다음 일정', br.next, { range: true,
+      briefBody = slot(br.sample ? '예시 다음 일정' : '다음 일정', br.next, { range: true,
         after: (br.isFirst ? '첫 일정 · ' : '') + C.minLabel(br.nextIn) + ' 후 시작' });
     } else if (br.state === 'ended') {
       briefBody = '<p class="brief__lead">오늘 일정이 모두 종료되었습니다.</p>' +
         (br.last ? '<p class="brief__lastline">마지막 일정 · ' + esc(br.last.title) + ' ' +
           timeRange(br.last) + '</p>' : '');
-    } else {
-      // 행사 전: 관리자가 표시한 주요 일정(없으면 첫 일정) 하나를 '다음 일정'으로 보여 줍니다.
-      briefBody = slot('다음 일정', br.key, { range: true,
-        day: br.key && itemDay(br.key) ? dayShort(itemDay(br.key)) : fmtEventDay(ev.start) });
-      if (!br.key) briefLink = '';
+    } else if (br.noReal) {
+      /* 실제 일정이 아직 0건. "등록된 일정이 없습니다" 한 줄로 끝내면,
+         아래 일정 화면에는 예시가 55건 깔려 있어 두 화면이 서로 다른
+         말을 하는 것처럼 보입니다. 지금 상태와 아래에 보이는 것이
+         무엇인지를 한 줄로 잇습니다. 카드를 새로 만들지 않고 기존
+         브리핑 안에 문장만 둡니다. */
+      briefBody = '<p class="brief__lead brief__lead--none">실제 일정은 아직 등록되지 않았습니다.</p>' +
+        '<p class="brief__sub">등록되면 현재 일정과 다음 일정이 여기에 자동으로 표시됩니다.</p>';
+      briefLink = '';
       /* 행사 당일 화면 예시 — 행사 전에만. 예시 첫날의 이어지는 두 일정(전시장
          투어 → 특별 강연)으로 당일에 '현재 + 다음' 이 어떻게 보이는지만 보여 줍니다.
          진행 중 표시·남은 시간은 붙이지 않습니다 — 지금 진행 중인 일정으로
          읽히면 안 됩니다. 실제 목록과 섞이지 않고 '예시' 묶음 안에만 있습니다. */
       var demo = ev.phase === 'before' && samplePreviewPair();
       if (demo) {
-        briefBody += '<div class="brief__demo" role="group" aria-label="행사 당일 화면 예시">' +
-          '<p class="brief__demohead">' + SAMPLE_END + '행사 당일에는 이렇게 표시됩니다</p>' +
+        briefBody += '<div class="brief__demo" role="group" aria-label="행사 당일 표시 예시">' +
+          '<p class="brief__demohead">' + SAMPLE_END + '행사 당일 표시 예시</p>' +
           '<div class="brief__pair brief__pair--demo">' +
-          slot('현재 일정', demo[0], { range: true, size: 'now' }) +
-          slot('다음 일정', demo[1], { range: true, size: 'next' }) + '</div></div>';
+          // 칸 이름에도 '예시' 를 답니다. 배지 하나로만 구분하면 스크롤
+          // 중에 배지를 놓친 사람은 지금 진행 중인 일정으로 읽습니다.
+          slot('예시 현재 일정', demo[0], { range: true, size: 'now' }) +
+          slot('예시 다음 일정', demo[1], { range: true, size: 'next' }) + '</div></div>';
       }
+    } else {
+      // 행사 전이고 실제 일정이 있음: 관리자가 표시한 주요 일정(없으면 첫 일정)
+      // 하나를 '다음 일정'으로 보여 줍니다.
+      briefBody = slot('다음 일정', br.key, { range: true,
+        day: br.key && itemDay(br.key) ? dayShort(itemDay(br.key)) : fmtEventDay(ev.start) });
+      if (!br.key) briefLink = '';
     }
 
     var brief = '<section class="brief" aria-labelledby="brief-t">' +
@@ -1181,6 +1198,11 @@
       : '';
     b.isFirst = !!b.next && b.next === sn.first;
     b.nowMin = sn.nowMin;
+    /* 실제 일정이 아직 한 건도 없는 상태.
+       '오늘 볼 일정이 없다'(실제 일정은 있는데 오늘 것이 없음)와 뜻이
+       완전히 달라서 화면 문구를 나눠야 합니다. 앞쪽은 "아직 등록 전이라
+       아래는 예시" 이고, 뒤쪽은 그냥 오늘 일정이 없는 것입니다. */
+    b.noReal = !S.schedule.length;
     b.phaseLabel = ev.phase === 'after' ? '행사 종료' : ev.phase === 'during' ? '행사 진행 중' : '행사 준비';
     return b;
   }
@@ -1273,6 +1295,9 @@
     function cell(cls, label, inner) {
       return '<div class="schedlive__cell ' + cls + '"><p class="schedlive__label">' + label + tag + '</p>' + inner + '</div>';
     }
+    /* 예시로 판단한 화면에서는 칸 이름부터 '예시' 로 시작합니다.
+       작은 배지 하나만으로는 실제 현재 일정으로 읽힙니다. */
+    function lab(name) { return br.sample ? '예시 ' + name : name; }
     function note(text, sub) {
       return '<p class="schedlive__empty">' + esc(text) + '</p>' +
         (sub ? '<p class="schedlive__left">' + sub + '</p>' : '');
@@ -1293,7 +1318,17 @@
     var cells;
     switch (br.state) {
       case 'empty':
-        cells = cell('schedlive__cell--wide', '일정', note('등록된 일정이 없습니다.'));
+        /* 실제 일정이 아직 0건이면 아래 목록에는 예시가 깔려 있습니다.
+           "등록된 일정이 없습니다" 한 줄로 끝내면 위아래가 서로 다른
+           말을 하는 것처럼 보이므로, 두 칸으로 나눠 관계를 적습니다.
+           현재·다음 일정 칸을 예시로 채우지는 않습니다. */
+        cells = br.noReal
+          ? cell('schedlive__cell--idle', '실제 일정', note('아직 등록되지 않았습니다.')) +
+            cell('schedlive__cell--next', '예시 일정' + SAMPLE_END,
+              note('아래에서 ' + SAMPLE_DAYS.map(function (d) {
+                var p = d.split('-'); return p[1] + '.' + p[2];
+              }).join(' · ') + ' 운영 예시를 확인할 수 있습니다.'))
+          : cell('schedlive__cell--wide', '일정', note('오늘 등록된 일정이 없습니다.'));
         break;
       case 'before':
         // 행사일 전에는 실시간 칸을 과장하지 않고 준비 상태와 다음 일정 하나만.
@@ -1306,23 +1341,26 @@
         break;
       case 'live':
         cells = cell('schedlive__cell--live' + (br.liveCount > 1 ? ' schedlive__cell--multi' : ''),
-            '<span class="livepill">진행 중</span>현재 일정' + (br.liveCount > 1 ? ' · ' + br.liveCount + '건' : ''),
+            // 예시일 때는 '진행 중' 알약을 붙이지 않습니다. 지금 실제로
+            // 진행 중인 일정이 아니라 당일 화면이 어떻게 보이는지의 예시입니다.
+            (br.sample ? '' : '<span class="livepill">진행 중</span>') +
+            lab('현재 일정') + (br.liveCount > 1 ? ' · ' + br.liveCount + '건' : ''),
             (br.liveCount > 1 ? liveList()
               : item(br.live, { cat: true, extra: br.liveLeft > 0 ? '남은 시간 <b>' + C.minLabel(br.liveLeft) + '</b>' : '곧 종료' })) +
             '<button class="linkbtn schedlive__jump" type="button" data-nowjump>타임라인에서 보기 ↓</button>') +
-          cell('schedlive__cell--next', '다음 일정',
+          cell('schedlive__cell--next', lab('다음 일정'),
             br.next ? item(br.next, { extra: C.minLabel(br.nextIn) + ' 후 시작' + (br.nextMore ? ' · ' + br.nextMore : '') })
               : note('오늘 남은 일정이 없습니다.'));
         break;
       case 'waiting':
-        cells = cell('schedlive__cell--idle', '현재 일정',
+        cells = cell('schedlive__cell--idle', lab('현재 일정'),
             note('진행 중인 일정 없음', (br.isFirst ? '첫 일정까지 ' : '다음 일정까지 ') + C.minLabel(br.nextIn))) +
-          cell('schedlive__cell--next schedlive__cell--focus', br.isFirst ? '첫 일정' : '다음 일정',
+          cell('schedlive__cell--next schedlive__cell--focus', lab(br.isFirst ? '첫 일정' : '다음 일정'),
             item(br.next, { cat: true, extra: '<b>' + C.minLabel(br.nextIn) + '</b> 후 시작' + (br.nextMore ? ' · ' + br.nextMore : '') }));
         break;
       case 'ended':
-        cells = cell('schedlive__cell--idle', '오늘 일정', note('오늘 일정이 모두 끝났습니다.')) +
-          cell('schedlive__cell--next', '마지막 일정',
+        cells = cell('schedlive__cell--idle', lab('오늘 일정'), note('오늘 일정이 모두 끝났습니다.')) +
+          cell('schedlive__cell--next', lab('마지막 일정'),
             br.last ? item(br.last, { extra: hhmm(spanOf(br.last).b) + ' 종료' }) : note('종료'));
         break;
       default: // after
@@ -1367,7 +1405,7 @@
         ? '요약은 오늘 전체 일정 기준, 목록은 선택한 조건 기준입니다.'
         : '행사 전체 일정을 시간순으로 확인합니다.') +
       // 예시 안내는 화면 위에 한 번만. 카드마다에는 작은 '예시' 표시만 둡니다.
-      (S.schedule.length ? '' : '<p class="samplenote">예시 화면입니다. 실제 운영 일정이 등록되면 자동으로 바뀝니다.</p>') +
+      (S.schedule.length ? '' : '<p class="samplenote">예시 화면입니다. 실제 운영 일정이 등록되면 자동으로 실제 일정으로 전환됩니다.</p>') +
       '<section class="schedlive' + (ev.sameDay ? ' is-today' : '') + '" id="sched-live" aria-label="실시간 일정 요약">' +
       scheduleLiveHtml(ev) + '</section>' +
       // 순서: 날짜 → 오전·오후(+핵심) → 분류 → 검색. 여러 날 행사에서는 날짜가 가장 큰 갈래입니다.
