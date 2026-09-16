@@ -16,15 +16,24 @@ create table if not exists public.settings (
   date_label         text        not null default '2026. 11. 13.(금) ~ 11. 14.(토)',
   venue              text        not null default '송도컨벤시아',
   venue_address      text        not null default '인천광역시 연수구 센트럴로 123',
-  contact_phone      text        not null default '032-000-0000',
+  -- 확정되지 않은 값은 비워 둡니다. '032-000-0000' 같은 자리표시 번호를
+  -- 기본값으로 두면 새 환경에서 실제 대표 전화처럼 보입니다. 비어 있으면
+  -- 관리자 → 행사 기본정보에서 채우면 됩니다.
+  contact_phone      text        not null default '',
   contact_email      text        not null default 'aifest@ice.go.kr',
-  footer_note        text        not null default '일정·부스·주차 정보는 검토용 예시 데이터입니다.',
+  -- 옛 관람객 안내 사이트의 '검토용 예시 데이터입니다' 문구가 기본값으로
+  -- 남아 있었습니다. 지금 화면 어디에서도 쓰지 않아 비워 둡니다.
+  footer_note        text        not null default '',
   -- 장소 상세: 2026 행사의 전시홀 번호는 아직 확정 전이라 비워 둡니다.
   -- 확정되면 관리자 → 행사 기본정보에서 채웁니다.
   venue_detail       text        not null default '',
+  -- 아래 셋은 옛 부스 모집 안내에 쓰던 칸입니다. 지금 포털·관리자
+  -- 어느 화면도 읽지 않지만, 호환성을 위해 칸은 그대로 둡니다.
+  -- 모집 기간처럼 확정되지 않은 값은 기본값으로 넣지 않습니다 —
+  -- 새 환경에서 확정된 일정처럼 보입니다.
   host_line          text        not null default '주최 인천광역시교육청',
-  booth_dept         text        not null default '미래교육과',
-  booth_apply_period text        not null default '2026. 9. 7.(월) ~ 9. 25.(금)',
+  booth_dept         text        not null default '',
+  booth_apply_period text        not null default '',
   show_ops_track     boolean     not null default false,
   show_parking_table boolean     not null default false,
   show_countdown     boolean     not null default true,
@@ -129,20 +138,23 @@ end $$;
 
 
 -- ===================================================================
--- 초기 데이터 — 지금 사이트에 들어 있는 예시 내용입니다.
--- 이미 데이터가 있으면 건너뜁니다.
+-- 초기 데이터 — 행사 설정 한 줄뿐입니다.
+--
+-- 운영 콘텐츠(일정 · 구역 · 부스 · FAQ · 프로그램)는 DB에 넣지
+-- 않습니다. 비어 있으면 포털이 UI-only 예시를 보여 주고, 실제
+-- 데이터가 한 건이라도 등록되면 예시는 사라집니다. 예시를 DB에
+-- 넣어 두면 그 전환이 영영 일어나지 않습니다.
 -- ===================================================================
 
 insert into public.settings (id) values (1) on conflict (id) do nothing;
 
-insert into public.programs (no, title, description, meta, tint, deep, sort_order)
-select * from (values
-  ('01', 'AI 체험 부스',      '직접 만들고 실험하는 40개 부스. 네 구역으로 나뉘어 운영됩니다.',   '전시장 일대 · 11:00–16:00',   '#D7E6FF', '#17458F', 1),
-  ('02', '기조 강연·특강',    '교실의 AI 전환을 먼저 실천한 교사와 연구자의 세 편의 강연.',       '메인무대 · 세미나실 A·B',     '#D9EFF7', '#0F5468', 2),
-  ('03', '학생 작품 전시',    '학생들이 만든 AI·디지털 프로젝트 100선. 폐막식에서 시상합니다.',   '전시장 · 11:00–16:00',        '#DCEFE6', '#14573F', 3),
-  ('04', '에듀테크 기업 전시', '수업에 바로 쓰는 도구를 만드는 기업의 기업관 시연.',              '기업관(D존) · 14:00–15:00',   '#E3E1F9', '#392C86', 4),
-  ('05', '무대 공연·이벤트',  '로봇 퍼포먼스와 학생 밴드·댄스 공연이 메인무대에서 이어집니다.',   '메인무대 · 13:00–16:40',      '#DAE8F5', '#1F4468', 5)
-) as v where not exists (select 1 from public.programs);
+-- 프로그램 안내 카드는 현재 관계자 운영 포털에서 사용하지 않습니다.
+-- programs 테이블은 호환성을 위해 유지하되 초기 seed는 넣지 않습니다.
+--
+-- 옛 관람객 안내 사이트의 카드 다섯 장(AI 체험 부스 · 기조 강연 ·
+-- 학생 작품 전시 · 에듀테크 기업 전시 · 무대 공연)이었습니다. 포털과
+-- 관리자 어느 화면도 이 표를 읽지 않아, 넣어 두면 아무 데도 보이지
+-- 않는 옛 행사장 문구만 DB에 남습니다.
 
 -- 일정 예시는 DB에 넣지 않습니다.
 -- schedule_items 가 비어 있으면 포털이 UI-only sample 을 표시합니다.
