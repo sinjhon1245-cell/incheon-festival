@@ -116,10 +116,11 @@
         { k: 'event_title',   label: '행사 이름', wide: true, required: true },
         { k: 'event_start',   label: '개막 일시', type: 'datetime' },
         { k: 'event_end',     label: '종료 일시', type: 'datetime' },
-        { k: 'date_label',    label: '날짜 표기', hint: '예: 2026. 10. 17.(토)' },
+        { k: 'date_label',    label: '날짜 표기', hint: '예: 2026. 11. 13.(금) ~ 11. 14.(토)' },
         { k: 'time_label',    label: '운영시간 표기', hint: '예: 10:00 – 17:00' },
         { k: 'venue',         label: '장소' },
-        { k: 'venue_detail',  label: '장소 상세' },
+        { k: 'venue_detail',  label: '장소 상세',
+          hint: '2026 전시홀 번호는 추후 확정입니다. 확정 전에는 비워 두세요 — 비면 화면에서 그 줄이 사라집니다' },
         { k: 'venue_address', label: '주소', wide: true },
 
         { type: 'group', label: '운영 안내' },
@@ -799,7 +800,13 @@
       if (!cur) { out += '<section class="fgroup"><div class="list">'; cur = true; }
       if (!(f.k in s)) return;
       var v = s[f.k];
-      if (f.type === 'datetime') v = v ? fmtDay(v) : '';
+      /* 개막·종료 일시는 연도까지 보여 줍니다. 목록에 쓰는 '11/13 10:00'
+         짧은 표기는 최근 글 순서를 볼 때나 쓸모 있고, 행사 기본정보에서는
+         연도가 틀린 것을 한눈에 알아차려야 합니다. */
+      if (f.type === 'datetime') {
+        var dv = v ? new Date(v) : null;
+        v = dv && !isNaN(dv) ? C.fmtDateTime(dv) : '';
+      }
       if (f.type === 'image') {
         out += '<div class="listrow"><div class="listrow__body">' +
           '<div class="listrow__meta">' + esc(f.label) + '</div>' +

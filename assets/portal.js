@@ -1825,7 +1825,7 @@
     openDrawer('현장 문제 보고',
       '<form id="reqform" novalidate style="display:flex;flex-direction:column;gap:14px">' +
       '<div class="field"><label class="field__label" for="rq-loc">부스 또는 위치<span class="field__req">*</span></label>' +
-      '<input class="input" id="rq-loc" list="boothlist" required placeholder="예: A-17 또는 야외무대 옆"' +
+      '<input class="input" id="rq-loc" list="boothlist" required placeholder="예: A-17 또는 메인무대 옆"' +
       (loc ? ' value="' + esc(loc) + '"' : '') + ' />' +
       '<datalist id="boothlist">' + boothOpts + '</datalist></div>' +
       '<div class="field"><label class="field__label" for="rq-kind">유형</label>' +

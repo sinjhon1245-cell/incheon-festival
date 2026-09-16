@@ -10,8 +10,8 @@
 -- ===================================================================
 
 alter table public.settings
-  add column if not exists venue_detail       text not null default '인천교육과학연구원 대강당 · 야외광장',
-  add column if not exists host_line          text not null default '주최 인천광역시교육청 · 주관 인천교육과학연구원',
+  add column if not exists venue_detail       text not null default '',
+  add column if not exists host_line          text not null default '주최 인천광역시교육청',
   add column if not exists booth_dept         text not null default '미래교육과',
   add column if not exists booth_apply_period text not null default '2026. 9. 7.(월) ~ 9. 25.(금)';
 
