@@ -32,9 +32,16 @@
   var ORG_TYPES     = ['초등', '중등', '고등', '기관', '기업', '기타'];
   var TASK_STATES   = ['예정', '진행 중', '완료'];
   var SUPPLY_STATES = ['미배부', '일부 배부', '배부 완료'];
-  // 역할 구분은 DB 에서 값을 제한하지 않습니다. 현장에서 쓰는 말이
-  // 해마다 달라서, 여기서는 추천값으로만 보여 줍니다.
-  var ROLE_GROUPS = ['총괄', '운영본부', '부스 지원', '안전', '안내', '행사 지원', '기타'];
+  /* 역할 구분은 DB 에서 값을 제한하지 않습니다. 현장에서 쓰는 말이
+     해마다 달라서, 여기서는 추천값으로만 보여 줍니다.
+
+     포털의 연락망 역할 필터와 예시도 같은 이름을 씁니다. 관리자는
+     '부스 지원', 포털 예시는 '부스지원팀' 처럼 갈라져 있으면 현장에서
+     두 화면을 견주다 같은 역할인지부터 헷갈립니다.
+
+     추천 목록 밖의 예전 값은 지우거나 바꾸지 않습니다 — keepValue 로
+     그대로 보이고 그대로 저장됩니다. */
+  var ROLE_GROUPS = ['총괄', '운영본부', '부스지원', '전산지원', '운영지원', '안전지원', '안내', '기타'];
 
   function opts(l) { return l.map(function (v) { return [v, v]; }); }
 
@@ -245,7 +252,7 @@
       desc: '부스 정보와 운영기관을 관리합니다.',
       blank: { no: 1, zone_key: 'A', name: '', org: '' },
       title: function (r) { return (r.code || (r.zone_key + '-' + r.no)) + ' · ' + (r.name || '(이름 없음)'); },
-      meta: function (r) { return (r.org || '운영기관 미정') + (r.manager ? ' · 담당 ' + r.manager : ''); },
+      meta: function (r) { return (r.org || '운영기관 미정') + (r.manager ? ' · 부스 담당 ' + r.manager : ''); },
       tags: function (r) {
         return (r.org_type ? tag(r.org_type) : '') +
           (r.needs_power ? tag('전기') : '') + (r.needs_network ? tag('네트워크') : '');
@@ -261,11 +268,11 @@
           hint: '포털 카드에 초등·중등·고등 표시로 보입니다',
           // migration-portal-actions.sql 을 돌리기 전에는 칸이 없습니다.
           needsColumn: true },
-        { k: 'manager',       label: '담당자' },
+        { k: 'manager',       label: '부스 담당자' },
 
         { type: 'group', label: '운영 정보' },
         { k: 'hours',         label: '운영 시간' },
-        { k: 'manager_phone', label: '담당자 연락처', type: 'tel' },
+        { k: 'manager_phone', label: '부스 담당자 연락처', type: 'tel' },
         { k: 'program',       label: '운영 프로그램', wide: true },
         { k: 'needs_power',   label: '전기 사용 필요', type: 'bool' },
         { k: 'needs_network', label: '네트워크 필요', type: 'bool' },
@@ -311,14 +318,15 @@
       title: function (r) { return r.title || '(제목 없음)'; },
       meta: function (r) {
         return (r.location || '위치 미지정') + ' · ' + fmtDay(r.created_at) +
-          (r.assignee_team ? ' · ' + r.assignee_team : '');
+          (r.assignee_team ? ' · 담당팀 ' + r.assignee_team : '');
       },
       tags: function (r) { return badge(r.status) + badge(r.priority) + tag(r.kind); },
       fields: [
         { k: 'status',        label: '처리 상태', type: 'select', options: opts(REQ_STATES) },
         { k: 'priority',      label: '우선순위', type: 'select', options: opts(REQ_PRIORITY) },
         { k: 'kind',          label: '유형', type: 'select', options: opts(REQ_KINDS), keepValue: true },
-        { k: 'assignee_team', label: '담당팀' },
+        { k: 'assignee_team', label: '처리 담당팀',
+          hint: '이 요청을 처리할 팀. 예: 전산지원 · 부스지원 · 운영지원' },
         { k: 'location',      label: '부스 또는 위치', wide: true, required: true },
         { k: 'title',         label: '제목', wide: true, required: true },
         { k: 'body',          label: '내용', type: 'textarea', wide: true },
@@ -353,15 +361,16 @@
         (r.is_staff ? badge('운영 인력') : ''); },
       fields: [
         { k: 'name',     label: '이름', required: true },
-        { k: 'category', label: '구분', hint: '예: 운영본부 · 시설지원 · 전산지원 · 안전지원' },
+        { k: 'category', label: '연락처 분류', hint: '연락망을 묶어 보는 이름. 예: 운영본부 · 협력기관 · 시설' },
         { k: 'org',      label: '소속' },
-        { k: 'duty',     label: '담당업무' },
+        { k: 'duty',     label: '담당업무', hint: '실제 담당 내용을 간단히 설명. 예: 전원·네트워크 점검' },
         { k: 'phone',    label: '전화번호', type: 'tel' },
         // 이 두 칸이 담당 업무 화면의 '운영 인력' 집계를 만듭니다.
         // 연락망과 명부를 따로 두지 않으려고 여기에 함께 둡니다.
         { k: 'is_staff',   label: '운영 인력 (담당 업무 화면에서 집계)', type: 'bool' },
-        { k: 'role_group', label: '역할 구분', type: 'select',
-          options: [['', '(없음)']].concat(opts(ROLE_GROUPS)) },
+        { k: 'role_group', label: '역할 구분', type: 'select', keepValue: true,
+          options: [['', '(없음)']].concat(opts(ROLE_GROUPS)),
+          hint: '부스지원 · 전산지원처럼 이 사람이 행사에서 맡은 기본 역할' },
         { k: 'memo',     label: '메모', type: 'textarea', wide: true }
       ]
     },
@@ -408,8 +417,8 @@
       groupBy: function (r) { return r.area || '기타'; },
       fields: [
         { type: 'group', label: '업무' },
-        { k: 'area',        label: '업무 영역', required: true,
-          hint: '예: 기념식 · 부스 운영 · 안전' },
+        { k: 'area',        label: '업무 분야', required: true,
+          hint: '업무를 묶는 분야. 예: 기념식 · 부스 운영 · 안전' },
         { k: 'title',       label: '업무명', wide: true, required: true },
         { k: 'start_time',  label: '시작시간', type: 'time' },
         { k: 'end_time',    label: '종료시간', type: 'time' },
@@ -421,7 +430,7 @@
         { type: 'group', label: '담당자' },
         { k: '__assigns', type: 'rows', label: '배정된 담당자',
           addLabel: '+ 담당자 추가', emptyText: '아직 배정된 담당자가 없습니다.',
-          hint: '연락망에서 고르거나, 없으면 이름을 직접 적습니다',
+          hint: '연락망에서 고르거나, 없으면 이름을 직접 적습니다. 역할은 이 업무에서 맡은 몫으로, 연락망의 역할 구분과 다릅니다',
           cols: [],   // 연락망 목록이 있어야 만들 수 있어 fieldsFor 에서 채웁니다
           blank: { contact_id: '', person_name: '', role: '' } },
 
@@ -470,7 +479,7 @@
       title: function (r) { return r.name || '(대상명 없음)'; },
       meta: function (r) {
         return (r.kind || '팀') +
-          (r.manager ? ' · 담당 ' + r.manager : '') +
+          (r.manager ? ' · 배부 담당 ' + r.manager : '') +
           (r.headcount ? ' · ' + r.headcount + '명' : '') + '<br />' +
           allocLine(r.id);
       },
@@ -501,7 +510,7 @@
         { k: 'name',      label: '대상 이름', wide: true, required: true },
         { k: 'kind',      label: '구분', type: 'select', options: opts(SUPPLY_KINDS) },
         { k: 'status',    label: '배부 상태', type: 'select', options: opts(SUPPLY_STATES) },
-        { k: 'manager',   label: '담당자' },
+        { k: 'manager',   label: '배부 담당', hint: '이 대상에 물품을 전달할 사람 또는 팀' },
         { k: 'headcount', label: '인원', type: 'number' },
 
         { type: 'group', label: '배부 물품' },
@@ -936,7 +945,8 @@
               return [c.id, c.name + (c.org ? ' · ' + c.org : '')];
             })) },
         { k: 'person_name', label: '이름', placeholder: '이름 직접 입력' },
-        { k: 'role', label: '맡은 몫', placeholder: '맡은 몫 (예: 좌석 안내)' }
+        { k: 'role', label: '업무 배정 역할',
+          placeholder: '이 업무에서 맡은 역할 (예: 총괄 · 현장 확인 · 기록 · 안내)' }
       ];
     }
     if (k === '__allocs') {

@@ -38,7 +38,7 @@
     { id: 'tasks',     label: '담당 업무', short: '업무', mark: '업', group: '운영' },
     { id: 'supplies',  label: '운영 물품', short: '물품', mark: '물', group: '운영' },
     { id: 'resources', label: '자료실',   short: '자료', mark: '자', group: '정보' },
-    { id: 'contacts',  label: '연락망',   short: '연락', mark: '연', group: '정보' },
+    { id: 'contacts',  label: '담당자·연락망', short: '연락', mark: '연', group: '정보' },
     { id: 'venue',     label: '행사장',   short: '행사장', mark: '장', group: '정보' },
     { id: 'faq',       label: '운영 FAQ', short: 'FAQ',  mark: 'F', group: '정보' }
   ];
@@ -91,7 +91,18 @@
              schedCat: '전체', schedQ: '', schedHalf: '전체', schedKey: false, schedDay: '',
              taskMode: '업무별', taskArea: '전체', taskQ: '', taskPerson: '',
              supplyQ: '', supplyState: '전체', resourceQ: '',
-             contactQ: '', contactCat: '전체', faqCat: '전체' };
+             contactQ: '', contactCat: '전체', contactRole: '전체', faqCat: '전체' };
+
+  /* 운영 역할 이름 — 관리자(admin.js ROLE_GROUPS)와 같은 목록, 같은 순서입니다.
+     연락망의 역할 필터를 늘어놓는 차례로만 씁니다. 여기 없는 값도 그대로
+     쓰고 그대로 보여 줍니다 — 역할 이름은 데이터베이스가 막지 않습니다. */
+  var ROLE_ORDER = ['총괄', '운영본부', '부스지원', '전산지원', '운영지원', '안전지원', '안내', '기타'];
+  function roleSort(a, b) {
+    var ia = ROLE_ORDER.indexOf(a), ib = ROLE_ORDER.indexOf(b);
+    if (ia < 0) ia = ROLE_ORDER.length;
+    if (ib < 0) ib = ROLE_ORDER.length;
+    return ia !== ib ? ia - ib : a.localeCompare(b, 'ko');
+  }
   var clockTimer = null;
 
   /* ── 알림 ───────────────────────────────────────────────────── */
@@ -351,24 +362,31 @@
   /* 요청은 실제 카드처럼 우선순위·상태·유형 · 제목 · 위치 한 줄.
      현장 요청은 대부분 특정 부스에서 생기므로 부스번호가 드러나게 합니다.
      부스 번호는 부스 예시(SAMPLE_BOOTHS)와 맞춥니다. */
+  /* 담당팀 이름은 관리자의 역할 목록(admin.js ROLE_GROUPS)과 같은 말을 씁니다. */
   var SAMPLE_REQUESTS = [
     { pri: '높음', st: '접수',  kind: '전기',     title: 'A-18 부스 멀티탭 추가 요청', booth: 'A-18',
-      body: '체험용 기기 전원이 부족해 멀티탭 1개가 더 필요합니다.', where: 'A-18 부스 · AI스쿨존' },
+      body: '체험용 기기 전원이 부족해 멀티탭 1개가 더 필요합니다.', where: 'A-18 부스 · AI스쿨존',
+      team: '운영지원' },
     { pri: '보통', st: '처리 중', kind: '네트워크', title: 'A-12 부스 와이파이 연결 확인', booth: 'A-12',
-      body: '체험용 노트북 2대가 행사장 와이파이에 연결되지 않습니다.', where: 'A-12 부스 · 전산지원팀 확인 중' },
+      body: '체험용 노트북 2대가 행사장 와이파이에 연결되지 않습니다.', where: 'A-12 부스 · AI스쿨존',
+      team: '전산지원' },
     { pri: '보통', st: '완료',  kind: '시설',     title: '미래채움-03 부스 테이블 추가 요청', booth: '미래채움-03',
-      body: '체험 도구 배치를 위해 테이블 1개가 더 필요합니다.', where: '미래채움-03 부스 · 미래채움존' }
+      body: '체험 도구 배치를 위해 테이블 1개가 더 필요합니다.', where: '미래채움-03 부스 · 미래채움존',
+      team: '운영지원' }
   ];
 
   function sampleRequests() {
     return sampleWrap(SAMPLE_NOTE,
       SAMPLE_REQUESTS.map(function (r) {
         var done = r.st === '완료';
+        // 실제 카드와 같은 자리에 담당팀 한 줄을 둡니다 — 예시에서 본
+        // 자리에 실제 값이 그대로 들어와야 예시를 본 뜻이 있습니다.
         return '<div class="req is-sample">' +
           '<span class="req__top">' + (done ? doneMark('해결 완료') : badge(r.pri) + badge(r.st)) +
           '<span class="tag tag--soft">' + esc(r.kind) + '</span>' + SAMPLE_END + '</span>' +
           '<span class="req__title">' + esc(r.title) + '</span>' +
           '<span class="req__body">' + esc(r.body) + '</span>' +
+          teamLine(r.team, done) +
           '<span class="req__meta">' + esc(r.where) + '</span></div>';
       }).join(''));
   }
@@ -390,18 +408,20 @@
 
   function sampleContacts() {
     return sampleWrap(SAMPLE_NOTE,
-      // 사람이 아니라 역할로 찾게 합니다. 부스에서 문제가 생겼을 때 어느 팀에
-      // 연락할지가 먼저 보이도록 부스 운영 책임 순서대로 둡니다.
+      /* 사람이 아니라 역할로 찾게 합니다. 부스에서 문제가 생겼을 때 어느 팀에
+         연락할지가 먼저 보이도록 부스 운영 책임 순서대로 둡니다.
+         역할 이름은 관리자의 역할 목록(admin.js ROLE_GROUPS)과 같은 말이고,
+         실제 카드와 같이 역할을 맨 위에 답니다. */
       [
         ['운영본부', '행사 운영 총괄', '행사 진행과 전체 운영 문의'],
-        ['부스지원팀', '부스 운영 지원', '운영자 입장 · 세팅 · 교대 · 마감 · 철수'],
-        ['전산지원팀', '전원·네트워크 지원', '전원 · 인터넷 · 노트북 · 장비 문제'],
-        ['운영지원팀', '운영 물품 지원', '물품 배부 · 추가 요청 · 회수'],
-        ['안전지원팀', '안전·응급 대응', '안전사고 · 응급 상황 · 관람객 동선']
+        ['부스지원', '부스 운영 지원', '운영자 입장 · 세팅 · 교대 · 마감 · 철수'],
+        ['전산지원', '전원·네트워크 지원', '전원 · 인터넷 · 노트북 · 장비 문제'],
+        ['운영지원', '운영 물품 지원', '물품 배부 · 추가 요청 · 회수'],
+        ['안전지원', '안전·응급 대응', '안전사고 · 응급 상황 · 관람객 동선']
       ].map(function (c) {
         // 이름·번호는 만들지 않습니다. 번호가 등록되면 전화·복사 단추가 생깁니다.
         return '<div class="contact is-sample">' +
-          '<div class="contact__top"><span class="tag tag--soft">' + esc(c[0]) + '</span>' + SAMPLE_END + '</div>' +
+          '<div class="contact__top"><span class="rolebadge">' + esc(c[0]) + '</span>' + SAMPLE_END + '</div>' +
           '<div class="contact__name">' + esc(c[1]) + '</div>' +
           '<div class="contact__meta">' + esc(c[2]) + '</div>' +
           '<div class="contact__memo">번호 등록 후 전화 · 복사 가능</div></div>';
@@ -430,7 +450,7 @@
         ['부스 운영자는 몇 시까지 도착해야 하나요?', '도착 시간이 확정되면 이곳과 공지에 안내됩니다.'],
         ['운영 중 전기나 네트워크 문제가 생기면 어떻게 하나요?', '운영 요청 메뉴에서 위치와 내용을 등록할 수 있습니다.'],
         ['운영 물품은 어디에서 확인하나요?', '운영 물품 메뉴에서 기관·팀·부스별 배부 현황을 확인할 수 있습니다.'],
-        ['안전사고 발생 시 누구에게 연락하나요?', '안전 담당 연락처가 확정되면 연락망에 안내됩니다.']
+        ['안전사고 발생 시 누구에게 연락하나요?', '안전 담당 연락처가 확정되면 담당자·연락망에 안내됩니다.']
       ].map(function (f) {
         // 접었다 펴는 동작 없이 질문과 답을 함께 보여 줍니다.
         return '<div class="faq is-sample">' +
@@ -724,8 +744,11 @@
     document.body.style.overflow = $('#drawer').hidden ? '' : 'hidden';
   }
 
-  function chips(items, active, attr, extra) {
-    return '<div class="chiprow' + (extra ? ' ' + extra : '') + '" role="group">' + items.map(function (it) {
+  /* groupLabel: 한 화면에 칩 줄이 둘 이상일 때, 화면을 읽어 주는 도구가
+     어느 줄인지 말할 수 있게 붙입니다(눈에는 보이지 않습니다). */
+  function chips(items, active, attr, extra, groupLabel) {
+    return '<div class="chiprow' + (extra ? ' ' + extra : '') + '" role="group"' +
+      (groupLabel ? ' aria-label="' + esc(groupLabel) + '"' : '') + '>' + items.map(function (it) {
       var label = typeof it === 'string' ? it : it.label;
       var n = typeof it === 'string' ? null : it.n;
       return '<button class="chip' + (label === active ? ' is-on' : '') + '" type="button" ' +
@@ -965,7 +988,7 @@
       '<h2 class="quick__t" id="quick-t">빠른 실행</h2>' +
       '<div class="quick__list">' +
       '<button class="btn btn--primary quick__main" type="button" data-newreq>+ 현장 문제 보고</button>' +
-      '<a class="btn btn--ghost" href="#contacts">연락망</a>' +
+      '<a class="btn btn--ghost" href="#contacts">담당자 찾기</a>' +
       '<a class="btn btn--ghost" href="#booths">부스 찾기</a>' +
       '</div></section>';
 
@@ -1682,7 +1705,7 @@
       ['운영기관', b.org],
       ['운영기관 유형', orgType(b)],
       ['구역', zoneName(b.zone_key)],
-      ['담당자', b.manager],
+      ['부스 담당자', b.manager],
       ['운영 프로그램', b.program],
       ['운영 시간', b.hours],
       // 필요할 때만 적습니다. '불필요' 두 줄은 읽을 거리만 늘립니다.
@@ -1709,7 +1732,7 @@
 
     if (b.manager_phone) {
       html += '<a class="btn btn--primary btn--full" href="' + esc(C.telHref(b.manager_phone)) + '">' +
-        '담당자에게 전화 · ' + esc(b.manager_phone) + '</a>';
+        '부스 담당자에게 전화 · ' + esc(b.manager_phone) + '</a>';
     }
 
     html += '<dl class="dl">' + rows.map(function (r) {
@@ -1804,6 +1827,23 @@
     return Math.floor(min / 60) + '시간 전';
   }
 
+  /* 처리 담당팀 한 줄. 위치·경과 시간 끝에 붙여 두면 "A-12 부스 · 12분 전 ·
+     전산지원" 처럼 읽혀 팀 이름이 시각 뒤에 묻힙니다. 줄을 따로 세우고
+     '담당팀' 이라는 말과 함께 팀 이름만 굵게 둡니다 — 새 색을 쓰지 않아도
+     레이블과 굵기 차이만으로 충분히 눈에 걸립니다.
+
+     아직 안 끝난 요청은 담당팀이 비어 있는 것 자체가 확인해야 할 정보라
+     '미지정' 을 흐리게 적습니다. 끝난 요청에는 적지 않습니다 — 이미 해결된
+     일에 미지정이라고 써 봐야 할 일이 없습니다. */
+  function teamLine(team, done) {
+    if (team) {
+      return '<span class="teamline"><span class="teamline__l">담당팀</span>' +
+        '<b class="teamline__v">' + esc(team) + '</b></span>';
+    }
+    return done ? '' : '<span class="teamline teamline--none">' +
+      '<span class="teamline__l">담당팀</span><span class="teamline__v">미지정</span></span>';
+  }
+
   function requestCard(r) {
     var done = r.status === '완료';
     var urgent = !done && r.priority === '긴급';
@@ -1813,9 +1853,9 @@
       '<span class="tag tag--soft">' + esc(r.kind) + '</span></span>' +
       '<span class="req__title">' + esc(r.title) + '</span>' +
       (r.body ? '<span class="req__body">' + esc(r.body) + '</span>' : '') +
+      teamLine(r.assignee_team, done) +
       '<span class="req__meta">' + esc(r.location || '위치 미지정') + ' · ' +
-      esc(done ? fmtDay(r.created_at) : agoLabel(r.created_at)) +
-      (r.assignee_team ? ' · ' + esc(r.assignee_team) : '') + '</span></button>';
+      esc(done ? fmtDay(r.created_at) : agoLabel(r.created_at)) + '</span></button>';
     // 끝난 요청에는 단추를 두지 않습니다.
     return done ? card : actionCard(card, actBtn('data-reqdone="' + esc(r.id) + '"', '해결 완료'));
   }
@@ -1870,7 +1910,12 @@
       (r.body ? '<div class="dl__row"><dt>내용</dt><dd style="white-space:pre-wrap">' + esc(r.body) + '</dd></div>' : '') +
       (r.reporter ? '<div class="dl__row"><dt>등록자</dt><dd>' + esc(r.reporter) + '</dd></div>' : '') +
       '<div class="dl__row"><dt>등록</dt><dd>' + esc(fmtDay(r.created_at)) + '</dd></div>' +
-      (r.assignee_team ? '<div class="dl__row"><dt>담당팀</dt><dd>' + esc(r.assignee_team) + '</dd></div>' : '') +
+      // 누가 처리하는지는 상세에서도 빠지면 안 됩니다. 아직 안 끝난 요청은
+      // 비어 있다는 사실까지 적고, 끝난 요청에는 적지 않습니다.
+      (r.assignee_team
+        ? '<div class="dl__row"><dt>처리 담당팀</dt><dd>' + esc(r.assignee_team) + '</dd></div>'
+        : (r.status === '완료' ? ''
+          : '<div class="dl__row"><dt>처리 담당팀</dt><dd class="dl__none">미지정</dd></div>')) +
       '</dl>' +
       // 처리 상태를 바꾸는 건 관리자 몫입니다. 여기서는 진행 상황만
       // 확인합니다(데이터베이스도 같은 규칙으로 막고 있습니다).
@@ -1943,24 +1988,50 @@
       body + '</div>';
   }
 
+  /* 카드에 앞세울 역할. 운영 인력으로 표시됐고 역할 구분이 적혀 있을
+     때만 있습니다. 연락망을 여는 이유는 대부분 "이건 어느 팀인가" 이고,
+     그 답이 이름보다 먼저 와야 합니다. 그냥 연락처(협력기관·시설 등)는
+     역할이 없으므로 지금 카드 모양 그대로 둡니다. */
+  function contactRole(c) {
+    return (c.is_staff && c.role_group) ? c.role_group : '';
+  }
+
   function viewContacts() {
+    /* 역할 필터. 운영 인력의 역할이 두 갈래 이상일 때만 만듭니다.
+       한 갈래뿐이면 고를 것이 없고, 0 건짜리 칩은 아예 만들지 않습니다. */
+    var roles = S.contacts.reduce(function (a, c) {
+      var r = contactRole(c);
+      if (r && a.indexOf(r) < 0) a.push(r);
+      return a;
+    }, []).sort(roleSort);
+    var roleOn = roles.length > 1 && ui.contactRole !== '전체' && roles.indexOf(ui.contactRole) >= 0;
+
     var cats = ['전체'].concat(S.contacts.reduce(function (a, c) {
       if (c.category && a.indexOf(c.category) < 0) a.push(c.category); return a; }, []));
     var q = ui.contactQ.trim().toLowerCase();
     var list = S.contacts.filter(function (c) {
+      if (roleOn && contactRole(c) !== ui.contactRole) return false;
       if (ui.contactCat !== '전체' && c.category !== ui.contactCat) return false;
       if (!q) return true;
-      return (c.name + ' ' + (c.org || '') + ' ' + (c.duty || '') + ' ' + (c.category || '') + ' ' + (c.phone || ''))
+      // 역할로도 찾습니다 — '전산' 만 쳐도 전산지원 담당자가 나와야 합니다.
+      return (c.name + ' ' + (c.org || '') + ' ' + (c.duty || '') + ' ' +
+              (c.role_group || '') + ' ' + (c.category || '') + ' ' + (c.phone || ''))
         .toLowerCase().indexOf(q) >= 0;
     });
 
     /* 연락망은 번호를 찾아 바로 거는 곳입니다. 번호를 감추고 단추만
        두면 PC 에서는 번호를 알 방법이 없습니다. 번호를 적고, 휴대폰은
-       전화, PC 는 복사로 씁니다. 번호가 없으면 단추도 없습니다. */
+       전화, PC 는 복사로 씁니다. 번호가 없으면 단추도 없습니다.
+
+       읽는 차례: 역할 → 이름 → 소속 · 담당업무 → 메모 → 번호.
+       연락처 분류는 역할 뒤에, 한 단계 낮은 무게(tag)로 둡니다. */
     var body = list.length ? '<div class="tl tl--2">' + list.map(function (c) {
       var tel = C.telHref(c.phone);
+      var role = contactRole(c);
       return '<div class="contact">' +
-        '<div class="contact__top">' + (c.category ? '<span class="tag tag--soft">' + esc(c.category) + '</span>' : '') + '</div>' +
+        '<div class="contact__top">' +
+        (role ? '<span class="rolebadge">' + esc(role) + '</span>' : '') +
+        (c.category ? '<span class="tag tag--soft">' + esc(c.category) + '</span>' : '') + '</div>' +
         '<div class="contact__name">' + esc(c.name) + '</div>' +
         ((c.org || c.duty) ? '<div class="contact__meta">' + esc([c.org, c.duty].filter(Boolean).join(' · ')) + '</div>' : '') +
         (c.memo ? '<div class="contact__memo">' + esc(c.memo) + '</div>' : '') +
@@ -1977,12 +2048,32 @@
         ? noMatchBox('조건에 맞는 연락처가 없습니다.')
         : sampleContacts();
 
+    var staffCount = S.contacts.filter(function (c) { return c.is_staff; }).length;
+
+    /* 역할이 1차 필터입니다. 부스 화면의 구역 줄과 같은 자리·같은 모양으로
+       둡니다. '전체' 에는 숫자를 달지 않습니다 — 역할 칩의 합(운영 인력)과
+       전체 연락처 수가 달라서, 숫자를 나란히 두면 더하기가 맞지 않아 보입니다.
+       연락처 분류는 한 단계 작은 보조 필터라 부스의 '구분' 줄을 그대로 씁니다. */
+    var roleRow = roles.length > 1
+      ? chips(['전체'].concat(roles).map(function (r) {
+          return { label: r, n: r === '전체' ? null
+            : S.contacts.filter(function (c) { return contactRole(c) === r; }).length };
+        }), roleOn ? ui.contactRole : '전체', 'data-contactrole', '', '역할')
+      : '';
+    var catRow = cats.length > 2
+      ? (roleRow
+        ? '<div class="filterrow"><span class="filterrow__l">분류</span>' +
+          chips(cats, ui.contactCat, 'data-contactcat', 'chiprow--sub') + '</div>'
+        : chips(cats, ui.contactCat, 'data-contactcat', 'chiprow--sub', '연락처 분류'))
+      : '';
+
     return '<div class="page">' +
-      pageHead('운영 연락망', '운영 담당자와 지원팀 연락처를 확인합니다.') +
-      (S.contacts.length ? '<p class="countline">등록 연락처 <b>' + S.contacts.length + '</b>명</p>' +
-        '<div class="tools"><div class="search"><label class="sr-only" for="contact-q">연락처 검색</label>' +
-        '<input class="input" id="contact-q" type="search" placeholder="이름 · 소속 · 담당업무 검색" value="' + esc(ui.contactQ) + '" /></div>' +
-        (cats.length > 2 ? chips(cats, ui.contactCat, 'data-contactcat', 'chiprow--sub') : '') + '</div>' : '') +
+      pageHead('담당자·연락망', '역할별 담당자와 연락처를 확인합니다.') +
+      (S.contacts.length ? '<p class="countline">등록 연락처 <b>' + S.contacts.length + '</b>명' +
+        (staffCount ? ' · 운영 인력 <b>' + staffCount + '</b>명' : '') + '</p>' +
+        '<div class="tools"><div class="search"><label class="sr-only" for="contact-q">담당자 검색</label>' +
+        '<input class="input" id="contact-q" type="search" placeholder="이름 · 소속 · 담당업무 · 역할 검색" value="' + esc(ui.contactQ) + '" /></div>' +
+        roleRow + catRow + '</div>' : '') +
       body + '</div>';
   }
 
@@ -2178,10 +2269,10 @@
      대신, 부스가 준비됐는지는 이런 업무의 예정 · 진행 중 · 완료로 드러납니다. */
   var SAMPLE_TASKS = [
     // 실제 목록과 같은 순서(진행 중 → 예정 → 완료)로 둡니다.
-    { st: '진행 중', time: '',         area: '부스', title: '부스 세팅 상태 순회 확인', place: 'AI스쿨존 · 미래채움존', team: '부스지원팀' },
-    { st: '예정',   time: '09:20까지', area: '부스', title: '부스 운영자 입장 확인', place: 'AI스쿨존', team: '부스지원팀' },
-    { st: '예정',   time: '09:40까지', area: '전산', title: 'A구역 전원·네트워크 점검', place: 'A구역', team: '전산지원팀' },
-    { st: '완료',   time: '',         area: '물품', title: '운영 물품 1차 배부', place: '운영본부', team: '운영지원팀' }
+    { st: '진행 중', time: '',         area: '부스', title: '부스 세팅 상태 순회 확인', place: 'AI스쿨존 · 미래채움존', team: '부스지원' },
+    { st: '예정',   time: '09:20까지', area: '부스', title: '부스 운영자 입장 확인', place: 'AI스쿨존', team: '부스지원' },
+    { st: '예정',   time: '09:40까지', area: '전산', title: 'A구역 전원·네트워크 점검', place: 'A구역', team: '전산지원' },
+    { st: '완료',   time: '',         area: '물품', title: '운영 물품 1차 배부', place: '운영본부', team: '운영지원' }
   ];
 
   function sampleTasks() {
@@ -2194,15 +2285,15 @@
           '<span class="tag tag--soft">' + esc(t.area) + '</span>' + SAMPLE_END + '</div>' +
           '<div class="task__title">' + esc(t.title) + '</div>' +
           '<div class="task__meta">' + esc(t.place) + '</div>' +
-          '<div class="task__people"><span class="person">담당 ' + esc(t.team) + '</span></div></div>';
+          '<div class="task__people"><span class="person">업무 담당 ' + esc(t.team) + '</span></div></div>';
       }).join(''), 2);
   }
 
   function samplePeople() {
     return sampleWrap(SAMPLE_NOTE,
-      [['부스지원팀', '부스 운영자 입장 확인 · 부스 세팅 상태 순회 확인', 2],
-       ['전산지원팀', 'A구역 전원·네트워크 점검', 1],
-       ['운영지원팀', '운영 물품 1차 배부', 1]].map(function (p) {
+      [['부스지원', '부스 운영자 입장 확인 · 부스 세팅 상태 순회 확인', 2],
+       ['전산지원', 'A구역 전원·네트워크 점검', 1],
+       ['운영지원', '운영 물품 1차 배부', 1]].map(function (p) {
         return '<div class="rowcard is-sample"><div class="rowcard__body">' +
           '<div class="rowcard__name">' + esc(p[0]) + SAMPLE_END + '</div>' +
           '<div class="rowcard__meta">담당 업무 ' + p[2] + '건 · ' + esc(p[1]) + '</div>' +
@@ -2302,13 +2393,18 @@
       '<span class="tag tag--soft">' + esc(t.area || '기타') + '</span></span>' +
       '<span class="task__title">' + esc(t.title) + '</span>' +
       (t.place ? '<span class="task__meta">' + esc(t.place) + '</span>' : '') +
-      // 맡은 몫까지 목록에 적으면 카드마다 높이가 달라져 훑기 어렵습니다.
-      // 이름만 두고 자세한 것은 상세에서 봅니다.
+      /* 이름만 적으면 "이 업무는 김OO 과 박OO" 까지만 알고, 둘 중 누구에게
+         말해야 하는지는 상세를 열어야 알 수 있습니다. 맡은 몫을 이름 옆에
+         붙입니다. 대신 카드 높이가 들쭉날쭉해지지 않게 두 명까지만 적고
+         나머지는 '+2명' 으로 접습니다. 맡은 몫이 없는 사람은 이름만. */
       (people.length
-        ? '<span class="task__people">' + people.map(function (p) {
-            return '<span class="person">' + esc(p.name) + '</span>';
-          }).join('') + '</span>'
-        : '<span class="task__meta task__meta--none">담당자 미배정</span>') +
+        ? '<span class="task__people">' + people.slice(0, 2).map(function (p) {
+            return '<span class="person">' + esc(p.name) +
+              (p.role ? '<span class="person__role">' + esc(p.role) + '</span>' : '') + '</span>';
+          }).join('') +
+          (people.length > 2 ? '<span class="person person--more">+' + (people.length - 2) + '명</span>' : '') +
+          '</span>'
+        : '<span class="task__meta task__meta--none">업무 담당자 미배정</span>') +
       '</button>';
     return actionCard(card, taskActions(t));
   }
@@ -2317,7 +2413,7 @@
     var t = S.tasks.filter(function (x) { return x.id === id; })[0];
     if (!t) return;
     var rows = [
-      ['업무 영역', t.area],
+      ['업무 분야', t.area],
       ['시간', taskTime(t)],
       ['장소', t.place]
     ].filter(function (r) { return r[1]; });
@@ -2333,7 +2429,7 @@
     if (t.description) html += '<div class="noticebody">' + esc(t.description) + '</div>';
 
     var people = assignsOf(t.id).map(assignPerson).filter(function (p) { return p.name; });
-    html += '<div><p class="field__label" style="margin-bottom:8px">담당자 ' + people.length + '명</p>' +
+    html += '<div><p class="field__label" style="margin-bottom:8px">업무 담당자 ' + people.length + '명</p>' +
       (people.length
         ? '<div class="tl">' + people.map(function (p) {
             return '<div class="rowcard"><div class="rowcard__body">' +
@@ -2410,9 +2506,13 @@
     var p = peopleWithTasks().filter(function (x) { return x.person.key === key; })[0];
     if (!p) return;
 
+    /* 기본 역할(연락망의 역할 구분)과 업무마다 맡은 몫은 다른 것입니다.
+       'A 는 전산지원인데 이 업무에서는 기록을 맡았다' 가 읽혀야 해서
+       여기서는 '기본 역할' 이라고 분명히 적고, 아래 업무 목록에서는
+       업무마다 맡은 몫을 따로 답니다. */
     var rows = [
       ['소속', p.person.org],
-      ['역할', p.person.roleGroup]
+      ['기본 역할', p.person.roleGroup]
     ].filter(function (r) { return r[1]; });
 
     var html = '';
@@ -2431,8 +2531,9 @@
         return '<div class="tmlrow">' +
           '<div class="tmlrow__time">' + esc(taskTime(it.task) || '시간 미정') + '</div>' +
           '<div class="tmlrow__body"><div class="tmlrow__title">' + esc(it.task.title) + '</div>' +
-          '<div class="tmlrow__meta">' + esc(it.task.place || '장소 미정') +
-          (it.role ? ' · ' + esc(it.role) : '') + '</div>' +
+          '<div class="tmlrow__meta">' + esc(it.task.place || '장소 미정') + '</div>' +
+          (it.role ? '<div class="tmlrow__role"><span class="tmlrow__rolel">이 업무에서</span>' +
+            '<b>' + esc(it.role) + '</b></div>' : '') +
           '<div class="tmlrow__tags">' + badge(taskStatus(it.task)) + '</div></div></div>';
       }).join('') + '</div></div>';
 
@@ -2454,13 +2555,15 @@
       .filter(function (a) { return a.name; });
   }
 
-  /* 담당은 사람 이름 대신 역할명. 수량은 화면 모양을 보여 주는 예시 값입니다. */
+  /* 배부 담당은 사람 이름 대신 역할명입니다. 역할 이름은 관리자의 역할
+     목록(admin.js ROLE_GROUPS)과 같은 말을 씁니다. 수량은 화면 모양을
+     보여 주는 예시 값입니다. */
   var SAMPLE_SUPPLIES = [
-    { name: 'A-18 체험 부스', kind: '부스', status: '미배부', manager: '부스지원팀', booth: 'A-18',
+    { name: 'A-18 체험 부스', kind: '부스', status: '미배부', manager: '부스지원', booth: 'A-18',
       items: [['운영키트', 1], ['명찰', 2], ['식권', 2], ['생수', 4]] },
-    { name: 'AI스쿨존 운영기관', kind: '기관', status: '일부 배부', manager: '운영지원팀',
+    { name: 'AI스쿨존 운영기관', kind: '기관', status: '일부 배부', manager: '운영지원',
       items: [['명찰', 4], ['식권', 4], ['운영안내문', 1]], note: '일부 품목 전달됨' },
-    { name: '운영본부', kind: '팀', status: '배부 완료', manager: '운영총괄',
+    { name: '운영본부', kind: '팀', status: '배부 완료', manager: '총괄',
       items: [['명찰', 6], ['무전기', 4], ['운영키트', 2], ['생수', 12]] }
   ];
 
@@ -2479,7 +2582,7 @@
           '<div class="supply__top">' + (done ? doneMark('배부 완료') : badge(supplyLabel(t.status))) +
           '<span class="supply__kind">' + esc(t.kind) + '</span>' + SAMPLE_END + '</div>' +
           '<div class="supply__name">' + esc(t.name) + '</div>' +
-          '<div class="supply__meta">담당 ' + esc(t.manager) + '</div>' +
+          '<div class="supply__meta">배부 담당 ' + esc(t.manager) + '</div>' +
           '<div class="supply__line">' + t.items.map(function (a) {
             return esc(a[0]) + ' <b>' + a[1] + '</b>';
           }).join('<span aria-hidden="true"> · </span>') + '</div>' +
@@ -2576,7 +2679,7 @@
       '<span class="supply__top">' + (st === '배부 완료' ? doneMark('배부 완료') : badge(supplyLabel(st))) +
       '<span class="supply__kind">' + esc([t.kind || '팀', t.headcount ? t.headcount + '명' : ''].filter(Boolean).join(' · ')) + '</span></span>' +
       '<span class="supply__name">' + esc(t.name) + '</span>' +
-      (t.manager ? '<span class="supply__meta">담당 ' + esc(t.manager) + '</span>' : '') +
+      (t.manager ? '<span class="supply__meta">배부 담당 ' + esc(t.manager) + '</span>' : '') +
       (items.length
         ? '<span class="supply__line">' + items.slice(0, 3).map(function (a) {
             return esc(a.name) + ' <b>' + a.qty + '</b>';
@@ -2594,7 +2697,7 @@
     var items = allocsOf(t.id);
     var rows = [
       ['구분', t.kind],
-      ['담당자', t.manager],
+      ['배부 담당', t.manager],
       ['인원', t.headcount ? t.headcount + '명' : ''],
       ['메모', t.memo]
     ].filter(function (r) { return r[1]; });
@@ -2740,12 +2843,13 @@
       if (t.closest('[data-close-zoom]')) { closeZoom(); return; }
 
       var chip = t.closest('[data-boothzone],[data-schedcat],[data-schedhalf],' +
-        '[data-contactcat],[data-faqcat],[data-taskarea],[data-boothtype],[data-supplystate]');
+        '[data-contactcat],[data-contactrole],[data-faqcat],[data-taskarea],[data-boothtype],[data-supplystate]');
       if (chip) {
         if (chip.hasAttribute('data-boothzone'))   ui.boothZone   = chip.getAttribute('data-boothzone');
         if (chip.hasAttribute('data-boothtype'))   ui.boothType   = chip.getAttribute('data-boothtype');
         if (chip.hasAttribute('data-schedcat'))    ui.schedCat    = chip.getAttribute('data-schedcat');
         if (chip.hasAttribute('data-contactcat'))  ui.contactCat  = chip.getAttribute('data-contactcat');
+        if (chip.hasAttribute('data-contactrole')) ui.contactRole = chip.getAttribute('data-contactrole');
         if (chip.hasAttribute('data-faqcat'))      ui.faqCat      = chip.getAttribute('data-faqcat');
         if (chip.hasAttribute('data-schedhalf'))   ui.schedHalf   = chip.getAttribute('data-schedhalf');
         if (chip.hasAttribute('data-taskarea'))    ui.taskArea    = chip.getAttribute('data-taskarea');
