@@ -2805,6 +2805,11 @@
 
       var fq = t.closest('.faq__q');
       if (fq) {
+        /* 예시 FAQ 는 접었다 펴지 않습니다. 질문과 답을 함께 펼쳐 둔
+           정적인 카드라 여는 단추(.faq__sign)도 없습니다. 여기서 걸러
+           내지 않으면 없는 단추를 건드려 오류가 나고, 눌린 김에 답이
+           접혀 사라집니다. */
+        if (fq.classList.contains('faq__q--static')) return;
         var box = fq.closest('.faq');
         var open = box.classList.toggle('is-open');
         fq.setAttribute('aria-expanded', String(open));
