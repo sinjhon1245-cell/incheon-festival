@@ -93,6 +93,38 @@
     return isNaN(d) ? '' : (d.getMonth() + 1) + '/' + d.getDate() + ' ' +
       C.pad2(d.getHours()) + ':' + C.pad2(d.getMinutes());
   }
+  /* ── 행사 날짜 ───────────────────────────────────────────────
+     일정의 '일자' 칸이 쓰는 값입니다. 행사 기간은 기본정보(settings)의
+     개막·종료 일시가 정합니다 — 일정 화면에서 날짜를 따로 적어 두지
+     않습니다. 이틀 행사면 날짜 칸이 비어 있으면 안 됩니다. */
+  var WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
+  function ymd(d) {
+    return d.getFullYear() + '-' + C.pad2(d.getMonth() + 1) + '-' + C.pad2(d.getDate());
+  }
+  function eventDays() {
+    var s = (cache.settings || [])[0];
+    if (!s || !s.event_start) return [];
+    var start = new Date(s.event_start);
+    if (isNaN(start)) return [];
+    var end = s.event_end ? new Date(s.event_end) : start;
+    if (isNaN(end) || end < start) end = start;
+    var days = [];
+    var d = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+    var last = new Date(end.getFullYear(), end.getMonth(), end.getDate());
+    while (d <= last && days.length < 14) {
+      days.push(ymd(d));
+      d = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1);
+    }
+    return days;
+  }
+  /* '2026-11-13' → '11.13. 금'. 목록 meta 에 작게 붙입니다. */
+  function dayShort(day) {
+    var p = String(day || '').split('-');
+    if (p.length !== 3) return '';
+    var d = new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]));
+    return isNaN(d) ? '' : (d.getMonth() + 1) + '.' + d.getDate() + '. ' + WEEKDAYS[d.getDay()];
+  }
+
   function toLocalInput(iso) {
     if (!iso) return '';
     var d = new Date(iso);
@@ -148,15 +180,29 @@
     schedule_items: {
       label: '일정', table: 'schedule_items', addLabel: '+ 일정 추가',
       desc: '행사 일정을 관리합니다. 시작·종료 시각으로 진행 상태가 자동 계산됩니다.',
-      blank: { start_time: '10:00', end_time: '10:30', title: '', category: '운영', status: '예정' },
+      // 새 일정의 일자는 행사 첫날로 채워 둡니다. 대부분 그날이고,
+      // 아니면 고르면 됩니다 — 빈칸으로 두고 잊는 것보다 낫습니다.
+      blank: function () {
+        return { event_date: eventDays()[0] || '', start_time: '10:00', end_time: '10:30',
+                 title: '', category: '운영', status: '예정' };
+      },
       title: function (r) { return r.title || '(제목 없음)'; },
+      /* 이틀 행사에서는 어느 날 일정인지가 시각보다 먼저 보여야 합니다.
+         배지로 키우지 않고 meta 한 줄 앞에 작게 둡니다. */
       meta: function (r) {
-        return (r.start_time || '--:--') + '–' + (r.end_time || '--:--') +
+        var day = dayShort(r.event_date);
+        var head = day ? day + ' · ' : (eventDays().length > 1 ? '일자 미정 · ' : '');
+        return head + (r.start_time || '--:--') + '–' + (r.end_time || '--:--') +
           (r.place ? ' · ' + r.place : '') + (r.team ? ' · ' + r.team : '') + (r.owner ? ' · ' + r.owner : '');
       },
       tags: function (r) { return badge(r.status || '예정') + tag(r.category || '운영') +
         (r.is_highlight ? tag('핵심') : ''); },
       fields: [
+        // 일자와 시각은 따로 받습니다. 시작·종료는 'HH:MM' 이라 날짜를
+        // 함께 담을 수 없고, 이틀 행사에서는 날짜가 반드시 필요합니다.
+        // migration-schedule-event-date.sql 을 돌리기 전에는 칸이 없습니다.
+        { k: 'event_date', label: '일자', type: 'date', needsColumn: true,
+          hint: '예: 2026-11-13 · 이틀 행사에서는 반드시 고릅니다' },
         { k: 'start_time', label: '시작시간', type: 'time', required: true },
         { k: 'end_time',   label: '종료시간', type: 'time', required: true },
         { k: 'title',      label: '일정명', wide: true, required: true },
@@ -174,12 +220,22 @@
         v.time_label = (v.start_time || '') + ' – ' + (v.end_time || '');
         var m = /^(\d{1,2}):/.exec(v.start_time || '');
         v.half = m && Number(m[1]) >= 12 ? 'pm' : 'am';
+        // 빈 글자는 date 칸에 넣을 수 없습니다(Postgres 가 거절합니다).
+        if ('event_date' in v && !v.event_date) v.event_date = null;
         return v;
       },
       validate: function (v) {
         var a = C.toMin(v.start_time), b = C.toMin(v.end_time);
         if (a == null || b == null) return '시간은 HH:MM 형식으로 입력해 주세요.';
         if (b <= a) return '종료시간은 시작시간보다 뒤여야 합니다.';
+        /* 이틀 이상 행사에서 일자가 없으면 포털이 그 일정을 첫날 것으로
+           봅니다. 짐작으로 남기지 않고 여기서 고르게 합니다. 하루 행사면
+           나눌 날이 없으므로 비워 두어도 됩니다. */
+        var days = eventDays();
+        if ('event_date' in v && !v.event_date && days.length > 1) {
+          return '이틀 이상 행사입니다. 일자를 골라 주세요 (' +
+            days.map(dayShort).join(' · ') + ').';
+        }
         return null;
       }
     },
@@ -849,6 +905,18 @@
             : '먼저 “' + (ENTITIES[f.ref] || {}).label + '”에서 등록해 주세요'
         });
       }
+      /* 일정의 일자는 행사 기간 안에서만 고르게 합니다. 달력에서
+         엉뚱한 해·달을 고르는 실수를 입력 단계에서 막습니다.
+         기간을 모르면(기본정보 미설정) 제한 없이 그대로 둡니다. */
+      if (f.type === 'date' && f.k === 'event_date') {
+        var days = eventDays();
+        if (!days.length) return f;
+        return Object.assign({}, f, {
+          min: days[0], max: days[days.length - 1],
+          hint: '행사 기간 ' + days.map(dayShort).join(' · ') +
+            (days.length > 1 ? ' 중에서 고릅니다' : '')
+        });
+      }
       /* 여러 줄 칸의 고를 목록은 다른 표에서 옵니다. 정의할 때는
          아직 불러오기 전이라 여기서 채웁니다. */
       if (f.type === 'rows') {
@@ -903,7 +971,10 @@
     var ent = ENTITIES[key];
     if (!ent.fields || !ent.fields.length) return;
     var isNew = !row;
-    var values = Object.assign({}, ent.blank || {}, row || {});
+    // blank 는 함수일 수 있습니다 — 기본값이 다른 표(행사 기간)에
+    // 따라 달라지는 경우, 정의할 때는 아직 알 수 없습니다.
+    var blank = typeof ent.blank === 'function' ? ent.blank() : ent.blank;
+    var values = Object.assign({}, blank || {}, row || {});
     ent.fields.forEach(function (f) {
       if (f.type === 'datetime') values[f.k] = toLocalInput(values[f.k]);
     });

@@ -200,7 +200,9 @@
     if (item.status === '취소' || item.status === '변경') return item.status;
     if (!ev.sameDay) return item.status || '예정';
     // 날짜가 붙은 일정(여러 날 행사)은 오늘 것만 시각으로 판단합니다.
-    var day = itemDay(item), today = ymd(ev.now);
+    // 날짜가 없는 옛 일정은 첫날 것으로 봅니다(effDay) — 그래야 둘째 날에
+    // 첫날 일정이 다시 '진행 중' 으로 잡히지 않습니다.
+    var day = effDay(item, ev), today = ymd(ev.now);
     if (day && day !== today) return day < today ? '종료' : '예정';
     var nowMin = ev.now.getHours() * 60 + ev.now.getMinutes();
     var a = C.toMin(item.start_time), b = C.toMin(item.end_time);
@@ -512,17 +514,18 @@
       ['17:40', '18:00', '전원 차단·분실물·최종 현장 확인', '전시장 · 운영본부', '운영']
     ])
   );
-  // 실제 일정 행(schedule_items)과 같은 모양으로 만들어 같은 판단·그리기를 씁니다.
-  // day 는 예시에만 있는 값입니다.
+  /* 실제 일정 행(schedule_items)과 같은 모양으로 만들어 같은 판단·그리기를 씁니다.
+     날짜도 실제 표와 같은 칸 이름(event_date)을 씁니다 — 예시 전용 날짜 구조를
+     따로 두면 날짜를 다루는 코드가 두 벌이 되고, 한쪽만 고치는 일이 생깁니다. */
   function sampleDay(day, rows) {
     return rows.map(function (r, n) {
-      return { id: 'sample-' + day + '-' + n, day: day, start_time: r[0], end_time: r[1],
+      return { id: 'sample-' + day + '-' + n, event_date: day, start_time: r[0], end_time: r[1],
                title: r[2], place: r[3], category: r[4], status: '예정', sample: true };
     });
   }
   // 행사 전 홈 '행사 당일에는 이렇게 표시됩니다' 에 쓰는 짝(첫날 14:30 · 15:00).
   function samplePreviewPair() {
-    var d1 = SAMPLE_SCHEDULE.filter(function (i) { return i.day === SAMPLE_DAYS[0]; });
+    var d1 = SAMPLE_SCHEDULE.filter(function (i) { return i.event_date === SAMPLE_DAYS[0]; });
     var at = function (t, place) {
       return d1.filter(function (i) { return i.start_time === t && i.place === place; })[0];
     };
@@ -972,8 +975,9 @@
 
     /* 오늘의 주요 일정 — 행사 당일에만. 몇 주 전에는 쓸모가 없습니다. */
     var keyItems = mode === 'during' && ev.sameDay ? S.schedule.filter(function (i) {
-      // 이미 끝난 일정은 빼고 지금·앞으로 볼 것만 둡니다.
-      return i.is_highlight && i.status !== '취소' && liveStatus(i, ev) !== '종료';
+      // 오늘 것만. 이미 끝난 일정은 빼고 지금·앞으로 볼 것만 둡니다.
+      return i.is_highlight && i.status !== '취소' &&
+        onDay(i, ymd(ev.now), ev) && liveStatus(i, ev) !== '종료';
     }).slice(0, 3) : [];
     var keyHtml = keyItems.length
       ? '<section class="dash__block" aria-labelledby="dk-t">' +
@@ -1046,11 +1050,27 @@
     return { a: a, b: b == null ? a + 30 : b };
   }
 
-  /* 일정의 날짜(YYYY-MM-DD). schedule_items 에는 아직 날짜 칸이 없어 실제
-     일정은 '' 이고, 이때는 행사일 모두에 해당하는 일정으로 봅니다.
-     예시 일정은 day 를 갖습니다. 나중에 event_date 칸이 생기면 그대로 읽습니다. */
-  function itemDay(i) { return (i && (i.event_date || i.day)) || ''; }
-  function onDay(i, day) { var d = itemDay(i); return !d || !day || d === day; }
+  /* 일정의 날짜(YYYY-MM-DD).
+
+     itemDay  표에 적힌 날짜 그대로. 없으면 ''.
+     effDay   판단에 쓰는 날짜. 날짜가 없으면 행사 첫날로 봅니다.
+
+     날짜 칸(event_date)이 생기기 전에 등록된 일정은 날짜가 비어 있습니다.
+     이때 '모든 행사일에 해당' 으로 보면 이틀 행사에서 같은 일정이 11/13 과
+     11/14 양쪽에 나오고, 둘째 날에도 첫날 일정이 '진행 중' 으로 잡힙니다.
+     그래서 날짜가 없는 일정은 첫날 것으로만 봅니다 — 어느 날인지 모르는
+     일정을 두 번 보여 주는 것보다, 한 번만(그것도 첫날에) 보여 주고
+     관리자가 날짜를 채우게 하는 편이 낫습니다. */
+  function itemDay(i) { return (i && i.event_date) || ''; }
+  function eventFirstDay(ev) {
+    return ev && ev.days && ev.days.length ? ymd(ev.days[0]) : '';
+  }
+  function effDay(i, ev) { return itemDay(i) || eventFirstDay(ev); }
+  function onDay(i, day, ev) {
+    if (!day) return true;
+    var d = effDay(i, ev);
+    return !d || d === day;
+  }
 
   /* 판단에 쓰는 오늘 일정.
        실제 일정이 한 건이라도 있으면 실제 일정만 씁니다(예시와 섞지 않음).
@@ -1059,10 +1079,10 @@
   function scheduleSource(ev) {
     var today = ymd(ev.now);
     if (S.schedule.length) {
-      return { all: S.schedule, items: S.schedule.filter(function (i) { return onDay(i, today); }), sample: false };
+      return { all: S.schedule, items: S.schedule.filter(function (i) { return onDay(i, today, ev); }), sample: false };
     }
     if (ev.sameDay && SAMPLE_DAYS.indexOf(today) >= 0) {
-      return { all: SAMPLE_SCHEDULE, items: SAMPLE_SCHEDULE.filter(function (i) { return i.day === today; }), sample: true };
+      return { all: SAMPLE_SCHEDULE, items: SAMPLE_SCHEDULE.filter(function (i) { return itemDay(i) === today; }), sample: true };
     }
     return { all: [], items: [], sample: false };
   }
@@ -1122,8 +1142,8 @@
       var last = null;
       list.forEach(function (i) {
         if (i.status === '취소' || !spanOf(i)) return;
-        if (!last || itemDay(i) > itemDay(last) ||
-            (itemDay(i) === itemDay(last) && spanOf(i).b > spanOf(last).b)) last = i;
+        if (!last || effDay(i, ev) > effDay(last, ev) ||
+            (effDay(i, ev) === effDay(last, ev) && spanOf(i).b > spanOf(last).b)) last = i;
       });
       return last;
     }
@@ -1138,7 +1158,8 @@
       // 관리자가 '핵심' 으로 표시한 일정이 있으면 그중 가장 이른 것, 없으면 첫 일정
       var timed = S.schedule.filter(function (i) { return i.status !== '취소' && spanOf(i); })
         .sort(function (x, y) {
-          return itemDay(x) === itemDay(y) ? spanOf(x).a - spanOf(y).a : (itemDay(x) < itemDay(y) ? -1 : 1);
+          var dx = effDay(x, ev), dy = effDay(y, ev);
+          return dx === dy ? spanOf(x).a - spanOf(y).a : (dx < dy ? -1 : 1);
         });
       b.key = timed.filter(function (i) { return i.is_highlight; })[0] || timed[0] || null;
     }
@@ -1191,13 +1212,15 @@
   }
 
   /* 일정 화면의 날짜 선택.
-       예시(실제 일정 0건)   → 예시의 이틀
-       실제 일정에 날짜가 있음 → 그 날짜들
-       날짜가 없음(현재 표 구조) → 날짜를 나눌 수 없으므로 두지 않습니다
-     하루뿐이면 고를 것이 없으니 두지 않습니다. */
-  function scheduleDays() {
+       예시(실제 일정 0건) → 예시의 이틀
+       그 밖에는 행사 기간(settings 의 event_start ~ event_end)이 정합니다.
+       일정에 그 기간 밖의 날짜가 적혀 있으면 그 날짜도 함께 둡니다 —
+       적어 둔 일정이 어느 탭에도 없어서 사라지면 안 됩니다.
+     하루뿐이면 고를 것이 없으니 탭을 두지 않습니다. */
+  function scheduleDays(ev) {
     if (!S.schedule.length) return SAMPLE_DAYS.slice();
     var seen = {};
+    (ev && ev.days ? ev.days : []).forEach(function (d) { seen[ymd(d)] = true; });
     S.schedule.forEach(function (i) { var d = itemDay(i); if (d) seen[d] = true; });
     return Object.keys(seen).sort();
   }
@@ -1318,11 +1341,11 @@
   function viewSchedule() {
     var ev = eventInfo();
     var hasKey = S.schedule.some(function (i) { return i.is_highlight; });
-    var days = scheduleDays();
+    var days = scheduleDays(ev);
     var sel = selectedDay(ev, days);
     // 칩 숫자는 실제 일정 기준이고, 예시만 보일 때는 숫자를 두지 않습니다('0' 옆에
     // 예시 24건이 보이면 헷갈립니다). 날짜를 고르면 그날 것만 셉니다.
-    var base = S.schedule.filter(function (i) { return onDay(i, sel); });
+    var base = S.schedule.filter(function (i) { return onDay(i, sel, ev); });
     var noCount = !S.schedule.length;
 
     var cats = ['전체'].concat(SCHEDULE_CATS).map(function (c) {
@@ -1370,10 +1393,10 @@
     // 날짜 선택은 필터가 아니라 '어느 날을 볼지' 라서 예시에도 그대로 씁니다.
     if (sample && filtered) return noMatchBox('조건에 맞는 일정이 없습니다.');
 
-    var days = scheduleDays();
+    var days = scheduleDays(ev);
     var sel = selectedDay(ev, days);
     var list = (sample ? SAMPLE_SCHEDULE : S.schedule).filter(function (i) {
-      if (!onDay(i, sel)) return false;
+      if (!onDay(i, sel, ev)) return false;
       if (ui.schedCat !== '전체' && i.category !== ui.schedCat) return false;
       if (ui.schedHalf !== '전체' && scheduleHalf(i) !== ui.schedHalf) return false;
       if (ui.schedKey && !i.is_highlight) return false;

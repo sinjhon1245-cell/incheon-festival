@@ -290,6 +290,12 @@ window.UI = (function () {
     } else if (f.type === 'number') {
       body = '<input class="input" type="number" id="' + id + '" data-k="' + f.k + '" value="' + esc(value) + '"' +
         (f.required ? ' required' : '') + ' />';
+    } else if (f.type === 'date') {
+      // 날짜만 받는 칸(예: 일정의 일자). 값은 'YYYY-MM-DD' 그대로 오갑니다 —
+      // 시각이 없어 시간대 환산이 필요 없습니다(datetime 과 다른 점).
+      body = '<input class="input" type="date" id="' + id + '" data-k="' + f.k + '" value="' + esc(value) + '"' +
+        (f.min ? ' min="' + esc(f.min) + '"' : '') + (f.max ? ' max="' + esc(f.max) + '"' : '') +
+        (f.required ? ' required' : '') + ' />';
     } else if (f.type === 'datetime') {
       body = '<input class="input" type="datetime-local" id="' + id + '" data-k="' + f.k + '" data-dt="1" value="' +
         esc(value) + '" />';
