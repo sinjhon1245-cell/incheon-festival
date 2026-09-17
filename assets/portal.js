@@ -33,9 +33,15 @@
     { id: 'dashboard', label: '홈', short: '홈', mark: '홈', tab: true },
     { id: 'schedule',  label: '일정',     short: '일정', mark: '일', tab: true },
     { id: 'booths',    label: '부스 현황', short: '부스', mark: '부', tab: true },
-    { id: 'notices',   label: '공지',     short: '공지', mark: '공', tab: true },
+    /* 하단 탭 넷째 자리는 '담당 업무' 입니다. 공지는 올라오면 한 번 읽는
+       글이고 긴급·중요는 이미 홈 맨 위에 뜹니다. 반면 업무는 행사 내내
+       "지금 뭘 하지 · 이건 누가 맡았지" 를 되풀이해 여는 화면입니다.
+       공지는 운영 묶음으로 내려가 사이드바와 더보기에서 그대로 열립니다.
+       대신 더보기 단추에 숨은 배지 합계를 달아(paintNav) 긴급 공지와
+       미처리 요청이 하단바에서 보이지 않게 되는 일을 막습니다. */
     { id: 'requests',  label: '운영 요청', short: '요청', mark: '요', group: '운영' },
-    { id: 'tasks',     label: '담당 업무', short: '업무', mark: '업', group: '운영' },
+    { id: 'tasks',     label: '담당 업무', short: '업무', mark: '업', group: '운영', tab: true },
+    { id: 'notices',   label: '공지',     short: '공지', mark: '공', group: '운영' },
     { id: 'supplies',  label: '운영 물품', short: '물품', mark: '물', group: '운영' },
     { id: 'resources', label: '자료실',   short: '자료', mark: '자', group: '정보' },
     { id: 'contacts',  label: '담당자·연락망', short: '연락', mark: '연', group: '정보' },
@@ -54,6 +60,7 @@
     booths:    svgIcon('<rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/>' +
                        '<rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/>'),
     notices:   svgIcon('<path d="M5 10v4h3l6 4V6l-6 4H5z"/><path d="M17.5 9.5a3.5 3.5 0 0 1 0 5"/>'),
+    tasks:     svgIcon('<rect x="4.5" y="4.5" width="15" height="15" rx="2.5"/><path d="m8.5 12 2.5 2.5 4.5-5"/>'),
     more:      svgIcon('<circle cx="6" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="18" cy="12" r="1.2"/>')
   };
 
@@ -423,7 +430,9 @@
         return '<div class="contact is-sample">' +
           '<div class="contact__top"><span class="rolebadge">' + esc(c[0]) + '</span>' + SAMPLE_END + '</div>' +
           '<div class="contact__name">' + esc(c[1]) + '</div>' +
-          '<div class="contact__meta">' + esc(c[2]) + '</div>' +
+          // 실제 카드와 같이 '주요 담당' 칸을 따로 냅니다.
+          '<div class="contact__duty"><span class="contact__dutyl">주요 담당</span>' +
+          '<span class="contact__dutyv">' + esc(c[2]) + '</span></div>' +
           '<div class="contact__memo">번호 등록 후 전화 · 복사 가능</div></div>';
       }).join(''), 3);
   }
@@ -1051,6 +1060,9 @@
     return '<div class="page dash">' +
       '<div class="dash__top">' + head + urgentHtml + statsHtml + '</div>' +
       '<div class="dash__main">' + brief + quick + '</div>' +
+      // 브리핑·빠른 실행 바로 아래. "지금 무엇을" 다음에 오는 질문이
+      // "누구에게" 라서, 공지·일정 목록보다 위에 둡니다.
+      opsRolesSection() +
       lists + guideHtml + '</div>';
   }
 
@@ -1910,19 +1922,10 @@
       (r.body ? '<div class="dl__row"><dt>내용</dt><dd style="white-space:pre-wrap">' + esc(r.body) + '</dd></div>' : '') +
       (r.reporter ? '<div class="dl__row"><dt>등록자</dt><dd>' + esc(r.reporter) + '</dd></div>' : '') +
       '<div class="dl__row"><dt>등록</dt><dd>' + esc(fmtDay(r.created_at)) + '</dd></div>' +
-      // 누가 처리하는지는 상세에서도 빠지면 안 됩니다. 아직 안 끝난 요청은
-      // 비어 있다는 사실까지 적고, 끝난 요청에는 적지 않습니다.
-      (r.assignee_team
-        ? '<div class="dl__row"><dt>처리 담당팀</dt><dd>' + esc(r.assignee_team) + '</dd></div>'
-        : (r.status === '완료' ? ''
-          : '<div class="dl__row"><dt>처리 담당팀</dt><dd class="dl__none">미지정</dd></div>')) +
       '</dl>' +
-      /* 팀 이름만 알려 주고 끝내면, 결국 연락망을 열어 그 역할을 다시
-         손으로 찾아야 합니다. 상세에서 바로 건너뛸 수 있게 합니다.
-         목록 카드에는 두지 않습니다 — 카드 전체가 이미 누를 수 있는
-         단추라, 안에 단추를 또 넣으면 눌러 보기 전에는 어느 쪽이
-         눌리는지 알 수 없습니다. */
-      teamJumpBtn(r.assignee_team) +
+      // 누가 처리하는지는 다른 값들과 무게가 다릅니다. dl 한 줄로 두지
+      // 않고 팀 · 사람 · 건너가기를 한 덩어리로 묶습니다.
+      teamBox(r) +
       // 처리 상태를 바꾸는 건 관리자 몫입니다. 여기서는 진행 상황만
       // 확인합니다(데이터베이스도 같은 규칙으로 막고 있습니다).
       '<p class="gate__hint">처리 상태는 운영 총괄이 관리자 화면에서 변경합니다.</p>';
@@ -2066,6 +2069,86 @@
       '>' + esc(label) + '</button>';
   }
 
+  /* 요청 상세의 '처리 담당' 묶음.
+
+     팀 이름만 적어 두면 결국 "그래서 누구?" 가 남습니다. 그 역할로
+     등록된 담당자가 있으면 두 명까지 이름과 주요 담당을 함께 적어,
+     연락망까지 건너가지 않고도 누구를 찾으면 되는지 알게 합니다.
+     셋 이상이면 나머지는 숫자로만 접고 연락망에서 전부 봅니다.
+
+     번호는 여기에 적지 않습니다 — 상세는 요청을 읽는 자리이고,
+     전화는 연락망 카드의 기존 단추로 겁니다. */
+  function teamBox(r) {
+    var team = r.assignee_team;
+    if (!team) {
+      // 끝난 요청에 '미지정' 이라고 써 봐야 이제 와서 할 일이 없습니다.
+      if (r.status === '완료') return '';
+      return '<div class="teambox"><p class="teambox__l">처리 담당</p>' +
+        '<p class="teambox__none">미지정</p></div>';
+    }
+    var staff = staffForRole(team);
+    return '<div class="teambox">' +
+      '<p class="teambox__l">처리 담당</p>' +
+      '<p class="teambox__team">' + esc(team) + '</p>' +
+      (staff.length
+        ? '<ul class="teambox__who">' + staff.slice(0, 2).map(function (c) {
+            return '<li><b>' + esc(c.name) + '</b>' +
+              (c.duty ? '<span>' + esc(c.duty) + '</span>' : '') + '</li>';
+          }).join('') + '</ul>' +
+          (staff.length > 2
+            ? '<p class="teambox__more">외 ' + (staff.length - 2) + '명</p>' : '')
+        : '') +
+      teamJumpBtn(team) + '</div>';
+  }
+
+  /* ── 홈: 운영 담당 한눈에 ─────────────────────────────────────
+     "문제가 생기면 누구에게" 는 행사 내내 가장 자주 나오는 질문인데,
+     지금은 연락망을 열어야만 답이 나옵니다. 홈에 역할별로 한 줄씩
+     깔아 두고, 줄을 누르면 그 역할만 걸러진 연락망으로 건너갑니다.
+
+     역할 하나에 사람이 여럿이고 맡은 일이 서로 다르면 주요 담당은
+     적지 않습니다 — 한 사람의 담당업무를 그 역할 전체의 설명인 것처럼
+     보이게 하면 엉뚱한 사람에게 연락하게 됩니다.
+
+     등록된 역할이 없으면 묶음 자체를 만들지 않습니다. */
+  function opsRolesSection() {
+    var byRole = {}, order = [];
+    S.contacts.forEach(function (c) {
+      var r = contactRole(c);
+      if (!r) return;
+      if (!byRole[r]) { byRole[r] = []; order.push(r); }
+      byRole[r].push(c);
+    });
+    if (!order.length) return '';
+    order.sort(roleSort);
+
+    var shown = order.slice(0, 6);
+    var rest = order.length - shown.length;
+
+    return '<section class="dash__block dash__roles" aria-labelledby="dr-t">' +
+      '<div class="dash__blockhead"><h2 class="dash__blockt" id="dr-t">운영 담당 한눈에</h2>' +
+      '<button class="linkbtn" type="button" data-go="contacts" data-contactsall>' +
+      (rest ? '전체 ' + order.length + '개 역할 →' : '연락망 전체 →') + '</button></div>' +
+      '<div class="dlist">' + shown.map(function (role) {
+        var list = byRole[role];
+        var duties = list.map(function (c) { return (c.duty || '').trim(); })
+          .filter(Boolean)
+          .reduce(function (a, d) { if (a.indexOf(d) < 0) a.push(d); return a; }, []);
+        var duty = duties.length === 1 ? duties[0] : '';
+        var names = list.slice(0, 2).map(function (c) { return c.name; }).join(' · ') +
+          (list.length > 2 ? ' 외 ' + (list.length - 2) + '명' : '');
+        return '<button class="dlist__row rolerow" type="button" ' +
+          'data-go="contacts" data-rolefilter="' + esc(role) + '" ' +
+          'aria-label="' + esc(role + ' 담당자 보기') + '">' +
+          '<span class="rolebadge rolebadge--sm">' + esc(role) + '</span>' +
+          '<span class="rolerow__body">' +
+          '<span class="rolerow__who">' + esc(names) + '</span>' +
+          (duty ? '<span class="rolerow__duty">' + esc(duty) + '</span>' : '') +
+          '</span>' +
+          '<span class="rolerow__go" aria-hidden="true">›</span></button>';
+      }).join('') + '</div></section>';
+  }
+
   function viewContacts() {
     /* 역할 필터. 운영 인력의 역할이 두 갈래 이상일 때만 만듭니다.
        한 갈래뿐이면 고를 것이 없고, 0 건짜리 칩은 아예 만들지 않습니다. */
@@ -2103,7 +2186,15 @@
         (role ? '<span class="rolebadge">' + esc(role) + '</span>' : '') +
         (c.category ? '<span class="tag tag--soft">' + esc(c.category) + '</span>' : '') + '</div>' +
         '<div class="contact__name">' + esc(c.name) + '</div>' +
-        ((c.org || c.duty) ? '<div class="contact__meta">' + esc([c.org, c.duty].filter(Boolean).join(' · ')) + '</div>' : '') +
+        (c.org ? '<div class="contact__meta">' + esc(c.org) + '</div>' : '') +
+        /* 무엇을 맡은 사람인지가 소속 뒤에 '·' 로 이어 붙어 있으면
+           "인천OO초 · 전원·네트워크 점검" 처럼 한 덩어리로 읽혀,
+           정작 찾던 '이 사람이 무엇을 하는가' 가 묻힙니다. 칸을 따로
+           내고 옅은 보라 바탕을 깔아 눈이 먼저 닿게 합니다. */
+        (c.duty
+          ? '<div class="contact__duty"><span class="contact__dutyl">주요 담당</span>' +
+            '<span class="contact__dutyv">' + esc(c.duty) + '</span></div>'
+          : '') +
         (c.memo ? '<div class="contact__memo">' + esc(c.memo) + '</div>' : '') +
         (tel
           ? '<div class="contact__phone"><span class="contact__num">' + esc(c.phone) + '</span>' +
@@ -2355,7 +2446,9 @@
           '<span class="tag tag--soft">' + esc(t.area) + '</span>' + SAMPLE_END + '</div>' +
           '<div class="task__title">' + esc(t.title) + '</div>' +
           '<div class="task__meta">' + esc(t.place) + '</div>' +
-          '<div class="task__people"><span class="person">업무 담당 ' + esc(t.team) + '</span></div></div>';
+          // 실제 카드와 같은 자리·같은 모양으로 담당자 칸을 둡니다.
+          '<div class="task__who"><span class="task__wholabel">담당자</span>' +
+          '<div class="task__people"><span class="person">' + esc(t.team) + '</span></div></div></div>';
       }).join(''), 2);
   }
 
@@ -2463,18 +2556,27 @@
       '<span class="tag tag--soft">' + esc(t.area || '기타') + '</span></span>' +
       '<span class="task__title">' + esc(t.title) + '</span>' +
       (t.place ? '<span class="task__meta">' + esc(t.place) + '</span>' : '') +
-      /* 이름만 적으면 "이 업무는 김OO 과 박OO" 까지만 알고, 둘 중 누구에게
-         말해야 하는지는 상세를 열어야 알 수 있습니다. 맡은 몫을 이름 옆에
-         붙입니다. 대신 카드 높이가 들쭉날쭉해지지 않게 두 명까지만 적고
-         나머지는 '+2명' 으로 접습니다. 맡은 몫이 없는 사람은 이름만. */
+      /* 담당자는 업무·장소와 다른 종류의 정보입니다. 같은 간격으로 이어
+         붙이면 카드를 훑을 때 장소인지 사람인지 읽고 나서야 압니다.
+         가는 선 하나로 칸을 나누고 '담당자' 라고 적어 둡니다.
+
+         이름 옆에는 그 업무에서 맡은 몫을 답니다 — 이름만 있으면 "김OO
+         과 박OO" 까지만 알고 둘 중 누구에게 말해야 하는지는 상세를 열어야
+         합니다. 카드 높이가 들쭉날쭉해지지 않게 두 명까지만 적고 나머지는
+         '+2명' 으로 접습니다. 맡은 몫이 없는 사람은 이름만.
+
+         아무도 없으면 흐린 글씨로 적지 않습니다. 담당자 없는 업무는
+         눈에 걸려야 하는 일이라 '확인 필요' 색(주황)을 씁니다. */
       (people.length
-        ? '<span class="task__people">' + people.slice(0, 2).map(function (p) {
+        ? '<span class="task__who">' +
+          '<span class="task__wholabel">담당자</span>' +
+          '<span class="task__people">' + people.slice(0, 2).map(function (p) {
             return '<span class="person">' + esc(p.name) +
               (p.role ? '<span class="person__role">' + esc(p.role) + '</span>' : '') + '</span>';
           }).join('') +
           (people.length > 2 ? '<span class="person person--more">+' + (people.length - 2) + '명</span>' : '') +
-          '</span>'
-        : '<span class="task__meta task__meta--none">업무 담당자 미배정</span>') +
+          '</span></span>'
+        : '<span class="task__who"><span class="task__none">담당자 미배정</span></span>') +
       '</button>';
     return actionCard(card, taskActions(t));
   }
@@ -2836,10 +2938,14 @@
   function paintNav() {
     var openReq = S.requests.filter(function (r) { return r.status !== '완료'; }).length;
     var urgent = S.notices.filter(function (n) { return n.level === '긴급'; }).length;
+    function badgeNum(id) {
+      if (id === 'requests') return openReq;
+      if (id === 'notices') return urgent;
+      return 0;
+    }
     function badgeFor(id) {
-      if (id === 'requests' && openReq) return '<span class="nav__badge">' + openReq + '</span>';
-      if (id === 'notices' && urgent) return '<span class="nav__badge">' + urgent + '</span>';
-      return '';
+      var n = badgeNum(id);
+      return n ? '<span class="nav__badge">' + n + '</span>' : '';
     }
     function link(n) {
       return '<a href="#' + n.id + '" class="' + (n.id === view ? 'is-on' : '') + '"' +
@@ -2860,15 +2966,31 @@
       '<p class="side__group">관리</p><a href="admin.html">관리자</a>';
 
     var tabs = NAV.filter(function (n) { return n.tab; });
+    var onTab = {};
+    tabs.forEach(function (n) { onTab[n.id] = true; });
+
+    /* 하단바에 자리가 없어 더보기 뒤로 간 화면의 배지는 그대로 두면
+       아무 데도 보이지 않습니다. 긴급 공지가 올라와도, 미처리 요청이
+       쌓여도 휴대폰 화면에는 아무 표시가 없게 됩니다. 숨은 배지를
+       더보기 단추 하나로 모아 답니다 — 몇 건인지는 시트를 열면
+       화면마다 다시 나뉘어 보입니다. */
+    var hidden = NAV.reduce(function (n, item) {
+      return n + (onTab[item.id] ? 0 : badgeNum(item.id));
+    }, 0);
+
     $('#tabbar').innerHTML = tabs.map(function (n) {
-      var b = badgeFor(n.id);
+      var num = badgeNum(n.id);
       return '<a href="#' + n.id + '" class="' + (n.id === view ? 'is-on' : '') + '"' +
         (n.id === view ? ' aria-current="page"' : '') + '>' +
         (TAB_ICONS[n.id] || '') +
-        (b ? '<span class="tab__badge">' + (n.id === 'requests' ? openReq : urgent) + '</span>' : '') +
+        (num ? '<span class="tab__badge">' + num + '</span>' : '') +
         '<span>' + esc(n.short) + '</span></a>';
     }).join('') +
-      '<button type="button" data-open-sheet>' + TAB_ICONS.more + '<span>더보기</span></button>';
+      '<button type="button" data-open-sheet' +
+      (hidden ? ' aria-label="더보기 · 확인할 항목 ' + hidden + '건"' : '') + '>' +
+      TAB_ICONS.more +
+      (hidden ? '<span class="tab__badge">' + hidden + '</span>' : '') +
+      '<span>더보기</span></button>';
 
     /* 더보기 시트도 같은 묶음으로 보여 줍니다. 사이드바와 순서가
        다르면 PC 로 익힌 위치가 휴대폰에서 통하지 않습니다. */
