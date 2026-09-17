@@ -988,7 +988,7 @@
       '<h2 class="quick__t" id="quick-t">빠른 실행</h2>' +
       '<div class="quick__list">' +
       '<button class="btn btn--primary quick__main" type="button" data-newreq>+ 현장 문제 보고</button>' +
-      '<a class="btn btn--ghost" href="#contacts">담당자 찾기</a>' +
+      '<a class="btn btn--ghost" href="#contacts" data-contactsall>담당자 찾기</a>' +
       '<a class="btn btn--ghost" href="#booths">부스 찾기</a>' +
       '</div></section>';
 
@@ -1917,6 +1917,12 @@
         : (r.status === '완료' ? ''
           : '<div class="dl__row"><dt>처리 담당팀</dt><dd class="dl__none">미지정</dd></div>')) +
       '</dl>' +
+      /* 팀 이름만 알려 주고 끝내면, 결국 연락망을 열어 그 역할을 다시
+         손으로 찾아야 합니다. 상세에서 바로 건너뛸 수 있게 합니다.
+         목록 카드에는 두지 않습니다 — 카드 전체가 이미 누를 수 있는
+         단추라, 안에 단추를 또 넣으면 눌러 보기 전에는 어느 쪽이
+         눌리는지 알 수 없습니다. */
+      teamJumpBtn(r.assignee_team) +
       // 처리 상태를 바꾸는 건 관리자 몫입니다. 여기서는 진행 상황만
       // 확인합니다(데이터베이스도 같은 규칙으로 막고 있습니다).
       '<p class="gate__hint">처리 상태는 운영 총괄이 관리자 화면에서 변경합니다.</p>';
@@ -1994,6 +2000,70 @@
      역할이 없으므로 지금 카드 모양 그대로 둡니다. */
   function contactRole(c) {
     return (c.is_staff && c.role_group) ? c.role_group : '';
+  }
+
+  /* ── 담당팀 → 담당자 찾기 ─────────────────────────────────────
+     요청에 적힌 처리 담당팀과 연락망의 역할 구분은 서로 다른 칸이라
+     글자가 꼭 같지는 않습니다. 해마다 '부스 지원' · '부스지원' ·
+     '부스지원팀' 이 섞여 들어옵니다.
+
+     비교할 때만 공백과 맨 끝 '팀' 을 떼고 견줍니다. 저장된 값도,
+     화면에 적히는 글자도 바꾸지 않습니다 — 관리자가 적어 둔 말을
+     포털이 마음대로 고쳐 쓰면 관리자 화면과 다른 말이 됩니다. */
+  function roleKey(v) {
+    var s = String(v || '').replace(/\s+/g, '');
+    // '팀' 한 글자만 남는 경우까지 지우면 서로 다른 역할이 같아집니다.
+    var cut = s.replace(/팀$/, '');
+    return cut || s;
+  }
+
+  function staffForRole(team) {
+    var k = roleKey(team);
+    if (!k) return [];
+    return S.contacts.filter(function (c) {
+      var r = contactRole(c);
+      return r && roleKey(r) === k;
+    });
+  }
+
+  /* 건너뛸 때 켤 역할 필터 값. 연락망 칩은 등록된 원문(role_group)을
+     그대로 쓰므로, '부스지원팀' 이라 적힌 요청에서 건너올 때도 칩에
+     실제로 있는 값('부스지원')을 골라야 그 칩이 켜집니다. 같은 뜻의
+     원문이 둘 이상 등록돼 있으면 사람이 많은 쪽으로 갑니다. */
+  function pickRole(list) {
+    var n = {}, best = '', bestN = 0;
+    list.forEach(function (c) {
+      var r = contactRole(c);
+      n[r] = (n[r] || 0) + 1;
+      if (n[r] > bestN) { bestN = n[r]; best = r; }
+    });
+    return best;
+  }
+
+  /* 역할 맥락 없이 연락망을 여는 자리(홈의 '담당자 찾기')에서 씁니다.
+     앞서 요청에서 건너오며 걸어 둔 필터가 남아 있으면, 전체 담당자를
+     찾으러 온 사람에게 걸러진 목록을 보여 주게 됩니다. */
+  function resetContactFilters() {
+    ui.contactRole = '전체';
+    ui.contactCat = '전체';
+    ui.contactQ = '';
+  }
+
+  /* 요청 상세에서 담당자로 건너가는 단추.
+
+     역할이 맞는 담당자가 실제로 있으면 그 역할 필터를 켠 채로 열고,
+     없으면 담당자·연락망 전체를 엽니다 — 없는 사람을 있는 것처럼
+     보이게 하지 않습니다. 어느 쪽이든 바로 전화를 걸지는 않습니다.
+     번호를 확인해야 할 수도 있고, 같은 역할이 여럿일 수도 있어서
+     누르자마자 전화 앱이 열리면 놀랍니다. 전화는 연락망 카드의
+     기존 단추로 겁니다. */
+  function teamJumpBtn(team) {
+    if (!team) return '';
+    var target = pickRole(staffForRole(team));
+    var label = target ? target + ' 담당자 보기' : '담당자·연락망에서 찾기';
+    return '<button class="btn btn--ghost btn--sm rolejump" type="button" data-go="contacts"' +
+      (target ? ' data-rolefilter="' + esc(target) + '"' : ' data-contactsall') +
+      '>' + esc(label) + '</button>';
   }
 
   function viewContacts() {
@@ -2732,6 +2802,21 @@
     contacts: viewContacts, venue: viewVenue, faq: viewFaq
   };
 
+  /* 좁은 화면에서 역할 칩 줄은 가로로 넘칩니다. 요청에서 건너오거나
+     칩을 눌러 화면을 다시 그리면 줄은 맨 왼쪽부터 다시 보이는데, 켜진
+     칩이 오른쪽 끝에 있으면 화면 밖에 있게 됩니다. 목록은 걸러져 있고
+     무엇으로 걸렀는지는 보이지 않는 상태라, 켜진 칩을 보이는 자리로
+     끌어옵니다. 가로 위치만 옮깁니다 — scrollIntoView 는 위아래로도
+     움직여서 보던 자리를 잃습니다. */
+  function showOnChip() {
+    var chip = $('#view [data-contactrole].is-on');
+    if (!chip) return;
+    var row = chip.parentElement;
+    if (row.scrollWidth <= row.clientWidth) return;
+    row.scrollLeft += chip.getBoundingClientRect().left - row.getBoundingClientRect().left -
+      (row.clientWidth - chip.offsetWidth) / 2;
+  }
+
   function render() {
     var host = $('#view');
     if (S.loading) { host.innerHTML = stateBox('데이터를 불러오는 중입니다.'); return; }
@@ -2741,6 +2826,7 @@
     host.setAttribute('data-view', view);
     host.innerHTML = (VIEWS[view] || viewDashboard)();
     fitMedia(host);
+    if (view === 'contacts') showOnChip();
     var nav = NAV.filter(function (n) { return n.id === view; })[0];
     $('#topbar-title').textContent = nav ? nav.label : '대시보드';
     document.title = (nav ? nav.label + ' · ' : '') + '행사 운영 포털';
@@ -2822,6 +2908,12 @@
       if (t.closest('[data-close-drawer]')) { closeDrawer(); return; }
       if (t.closest('[data-retry]')) { boot(true); return; }
 
+      /* 역할 맥락 없이 연락망을 여는 자리 — 홈의 '담당자 찾기' 와,
+         맞는 담당자가 없을 때의 '담당자·연락망에서 찾기'. 걸려 있던
+         필터를 풀어 전체 목록으로 엽니다. 홈 쪽은 진짜 링크라 기본
+         이동을 막지 않으므로 여기서 return 하지 않습니다. */
+      if (t.closest('[data-contactsall]')) resetContactFilters();
+
       var go2 = t.closest('[data-go]');
       if (go2) {
         var f = go2.getAttribute('data-filter');
@@ -2830,7 +2922,19 @@
         if (go2.hasAttribute('data-schedkey')) {
           ui.schedKey = true; ui.schedCat = '전체'; ui.schedHalf = '전체'; ui.schedQ = '';
         }
-        location.hash = '#' + go2.dataset.go;
+        /* 요청 상세의 '담당자 보기'. 건너간 화면에서 그 역할이 바로
+           걸러져 있어야 합니다. 검색어와 분류가 남아 있으면 역할은
+           맞는데 목록이 비어 보일 수 있어 함께 풉니다. */
+        if (go2.hasAttribute('data-rolefilter')) {
+          resetContactFilters();
+          ui.contactRole = go2.getAttribute('data-rolefilter');
+        }
+        // 드로어 안에서 건너뛰는 단추라면 먼저 닫습니다. 열어 둔 채
+        // 화면만 바꾸면 가려진 드로어에 초점이 남습니다.
+        if (!$('#drawer').hidden) closeDrawer();
+        // 이미 그 화면이면 주소가 바뀌지 않아 hashchange 가 오지 않습니다.
+        var next = '#' + go2.dataset.go;
+        if (location.hash === next) go(); else location.hash = next;
         return;
       }
 

@@ -474,6 +474,15 @@ button.is-sample:hover { border-color: var(--primary); background: #fff; }
 .teamline__v { font-weight: 700; color: var(--ink-2); letter-spacing: -0.015em; }
 .teamline--none .teamline__v { font-weight: 500; color: var(--muted-2); }
 
+/* 요청 상세의 '담당자 보기'. 드로어 본문은 세로 flex 라 그냥 두면
+   단추가 가로로 꽉 차서, 정작 읽어야 할 담당팀보다 커 보입니다.
+   글자만큼만 차지하게 왼쪽에 붙입니다. 좁은 화면에서는 손가락이
+   닿는 크기가 먼저라 한 줄을 다 씁니다. */
+.rolejump { align-self: flex-start; }
+@media (max-width: 560px) {
+  .rolejump { align-self: stretch; justify-content: center; min-height: 44px; }
+}
+
 .fab {
   position: fixed; right: 16px; z-index: 45;
   bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + 16px);
