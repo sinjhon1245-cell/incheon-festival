@@ -272,7 +272,9 @@
 
         { type: 'group', label: '운영 정보' },
         { k: 'hours',         label: '운영 시간' },
-        { k: 'manager_phone', label: '부스 담당자 연락처', type: 'tel' },
+        { k: 'manager_phone', label: '부스 담당자 연락처', type: 'tel',
+          hint: '⚠️ 개인 휴대전화 입력 금지 — 부스 표도 로그인 없이 열람됩니다. ' +
+                '보안 분리 전까지 공용번호만 적어 주세요' },
         { k: 'program',       label: '운영 프로그램', wide: true },
         { k: 'needs_power',   label: '전기 사용 필요', type: 'bool' },
         { k: 'needs_network', label: '네트워크 필요', type: 'bool' },
@@ -364,7 +366,12 @@
         { k: 'category', label: '연락처 분류', hint: '연락망을 묶어 보는 이름. 예: 운영본부 · 협력기관 · 시설' },
         { k: 'org',      label: '소속' },
         { k: 'duty',     label: '담당업무', hint: '실제 담당 내용을 간단히 설명. 예: 전원·네트워크 점검' },
-        { k: 'phone',    label: '전화번호', type: 'tel' },
+        /* ⚠️ contacts 는 지금 로그인 없이 열람할 수 있는 표입니다.
+           포털 화면에서는 번호를 빼 두었지만, 표 자체는 아직 공개
+           범위 안에 있습니다. 개인 휴대전화는 넣지 마세요. */
+        { k: 'phone',    label: '전화번호', type: 'tel',
+          hint: '⚠️ 개인 휴대전화 입력 금지 — 지금 구조에서는 이 표가 공개 범위입니다. ' +
+                '보안 분리 전까지 운영본부·기관 대표번호 같은 공용번호만 적어 주세요' },
         // 이 두 칸이 담당 업무 화면의 '운영 인력' 집계를 만듭니다.
         // 연락망과 명부를 따로 두지 않으려고 여기에 함께 둡니다.
         { k: 'is_staff',   label: '운영 인력 (담당 업무 화면에서 집계)', type: 'bool' },

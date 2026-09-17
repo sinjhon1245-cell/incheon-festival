@@ -38,7 +38,7 @@
     { id: 'tasks',     label: '담당 업무', short: '업무', mark: '업', group: '운영' },
     { id: 'supplies',  label: '운영 물품', short: '물품', mark: '물', group: '운영' },
     { id: 'resources', label: '자료실',   short: '자료', mark: '자', group: '정보' },
-    { id: 'contacts',  label: '담당자·연락망', short: '연락', mark: '연', group: '정보' },
+    { id: 'contacts',  label: '담당자', short: '담당자', mark: '담', group: '정보' },
     { id: 'venue',     label: '행사장',   short: '행사장', mark: '장', group: '정보' },
     { id: 'faq',       label: '운영 FAQ', short: 'FAQ',  mark: 'F', group: '정보' }
   ];
@@ -419,14 +419,14 @@
         ['운영지원', '운영 물품 지원', '물품 배부 · 추가 요청 · 회수'],
         ['안전지원', '안전·응급 대응', '안전사고 · 응급 상황 · 관람객 동선']
       ].map(function (c) {
-        // 이름·번호는 만들지 않습니다. 번호가 등록되면 전화·복사 단추가 생깁니다.
+        // 이름·번호는 만들지 않습니다. 번호는 포털에 두지 않습니다.
         return '<div class="contact is-sample">' +
           '<div class="contact__top"><span class="rolebadge">' + esc(c[0]) + '</span>' + SAMPLE_END + '</div>' +
           '<div class="contact__name">' + esc(c[1]) + '</div>' +
           // 실제 카드와 같은 줄 구성입니다(역할 → 이름 → 담당업무).
           '<div class="contact__duty"><span class="contact__dutyl">담당업무</span>' +
           esc(c[2]) + '</div>' +
-          '<div class="contact__memo">번호 등록 후 전화 · 복사 가능</div></div>';
+          '<div class="contact__memo">이름 · 소속이 등록되면 함께 표시됩니다</div></div>';
       }).join(''), 3);
   }
 
@@ -452,7 +452,7 @@
         ['부스 운영자는 몇 시까지 도착해야 하나요?', '도착 시간이 확정되면 이곳과 공지에 안내됩니다.'],
         ['운영 중 전기나 네트워크 문제가 생기면 어떻게 하나요?', '운영 요청 메뉴에서 위치와 내용을 등록할 수 있습니다.'],
         ['운영 물품은 어디에서 확인하나요?', '운영 물품 메뉴에서 기관·팀·부스별 배부 현황을 확인할 수 있습니다.'],
-        ['안전사고 발생 시 누구에게 연락하나요?', '안전 담당 연락처가 확정되면 담당자·연락망에 안내됩니다.']
+        ['안전사고 발생 시 누구에게 연락하나요?', '안전 담당자가 확정되면 담당자 메뉴에서 확인할 수 있습니다.']
       ].map(function (f) {
         // 접었다 펴는 동작 없이 질문과 답을 함께 보여 줍니다.
         return '<div class="faq is-sample">' +
@@ -1732,10 +1732,11 @@
         '</figure>';
     }
 
-    if (b.manager_phone) {
-      html += '<a class="btn btn--primary btn--full" href="' + esc(C.telHref(b.manager_phone)) + '">' +
-        '부스 담당자에게 전화 · ' + esc(b.manager_phone) + '</a>';
-    }
+    /* 부스 담당자 번호(booths.manager_phone)도 화면에 적지 않습니다.
+       개인 휴대전화인지 업무용 공용번호인지 값만 보고는 알 수 없고,
+       이 화면은 로그인 없이 열립니다. 필요한 사람은 운영본부를 통해
+       확인합니다. 표의 값은 그대로 두었습니다 — 지우는 것은 확인한
+       뒤에 할 일입니다. */
 
     html += '<dl class="dl">' + rows.map(function (r) {
       return '<div class="dl__row"><dt>' + esc(r[0]) + '</dt><dd>' + esc(r[1]) + '</dd></div>';
@@ -2033,7 +2034,7 @@
     return best;
   }
 
-  /* 역할 맥락 없이 연락망을 여는 자리(홈의 '담당자 찾기')에서 씁니다.
+  /* 역할 맥락 없이 담당자 화면을 여는 자리(홈의 '담당자 찾기')에서 씁니다.
      앞서 요청에서 건너오며 걸어 둔 필터가 남아 있으면, 전체 담당자를
      찾으러 온 사람에게 걸러진 목록을 보여 주게 됩니다. */
   function resetContactFilters() {
@@ -2045,15 +2046,13 @@
   /* 요청 상세에서 담당자로 건너가는 단추.
 
      역할이 맞는 담당자가 실제로 있으면 그 역할 필터를 켠 채로 열고,
-     없으면 담당자·연락망 전체를 엽니다 — 없는 사람을 있는 것처럼
-     보이게 하지 않습니다. 어느 쪽이든 바로 전화를 걸지는 않습니다.
-     번호를 확인해야 할 수도 있고, 같은 역할이 여럿일 수도 있어서
-     누르자마자 전화 앱이 열리면 놀랍니다. 전화는 연락망 카드의
-     기존 단추로 겁니다. */
+     없으면 담당자 전체를 엽니다 — 없는 사람을 있는 것처럼 보이게
+     하지 않습니다. 건너가서 확인하는 것은 이름 · 소속 · 담당업무이고,
+     번호는 포털에 두지 않습니다. */
   function teamJumpBtn(team) {
     if (!team) return '';
     var target = pickRole(staffForRole(team));
-    var label = target ? target + ' 담당자 보기' : '담당자·연락망에서 찾기';
+    var label = target ? target + ' 담당자 보기' : '담당자에서 찾기';
     return '<button class="btn btn--ghost btn--sm rolejump" type="button" data-go="contacts"' +
       (target ? ' data-rolefilter="' + esc(target) + '"' : ' data-contactsall') +
       '>' + esc(label) + '</button>';
@@ -2063,11 +2062,10 @@
 
      팀 이름만 적어 두면 결국 "그래서 누구?" 가 남습니다. 그 역할로
      등록된 담당자가 있으면 두 명까지 이름과 주요 담당을 함께 적어,
-     연락망까지 건너가지 않고도 누구를 찾으면 되는지 알게 합니다.
-     셋 이상이면 나머지는 숫자로만 접고 연락망에서 전부 봅니다.
+     담당자 화면까지 건너가지 않고도 누구를 찾으면 되는지 알게 합니다.
+     셋 이상이면 나머지는 숫자로만 접고 담당자 화면에서 전부 봅니다.
 
-     번호는 여기에 적지 않습니다 — 상세는 요청을 읽는 자리이고,
-     전화는 연락망 카드의 기존 단추로 겁니다. */
+     번호는 어디에도 적지 않습니다 — 포털은 로그인이 없습니다. */
   function teamBox(r) {
     var team = r.assignee_team;
     if (!team) {
@@ -2109,19 +2107,24 @@
       if (ui.contactCat !== '전체' && c.category !== ui.contactCat) return false;
       if (!q) return true;
       // 역할로도 찾습니다 — '전산' 만 쳐도 전산지원 담당자가 나와야 합니다.
+      // 번호로는 찾지 않습니다. 화면에 번호를 두지 않으므로 찾을 이유가
+      // 없고, 번호를 넣어 맞는지 확인하는 통로가 되면 안 됩니다.
       return (c.name + ' ' + (c.org || '') + ' ' + (c.duty || '') + ' ' +
-              (c.role_group || '') + ' ' + (c.category || '') + ' ' + (c.phone || ''))
+              (c.role_group || '') + ' ' + (c.category || ''))
         .toLowerCase().indexOf(q) >= 0;
     });
 
-    /* 연락망은 번호를 찾아 바로 거는 곳입니다. 번호를 감추고 단추만
-       두면 PC 에서는 번호를 알 방법이 없습니다. 번호를 적고, 휴대폰은
-       전화, PC 는 복사로 씁니다. 번호가 없으면 단추도 없습니다.
+    /* 이 화면은 전화번호부가 아니라 "누가 어떤 역할을 맡는가" 를 보는
+       곳입니다. 읽는 차례: 역할 → 이름 → 소속 → 담당업무 → 메모.
 
-       읽는 차례: 역할 → 이름 → 소속 · 담당업무 → 메모 → 번호.
-       연락처 분류는 역할 뒤에, 한 단계 낮은 무게(tag)로 둡니다. */
+       ⚠️ 전화번호는 이 화면에 적지 않습니다.
+       포털은 로그인이 없어 주소를 아는 사람이면 누구나 열립니다.
+       개인 휴대전화가 그 화면에 그대로 적혀 있으면, 링크 한 번으로
+       명부가 통째로 나갑니다. 번호를 화면에서 지우는 것은 눈에 보이는
+       노출만 막는 것이고, 데이터베이스에서 anon 이 읽을 수 있는지는
+       별개 문제입니다 — 그건 표를 나누고 정책을 바꿔야 끝납니다
+       (README '개인 연락처' 참고). */
     var body = list.length ? '<div class="tl tl--2">' + list.map(function (c) {
-      var tel = C.telHref(c.phone);
       var role = contactRole(c);
       return '<div class="contact">' +
         '<div class="contact__top">' +
@@ -2131,24 +2134,17 @@
         (c.org ? '<div class="contact__meta">' + esc(c.org) + '</div>' : '') +
         /* 담당업무는 소속과 다른 줄에 둡니다 — '인천OO초 · 전원 점검' 처럼
            한 줄에 이어 붙이면 한 덩어리로 읽혀 무엇을 맡은 사람인지가
-           묻힙니다. 상자를 만들지는 않습니다. 연락망은 번호를 찾는
-           곳이고, 여기에 색 블록이 늘면 업무 카드처럼 보입니다. */
+           묻힙니다. 상자를 만들지는 않습니다 — 색 블록이 늘면
+           업무 카드처럼 보입니다. */
         (c.duty
           ? '<div class="contact__duty"><span class="contact__dutyl">담당업무</span>' +
             esc(c.duty) + '</div>'
           : '') +
         (c.memo ? '<div class="contact__memo">' + esc(c.memo) + '</div>' : '') +
-        (tel
-          ? '<div class="contact__phone"><span class="contact__num">' + esc(c.phone) + '</span>' +
-            '<span class="contact__act">' +
-            '<a class="btn btn--ghost btn--sm" href="' + esc(tel) + '" aria-label="' + esc(c.name) + '에게 전화">전화</a>' +
-            '<button class="btn btn--ghost btn--sm" type="button" data-copyphone="' + esc(c.phone) + '" ' +
-            'aria-label="' + esc(c.name) + ' 번호 복사">번호 복사</button></span></div>'
-          : '') +
         '</div>';
     }).join('') + '</div>'
       : S.contacts.length
-        ? noMatchBox('조건에 맞는 연락처가 없습니다.')
+        ? noMatchBox('조건에 맞는 담당자가 없습니다.')
         : sampleContacts();
 
     var staffCount = S.contacts.filter(function (c) { return c.is_staff; }).length;
@@ -2167,12 +2163,12 @@
       ? (roleRow
         ? '<div class="filterrow"><span class="filterrow__l">분류</span>' +
           chips(cats, ui.contactCat, 'data-contactcat', 'chiprow--sub') + '</div>'
-        : chips(cats, ui.contactCat, 'data-contactcat', 'chiprow--sub', '연락처 분류'))
+        : chips(cats, ui.contactCat, 'data-contactcat', 'chiprow--sub', '분류'))
       : '';
 
     return '<div class="page">' +
-      pageHead('담당자·연락망', '역할별 담당자와 연락처를 확인합니다.') +
-      (S.contacts.length ? '<p class="countline">등록 연락처 <b>' + S.contacts.length + '</b>명' +
+      pageHead('담당자', '운영 담당자와 담당 업무를 확인합니다.') +
+      (S.contacts.length ? '<p class="countline">등록 담당자 <b>' + S.contacts.length + '</b>명' +
         (staffCount ? ' · 운영 인력 <b>' + staffCount + '</b>명' : '') + '</p>' +
         '<div class="tools"><div class="search"><label class="sr-only" for="contact-q">담당자 검색</label>' +
         '<input class="input" id="contact-q" type="search" placeholder="이름 · 소속 · 담당업무 · 역할 검색" value="' + esc(ui.contactQ) + '" /></div>' +
@@ -2180,28 +2176,9 @@
       body + '</div>';
   }
 
-  /* 번호 복사. 복사 기능을 쓸 수 없는 환경(주소가 https 가 아니거나
-     권한이 막힌 경우)에서는 번호를 선택된 상태로 띄워 직접 복사하게 합니다. */
-  function copyPhone(num) {
-    function fallback() {
-      var box = document.createElement('textarea');
-      box.value = num; box.setAttribute('readonly', '');
-      box.style.position = 'fixed'; box.style.top = '-1000px';
-      document.body.appendChild(box); box.select();
-      var ok = false;
-      try { ok = document.execCommand('copy'); } catch (x) { ok = false; }
-      document.body.removeChild(box);
-      if (ok) toast('전화번호를 복사했습니다.');
-      else window.prompt('아래 번호를 복사해 주세요.', num);
-    }
-    if (navigator.clipboard && window.isSecureContext) {
-      navigator.clipboard.writeText(num).then(function () {
-        toast('전화번호를 복사했습니다.');
-      }).catch(fallback);
-    } else {
-      fallback();
-    }
-  }
+  /* 번호 복사 기능은 없앴습니다. 포털에 번호를 두지 않으므로 복사할
+     것도 없습니다. 나중에 로그인한 관계자에게만 번호를 보여 주게 되면
+     그때 그 화면에서 다시 만듭니다. */
 
   function viewVenue() {
     var s = S.settings || {};
@@ -2276,7 +2253,7 @@
      두 가지를 같은 데이터로 보여 줍니다.
 
        업무별 담당자 — 이 업무는 누가 맡는가
-       개인별 역할   — 이 사람은 오늘 무엇을 하는가
+       담당자별 업무 — 이 사람은 어떤 업무를 맡았는가
 
      행사 당일에는 두 번째 질문이 훨씬 자주 나옵니다. 그래서 사람을
      고르면 그 사람의 하루가 시간순으로 한 번에 보이게 합니다.
@@ -2305,7 +2282,8 @@
       name: (c ? c.name : a.person_name) || '',
       org: (c ? c.org : a.person_org) || '',
       roleGroup: c ? (c.role_group || '') : '',
-      phone: c ? (c.phone || '') : '',
+      // 번호는 싣지 않습니다. 화면에 쓰지 않는 값을 들고 다니면
+      // 언젠가 어딘가에 찍힙니다.
       role: a.role || ''
     };
   }
@@ -2340,7 +2318,7 @@
       .map(function (x) { return x[0] + ' ' + x[1]; }).join(' · ');
   }
 
-  /* 사람별로 업무를 묶습니다. 개인별 역할 화면이 쓰는 원본입니다. */
+  /* 사람별로 업무를 묶습니다. 담당자별 업무 화면이 쓰는 원본입니다. */
   function peopleWithTasks() {
     var map = {}, order = [];
     tasksSorted().forEach(function (t) {
@@ -2404,7 +2382,7 @@
       }).join(''), 2);
   }
 
-  /* 개인별 역할의 예시. 이 화면은 '사람' 을 세는 곳이라 역할 이름만
+  /* 담당자별 업무의 예시. 이 화면은 '사람' 을 세는 곳이라 역할 이름만
      적어 두면 역할이 사람인 것처럼 읽힙니다. 실제 카드와 같은 구성
      (이름 · 역할 배지 · 소속 · 건수)으로 보여 주되, 이름은 실제 사람으로
      읽히지 않게 OO 만 씁니다. */
@@ -2432,15 +2410,19 @@
      묶어서, 현장에서 나오는 두 질문에 각각 답합니다.
 
        업무별 담당자 — 이 업무는 누가 맡았지?
-       개인별 역할   — 이 사람은 오늘 뭘 하지?
+       담당자별 업무 — 이 사람은 어떤 업무를 맡았지?
 
      그래서 둘을 작은 토글로 두지 않고, 같은 너비의 단추 두 장으로
      세웁니다. 단추에는 보기 이름과 그 보기가 답하는 질문을 함께
-     적습니다 — 이름만으로는 '업무별' 과 '개인별' 이 어떻게 다른지
-     눌러 봐야 알 수 있습니다. */
+     적습니다 — 이름만으로는 두 보기가 어떻게 다른지 눌러 봐야
+     알 수 있습니다.
+
+     ui.taskMode 의 값('업무별' · '개인별')은 그대로 둡니다. 화면에
+     보이는 이름만 바꿉니다 — 잘 도는 값을 이름 때문에 갈아 끼우면
+     저장된 상태와 어긋날 뿐 얻는 것이 없습니다. */
   var TASK_MODES = [
     { k: '업무별', t: '업무별 담당자', s: '이 업무는 누가?' },
-    { k: '개인별', t: '개인별 역할',   s: '이 사람은 뭘 하지?' }
+    { k: '개인별', t: '담당자별 업무', s: '이 사람은 어떤 업무를?' }
   ];
 
   function viewTasks() {
@@ -2455,7 +2437,7 @@
 
     return '<div class="page">' +
       pageHead('담당 업무',
-        '업무별 담당자와 개인별 역할을 확인합니다.') +
+        '업무별 담당자와 담당자별 업무를 확인합니다.') +
       switcher + (ui.taskMode === '개인별' ? tasksByPerson() : tasksByTask()) + '</div>';
   }
 
@@ -2588,15 +2570,15 @@
               '<div class="rowcard__name">' + esc(p.name) +
               (p.role ? ' <span class="badge badge--plain">' + esc(p.role) + '</span>' : '') + '</div>' +
               (p.org ? '<div class="rowcard__meta">' + esc(p.org) + '</div>' : '') + '</div>' +
-              (p.phone ? '<div class="rowcard__act"><a class="btn btn--primary btn--sm" href="' +
-                esc(C.telHref(p.phone)) + '">전화</a></div>' : '') + '</div>';
+              // 번호는 적지 않습니다 — 로그인 없는 화면입니다(viewContacts 주석 참고).
+              '</div>';
           }).join('') + '</div>'
         : '<p class="nowcard__meta">아직 배정된 담당자가 없습니다.</p>') + '</div>';
 
     openDrawer(t.title, html, { footer: true });
   }
 
-  /* 개인별 역할 — 사람을 고르면 그 사람의 하루가 시간순으로 열립니다. */
+  /* 담당자별 업무 — 사람을 고르면 그 사람의 하루가 시간순으로 열립니다. */
   function tasksByPerson() {
     if (!S.tasks.length) {
       return C.isTableMissing('operation_tasks')
@@ -2679,10 +2661,7 @@
         return '<div class="dl__row"><dt>' + esc(r[0]) + '</dt><dd>' + esc(r[1]) + '</dd></div>';
       }).join('') + '</dl>';
     }
-    if (p.person.phone) {
-      html += '<a class="btn btn--primary btn--full" href="' + esc(C.telHref(p.person.phone)) + '">' +
-        '전화 · ' + esc(p.person.phone) + '</a>';
-    }
+    // 번호는 적지 않습니다 — 로그인 없는 화면입니다(viewContacts 주석 참고).
 
     html += '<div><p class="field__label" style="margin-bottom:8px">담당 업무 ' + p.tasks.length + '건</p>' +
       '<div class="tml tml--plain">' + p.tasks.map(function (it) {
@@ -3000,8 +2979,8 @@
       if (t.closest('[data-close-drawer]')) { closeDrawer(); return; }
       if (t.closest('[data-retry]')) { boot(true); return; }
 
-      /* 역할 맥락 없이 연락망을 여는 자리 — 홈의 '담당자 찾기' 와,
-         맞는 담당자가 없을 때의 '담당자·연락망에서 찾기'. 걸려 있던
+      /* 역할 맥락 없이 담당자 화면을 여는 자리 — 홈의 '담당자 찾기' 와,
+         맞는 담당자가 없을 때의 '담당자에서 찾기'. 걸려 있던
          필터를 풀어 전체 목록으로 엽니다. 홈 쪽은 진짜 링크라 기본
          이동을 막지 않으므로 여기서 return 하지 않습니다. */
       if (t.closest('[data-contactsall]')) resetContactFilters();
@@ -3099,9 +3078,6 @@
       var tn = t.closest('[data-tasknext]');
       if (tn) { setTaskStatus(tn.getAttribute('data-tasknext'), tn.getAttribute('data-to'), tn); return; }
 
-
-      var cp = t.closest('[data-copyphone]');
-      if (cp) { copyPhone(cp.getAttribute('data-copyphone')); return; }
 
       var fq = t.closest('.faq__q');
       if (fq) {
