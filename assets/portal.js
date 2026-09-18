@@ -2565,8 +2565,12 @@
           }).join('') +
           (people.length > 2 ? '<span class="person person--more">+' + (people.length - 2) + '명</span>' : '') +
           '</span></span>'
-        : '<span class="task__who">' +
-          '<span class="badge badge--warn badge--plain">담당자 미배정</span></span>') +
+        /* 미배정도 같은 칸 구성(레이블 + 값)으로 둡니다. 레이블 없이 배지만
+           있으면 이 카드만 담당자 칸이 낮아져, 같은 줄 카드끼리 구분선이
+           어긋나고 "담당자" 가 한 줄로 읽히지 않습니다. 위에 '담당자'
+           레이블이 있으므로 배지는 '미배정' 만 적습니다. */
+        : '<span class="task__who"><span class="task__wholabel">담당자</span>' +
+          '<span class="badge badge--warn badge--plain">미배정</span></span>') +
       '</button>';
     return actionCard(card, taskActions(t));
   }
