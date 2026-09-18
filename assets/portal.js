@@ -35,10 +35,10 @@
     { id: 'booths',    label: '부스 현황', short: '부스', mark: '부', tab: true },
     { id: 'notices',   label: '공지',     short: '공지', mark: '공', tab: true },
     { id: 'requests',  label: '운영 요청', short: '요청', mark: '요', group: '운영' },
-    { id: 'tasks',     label: '담당 업무', short: '업무', mark: '업', group: '운영' },
+    { id: 'tasks',     label: '업무 배정', short: '업무', mark: '업', group: '운영' },
     { id: 'supplies',  label: '운영 물품', short: '물품', mark: '물', group: '운영' },
     { id: 'resources', label: '자료실',   short: '자료', mark: '자', group: '정보' },
-    { id: 'contacts',  label: '담당자', short: '담당자', mark: '담', group: '정보' },
+    { id: 'contacts',  label: '운영 인력', short: '인력', mark: '인', group: '정보' },
     { id: 'venue',     label: '행사장',   short: '행사장', mark: '장', group: '정보' },
     { id: 'faq',       label: '운영 FAQ', short: 'FAQ',  mark: 'F', group: '정보' }
   ];
@@ -299,13 +299,13 @@
      검색·필터 결과가 0인 경우는 해당하지 않습니다 — 그때는
      예시가 아니라 "검색 결과 없음" 을 보여 줘야 합니다.
 
-     실제 카드와 헷갈리지 않도록 "예시" 배지를 반드시 붙이고,
-     테두리를 점선으로 둡니다. 흐리게 만들지는 않습니다 —
-     구성을 읽을 수 있어야 하기 때문입니다. */
+     실제 카드와 헷갈리지 않도록 "예시" 표를 반드시 붙입니다. 카드
+     자체는 실제 카드와 똑같이 그립니다 — 흐린 바탕이나 점선으로
+     감싸면 구성을 읽기 어렵고, 카드 경계도 함께 약해집니다. */
   var SAMPLE = '<span class="badge badge--plain badge--sample">예시</span>';
   // 카드 줄 오른쪽 끝에 작게. 실제 상태 배지보다 약하게 보입니다.
   var SAMPLE_END = '<span class="sampletag">예시</span>';
-  var SAMPLE_NOTE = '예시 화면입니다. 실제 데이터가 등록되면 자동으로 바뀝니다.';
+  var SAMPLE_NOTE = '예시 데이터';
 
   /* cols: 1(한 줄씩) · 2(기존 두 칸 규칙) · 3(짧은 예시 석 장 — 폭이 넉넉할 때만 세 칸).
      head: 안내문과 목록 사이에 끼울 것(예: 예시 현황 숫자). */
@@ -348,7 +348,7 @@
   ];
 
   function sampleNotices() {
-    return sampleWrap(SAMPLE_NOTE + ' 눌러서 상세도 볼 수 있습니다.',
+    return sampleWrap(SAMPLE_NOTE + ' · 눌러서 상세를 볼 수 있습니다',
       SAMPLE_NOTICES.map(function (n, i) {
         // button 이라 마우스·Enter·Space 가 모두 됩니다.
         return '<button class="notice is-sample' + (n.level === '긴급' ? ' notice--urgent' : '') +
@@ -452,7 +452,7 @@
         ['부스 운영자는 몇 시까지 도착해야 하나요?', '도착 시간이 확정되면 이곳과 공지에 안내됩니다.'],
         ['운영 중 전기나 네트워크 문제가 생기면 어떻게 하나요?', '운영 요청 메뉴에서 위치와 내용을 등록할 수 있습니다.'],
         ['운영 물품은 어디에서 확인하나요?', '운영 물품 메뉴에서 기관·팀·부스별 배부 현황을 확인할 수 있습니다.'],
-        ['안전사고 발생 시 누구에게 연락하나요?', '안전 담당자가 확정되면 담당자 메뉴에서 확인할 수 있습니다.']
+        ['안전사고 발생 시 누구에게 연락하나요?', '안전 담당자가 확정되면 운영 인력 메뉴에서 확인할 수 있습니다.']
       ].map(function (f) {
         // 접었다 펴는 동작 없이 질문과 답을 함께 보여 줍니다.
         return '<div class="faq is-sample">' +
@@ -633,8 +633,7 @@
     if (!b) return;
     var rows = [['부스 번호', b.code], ['부스명', b.name], ['운영기관', b.org],
                 ['운영기관 유형', b.type], ['구역', b.zone]];
-    var html = '<p class="samplenote">' + esc(SAMPLE_NOTE) + '</p>' +
-      '<dl class="dl">' + rows.map(function (r) {
+    var html = '<dl class="dl">' + rows.map(function (r) {
         return '<div class="dl__row"><dt>' + esc(r[0]) + '</dt><dd>' + esc(r[1]) + '</dd></div>';
       }).join('') + '</dl>' +
       boothOpsHtml(b.code,
@@ -990,7 +989,7 @@
       '<h2 class="quick__t" id="quick-t">빠른 실행</h2>' +
       '<div class="quick__list">' +
       '<button class="btn btn--primary quick__main" type="button" data-newreq>+ 현장 문제 보고</button>' +
-      '<a class="btn btn--ghost" href="#contacts" data-contactsall>담당자 찾기</a>' +
+      '<a class="btn btn--ghost" href="#contacts" data-contactsall>운영 인력 보기</a>' +
       '<a class="btn btn--ghost" href="#booths">부스 찾기</a>' +
       '</div></section>';
 
@@ -1428,9 +1427,9 @@
     return '<div class="page sched">' +
       pageHead('운영 일정', ev.sameDay
         ? '요약은 오늘 전체 일정 기준, 목록은 선택한 조건 기준입니다.'
-        : '행사 전체 일정을 시간순으로 확인합니다.') +
+        : '') +
       // 예시 안내는 화면 위에 한 번만. 카드마다에는 작은 '예시' 표시만 둡니다.
-      (S.schedule.length ? '' : '<p class="samplenote">예시 화면입니다. 실제 운영 일정이 등록되면 자동으로 실제 일정으로 전환됩니다.</p>') +
+      (S.schedule.length ? '' : '<p class="samplenote">' + esc(SAMPLE_NOTE) + '</p>') +
       '<section class="schedlive' + (ev.sameDay ? ' is-today' : '') + '" id="sched-live" aria-label="실시간 일정 요약">' +
       scheduleLiveHtml(ev) + '</section>' +
       // 순서: 날짜 → 오전·오후(+핵심) → 분류 → 검색. 여러 날 행사에서는 날짜가 가장 큰 갈래입니다.
@@ -1685,7 +1684,7 @@
     });
 
     return '<div class="page">' +
-      pageHead('부스 현황', '부스 위치와 운영기관을 확인합니다.') +
+      pageHead('부스 현황') +
       map +
       // 등록된 부스가 없을 때 "전체 부스 0개"를 예시 카드 위에 그대로 두면
       // 숫자와 목록이 서로 다른 말을 하게 됩니다 — 실제 부스가 있을 때만 적습니다.
@@ -1778,7 +1777,7 @@
         '<span class="notice__body">' + esc(n.body) + '</span></button>';
     }).join('') + '</div>' : sampleNotices();
     return '<div class="page">' +
-      pageHead('운영 공지', '운영 중 확인해야 할 변경 사항과 주요 안내입니다.') +
+      pageHead('공지') +
       body + '</div>';
   }
 
@@ -1980,7 +1979,7 @@
         : S.resources.length ? noMatchBox('공개된 자료가 없습니다.') : sampleResources();
 
     return '<div class="page">' +
-      pageHead('관계자 자료실', '행사 운영에 필요한 자료를 확인합니다.') +
+      pageHead('관계자 자료실') +
       (all.length ? '<p class="countline">등록 자료 <b>' + all.length + '</b>개</p>' +
         '<div class="tools"><div class="search"><label class="sr-only" for="resource-q">자료 검색</label>' +
         '<input class="input" id="resource-q" type="search" placeholder="자료명 · 종류 검색" value="' +
@@ -2052,7 +2051,7 @@
   function teamJumpBtn(team) {
     if (!team) return '';
     var target = pickRole(staffForRole(team));
-    var label = target ? target + ' 담당자 보기' : '담당자에서 찾기';
+    var label = target ? target + ' 담당자 보기' : '운영 인력에서 찾기';
     return '<button class="btn btn--ghost btn--sm rolejump" type="button" data-go="contacts"' +
       (target ? ' data-rolefilter="' + esc(target) + '"' : ' data-contactsall') +
       '>' + esc(label) + '</button>';
@@ -2167,10 +2166,10 @@
       : '';
 
     return '<div class="page">' +
-      pageHead('담당자', '운영 담당자와 담당 업무를 확인합니다.') +
-      (S.contacts.length ? '<p class="countline">등록 담당자 <b>' + S.contacts.length + '</b>명' +
-        (staffCount ? ' · 운영 인력 <b>' + staffCount + '</b>명' : '') + '</p>' +
-        '<div class="tools"><div class="search"><label class="sr-only" for="contact-q">담당자 검색</label>' +
+      pageHead('운영 인력') +
+      (S.contacts.length ? '<p class="countline">등록 <b>' + S.contacts.length + '</b>명' +
+        (staffCount ? ' · 업무 배정 대상 <b>' + staffCount + '</b>명' : '') + '</p>' +
+        '<div class="tools"><div class="search"><label class="sr-only" for="contact-q">운영 인력 검색</label>' +
         '<input class="input" id="contact-q" type="search" placeholder="이름 · 소속 · 담당업무 · 역할 검색" value="' + esc(ui.contactQ) + '" /></div>' +
         roleRow + catRow + '</div>' : '') +
       body + '</div>';
@@ -2244,7 +2243,7 @@
         : sampleFaqs();
 
     return '<div class="page">' +
-      pageHead('운영 FAQ', '자주 확인하는 운영 질문을 모았습니다.') +
+      pageHead('운영 FAQ') +
       (cats.length > 2 ? '<div class="tools">' + chips(cats, ui.faqCat, 'data-faqcat') + '</div>' : '') +
       body + '</div>';
   }
@@ -2405,7 +2404,7 @@
       }).join(''), 2);
   }
 
-  /* ── 화면: 담당 업무 ──────────────────────────────────────────
+  /* ── 화면: 업무 배정 ──────────────────────────────────────────
      이 화면의 뼈대는 두 보기입니다. 같은 자료를 정확히 반대 방향으로
      묶어서, 현장에서 나오는 두 질문에 각각 답합니다.
 
@@ -2413,16 +2412,16 @@
        담당자별 업무 — 이 사람은 어떤 업무를 맡았지?
 
      그래서 둘을 작은 토글로 두지 않고, 같은 너비의 단추 두 장으로
-     세웁니다. 단추에는 보기 이름과 그 보기가 답하는 질문을 함께
-     적습니다 — 이름만으로는 두 보기가 어떻게 다른지 눌러 봐야
-     알 수 있습니다.
+     세웁니다. 단추에는 보기 이름만 한 줄로 적습니다 — '업무별 담당자'
+     와 '담당자별 업무' 는 이름 자체가 무엇을 묶어 보여 주는지 말하고
+     있어서, 아래에 질문을 한 줄 더 달면 좁은 화면에서 단추만 커집니다.
 
      ui.taskMode 의 값('업무별' · '개인별')은 그대로 둡니다. 화면에
      보이는 이름만 바꿉니다 — 잘 도는 값을 이름 때문에 갈아 끼우면
      저장된 상태와 어긋날 뿐 얻는 것이 없습니다. */
   var TASK_MODES = [
-    { k: '업무별', t: '업무별 담당자', s: '이 업무는 누가?' },
-    { k: '개인별', t: '담당자별 업무', s: '이 사람은 어떤 업무를?' }
+    { k: '업무별', t: '업무별 담당자' },
+    { k: '개인별', t: '담당자별 업무' }
   ];
 
   function viewTasks() {
@@ -2431,13 +2430,11 @@
         var on = ui.taskMode === m.k;
         return '<button class="seg' + (on ? ' is-on' : '') + '" type="button" ' +
           'data-taskmode="' + esc(m.k) + '" aria-pressed="' + on + '">' +
-          '<span class="seg__t">' + esc(m.t) + '</span>' +
-          '<span class="seg__s">' + esc(m.s) + '</span></button>';
+          '<span class="seg__t">' + esc(m.t) + '</span></button>';
       }).join('') + '</div>';
 
     return '<div class="page">' +
-      pageHead('담당 업무',
-        '업무별 담당자와 담당자별 업무를 확인합니다.') +
+      pageHead('업무 배정') +
       switcher + (ui.taskMode === '개인별' ? tasksByPerson() : tasksByTask()) + '</div>';
   }
 
@@ -2445,7 +2442,7 @@
   function tasksByTask() {
     if (!S.tasks.length) {
       return C.isTableMissing('operation_tasks')
-        ? notReadyBox('담당 업무 기능이 아직 준비되지 않았습니다.')
+        ? notReadyBox('업무 배정 기능이 아직 준비되지 않았습니다.')
         : sampleTasks();
     }
 
@@ -2582,7 +2579,7 @@
   function tasksByPerson() {
     if (!S.tasks.length) {
       return C.isTableMissing('operation_tasks')
-        ? notReadyBox('담당 업무 기능이 아직 준비되지 않았습니다.')
+        ? notReadyBox('업무 배정 기능이 아직 준비되지 않았습니다.')
         : samplePeople();
     }
 
@@ -2749,7 +2746,7 @@
   }
 
   function viewSupplies() {
-    var head = pageHead('운영 물품', '기관·팀·부스별 배부 현황입니다. 배부 상태는 운영본부가 관리합니다.');
+    var head = pageHead('운영 물품', '배부 상태는 운영본부가 관리합니다.');
 
     if (C.isTableMissing('supply_targets')) {
       return '<div class="page">' + head + notReadyBox('운영 물품 기능이 아직 준비되지 않았습니다.') + '</div>';
@@ -2888,8 +2885,9 @@
     var host = $('#view');
     if (S.loading) { host.innerHTML = stateBox('데이터를 불러오는 중입니다.'); return; }
     if (S.error)   { host.innerHTML = stateBox(S.error, 'error', true); return; }
-    // 화면마다 아주 옅은 색 하나를 씁니다(portal.css 의 [data-view]).
-    // 상태 색(긴급·주의·완료)과는 따로 둡니다.
+    // 화면 이름을 표시로 남깁니다. 색이 아니라 화면별 배치 규칙에만
+    // 씁니다(portal.css 의 [data-view]) — 제목 띠는 모든 화면이 같은
+    // 보라 하나를 쓰고, 빨강·주황·초록은 상태에만 남겨 둡니다.
     host.setAttribute('data-view', view);
     host.innerHTML = (VIEWS[view] || viewDashboard)();
     fitMedia(host);

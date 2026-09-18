@@ -15,7 +15,7 @@
   --ink-2:     #38456B;
   --muted:     #5C6989;
   --muted-2:   #7A87A6;
-  --line:      #E4E8F2;
+  --line:      #DCE2EF;
   --line-2:    #EFF2F8;
 
   /* 포인트 — 보라 */
@@ -287,25 +287,14 @@ code {
    대신 점선 테두리와 “예시” 배지로 진짜와 구분합니다. */
 .sample { display: flex; flex-direction: column; gap: 12px; }
 .samplenote {
-  font-size: 12.5px; line-height: 1.7; color: var(--muted);
-  background: var(--bg-sink); border-radius: 10px; padding: 10px 13px;
+  font-size: 12.5px; line-height: 1.6; color: var(--muted-2);
+  margin: -4px 2px 0;
 }
-.is-sample {
-  border-style: dashed; box-shadow: none; cursor: default;
-  background: var(--bg-soft);
-}
-/* 각 카드 기본 규칙(.notice, .req, .booth …)이 border를 한 번에 지정하는
-   shorthand라 이 파일 뒤쪽에서 다시 나오면 위 .is-sample의 점선 지정을
-   덮어씁니다. 카드 종류를 모두 나열해 우선순위를 확실히 이깁니다. */
-.notice.is-sample, .req.is-sample, .rescard.is-sample, .contact.is-sample,
-.rowcard.is-sample, .faq.is-sample, .tmlrow.is-sample, .booth.is-sample,
-.task.is-sample, .supply.is-sample {
-  border-style: dashed; box-shadow: none; background: var(--bg-soft);
-}
+.is-sample { cursor: default; }
 /* 눌러서 상세까지 볼 수 있는 예시는 손 모양과 옅은 강조를 줍니다.
    요란한 움직임 없이 "누를 수 있다" 만 전합니다. */
-button.is-sample { cursor: pointer; transition: border-color 130ms ease, background 130ms ease; }
-button.is-sample:hover { border-color: var(--primary); background: #fff; }
+button.is-sample { cursor: pointer; transition: border-color 130ms ease; }
+button.is-sample:hover { border-color: var(--primary); }
 .is-sample .rowcard__name,
 .is-sample .notice__title,
 .is-sample .req__title { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
@@ -329,13 +318,16 @@ button.is-sample:hover { border-color: var(--primary); background: #fff; }
   background: var(--off-t); color: var(--off);
 }
 .badge::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: 0 0 auto; }
-.badge--ok     { background: var(--ok-t);     color: var(--ok); }
-.badge--warn   { background: var(--warn-t);   color: var(--warn); }
-.badge--danger { background: var(--danger-t); color: var(--danger); }
-.badge--info   { background: var(--info-t);   color: var(--info); }
+/* 테두리 색은 글자색을 그대로 쓰면 너무 세게 보입니다. 같은 계열을
+   한 단계 옅게 깔아 글자보다 뒤에 서게 합니다. */
+.badge         { border: 1px solid #C7CEDE; }
+.badge--ok     { background: var(--ok-t);     color: var(--ok);     border-color: #A9D8C4; }
+.badge--warn   { background: var(--warn-t);   color: var(--warn);   border-color: #E6C68A; }
+.badge--danger { background: var(--danger-t); color: var(--danger); border-color: #EBAFB7; }
+.badge--info   { background: var(--info-t);   color: var(--info);   border-color: #A9C6E8; }
 .badge--plain::before { display: none; }
 /* 예시 표시 — 실제 상태 배지보다 한 단계 낮은 강조 */
-.badge--sample { background: var(--primary-t); color: var(--primary); font-weight: 600; }
+.badge--sample { background: var(--primary-t); color: var(--primary); font-weight: 600; border-color: #CFC7F7; }
 
 /* ── 역할 표시 ───────────────────────────────────────────────────
    "이 사람은 무슨 역할인가" 는 상태(긴급·완료)와 다른 종류의 정보입니다.
@@ -441,7 +433,7 @@ button.is-sample:hover { border-color: var(--primary); background: #fff; }
   padding: 14px 15px; box-shadow: var(--sh); width: 100%; text-align: left; cursor: pointer;
   display: flex; flex-direction: column; gap: 6px;
 }
-.notice--urgent { border-color: #F0CFD4; background: #FFFBFB; }
+.notice--urgent { border-left: 3px solid var(--danger); padding-left: 13px; }
 /* 눌러서 상세를 볼 수 있는 카드입니다. 그 사실이 보이도록 아주 옅은
    테두리·그림자 변화만 둡니다 — 목록에서 여러 장이 한꺼번에 움직이면
    읽기 어려워지므로 크기나 위치는 건드리지 않습니다. */
@@ -828,21 +820,19 @@ button.is-sample:hover { border-color: var(--primary); background: #fff; }
    테두리로 둡니다 — 새 색을 들이지 않고 기존 보라만 옅게 씁니다. */
 .segrow--two { background: none; border: 0; padding: 0; gap: 8px; }
 .segrow--two .seg {
-  flex: 1 1 0; min-width: 0; min-height: 56px;
-  display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 2px;
-  padding: 9px 13px; border: 1px solid var(--line); border-radius: 11px;
-  background: #fff; color: var(--ink-2); box-shadow: none; text-align: left;
+  flex: 1 1 0; min-width: 0; min-height: 44px;
+  display: flex; align-items: center; justify-content: center;
+  padding: 9px 10px; border: 1px solid var(--line); border-radius: 10px;
+  background: #fff; color: var(--ink-2); box-shadow: none; text-align: center;
   transition: border-color 130ms ease, background 130ms ease;
 }
 .segrow--two .seg:hover { border-color: var(--primary); }
 .segrow--two .seg.is-on {
-  background: var(--primary-t); border-color: var(--primary); color: var(--primary);
+  background: #FBFAFF; border-color: var(--primary); color: var(--primary);
   box-shadow: none;
 }
-.seg__t { font-size: 14.5px; font-weight: 700; letter-spacing: -0.02em; }
+.seg__t { font-size: 14.5px; font-weight: 700; letter-spacing: -0.03em; white-space: nowrap; }
 .segrow--two .seg.is-on .seg__t { font-weight: 800; }
-.seg__s { font-size: 12px; font-weight: 500; color: var(--muted-2); letter-spacing: -0.01em; }
-.segrow--two .seg.is-on .seg__s { color: var(--primary); opacity: 0.8; }
 
 /* 켜고 끄는 칩(핵심 일정만 보기) */
 .chip--toggle.is-on { background: var(--primary); border-color: var(--primary); color: #fff; }
@@ -1151,16 +1141,6 @@ a.side__brand:hover b { color: var(--primary); }
    상태 색(긴급 빨강 · 주의 주황 · 완료 초록)과 섞이지 않도록 숫자와
    배지에는 쓰지 않습니다. */
 #view { --accent: var(--primary); --accent-t: var(--primary-t); }
-#view[data-view="schedule"]  { --accent: #2F6FD6; --accent-t: #EAF1FC; }
-#view[data-view="booths"]    { --accent: #0E8A86; --accent-t: #E2F3F2; }
-#view[data-view="notices"]   { --accent: #B7791F; --accent-t: #FBF2E0; }
-#view[data-view="requests"]  { --accent: #C2571A; --accent-t: #FCEEE4; }
-#view[data-view="tasks"]     { --accent: #4B4FC7; --accent-t: #ECEDFB; }
-#view[data-view="supplies"]  { --accent: #4E8A5E; --accent-t: #E9F3EC; }
-#view[data-view="resources"],
-#view[data-view="contacts"],
-#view[data-view="venue"],
-#view[data-view="faq"]       { --accent: #5A6B86; --accent-t: #EEF1F5; }
 
 .page__title { display: flex; align-items: center; gap: 10px; }
 .page__title::before {
@@ -2163,7 +2143,7 @@ a.side__brand:hover b { color: var(--primary); }
 .sampletag {
   flex: none; margin-left: auto;
   font-size: 11px; font-weight: 600; line-height: 1.5; color: var(--primary);
-  border: 1px dashed #C9C0F5; border-radius: 999px; padding: 0 7px;
+  border: 1px solid #CFC7F7; border-radius: 999px; padding: 0 7px;
   white-space: nowrap;
 }
 .is-sample .rowcard__name { width: 100%; }
@@ -2184,7 +2164,7 @@ a.side__brand:hover b { color: var(--primary); }
   font-size: 13px; font-weight: 700; color: var(--ink-2);
 }
 .sumwrap__label .sampletag { margin-left: 0; }
-.sumgrid--sample .sumcard { border-style: dashed; }
+.sumgrid--sample .sumcard { border-color: var(--line); }
 
 /* ── 홈 브리핑: 행사 당일 화면 예시 ──────────────────────────────
    카드 안에 카드를 겹치지 않도록 테두리 없이 점선 구분과 옅은 바탕만. */
