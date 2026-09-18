@@ -298,12 +298,9 @@ code {
 /* ── 예시 카드 ────────────────────────────────────────────────
    실제 데이터가 아직 없을 때, 그 메뉴에 무엇이 들어오는지 보여 줍니다.
    흐리게 만들지 않습니다 — 구성을 읽을 수 있어야 하기 때문입니다.
-   대신 점선 테두리와 “예시” 배지로 진짜와 구분합니다. */
+   진짜와의 구분은 카드마다 붙은 작은 '예시' 표시 하나로 합니다.
+   목록 위 안내 줄 · 점선 테두리 · 칠한 바탕은 쓰지 않습니다. */
 .sample { display: flex; flex-direction: column; gap: 12px; }
-.samplenote {
-  font-size: 12.5px; line-height: 1.6; color: var(--muted-2);
-  margin: -4px 2px 0;
-}
 .is-sample { cursor: default; }
 /* 눌러서 상세까지 볼 수 있는 예시는 손 모양과 옅은 강조를 줍니다.
    요란한 움직임 없이 "누를 수 있다" 만 전합니다. */
@@ -313,16 +310,6 @@ button.is-sample:hover { border-color: var(--primary); }
 .is-sample .notice__title,
 .is-sample .req__title { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
 .is-sample .btn:disabled { opacity: 0.55; }
-
-/* 예시 FAQ 는 접었다 펴지 않고 질문과 답을 함께 보여 줍니다. */
-.faq__q--static { cursor: default; font-weight: 600; }
-.is-sample .faq__a { padding-top: 0; }
-
-/* 화면 맨 위 한두 줄 안내 */
-.pagenote {
-  font-size: 12.5px; line-height: 1.7; color: var(--muted);
-  background: var(--bg-sink); border-radius: 10px; padding: 10px 13px;
-}
 
 /* ── 상태 배지 — 색 + 글자 ────────────────────────────────────── */
 /* ── 세 가지 표시의 역할 나누기 ───────────────────────────────────
@@ -409,6 +396,18 @@ button.is-sample:hover { border-color: var(--primary); }
 .chip:hover { border-color: var(--primary); color: var(--primary); }
 .chip.is-on { background: var(--primary); border-color: var(--primary); color: #fff; }
 .chip__n { opacity: 0.75; margin-left: 4px; font-variant-numeric: tabular-nums; }
+/* 좁은 화면에서만 쓰는 짧은 칩 글자(A구역 → A, 초등 → 초).
+   긴 글자는 화면에서만 숨기고 화면 읽기 도구에는 그대로 읽힙니다. */
+.chip__short { display: none; }
+@media (max-width: 560px) {
+  .chip__short { display: inline; }
+  /* 필터 줄의 보조 칩(예: 부스 구분)이 375px 에서 한 줄에 들어가도록 옆 여백만 조금 줄입니다. */
+  .filterrow .chiprow--sub .chip { padding-left: 9px; padding-right: 9px; }
+  .chip__long {
+    position: absolute; width: 1px; height: 1px; overflow: hidden;
+    clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap;
+  }
+}
 
 /* ── 일정 타임라인 ────────────────────────────────────────────── */
 .tl { display: flex; flex-direction: column; gap: var(--gap-card); }
@@ -488,6 +487,10 @@ button.is-sample:hover { border-color: var(--primary); }
 .req__top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .req__title { font-size: 15px; font-weight: 700; letter-spacing: -0.025em; }
 .req__meta { font-size: 12.5px; color: var(--muted-2); font-variant-numeric: tabular-nums; }
+/* 담당팀 · 위치는 카드 아래쪽에 붙입니다(margin-top: auto). 두 칸
+   목록에서 같은 줄 두 카드는 높이가 같으므로(.tl--2 stretch) 담당팀도
+   두 카드에서 같은 높이에 놓여, 줄을 따라 담당팀만 훑을 수 있습니다. */
+.req__foot { display: flex; flex-direction: column; gap: 4px; margin-top: auto; padding-top: 4px; }
 
 /* 처리 담당팀 한 줄. 새 색을 들이지 않고 레이블과 굵기만으로 세웁니다 —
    요청 카드에는 이미 우선순위·상태 배지가 있어서, 여기에 색이 하나 더
@@ -569,13 +572,31 @@ button.is-sample:hover { border-color: var(--primary); }
   padding: 15px; min-height: 52px; border: none; background: none; cursor: pointer;
   text-align: left; font-size: 15px; font-weight: 600; letter-spacing: -0.02em;
 }
-.faq__q span:first-child { flex: 1; }
+.faq__qt { flex: 1; min-width: 0; }
+.faq__q .sampletag { margin-left: 0; }
 .faq__sign { color: var(--muted-2); font-size: 18px; transition: transform 150ms ease; }
 .faq.is-open .faq__sign { transform: rotate(45deg); }
 /* 답변은 줄글이라 카드 폭을 그대로 따라가면 한 줄이 너무 길어져
    다음 줄 첫 글자를 찾기 어려워집니다. 본문 폭과 상관없이 읽기 좋은
    길이에서 끊습니다(대시보드 운영 안내와 같은 규칙). */
 .faq__a { padding: 0 15px 16px; font-size: 14px; line-height: 1.8; color: var(--muted); max-width: 74ch; }
+.faq__a p + p { margin-top: 4px; }
+/* 답 아래 도움 줄 — 관련 담당(역할 이름)과 건너가는 단추.
+   번호는 적지 않습니다. 사람은 운영 인력 화면에서 찾습니다. */
+.faq__role {
+  display: flex; align-items: baseline; gap: 7px; flex-wrap: wrap;
+  margin-top: 12px; padding-top: 11px; border-top: 1px solid var(--line-2);
+  font-size: 13.5px; color: var(--ink-2);
+}
+.faq__rolel {
+  font-size: 11.5px; font-weight: 600; color: var(--muted-2);
+  background: var(--bg-sink); border-radius: 5px; padding: 2px 6px; line-height: 1.5;
+}
+.faq__role b { font-weight: 700; }
+.faq__acts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.faq__acts:empty { display: none; }
+.faq__acts .rolejump { align-self: auto; }
+@media (max-width: 560px) { .faq__acts .btn { min-height: 44px; } }
 
 /* ── 드로어 · 시트 ────────────────────────────────────────────── */
 .drawer, .sheet { position: fixed; inset: 0; z-index: 80; }
@@ -1497,13 +1518,16 @@ a.side__brand:hover b { color: var(--primary); }
 .supply__line { border-top: 0; padding-top: 0; margin-top: 4px; }
 
 /* ── 운영 요청 카드: 제목 · 짧은 내용이 먼저 ─────────────────────── */
+/* 두 칸 목록이 되면서 카드 폭이 절반이라, 한 줄로 자르면 내용이
+   거의 남지 않습니다. 두 줄까지 보이고, 전문은 상세에서 읽습니다. */
 .req__body {
   font-size: 14px; color: var(--ink-2); line-height: 1.55;
-  display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden;
-  /* 요청 카드는 한 칸을 다 씁니다. 줄글까지 그 폭을 따라가면 한 줄이
-     너무 길어져, 한 줄만 보여 주는 요약이 오히려 읽기 어려워집니다. */
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
   max-width: 74ch;
 }
+/* 해결된 요청은 제목 무게를 한 단계 낮춥니다. 미처리 요청과 한 목록에
+   섞일 일은 없지만(접어 둔 '해결 완료'), 펼쳤을 때도 남은 일이 먼저입니다. */
+.req.is-done .req__title { font-weight: 650; color: var(--ink-2); }
 
 
 /* ── 자료실: 종류는 설명 아래 작은 글자 ─────────────────────────── */
@@ -2378,3 +2402,21 @@ button.boothops__row:hover { border-color: var(--primary); }
 .side__nav::-webkit-scrollbar { width: 6px; }
 .side__nav::-webkit-scrollbar-thumb { background: transparent; border-radius: 6px; }
 .side__nav:hover::-webkit-scrollbar-thumb { background: #DADDE5; }
+
+/* ── 운영 요청 목록: PC 두 칸 · 900px 아래 한 칸 ────────────────────
+   요청은 한 장이 짧아(배지 줄 · 제목 · 두 줄 내용 · 담당팀 · 위치)
+   한 칸 전체 폭을 쓰면 옆이 비고 세로 스크롤만 길어집니다. 사이드바가
+   있는 1024px 에서도 목록 폭이 730px 안팎이라, 칸 최소 폭을 다른 목록
+   (380px)보다 조금 낮춰 그 폭에서도 두 칸이 되게 합니다. 900px 아래
+   (태블릿 세로 · 휴대폰)는 폭이 남더라도 한 칸 — 담당팀 · 위치 줄이
+   좁은 칸에서 두 줄로 접히지 않게 합니다. */
+.reqlist { --col-min: 350px; }
+@media (max-width: 899px) {
+  .reqlist { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* ── 운영 FAQ: 한 칸, 읽기 좋은 폭 ─────────────────────────────────
+   질문은 한 줄 글이라 1240px 본문 폭을 다 쓰면 질문 끝과 여닫기
+   표시(+)가 멀어지고, 펼친 답 오른쪽이 비어 보입니다. 목록만 읽기
+   좋은 폭에서 멈춥니다(페이지 폭 정책은 그대로). 두 칸은 쓰지 않습니다. */
+#view[data-view="faq"] .tl { max-width: 880px; }

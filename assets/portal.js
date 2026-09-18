@@ -336,14 +336,15 @@
   var SAMPLE = '<span class="badge badge--plain badge--sample">예시</span>';
   // 카드 줄 오른쪽 끝에 작게. 실제 상태 배지보다 약하게 보입니다.
   var SAMPLE_END = '<span class="sampletag">예시</span>';
-  var SAMPLE_NOTE = '예시 데이터';
 
   /* cols: 1(한 줄씩) · 2(기존 두 칸 규칙) · 3(짧은 예시 석 장 — 폭이 넉넉할 때만 세 칸).
-     head: 안내문과 목록 사이에 끼울 것(예: 예시 현황 숫자). */
-  function sampleWrap(note, cards, cols, head) {
+     head: 목록 위에 끼울 것(예: 예시 현황 숫자).
+     목록 위에 '예시 데이터' 같은 안내 줄을 따로 두지 않습니다. 카드마다
+     붙은 작은 '예시' 표시로 충분하고, 안내 줄이 있으면 실제 화면보다
+     한 줄 밀려 실제 데이터가 들어왔을 때와 모양이 달라집니다. */
+  function sampleWrap(cards, cols, head) {
     var cls = cols === 3 ? ' tl--3s' : cols ? ' tl--2' : '';
-    return '<div class="sample">' +
-      '<p class="samplenote">' + esc(note) + '</p>' + (head || '') +
+    return '<div class="sample">' + (head || '') +
       '<div class="tl' + cls + '" aria-label="예시 목록">' +
       cards + '</div></div>';
   }
@@ -379,7 +380,7 @@
   ];
 
   function sampleNotices() {
-    return sampleWrap(SAMPLE_NOTE + ' · 눌러서 상세를 볼 수 있습니다',
+    return sampleWrap(
       SAMPLE_NOTICES.map(function (n, i) {
         // button 이라 마우스·Enter·Space 가 모두 됩니다.
         return '<button class="notice is-sample' + (n.level === '긴급' ? ' notice--urgent' : '') +
@@ -394,36 +395,51 @@
      현장 요청은 대부분 특정 부스에서 생기므로 부스번호가 드러나게 합니다.
      부스 번호는 부스 예시(SAMPLE_BOOTHS)와 맞춥니다. */
   /* 담당팀 이름은 관리자의 역할 목록(admin.js ROLE_GROUPS)과 같은 말을 씁니다. */
+  /* 미처리 넷은 우선순위 순서(긴급 → 높음 → 보통)로 두어 두 칸 목록에서
+     실제처럼 두 줄이 되게 하고, 담당팀이 비어 있는 경우(미지정)도 하나
+     넣습니다. 유형과 담당팀은 FAQ 의 안내(물품 → 운영지원, 전기 ·
+     네트워크 → 전산지원, 안전 → 안전지원)와 맞춥니다. */
   var SAMPLE_REQUESTS = [
-    { pri: '높음', st: '접수',  kind: '전기',     title: 'A-18 부스 멀티탭 추가 요청', booth: 'A-18',
-      body: '체험용 기기 전원이 부족해 멀티탭 1개가 더 필요합니다.', where: 'A-18 부스 · AI스쿨존',
+    { pri: '긴급', st: '확인 중', kind: '안전',   title: 'C-05 부스 앞 통로 전선 걸림 위험', booth: 'C-05',
+      body: '관람객 통로에 전원선이 드러나 있어 걸려 넘어질 위험이 있습니다.', where: 'C-05 부스 · C구역',
+      team: '안전지원' },
+    { pri: '높음', st: '접수',  kind: '물품',     title: 'A-18 부스 멀티탭 추가 요청', booth: 'A-18',
+      body: '체험용 기기 전원이 부족해 멀티탭 1개가 더 필요합니다.', where: 'A-18 부스 · A구역',
       team: '운영지원' },
-    { pri: '보통', st: '처리 중', kind: '네트워크', title: 'A-12 부스 와이파이 연결 확인', booth: 'A-12',
-      body: '체험용 노트북 2대가 행사장 와이파이에 연결되지 않습니다.', where: 'A-12 부스 · AI스쿨존',
+    { pri: '보통', st: '처리 중', kind: '네트워크', title: 'B-12 부스 와이파이 연결 확인', booth: 'B-12',
+      body: '체험용 노트북 2대가 행사장 와이파이에 연결되지 않습니다.', where: 'B-12 부스 · B구역',
       team: '전산지원' },
-    { pri: '보통', st: '완료',  kind: '시설',     title: '미래채움-03 부스 테이블 추가 요청', booth: '미래채움-03',
-      body: '체험 도구 배치를 위해 테이블 1개가 더 필요합니다.', where: '미래채움-03 부스 · 미래채움존',
+    { pri: '보통', st: '접수',  kind: '전기',     title: 'B-15 부스 전원이 자꾸 꺼짐', booth: 'B-15',
+      body: '드론 충전기를 연결하면 부스 전원이 내려갑니다.', where: 'B-15 부스 · B구역',
+      team: '' },
+    { pri: '보통', st: '완료',  kind: '시설',     title: 'D-03 부스 테이블 추가 요청', booth: 'D-03',
+      body: '체험 도구 배치를 위해 테이블 1개가 더 필요합니다.', where: 'D-03 부스 · D구역',
       team: '운영지원' }
   ];
 
+  /* 예시도 실제 목록과 같은 틀(처리가 필요한 요청 두 칸 + 접어 둔 해결
+     완료)에 담습니다. 예시일 때만 다른 모양이면, 실제 요청이 들어온 날
+     화면이 처음 보는 모양으로 바뀝니다. 예시 숫자 요약은 두지 않습니다 —
+     실제 요청 0건인 화면에 '미처리 4' 가 떠 있으면 숫자를 믿게 됩니다. */
   function sampleRequests() {
-    return sampleWrap(SAMPLE_NOTE,
-      SAMPLE_REQUESTS.map(function (r) {
-        var done = r.st === '완료';
-        // 실제 카드와 같은 자리에 담당팀 한 줄을 둡니다 — 예시에서 본
-        // 자리에 실제 값이 그대로 들어와야 예시를 본 뜻이 있습니다.
-        return '<div class="req is-sample">' +
-          '<span class="req__top">' + (done ? doneMark('해결 완료') : badge(r.pri) + badge(r.st)) +
-          '<span class="tag tag--soft">' + esc(r.kind) + '</span>' + SAMPLE_END + '</span>' +
-          '<span class="req__title">' + esc(r.title) + '</span>' +
-          '<span class="req__body">' + esc(r.body) + '</span>' +
-          teamLine(r.team, done) +
-          '<span class="req__meta">' + esc(r.where) + '</span></div>';
-      }).join(''));
+    function card(r) {
+      var done = r.st === '완료';
+      return '<div class="req is-sample' + (done ? ' is-done' : '') +
+        (!done && r.pri === '긴급' ? ' req--urgent' : '') + '">' +
+        reqCardInner({ priority: r.pri, status: r.st, kind: r.kind, title: r.title, body: r.body,
+          team: r.team, meta: r.where, done: done, sample: true }) + '</div>';
+    }
+    var open = SAMPLE_REQUESTS.filter(function (r) { return r.st !== '완료'; });
+    var done = SAMPLE_REQUESTS.filter(function (r) { return r.st === '완료'; });
+    return '<section class="listsec"><h2 class="section-title">처리가 필요한 요청' +
+      '<span class="section-title__n">' + open.length + '</span></h2>' +
+      '<div class="tl tl--2 reqlist" aria-label="예시 요청 목록">' + open.map(card).join('') + '</div></section>' +
+      doneSection('해결 완료', done.length,
+        '<div class="tl tl--2 reqlist">' + done.map(card).join('') + '</div>');
   }
 
   function sampleResources() {
-    return sampleWrap(SAMPLE_NOTE,
+    return sampleWrap(
       [
         ['운영 매뉴얼', '행사 운영 매뉴얼', '운영 절차와 시간대별 역할을 정리한 자료입니다.'],
         ['부스 운영', '부스 운영자 안내', '부스 준비 · 운영 · 철수 기준을 확인합니다.'],
@@ -438,7 +454,7 @@
   }
 
   function sampleContacts() {
-    return sampleWrap(SAMPLE_NOTE,
+    return sampleWrap(
       /* 사람이 아니라 역할로 찾게 합니다. 부스에서 문제가 생겼을 때 어느 팀에
          연락할지가 먼저 보이도록 부스 운영 책임 순서대로 둡니다.
          역할 이름은 관리자의 역할 목록(admin.js ROLE_GROUPS)과 같은 말이고,
@@ -462,7 +478,7 @@
   }
 
   function samplePlaces() {
-    return sampleWrap(SAMPLE_NOTE,
+    return sampleWrap(
       [
         ['운영본부', '운영 총괄 · 현장 지원 · 물품 수령'],
         ['메인 무대', '개막식 · 공연 · 시상 진행'],
@@ -476,20 +492,78 @@
       }).join(''), 2);
   }
 
-  function sampleFaqs() {
-    return sampleWrap(SAMPLE_NOTE,
-      [
-        // 확정되지 않은 답은 확정된 것처럼 쓰지 않습니다. 포털 기능 안내만 단정합니다.
-        ['부스 운영자는 몇 시까지 도착해야 하나요?', '도착 시간이 확정되면 이곳과 공지에 안내됩니다.'],
-        ['운영 중 전기나 네트워크 문제가 생기면 어떻게 하나요?', '운영 요청 메뉴에서 위치와 내용을 등록할 수 있습니다.'],
-        ['운영 물품은 어디에서 확인하나요?', '운영 물품 메뉴에서 기관·팀·부스별 배부 현황을 확인할 수 있습니다.'],
-        ['안전사고 발생 시 누구에게 연락하나요?', '안전 담당자가 확정되면 운영 인력 메뉴에서 확인할 수 있습니다.']
-      ].map(function (f) {
-        // 접었다 펴는 동작 없이 질문과 답을 함께 보여 줍니다.
-        return '<div class="faq is-sample">' +
-          '<div class="faq__q faq__q--static"><span>' + esc(f[0]) + '</span>' + SAMPLE_END + '</div>' +
-          '<div class="faq__a">' + esc(f[1]) + '</div></div>';
-      }).join(''));
+  /* 운영 FAQ 예시 — 현장에서 실제로 나오는 질문과, "그래서 어디에
+     말하나" 까지 닿는 답. 확정되지 않은 시각 · 위치 · 이름은 적지 않고
+     포털에서 어디를 보면 되는지와 어느 역할이 맡는지만 단정합니다.
+
+       role  관련 담당(역할 이름). 관리자 역할 목록(admin.js ROLE_GROUPS)과
+             같은 말입니다. 전화번호는 적지 않고 운영 인력 화면으로 잇습니다.
+       req   true 면 '운영 요청 등록' 단추(요청 화면의 단추와 같은 동작)
+       go    [해시, 단추 글자] — 확인할 화면으로 건너가는 단추
+
+     단추는 실제로 할 일이 있는 질문에만 답니다. */
+  var SAMPLE_FAQS = [
+    { cat: '도착·일정', q: '부스 운영자는 행사장에 도착하면 어디에서 확인하나요?',
+      a: ['먼저 운영본부에 들러 입장 확인과 당일 안내를 받아 주세요.',
+          '운영본부 위치가 확정되면 행사장 안내와 공지에 올라옵니다.'],
+      role: '운영본부', go: ['venue', '행사장 안내 보기'] },
+    { cat: '현장 문제', q: '부스 설치 중 전기나 네트워크 문제가 생기면 어떻게 하나요?',
+      a: ['운영 요청에서 부스 번호와 증상을 적고, 유형을 전기 또는 네트워크로 골라 등록해 주세요.',
+          '전원 · 인터넷 · 장비 문제는 전산지원에서 확인합니다.'],
+      role: '전산지원', req: true },
+    { cat: '현장 문제', q: '멀티탭 · 테이블 · 운영 물품이 추가로 필요하면 어떻게 하나요?',
+      a: ['운영 요청에서 필요한 물품과 수량, 부스 번호를 적어 등록해 주세요.',
+          '유형은 물품으로, 테이블처럼 설치가 필요한 것은 시설로 고릅니다. 운영지원에서 확인해 전달합니다.'],
+      role: '운영지원', req: true },
+    { cat: '담당·업무', q: '담당 업무나 담당자가 바뀌었는지 어디서 확인하나요?',
+      a: ['업무 배정 화면에서 확인합니다.',
+          '업무별 담당자에서는 업무마다 맡은 사람을, 담당자별 업무에서는 사람마다 맡은 업무를 볼 수 있습니다.'],
+      go: ['tasks', '업무 배정 보기'] },
+    { cat: '도착·일정', q: '행사 당일 일정이나 장소가 바뀌면 어디에서 확인하나요?',
+      a: ['공지에서 확인해 주세요. 긴급 · 중요 공지가 목록 맨 위에 먼저 표시됩니다.'],
+      go: ['notices', '공지 보기'] },
+    { cat: '안전', q: '안전사고나 응급상황이 생기면 누구에게 알려야 하나요?',
+      a: ['생명이 위급하면 119에 먼저 신고해 주세요.',
+          '그다음 가까운 안전지원 인력이나 운영본부에 바로 알리고, 상황이 정리되면 운영 요청에 안전 유형으로 기록을 남겨 주세요.',
+          '비상 대응 지침이 확정되면 그 지침을 먼저 따릅니다.'],
+      role: '안전지원', req: true },
+    { cat: '도착·일정', q: '부스 운영 중 교대나 마감 시간은 어디서 확인하나요?',
+      a: ['운영 일정과 업무 배정에서 확인합니다. 시간이 바뀌면 공지로 먼저 안내됩니다.'],
+      go: ['schedule', '운영 일정 보기'] },
+    { cat: '현장 문제', q: '문제를 등록했는데 누가 처리하는지 어떻게 확인하나요?',
+      a: ['운영 요청에서 등록한 요청을 누르면 처리 담당팀이 보입니다.',
+          '담당팀 아래의 담당자 보기를 누르면 그 역할의 운영 인력으로 건너갑니다.'],
+      go: ['requests', '운영 요청 보기'] }
+  ];
+
+  /* FAQ 한 건 — 실제 FAQ 와 예시 FAQ 가 같은 마크업과 같은 여닫기
+     동작을 씁니다. 질문을 누르면 답이 열리고, 다시 누르면 닫힙니다.
+     예시에만 있는 것은 질문 끝의 작은 '예시' 표시와 답 아래 도움 줄
+     (관련 담당 · 단추)입니다. 관련 담당 단추는 요청 상세의 '담당자
+     보기' 와 같은 함수(teamJumpBtn)를 씁니다. */
+  function faqItem(f, i) {
+    // 실제 FAQ 답은 관리자가 적은 줄바꿈대로 문단을 나눕니다.
+    var paras = Array.isArray(f.a) ? f.a
+      : String(f.a).split(/\n+/).filter(function (p) { return p.trim(); });
+    var help = '';
+    if (f.role || f.req || f.go) {
+      help = (f.role ? '<p class="faq__role"><span class="faq__rolel">관련 담당</span>' +
+          '<b>' + esc(f.role) + '</b></p>' : '') +
+        '<div class="faq__acts">' +
+        (f.req ? '<button class="btn btn--ghost btn--sm" type="button" data-newreq>운영 요청 등록</button>' : '') +
+        (f.role ? teamJumpBtn(f.role) : '') +
+        (f.go ? '<button class="btn btn--ghost btn--sm" type="button" data-go="' + esc(f.go[0]) + '">' +
+          esc(f.go[1]) + '</button>' : '') +
+        '</div>';
+    }
+    var id = 'faq-a-' + i;
+    return '<div class="faq' + (f.sample ? ' is-sample' : '') + '" data-faq="' + i + '">' +
+      '<button class="faq__q" type="button" aria-expanded="false" aria-controls="' + id + '">' +
+      '<span class="faq__qt">' + esc(f.q) + '</span>' +
+      (f.sample ? SAMPLE_END : '') +
+      '<span class="faq__sign" aria-hidden="true">+</span></button>' +
+      '<div class="faq__a" id="' + id + '" hidden>' +
+      paras.map(function (p) { return '<p>' + esc(p) + '</p>'; }).join('') + help + '</div></div>';
   }
 
   /* 운영 일정 예시 — 이틀(11.13 · 11.14) 행사 기준.
@@ -585,32 +659,21 @@
     return [at('14:30', '전시장'), at('15:00', '메인무대')];
   }
 
-  /* 부스 예시. 학교 부스만 있다고 가정하지 않도록 초·중·고와 기관형 부스를
-     함께 보여 줍니다 — 실제 행사에도 학교 부스와 협동조합·기관 부스가
-     함께 있을 수 있습니다. 실제 기관명 대신 ○○·△△·□□ 로 일반화합니다. */
+  /* 부스 예시. 학교 부스만 있다고 가정하지 않도록 초·중·고와 기관·업체
+     부스를 함께 두고, A~D 네 구역에 나눠 구역 · 구분 필터를 실제처럼
+     눌러 볼 수 있게 합니다. 화면에서만 쓰는 값이고 어디에도 저장하지
+     않습니다. 실제 기관명 대신 ○○·△△·□□ 로 일반화합니다.
+     zone 은 구역 키(A·B·C·D), area 는 구역 안의 운영 공간 이름입니다. */
   var SAMPLE_BOOTHS = [
-    { code: 'A-18', type: '초등', name: '레고와 코딩으로 만드는 AI 놀이터', org: '○○초등학교', zone: 'AI스쿨존' },
-    { code: 'A-23', type: '초등', name: '증강현실 AR 체험', org: '△△초등학교', zone: 'AI스쿨존' },
-    { code: 'A-12', type: '중등', name: 'AI 모션 센서를 활용한 인터랙티브 체험', org: '○○중학교', zone: 'AI스쿨존' },
-    { code: 'A-63', type: '고등', name: '아두이노 기반 스마트 시스템 체험', org: '□□고등학교', zone: 'AI스쿨존' },
-    { code: '미래채움-03', type: '기관', name: 'AI 기반 환경문제 해결 체험', org: 'SW교육협동조합', zone: '미래채움존' }
+    { code: 'A-18', type: '초등', name: '레고와 코딩으로 만드는 AI 놀이터', org: '○○초등학교', zone: 'A', area: 'AI스쿨존' },
+    { code: 'A-23', type: '초등', name: '증강현실 AR 체험', org: '△△초등학교', zone: 'A', area: 'AI스쿨존' },
+    { code: 'B-12', type: '중등', name: 'AI 모션 센서를 활용한 인터랙티브 체험', org: '○○중학교', zone: 'B', area: 'AI스쿨존' },
+    { code: 'B-15', type: '중등', name: '드론 코딩 비행 체험', org: '△△중학교', zone: 'B', area: 'AI스쿨존' },
+    { code: 'C-05', type: '고등', name: '아두이노 기반 스마트 시스템 체험', org: '□□고등학교', zone: 'C', area: 'AI스쿨존' },
+    { code: 'C-09', type: '초등', name: '로봇과 함께하는 분리배출 챌린지', org: '□□초등학교', zone: 'C', area: 'AI스쿨존' },
+    { code: 'D-03', type: '기관', name: 'AI 기반 환경문제 해결 체험', org: '○○교육협동조합', zone: 'D', area: '미래채움존' },
+    { code: 'D-08', type: '기업', name: '생성형 AI 교육 콘텐츠 체험', org: '△△에듀테크', zone: 'D', area: '미래채움존' }
   ];
-
-  // 실제 카드(.booth)와 같은 마크업을 쓰되 .boothgrid 에 담아 실제 부스
-  // 목록과 같은 열 배치로 보이게 합니다. orgBadge()는 아래에서 정의됩니다.
-  function sampleBooths() {
-    return '<div class="sample"><p class="samplenote">' + esc(SAMPLE_NOTE) + '</p>' +
-      '<div class="boothgrid" aria-label="예시 부스 목록">' +
-      SAMPLE_BOOTHS.map(function (b, n) {
-        // 눌러서 상세를 볼 수 있습니다 — 부스 → 관련 요청·물품 흐름을 미리 보여 줍니다.
-        return '<button class="booth is-sample" type="button" data-samplebooth="' + n + '">' +
-          '<span class="booth__top"><span class="booth__code">' + esc(b.code) + '</span>' +
-          orgBadge(b.type) + SAMPLE_END + '</span>' +
-          '<span class="booth__name">' + esc(b.name) + '</span>' +
-          '<span class="booth__org">' + esc(b.org) + '</span>' +
-          '<span class="booth__foot">' + esc(b.zone) + '</span></button>';
-      }).join('') + '</div></div>';
-  }
 
   /* ── 부스와 이어진 운영 ─────────────────────────────────────────
      부스 카드에 '준비 전 / 운영 중' 같은 상태를 다시 두지 않습니다.
@@ -663,7 +726,7 @@
     var b = SAMPLE_BOOTHS[n];
     if (!b) return;
     var rows = [['부스 번호', b.code], ['부스명', b.name], ['운영기관', b.org],
-                ['운영기관 유형', b.type], ['구역', b.zone]];
+                ['운영기관 유형', b.type], ['구역', b.zone + '구역 · ' + b.area]];
     var html = '<dl class="dl">' + rows.map(function (r) {
         return '<div class="dl__row"><dt>' + esc(r[0]) + '</dt><dd>' + esc(r[1]) + '</dd></div>';
       }).join('') + '</dl>' +
@@ -783,8 +846,14 @@
       (groupLabel ? ' aria-label="' + esc(groupLabel) + '"' : '') + '>' + items.map(function (it) {
       var label = typeof it === 'string' ? it : it.label;
       var n = typeof it === 'string' ? null : it.n;
-      return '<button class="chip' + (label === active ? ' is-on' : '') + '" type="button" ' +
-        attr + '="' + esc(label) + '" aria-pressed="' + (label === active) + '">' + esc(label) +
+      // value: 필터에 담을 값(없으면 글자 그대로). short: 좁은 화면에서 보일 짧은 글자 —
+      // 긴 글자는 화면 읽기 도구를 위해 남겨 둡니다.
+      var value = typeof it === 'string' || it.value == null ? label : it.value;
+      var text = it.short
+        ? '<span class="chip__long">' + esc(label) + '</span><span class="chip__short" aria-hidden="true">' + esc(it.short) + '</span>'
+        : esc(label);
+      return '<button class="chip' + (value === active ? ' is-on' : '') + '" type="button" ' +
+        attr + '="' + esc(value) + '" aria-pressed="' + (value === active) + '">' + text +
         (n != null ? '<span class="chip__n">' + n + '</span>' : '') + '</button>';
     }).join('') + '</div>';
   }
@@ -1459,8 +1528,7 @@
       pageHead('운영 일정', ev.sameDay
         ? '요약은 오늘 전체 일정 기준, 목록은 선택한 조건 기준입니다.'
         : '') +
-      // 예시 안내는 화면 위에 한 번만. 카드마다에는 작은 '예시' 표시만 둡니다.
-      (S.schedule.length ? '' : '<p class="samplenote">' + esc(SAMPLE_NOTE) + '</p>') +
+      // 예시 일정은 줄마다 붙은 작은 '예시' 표시와 목록 머리의 '· 예시' 로 알립니다.
       '<section class="schedlive' + (ev.sameDay ? ' is-today' : '') + '" id="sched-live" aria-label="실시간 일정 요약">' +
       scheduleLiveHtml(ev) + '</section>' +
       // 순서: 날짜 → 오전·오후(+핵심) → 분류 → 검색. 여러 날 행사에서는 날짜가 가장 큰 갈래입니다.
@@ -1635,96 +1703,123 @@
   function orgBadge(type) {
     return type ? '<span class="orgtag orgtag--' + ORG_TONE[type] + '">' + esc(type) + '</span>' : '';
   }
-  // 필터에서는 기관·기업·기타를 하나로 묶습니다. 수가 적어 칩을 셋으로
-  // 나누면 줄만 길어집니다. 카드에는 실제 값을 그대로 적습니다.
+  // 필터에서는 기관·기업·기타를 '기관·업체' 하나로 묶습니다. 수가 적어
+  // 칩을 셋으로 나누면 줄만 길어집니다. 카드에는 실제 값을 그대로 적습니다.
   function orgGroup(type) {
-    return (type === '초등' || type === '중등' || type === '고등') ? type : (type ? '기관·기타' : '');
+    return (type === '초등' || type === '중등' || type === '고등') ? type : (type ? '기관·업체' : '');
   }
+  var ORG_GROUPS = [
+    { label: '초등', short: '초' }, { label: '중등', short: '중' },
+    { label: '고등', short: '고' }, { label: '기관·업체' }
+  ];
 
   function zoneName(key) {
     var z = S.zones.filter(function (x) { return x.key === key; })[0];
     return z ? z.key + '구역' + (z.label ? ' · ' + z.label : '') : (key ? key + '구역' : '');
   }
 
+  /* 부스 목록의 원본. 실제 부스가 한 건이라도 있으면 실제 부스만, 없으면
+     예시 부스를 같은 모양으로 바꿔 씁니다. 구역 · 구분 필터와 검색은
+     이 목록 하나만 보므로, 예시 화면에서도 실제와 똑같이 동작합니다.
+       zone  구역 키(저장된 zone_key 그대로)   foot  카드 맨 아래 위치 줄 */
+  function boothItems() {
+    if (S.booths.length) {
+      return S.booths.map(function (b) {
+        return { id: b.id, code: b.code || (b.zone_key + '-' + b.no), type: orgType(b),
+          zone: b.zone_key || '', name: b.name, org: b.org || '운영기관 미정',
+          foot: [zoneName(b.zone_key), b.program].filter(Boolean).join(' · '),
+          find: (b.program || '') + ' ' + zoneName(b.zone_key) };
+      });
+    }
+    return SAMPLE_BOOTHS.map(function (b, n) {
+      return { sample: n, code: b.code, type: b.type, zone: b.zone, name: b.name, org: b.org,
+        foot: b.zone + '구역 · ' + b.area, find: b.zone + '구역 ' + b.area };
+    });
+  }
+
+  /* 구역 칩에 올릴 키. 등록된 구역(zones)의 순서를 먼저 따르고, 구역
+     목록에 없는 키가 부스에 적혀 있으면 뒤에 붙입니다. 예시 화면에서는
+     예시 부스의 키(A~D)를 씁니다. 칩 글자는 'A구역' — 저장된 값은 그대로
+     두고 화면에서만 '구역' 을 붙입니다. */
+  function boothZoneKeys(items) {
+    var keys = S.booths.length ? S.zones.map(function (z) { return z.key; }) : [];
+    items.forEach(function (b) { if (b.zone && keys.indexOf(b.zone) < 0) keys.push(b.zone); });
+    return keys.filter(function (k) { return items.some(function (b) { return b.zone === k; }); });
+  }
+
   function viewBooths() {
     var q = ui.boothQ.trim().toLowerCase();
+    var items = boothItems();
+    var sample = !S.booths.length;
 
-    // 구역은 개수보다 '그 구역만 보기' 로 쓰입니다.
-    var zoneHtml = S.zones.length > 1
-      ? '<div class="chiprow" role="group" aria-label="구역">' +
-        ['전체'].concat(S.zones.map(function (z) { return z.key + '존'; })).map(function (lab) {
-          var n = lab === '전체' ? S.booths.length
-            : S.booths.filter(function (b) { return b.zone_key + '존' === lab; }).length;
-          var text = lab === '전체' ? '전체' : lab.replace('존', '');
-          return '<button class="chip' + (ui.boothZone === lab ? ' is-on' : '') + '" type="button" ' +
-            'data-boothzone="' + esc(lab) + '" aria-pressed="' + (ui.boothZone === lab) + '">' +
-            esc(text) + '<span class="chip__n">' + n + '</span></button>';
-        }).join('') + '</div>'
+    // 구역은 개수보다 '그 구역만 보기' 로 쓰입니다. 고를 것이 하나뿐이면 두지 않습니다.
+    var zoneKeys = boothZoneKeys(items);
+    var zoneHtml = zoneKeys.length > 1
+      ? '<div class="filterrow"><span class="filterrow__l">구역</span>' +
+        chips([{ label: '전체', n: items.length }].concat(zoneKeys.map(function (k) {
+          return { label: k + '구역', short: k, value: k,
+            n: items.filter(function (b) { return b.zone === k; }).length };
+        })), ui.boothZone, 'data-boothzone', '', '구역') + '</div>'
       : '';
 
     /* 구분은 한 단계 작은 보조 필터입니다. 유형을 알 수 있는 부스가
-       하나도 없으면 줄 자체를 두지 않습니다. */
-    var groupsPresent = ['초등', '중등', '고등', '기관·기타'].filter(function (g) {
-      return S.booths.some(function (b) { return orgGroup(orgType(b)) === g; });
+       하나도 없거나 한 가지뿐이면(예: 전부 초등) 줄 자체를 두지 않습니다. */
+    var groupsPresent = ORG_GROUPS.filter(function (g) {
+      return items.some(function (b) { return orgGroup(b.type) === g.label; });
     });
-    // 고를 것이 한 가지뿐이면(예: 전부 초등) 필터는 뜻이 없습니다.
     var typeHtml = groupsPresent.length > 1
       ? '<div class="filterrow"><span class="filterrow__l">구분</span>' +
-        chips(['전체'].concat(groupsPresent).map(function (g) {
-          return { label: g, n: g === '전체' ? S.booths.length
-            : S.booths.filter(function (b) { return orgGroup(orgType(b)) === g; }).length };
-        }), ui.boothType, 'data-boothtype', 'chiprow--sub') + '</div>'
+        chips([{ label: '전체', n: items.length }].concat(groupsPresent.map(function (g) {
+          return { label: g.label, short: g.short,
+            n: items.filter(function (b) { return orgGroup(b.type) === g.label; }).length };
+        })), ui.boothType, 'data-boothtype', 'chiprow--sub', '구분') + '</div>'
       : '';
 
-    var list = S.booths.filter(function (b) {
-      if (ui.boothZone !== '전체' && (b.zone_key + '존') !== ui.boothZone) return false;
-      if (ui.boothType !== '전체' && orgGroup(orgType(b)) !== ui.boothType) return false;
+    // 두 필터는 함께 걸립니다(예: B구역 + 중등).
+    var list = items.filter(function (b) {
+      if (ui.boothZone !== '전체' && b.zone !== ui.boothZone) return false;
+      if (ui.boothType !== '전체' && orgGroup(b.type) !== ui.boothType) return false;
       if (!q) return true;
       // 부스번호 · 부스명 · 운영기관 · 유형 · 구역(키와 이름) · 프로그램
-      return ((b.code || '') + ' ' + b.name + ' ' + (b.org || '') + ' ' + (b.program || '') + ' ' + orgType(b) +
-        ' ' + orgGroup(orgType(b)) + ' ' + (b.zone_key || '') + ' ' + zoneName(b.zone_key))
-        .toLowerCase().indexOf(q) >= 0;
+      return (b.code + ' ' + b.name + ' ' + b.org + ' ' + b.type + ' ' + orgGroup(b.type) +
+        ' ' + b.zone + ' ' + b.find).toLowerCase().indexOf(q) >= 0;
     });
 
-    var body = list.length ? '<div class="boothgrid">' + list.map(function (b) {
-      // 읽는 순서: 번호 · 유형 → 부스명 · 기관 → 위치.
-      // 유형은 옅게 채운 표시, 구역은 테두리만 있는 위치 표시로 문법을 나눕니다.
-      return '<button class="booth" type="button" data-booth="' + esc(b.id) + '">' +
-        '<span class="booth__top"><span class="booth__code">' + esc(b.code || (b.zone_key + '-' + b.no)) + '</span>' +
-        orgBadge(orgType(b)) + '</span>' +
-        '<span class="booth__name">' + esc(b.name) + '</span>' +
-        '<span class="booth__org">' + esc(b.org || '운영기관 미정') + '</span>' +
-        // 구역은 상자 없이 작은 글자로. 위치 정보라 유형 배지와 겹쳐 보이면 안 됩니다.
-        ((b.zone_key || b.program)
-          ? '<span class="booth__foot">' + esc([zoneName(b.zone_key), b.program].filter(Boolean).join(' · ')) + '</span>'
-          : '') +
-        '</button>';
-    }).join('') + '</div>'
-      // 등록된 부스가 없을 때만 예시를 보여 줍니다. 검색·필터를 걸어서 0건이 된
-      // 경우에는(등록 부스가 없어도) 예시가 다시 나타나면 안 되므로 조건에 맞는
-      // 결과 없음으로 안내합니다.
-      : S.booths.length || ui.boothZone !== '전체' || ui.boothType !== '전체' || q
-        ? noMatchBox('조건에 맞는 부스가 없습니다.')
-        : sampleBooths();
+    var body = list.length ? '<div class="boothgrid"' + (sample ? ' aria-label="예시 부스 목록"' : '') + '>' +
+      list.map(function (b) {
+        // 읽는 순서: 번호 · 유형 → 부스명 · 기관 → 구역.
+        // 구역은 상자 없이 카드 맨 아래 작은 글자로. 위치 정보라 유형 표시와 겹쳐 보이면 안 됩니다.
+        // 예시 부스도 눌러서 상세(→ 관련 요청 · 물품)를 볼 수 있습니다.
+        return '<button class="booth' + (sample ? ' is-sample' : '') + '" type="button" ' +
+          (sample ? 'data-samplebooth="' + b.sample + '"' : 'data-booth="' + esc(b.id) + '"') + '>' +
+          '<span class="booth__top"><span class="booth__code">' + esc(b.code) + '</span>' +
+          orgBadge(b.type) + (sample ? SAMPLE_END : '') + '</span>' +
+          '<span class="booth__name">' + esc(b.name) + '</span>' +
+          '<span class="booth__org">' + esc(b.org) + '</span>' +
+          (b.foot ? '<span class="booth__foot">' + esc(b.foot) + '</span>' : '') +
+          '</button>';
+      }).join('') + '</div>'
+      : noMatchBox('조건에 맞는 부스가 없습니다.');
 
+    /* 배치도는 올라와 있을 때만 그립니다. 없을 때 '준비 중' 큰 빈 상자를
+       두면 필터와 부스 목록이 첫 화면 아래로 밀립니다. 행사장 안내 화면은
+       배치도 자리를 그대로 둡니다 — 그 화면은 배치도를 보러 가는 곳입니다. */
     var s = S.settings || {};
-    var map = mediaBox({
+    var map = s.booth_map_url ? mediaBox({
       url: s.booth_map_url, alt: s.booth_map_alt, caption: s.booth_map_caption,
-      title: '부스 배치도',
-      hint: '부스 배치도를 준비 중입니다.'
-    });
+      title: '부스 배치도'
+    }) : '';
 
     return '<div class="page">' +
       pageHead('부스 현황') +
       map +
-      // 등록된 부스가 없을 때 "전체 부스 0개"를 예시 카드 위에 그대로 두면
-      // 숫자와 목록이 서로 다른 말을 하게 됩니다 — 실제 부스가 있을 때만 적습니다.
-      (S.booths.length ? '<p class="countline">전체 부스 <b>' + S.booths.length + '</b>개</p>' : '') +
-      (zoneHtml ? '<div class="filterrow"><span class="filterrow__l">구역</span>' + zoneHtml + '</div>' : '') +
+      // 예시 화면에서 "전체 부스 8개" 라고 적으면 실제 부스 수로 읽힙니다 — 실제 부스가 있을 때만 적습니다.
+      (sample ? '' : '<p class="countline">전체 부스 <b>' + items.length + '</b>개</p>') +
+      zoneHtml +
       typeHtml +
       '<div class="tools"><div class="search"><label class="sr-only" for="booth-q">부스 검색</label>' +
       '<input class="input" id="booth-q" type="search" placeholder="부스번호 · 부스명 · 운영기관 · 구역 검색" value="' + esc(ui.boothQ) + '" /></div></div>' +
-      (list.length && list.length !== S.booths.length ? '<p class="resultline">' + list.length + '건</p>' : '') +
+      (list.length && list.length !== items.length ? '<p class="resultline">' + list.length + '건</p>' : '') +
       body + '</div>';
   }
 
@@ -1877,18 +1972,30 @@
       '<span class="teamline__l">담당팀</span><span class="teamline__v">미지정</span></span>';
   }
 
+  /* 요청 카드 안쪽 — 실제 요청과 예시 요청이 같은 마크업을 씁니다.
+     읽는 순서: 우선순위 · 상태 · 유형 → 제목 → 짧은 내용 → 담당팀 → 위치.
+     담당팀과 위치는 .req__foot 로 묶어 카드 아래쪽에 붙입니다. 두 칸
+     목록에서 같은 줄 두 카드의 담당팀이 같은 높이에 놓입니다. */
+  function reqCardInner(o) {
+    return '<span class="req__top">' +
+      (o.done ? doneMark('해결 완료') : badge(o.priority) + badge(o.status)) +
+      (o.kind ? '<span class="tag">' + esc(o.kind) + '</span>' : '') +
+      (o.sample ? SAMPLE_END : '') + '</span>' +
+      '<span class="req__title">' + esc(o.title) + '</span>' +
+      (o.body ? '<span class="req__body">' + esc(o.body) + '</span>' : '') +
+      '<span class="req__foot">' + teamLine(o.team, o.done) +
+      '<span class="req__meta">' + esc(o.meta) + '</span></span>';
+  }
+
   function requestCard(r) {
     var done = r.status === '완료';
     var urgent = !done && r.priority === '긴급';
     var card = '<button class="req' + (done ? ' is-done' : '') + (urgent ? ' req--urgent' : '') +
       '" type="button" data-req="' + esc(r.id) + '">' +
-      '<span class="req__top">' + (done ? doneMark('해결 완료') : badge(r.priority) + badge(r.status)) +
-      '<span class="tag tag--soft">' + esc(r.kind) + '</span></span>' +
-      '<span class="req__title">' + esc(r.title) + '</span>' +
-      (r.body ? '<span class="req__body">' + esc(r.body) + '</span>' : '') +
-      teamLine(r.assignee_team, done) +
-      '<span class="req__meta">' + esc(r.location || '위치 미지정') + ' · ' +
-      esc(done ? fmtDay(r.created_at) : agoLabel(r.created_at)) + '</span></button>';
+      reqCardInner({ priority: r.priority, status: r.status, kind: r.kind, title: r.title, body: r.body,
+        team: r.assignee_team, done: done,
+        meta: (r.location || '위치 미지정') + ' · ' + (done ? fmtDay(r.created_at) : agoLabel(r.created_at)) }) +
+      '</button>';
     // 끝난 요청에는 단추를 두지 않습니다.
     return done ? card : actionCard(card, actBtn('data-reqdone="' + esc(r.id) + '"', '해결 완료'));
   }
@@ -1918,18 +2025,18 @@
         '<section class="listsec"><h2 class="section-title">처리가 필요한 요청' +
         '<span class="section-title__n">' + open.length + '</span></h2>' +
         (open.length
-          ? '<div class="tl">' + open.map(requestCard).join('') + '</div>'
+          ? '<div class="tl tl--2 reqlist">' + open.map(requestCard).join('') + '</div>'
           : '<p class="allclear">' + doneMark('남은 요청이 없습니다.') + '</p>') +
         '</section>' +
-        doneSection('해결 완료', done.length, '<div class="tl">' + done.map(requestCard).join('') + '</div>');
+        doneSection('해결 완료', done.length, '<div class="tl tl--2 reqlist">' + done.map(requestCard).join('') + '</div>');
     }
 
+    /* 제목 아래 설명문과 안전 안내 줄은 두지 않습니다. 화면이 하는 일은
+       제목과 '현장 문제 보고' 단추로 이미 드러나고, 안전사고 때 할 일은
+       운영 FAQ 의 안전 항목에서 담당(안전지원)과 함께 안내합니다. */
     return '<div class="page">' +
-      pageHead('운영 요청',
-        '현장 지원이 필요할 때 등록하고, 해결되면 완료로 표시합니다.',
+      pageHead('운영 요청', '',
         '<button class="btn btn--primary btn--sm" type="button" data-newreq>+ 현장 문제 보고</button>') +
-      // 비상 연락처가 아직 확정되지 않아 번호는 넣지 않습니다.
-      '<p class="pagenote">안전과 관련된 긴급 상황은 요청 등록과 함께 운영본부에 직접 알려 주세요.</p>' +
       body + '</div>';
   }
 
@@ -2253,25 +2360,25 @@
   function viewFaq() {
     // 답변이 없는 질문은 아직 준비 중입니다. 관리자에서 답변을 채우고
     // '공개'를 켜야 여기에 나옵니다.
-    var all = S.faqs.filter(function (f) {
+    var real = S.faqs.filter(function (f) {
       return f.is_public !== false && (f.answer || '').trim();
     });
+    // 실제 FAQ 가 없을 때만 예시. 분류 칩과 여닫기는 예시에서도 똑같이 동작합니다.
+    var all = real.length
+      ? real.map(function (f) { return { cat: f.category, q: f.question, a: f.answer }; })
+      : SAMPLE_FAQS.map(function (f) {
+          var o = {}; for (var k in f) o[k] = f[k]; o.sample = true; return o;
+        });
 
     var cats = ['전체'].concat(all.reduce(function (a, f) {
-      if (f.category && a.indexOf(f.category) < 0) a.push(f.category); return a; }, []));
+      if (f.cat && a.indexOf(f.cat) < 0) a.push(f.cat); return a; }, []));
     var list = all.filter(function (f) {
-      return ui.faqCat === '전체' || f.category === ui.faqCat;
+      return ui.faqCat === '전체' || f.cat === ui.faqCat;
     });
 
-    var body = list.length ? '<div class="tl">' + list.map(function (f, i) {
-      return '<div class="faq" data-faq="' + i + '">' +
-        '<button class="faq__q" type="button" aria-expanded="false"><span>' + esc(f.question) + '</span>' +
-        '<span class="faq__sign" aria-hidden="true">+</span></button>' +
-        '<div class="faq__a" hidden>' + esc(f.answer) + '</div></div>';
-    }).join('') + '</div>'
-      : all.length
-        ? noMatchBox('조건에 맞는 질문이 없습니다.')
-        : sampleFaqs();
+    var body = list.length
+      ? '<div class="tl"' + (real.length ? '' : ' aria-label="예시 질문 목록"') + '>' + list.map(faqItem).join('') + '</div>'
+      : noMatchBox('조건에 맞는 질문이 없습니다.');
 
     return '<div class="page">' +
       pageHead('운영 FAQ') +
@@ -2394,7 +2501,7 @@
   ];
 
   function sampleTasks() {
-    return sampleWrap(SAMPLE_NOTE,
+    return sampleWrap(
       SAMPLE_TASKS.map(function (t) {
         var done = t.st === '완료';
         return '<div class="task is-sample' + (done ? ' is-done' : '') + '">' +
@@ -2423,7 +2530,7 @@
   ];
 
   function samplePeople() {
-    return sampleWrap(SAMPLE_NOTE,
+    return sampleWrap(
       SAMPLE_PEOPLE.map(function (p) {
         return '<div class="rowcard rowcard--person is-sample"><div class="rowcard__body">' +
           '<div class="rowcard__name">' + esc(p.name) +
@@ -2743,7 +2850,7 @@
       supplySummary(function (st) {
         return SAMPLE_SUPPLIES.filter(function (t) { return t.status === st; }).length;
       }, 'sumgrid--sample') + '</div>';
-    return sampleWrap(SAMPLE_NOTE,
+    return sampleWrap(
       SAMPLE_SUPPLIES.map(function (t) {
         var done = t.status === '배부 완료';
         // 예시 표시는 오른쪽 끝에 작게 한 번만. 상태 배지와 같은 무게로 늘어서지 않게 합니다.
@@ -2781,7 +2888,7 @@
   }
 
   function viewSupplies() {
-    var head = pageHead('운영 물품', '배부 상태는 운영본부가 관리합니다.');
+    var head = pageHead('운영 물품');
 
     if (C.isTableMissing('supply_targets')) {
       return '<div class="page">' + head + notReadyBox('운영 물품 기능이 아직 준비되지 않았습니다.') + '</div>';
@@ -3114,11 +3221,7 @@
 
       var fq = t.closest('.faq__q');
       if (fq) {
-        /* 예시 FAQ 는 접었다 펴지 않습니다. 질문과 답을 함께 펼쳐 둔
-           정적인 카드라 여는 단추(.faq__sign)도 없습니다. 여기서 걸러
-           내지 않으면 없는 단추를 건드려 오류가 나고, 눌린 김에 답이
-           접혀 사라집니다. */
-        if (fq.classList.contains('faq__q--static')) return;
+        // 실제 FAQ 와 예시 FAQ 가 같은 마크업(faqItem)이라 여기 하나로 여닫습니다.
         var box = fq.closest('.faq');
         var open = box.classList.toggle('is-open');
         fq.setAttribute('aria-expanded', String(open));
