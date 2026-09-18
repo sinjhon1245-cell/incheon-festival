@@ -45,6 +45,14 @@
 
   function opts(l) { return l.map(function (v) { return [v, v]; }); }
 
+  /* 부모 한 줄에 딸린 관리자 전용 줄(예: 담당자 → contact_private).
+     없으면 null 입니다 — 아직 개인 연락처를 한 번도 적지 않은 담당자. */
+  function privateOf(key, parentId) {
+    var pv = (ENTITIES[key] || {}).private;
+    if (!pv || !parentId) return null;
+    return (cache[pv.key] || []).filter(function (x) { return x[pv.parent] === parentId; })[0] || null;
+  }
+
   /* 배정 한 줄이 가리키는 사람 이름. 연락망에 연결돼 있으면 그쪽을
      씁니다 — 연락처가 바뀌어도 배정을 다시 고칠 필요가 없습니다. */
   function assignName(a) {
@@ -89,7 +97,9 @@
     '접수': 'warn', '확인 중': 'info', '처리 중': 'info', '완료': 'ok',
     '미배부': 'warn', '일부 배부': 'info', '배부 완료': 'ok',
     // 연락망에서 '운영 인력' 으로 표시한 사람을 눈에 띄게 합니다.
-    '운영 인력': 'info'
+    '운영 인력': 'info',
+    // 공개 칸에 전화번호가 남은 담당자 — 옮기고 비워야 합니다.
+    '공개 칸 번호 정리 필요': 'warn'
   };
   function badge(t) { return '<span class="badge badge--' + (TONE[t] || 'off') + '">' + esc(t) + '</span>'; }
   function tag(t) { return '<span class="badge badge--plain">' + esc(t) + '</span>'; }
@@ -272,9 +282,12 @@
 
         { type: 'group', label: '운영 정보' },
         { k: 'hours',         label: '운영 시간' },
-        { k: 'manager_phone', label: '부스 담당자 연락처', type: 'tel',
-          hint: '⚠️ 개인 휴대전화 입력 금지 — 부스 표도 로그인 없이 열람됩니다. ' +
-                '보안 분리 전까지 공용번호만 적어 주세요' },
+        /* 부스 표는 로그인 없이 읽힙니다. 개인 번호를 둘 자리가 아니라서
+           새로 적는 칸은 없앴습니다 — 연락이 필요한 담당자는 연락망에
+           담당자로 등록하고 '관리자 전용 정보' 에 번호를 적습니다.
+           예전 값이 남은 부스에만 보여서 비울 수 있게 합니다. */
+        { k: 'manager_phone', label: '부스 담당자 연락처 (이전 값)', type: 'tel', legacyOnly: true,
+          hint: '⚠️ 이 칸은 로그인 없이 읽힙니다. 비워 주시고, 연락처는 연락망 담당자의 “개인 연락처” 에 적어 주세요' },
         { k: 'program',       label: '운영 프로그램', wide: true },
         { k: 'needs_power',   label: '전기 사용 필요', type: 'bool' },
         { k: 'needs_network', label: '네트워크 필요', type: 'bool' },
@@ -353,33 +366,76 @@
       ]
     },
 
+    /* 담당자는 두 표에 나눠 담습니다.
+
+         contacts         공개 — 로그인 없이 포털에서 읽힙니다
+         contact_private  관리자 전용 — 개인 연락처 · 관리자 메모
+
+       contact_private 는 비로그인 사용자에게 권한 자체가 없고(401),
+       로그인한 사용자도 is_admin() 인 사람만 줄을 봅니다. 화면에서
+       감추는 것이 아니라 데이터베이스가 막습니다. 편집 창에서도
+       두 묶음을 나눠, 어느 칸이 공개되는지 입력하는 순간 보이게 합니다.
+
+       contacts.phone 칸은 아직 표에 남아 있지만(지우기 전 호환 확인
+       단계) 새로 쓰지 않습니다. 예전에 값이 들어간 담당자에게만
+       그 칸이 보이고, 비워서 저장하면 다음부터는 보이지 않습니다. */
     contacts: {
-      label: '연락망', table: 'contacts', addLabel: '+ 연락처 추가',
-      desc: '운영 담당자와 지원 연락처를 관리합니다.',
-      blank: { name: '', category: '기타', phone: '' },
+      label: '연락망', table: 'contacts', addLabel: '+ 담당자 추가',
+      desc: '운영 담당자를 관리합니다. 개인 연락처는 관리자만 볼 수 있습니다.',
+      blank: { name: '', category: '기타' },
       title: function (r) { return r.name || '(이름 없음)'; },
-      meta: function (r) { return (r.org || '') + (r.phone ? ' · ' + r.phone : ''); },
+      // 관리자 화면이라 개인 연락처를 보여 줍니다. 관리자 로그인이 아니면
+      // 이 목록에 들어올 수 없고, 값 자체가 내려오지 않습니다.
+      meta: function (r) {
+        var p = privateOf('contacts', r.id);
+        return (r.org || '') + (p && p.phone ? (r.org ? ' · ' : '') + p.phone : '');
+      },
       tags: function (r) { return tag(r.category || '기타') + (r.duty ? tag(r.duty) : '') +
-        (r.is_staff ? badge('운영 인력') : ''); },
+        (r.is_staff ? badge('운영 인력') : '') +
+        // 공개 칸에 번호가 남아 있으면 옮겨야 한다는 표시를 답니다.
+        (String(r.phone || '').trim() ? badge('공개 칸 번호 정리 필요') : ''); },
       fields: [
+        { type: 'group', label: '공개 정보',
+          hint: '로그인 없이 포털에서 누구나 볼 수 있습니다. 개인 연락처는 여기에 적지 마세요.' },
         { k: 'name',     label: '이름', required: true },
-        { k: 'category', label: '연락처 분류', hint: '연락망을 묶어 보는 이름. 예: 운영본부 · 협력기관 · 시설' },
         { k: 'org',      label: '소속' },
-        { k: 'duty',     label: '담당업무', hint: '실제 담당 내용을 간단히 설명. 예: 전원·네트워크 점검' },
-        /* ⚠️ contacts 는 지금 로그인 없이 열람할 수 있는 표입니다.
-           포털 화면에서는 번호를 빼 두었지만, 표 자체는 아직 공개
-           범위 안에 있습니다. 개인 휴대전화는 넣지 마세요. */
-        { k: 'phone',    label: '전화번호', type: 'tel',
-          hint: '⚠️ 개인 휴대전화 입력 금지 — 지금 구조에서는 이 표가 공개 범위입니다. ' +
-                '보안 분리 전까지 운영본부·기관 대표번호 같은 공용번호만 적어 주세요' },
         // 이 두 칸이 포털 '업무 배정' 화면의 인력 집계를 만듭니다.
         // 연락망과 명부를 따로 두지 않으려고 여기에 함께 둡니다.
-        { k: 'is_staff',   label: '운영 인력 (업무 배정 화면에서 집계)', type: 'bool' },
         { k: 'role_group', label: '역할 구분', type: 'select', keepValue: true,
           options: [['', '(없음)']].concat(opts(ROLE_GROUPS)),
           hint: '부스지원 · 전산지원처럼 이 사람이 행사에서 맡은 기본 역할' },
-        { k: 'memo',     label: '메모', type: 'textarea', wide: true }
-      ]
+        { k: 'duty',     label: '담당업무', hint: '실제 담당 내용을 간단히 설명. 예: 전원·네트워크 점검' },
+        { k: 'is_staff', label: '운영 인력 (업무 배정 화면에서 집계)', type: 'bool' },
+        { k: 'category', label: '연락처 분류', hint: '담당자를 묶어 보는 이름. 예: 운영본부 · 협력기관 · 시설' },
+        { k: 'memo',     label: '공개 메모', type: 'textarea', wide: true,
+          hint: '포털에 그대로 보입니다. 관리자끼리만 볼 내용은 아래 관리자 메모에 적어 주세요' },
+        /* 예전 공개 칸. 값이 남아 있는 담당자에게만 보입니다
+           (legacyOnly — openEditor 참고). 새 담당자에게는 나오지 않습니다. */
+        { k: 'phone',    label: '공개 칸 전화번호 (이전 값)', type: 'tel', legacyOnly: true, wide: true,
+          hint: '⚠️ 이 칸은 로그인 없이 읽힙니다. 개인 번호라면 아래 “개인 연락처” 로 옮기고 이 칸은 비워 주세요' },
+
+        { type: 'group', label: '관리자 전용 정보',
+          hint: '관리자만 볼 수 있습니다. 포털과 비로그인 사용자에게는 전달되지 않습니다.' },
+        { k: '__private_phone', label: '개인 연락처', type: 'tel' },
+        { k: '__private_memo',  label: '관리자 메모', type: 'textarea', wide: true,
+          hint: '예: 비상 연락 방법, 당일 도착 시간' }
+      ],
+      /* 편집 창의 관리자 전용 칸을 contact_private 한 줄과 잇습니다.
+         여기 적힌 칸은 contacts 로 보내지 않고 떼어 내 따로 저장합니다
+         (openEditor · syncPrivate). */
+      private: {
+        key: 'contact_private', parent: 'contact_id', onConflict: 'contact_id',
+        map: { __private_phone: 'phone', __private_memo: 'private_memo' }
+      }
+    },
+
+    /* 메뉴에는 없지만 담당자 편집 창이 씁니다. 관리자 로그인일 때만
+       줄이 내려옵니다(RLS). 표가 없는 환경에서는 빈 목록이 됩니다. */
+    contact_private: {
+      label: '개인 연락처', table: 'contact_private', soft: true, hidden: true,
+      order: [['created_at', true]],   // 이 표에는 sort_order 가 없습니다
+      title: function () { return '(개인 연락처)'; },
+      fields: []
     },
 
     venue_places: {
@@ -594,7 +650,8 @@
                'operation_requests', 'operation_tasks', 'supplies',
                'contacts', 'resources', 'venue_places', 'faqs',
                // 아래는 메뉴에 없지만 데이터는 함께 불러옵니다.
-               'task_assignments', 'supply_targets', 'supply_items', 'supply_allocations'];
+               'task_assignments', 'supply_targets', 'supply_items', 'supply_allocations',
+               'contact_private'];
   var GROUPS = [
     { label: '', keys: ['overview'] },
     { label: '행사 관리', keys: ['settings', 'schedule_items', 'booths'] },
@@ -996,12 +1053,25 @@
       if (f.type === 'datetime') values[f.k] = toLocalInput(values[f.k]);
     });
     var kept = keepOldValue(ent, values).filter(function (f) {
+      /* 더는 새로 쓰지 않는 칸(공개 전화번호 등). 예전 값이 남은 줄에만
+         보여서, 관리자가 비울 수 있게 합니다. 새 줄이나 빈 칸이면
+         창에 나오지 않고, 나오지 않은 칸은 저장할 때 보내지도 않습니다. */
+      if (f.legacyOnly) return !!(row && String(row[f.k] == null ? '' : row[f.k]).trim());
       /* 아직 표에 없는 칸은 편집창에서 뺍니다. 없는 칸을 보내면 저장이
          통째로 거절됩니다. 줄이 하나도 없으면 알 수 없으니 그대로 둡니다. */
       if (!f.needsColumn) return true;
       var rows = cache[key] || [];
       return !rows.length || rows.some(function (r) { return f.k in r; });
     });
+
+    // 관리자 전용 칸을 딸린 한 줄(contact_private)에서 읽어 채웁니다.
+    var pv = ent.private;
+    if (pv) {
+      var priv = row ? privateOf(key, row.id) : null;
+      Object.keys(pv.map).forEach(function (fk) {
+        values[fk] = priv ? (priv[pv.map[fk]] || '') : '';
+      });
+    }
 
     // 딸린 줄(담당자·물품)을 지금 값에서 읽어 함께 싣습니다.
     var ch = ent.children;
@@ -1029,19 +1099,36 @@
       // 딸린 줄은 부모 표의 칸이 아니라 따로 떼어 둡니다.
       var childRows = null;
       if (ch) { childRows = v[ch.field] || []; delete v[ch.field]; }
+      /* 관리자 전용 칸도 떼어 냅니다. 이 값은 공개 표(contacts)로
+         절대 보내지 않습니다 — 보내면 공개 표에 칸이 없어 저장이
+         거절되기도 하지만, 그보다 공개 표에 섞일 일이 없어야 합니다. */
+      var privVals = null;
+      if (pv) {
+        privVals = {};
+        Object.keys(pv.map).forEach(function (fk) {
+          privVals[pv.map[fk]] = String(v[fk] == null ? '' : v[fk]).trim();
+          delete v[fk];
+        });
+      }
       if (ent.beforeSave) v = ent.beforeSave(v);
 
       if (isNew) {
         var rows = cache[key] || [];
         v.sort_order = rows.reduce(function (m, r) { return Math.max(m, r.sort_order || 0); }, 0) + 1;
+        var createdId = null;
         C.insert(ent.table, v).then(function (created) {
           cache[key].push(created);
+          createdId = created.id;
           return syncChildren(ent, created.id, childRows);
+        }).then(function () {
+          // 새 담당자는 방금 만든 줄의 id 로 개인 연락처를 잇습니다.
+          return syncPrivate(ent, key, createdId, privVals).catch(privateFailed);
         }).then(function () {
           renderPanel();
           toast('추가했습니다.');
         }).catch(function (e) {
           console.error('[admin] 추가 실패', key, e);
+          if (e && e.privateStep) { renderPanel(); toast(e.privateStep, true); return; }
           toast(C.dataMessage(e), true);
         });
       } else {
@@ -1054,10 +1141,13 @@
           dropReplacedImages(ent, row, updated);
           return syncChildren(ent, row.id, childRows);
         }).then(function () {
+          return syncPrivate(ent, key, row.id, privVals).catch(privateFailed);
+        }).then(function () {
           renderPanel();
           toast('저장했습니다.');
         }).catch(function (e) {
           console.error('[admin] 저장 실패', key, e);
+          if (e && e.privateStep) { renderPanel(); toast(e.privateStep, true); return; }
           toast(C.dataMessage(e), true);
         });
       }
@@ -1111,6 +1201,42 @@
     });
   }
 
+  /* 관리자 전용 한 줄(contact_private)을 저장합니다.
+
+     줄이 아직 없는 담당자: 칸이 모두 비어 있으면 만들지 않습니다(빈
+       줄만 쌓입니다). 하나라도 적혀 있으면 새로 만듭니다.
+     줄이 있는 담당자: 적힌 대로 고칩니다. 비웠다면 빈 값으로 고칩니다.
+
+     upsert(contact_id 기준)라, 화면이 가진 목록이 낡아서 "없다" 고
+     판단했는데 실제로는 줄이 있더라도 중복을 만들지 않고 고칩니다. */
+  /* 공개 정보는 저장됐는데 관리자 전용 정보만 실패한 경우.
+     그냥 "저장 실패" 라고 하면 담당자가 안 만들어진 줄 알고 한 번 더
+     추가해 같은 사람이 둘이 됩니다. 무엇이 됐고 무엇이 안 됐는지
+     나눠 알리고, 목록을 다시 그려 만들어진 담당자가 보이게 합니다. */
+  function privateFailed(e) {
+    var err = new Error(C.dataMessage(e));
+    err.privateStep = '담당자 공개 정보는 저장했지만 관리자 전용 정보(개인 연락처 · 관리자 메모)는 ' +
+      '저장하지 못했습니다. 목록에서 이 담당자를 다시 수정해 저장해 주세요. — ' + C.dataMessage(e);
+    throw err;
+  }
+
+  function syncPrivate(ent, key, parentId, vals) {
+    var pv = ent.private;
+    if (!pv || !vals || !parentId) return Promise.resolve();
+    var had = privateOf(key, parentId);
+    var empty = Object.keys(vals).every(function (k) { return !vals[k]; });
+    if (!had && empty) return Promise.resolve();
+
+    var payload = Object.assign({}, vals);
+    payload[pv.parent] = parentId;
+    return C.upsert(ENTITIES[pv.key].table, payload, pv.onConflict).then(function (saved) {
+      var list = cache[pv.key] || (cache[pv.key] = []);
+      var i = -1;
+      list.forEach(function (x, idx) { if (x[pv.parent] === parentId) i = idx; });
+      if (i >= 0) list[i] = saved; else list.push(saved);
+    });
+  }
+
   function confirmDelete(key, row) {
     var ent = ENTITIES[key];
     UI.confirm({
@@ -1122,6 +1248,13 @@
       C.remove(ent.table, row.id).then(function () {
         cache[key] = cache[key].filter(function (x) { return x.id !== row.id; });
         dropReplacedImages(ent, row, {});   // 딸린 이미지도 함께 정리
+        /* 관리자 전용 한 줄은 데이터베이스가 함께 지웁니다
+           (contact_private.contact_id … on delete cascade).
+           화면이 가진 목록에서도 맞춰 뺍니다. */
+        var pv = ent.private;
+        if (pv && cache[pv.key]) {
+          cache[pv.key] = cache[pv.key].filter(function (x) { return x[pv.parent] !== row.id; });
+        }
         renderPanel();
         toast('삭제했습니다.');
       }).catch(function (e) {

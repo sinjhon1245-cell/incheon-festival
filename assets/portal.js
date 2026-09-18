@@ -225,17 +225,48 @@
   }
 
   /* ── 데이터 ─────────────────────────────────────────────────── */
+  /* ── 공개 칸만 요청하기 ─────────────────────────────────────────
+     contacts · booths 에는 개인 연락처를 담던 칸(phone ·
+     manager_phone)이 아직 남아 있습니다. '*' 로 받으면 포털이 쓰지도
+     않는 그 칸이 모든 방문자의 브라우저로 내려갑니다. 화면이 실제로
+     그리는 칸만 이름을 적어 받습니다.
+
+     새 칸을 화면에 쓰려면 여기 목록에 더해야 합니다 — 더하지 않으면
+     값이 undefined 로 옵니다. 번거롭지만, 새 칸이 생겼다고 저절로
+     공개되지 않게 하려는 것입니다.
+
+     later: 나중 마이그레이션에서 생긴 칸입니다. 그 마이그레이션을
+     아직 돌리지 않은 환경에서는 칸이 없어 요청이 42703 으로 거절되므로,
+     그때만 later 를 빼고 다시 받습니다('*' 로 되돌리지 않습니다).
+     화면은 원래부터 그 칸이 없을 때를 따로 처리합니다. */
+  var PUBLIC_COLS = {
+    contacts: { base: ['id', 'name', 'org', 'duty', 'category', 'memo'],
+                later: ['is_staff', 'role_group'] },
+    booths:   { base: ['id', 'no', 'zone_key', 'code', 'name', 'org', 'manager', 'hours',
+                       'program', 'needs_power', 'needs_network', 'supplies', 'memo', 'notes',
+                       'image_url', 'image_alt', 'image_caption'],
+                later: ['org_type'] }
+  };
+  function selectPublic(table) {
+    var cols = PUBLIC_COLS[table];
+    return C.select(table, { columns: cols.base.concat(cols.later).join(',') })
+      .catch(function (e) {
+        if (!e || e.code !== '42703' || !cols.later.length) throw e;
+        return C.select(table, { columns: cols.base.join(',') });
+      });
+  }
+
   function loadAll() {
     S.loading = true; S.error = null;
     return Promise.all([
       C.select('settings', { order: [['id', true]] }),
       C.select('schedule_items'),
       C.select('zones'),
-      C.select('booths'),
+      selectPublic('booths'),
       C.select('notices', { order: [['pinned', false], ['created_at', false]] }),
       C.select('operation_requests', { order: [['created_at', false]] }),
       C.select('resources'),
-      C.select('contacts'),
+      selectPublic('contacts'),
       C.select('venue_places'),
       C.select('faqs'),
       // 아래 다섯은 migration-operations.sql 을 돌리기 전에는 없습니다.
