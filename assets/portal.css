@@ -2274,7 +2274,7 @@ a.side__brand:hover b { color: var(--primary); }
 
 /* ═══ 일정: 날짜 선택 · 동시 진행 ════════════════════════════════════
    여러 날 행사에서 날짜는 가장 큰 갈래라 필터 칩보다 한 단계 굵게 둡니다.
-   넓으면 '11월 13일 금요일', 좁으면 '11.13. 금'. */
+   넓으면 '11월 6일 금요일', 좁으면 '11.6. 금'. */
 .daytabs {
   display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 4px;
   padding: 4px; background: var(--bg-sink); border-radius: 12px;

@@ -134,7 +134,7 @@
     }
     return days;
   }
-  /* '2026-11-13' → '11.13. 금'. 목록 meta 에 작게 붙입니다. */
+  /* '2026-11-06' → '11.6. 금'. 목록 meta 에 작게 붙입니다. */
   function dayShort(day) {
     var p = String(day || '').split('-');
     if (p.length !== 3) return '';
@@ -165,7 +165,7 @@
         { k: 'event_title',   label: '행사 이름', wide: true, required: true },
         { k: 'event_start',   label: '개막 일시', type: 'datetime' },
         { k: 'event_end',     label: '종료 일시', type: 'datetime' },
-        { k: 'date_label',    label: '날짜 표기', hint: '예: 2026. 11. 13.(금) ~ 11. 14.(토)' },
+        { k: 'date_label',    label: '날짜 표기', hint: '예: 2026. 11. 6.(금) ~ 11. 7.(토)' },
         { k: 'time_label',    label: '운영시간 표기', hint: '예: 10:00 – 17:00' },
         { k: 'venue',         label: '장소' },
         { k: 'venue_detail',  label: '장소 상세',
@@ -219,7 +219,7 @@
         // 함께 담을 수 없고, 이틀 행사에서는 날짜가 반드시 필요합니다.
         // migration-schedule-event-date.sql 을 돌리기 전에는 칸이 없습니다.
         { k: 'event_date', label: '일자', type: 'date', needsColumn: true,
-          hint: '예: 2026-11-13 · 이틀 행사에서는 반드시 고릅니다' },
+          hint: '예: 2026-11-06 · 이틀 행사에서는 반드시 고릅니다' },
         { k: 'start_time', label: '시작시간', type: 'time', required: true },
         { k: 'end_time',   label: '종료시간', type: 'time', required: true },
         { k: 'title',      label: '일정명', wide: true, required: true },

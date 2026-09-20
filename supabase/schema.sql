@@ -11,9 +11,9 @@ create extension if not exists "pgcrypto";
 create table if not exists public.settings (
   id                 smallint primary key default 1,
   event_title        text        not null default '2026년 인천 AI·SW미래채움 교육페스티벌',
-  event_start        timestamptz not null default '2026-11-13T10:00:00+09:00',
+  event_start        timestamptz not null default '2026-11-06T10:00:00+09:00',
   time_label         text        not null default '10:00 – 17:00',
-  date_label         text        not null default '2026. 11. 13.(금) ~ 11. 14.(토)',
+  date_label         text        not null default '2026. 11. 6.(금) ~ 11. 7.(토)',
   venue              text        not null default '송도컨벤시아',
   venue_address      text        not null default '인천광역시 연수구 센트럴로 123',
   -- 확정되지 않은 값은 비워 둡니다. '032-000-0000' 같은 자리표시 번호를
