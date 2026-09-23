@@ -125,11 +125,48 @@ export function ok(s) { line('  [O] ' + s); }
 export function bad(s) { line('  [X] ' + s); }
 export function note(s) { line('  ·   ' + s); }
 
+/* die() 가 던지는 신호. 오류가 아니라 "여기서 그만"이라는 뜻이라
+   마무리 처리에서 따로 알아봅니다. */
+export class Stop extends Error {}
+
+/* 멈춥니다.
+
+   ⚠️ process.exit() 을 부르지 않습니다. fetch 는 keep-alive 소켓을
+      남겨 두는데, 그 상태로 process.exit 을 부르면 Windows 의
+      Node 가 내부 단언(src\win\async.c)에 걸려 127 로 죽습니다.
+      종료코드가 1 이 아니면 부르는 쪽에서 "범위를 잘못 줬다"와
+      "진짜 실패했다"를 구분할 수 없습니다. 실제로 그랬습니다.
+
+      대신 exitCode 만 정해 두고 신호를 던집니다. 연결을 닫고 나면
+      Node 가 스스로 그 코드로 끝냅니다. */
 export function die(msg) {
   line();
   line('[중단] ' + msg);
   line();
-  process.exit(1);
+  process.exitCode = 1;
+  throw new Stop(msg);
+}
+
+/* 열려 있는 연결을 닫습니다. 닫지 않으면 keep-alive 가 끝날
+   때까지(기본 몇 초) 프로그램이 멈춰 있는 것처럼 보입니다.
+   내부 이름이라 없을 수도 있어 조용히 넘어갑니다. */
+export async function closeConnections() {
+  try {
+    const d = globalThis[Symbol.for('undici.globalDispatcher.1')];
+    if (d && typeof d.close === 'function') await d.close();
+  } catch (e) { /* 없으면 그만 */ }
+}
+
+/* main().catch(finish) 로 씁니다.
+   die() 로 멈춘 것은 이미 설명을 냈으니 조용히 끝내고,
+   그 밖의 오류만 내용을 보여 줍니다. */
+export function finish(e) {
+  if (e instanceof Stop) return;
+  line();
+  line('[오류] ' + (e && e.message ? e.message : e));
+  if (e && e.body) line('  ' + JSON.stringify(e.body));
+  line();
+  process.exitCode = 1;
 }
 
 /* 키가 없으면 어느 스크립트든 여기서 멈춥니다. */

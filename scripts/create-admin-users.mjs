@@ -40,6 +40,7 @@ import {
   SUPABASE_URL, ID_DOMAIN, ID_MIN, ID_MAX, PROTECTED,
   targets, idsFor, rangeProblem, parseRange,
   line, head, ok, bad, note, die, requireKey,
+  finish, closeConnections,
   api, listAuthUsers, listStaffProfiles, usersByEmail,
   makePassword, passwordProblem, selfTestPasswords,
   fingerprint, diffFingerprints
@@ -264,19 +265,31 @@ async function main() {
         note('예전 목록을 옮겨 두었습니다: ' + backup);
         note('(admin-accounts.* 는 모두 .gitignore 로 제외됩니다)');
       } catch (e) {
-        die('예전 admin-accounts.csv 를 옮기지 못했습니다: ' + e.message +
-          '\n  덮어쓰면 아직 나눠 주지 않은 비밀번호가 사라질 수 있어 멈춥니다.' +
-          '\n  파일을 직접 치운 뒤 다시 실행해 주세요.');
+        // 여기서 멈추면 안 됩니다. 계정은 이미 만들어졌고 새
+        // 비밀번호는 아직 메모리에만 있습니다. 멈추면 영영 잃습니다.
+        // 파일에 못 쓰더라도 화면으로는 반드시 넘겨 줍니다.
+        bad('예전 admin-accounts.csv 를 옮기지 못했습니다: ' + e.message);
+        bad('계정은 이미 만들어졌습니다. 아래 비밀번호를 지금 받아 두세요.');
+        made.forEach(function (m) { line('    ' + m.id + ',' + m.email + ',' + m.password); });
       }
     }
 
     const rows = ['아이디,로그인이메일,초기비밀번호,uid'].concat(
       made.map(function (m) { return [m.id, m.email, m.password, m.uid].join(','); })
     );
-    // ﻿ — Excel 이 UTF-8 로 열게 하는 표식입니다. 없으면 한글이 깨집니다.
-    writeFileSync(OUT_CSV, '﻿' + rows.join('\r\n') + '\r\n', 'utf8');
-    ok('저장: ' + OUT_CSV + '  (' + made.length + '줄)');
-    note('이 파일은 .gitignore 로 제외되어 있습니다. 전달이 끝나면 지우세요.');
+    try {
+      // ﻿ — Excel 이 UTF-8 로 열게 하는 표식입니다. 없으면 한글이 깨집니다.
+      writeFileSync(OUT_CSV, '﻿' + rows.join('\r\n') + '\r\n', 'utf8');
+      ok('저장: ' + OUT_CSV + '  (' + made.length + '줄)');
+      note('이 파일은 .gitignore 로 제외되어 있습니다. 전달이 끝나면 지우세요.');
+    } catch (e) {
+      bad('목록을 파일로 저장하지 못했습니다: ' + e.message);
+      bad('계정은 이미 만들어졌습니다. 아래를 지금 받아 두세요.');
+      line('    아이디,로그인이메일,초기비밀번호,uid');
+      made.forEach(function (m) {
+        line('    ' + [m.id, m.email, m.password, m.uid].join(','));
+      });
+    }
   } else {
     head('5. 비밀번호 목록');
     note('새로 만든 계정이 없어 admin-accounts.csv 를 건드리지 않았습니다.');
@@ -349,10 +362,4 @@ async function main() {
   line();
 }
 
-main().catch(function (e) {
-  line();
-  line('[오류] ' + (e && e.message ? e.message : e));
-  if (e && e.body) line('  ' + JSON.stringify(e.body));
-  line();
-  process.exit(1);
-});
+main().catch(finish).then(closeConnections);

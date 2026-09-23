@@ -1,5 +1,5 @@
 /* ===================================================================
-   관리자 비밀번호 재설정 — aisw01 ~ aisw20
+   관리자 비밀번호 재설정 — 범위로 지정합니다 (aisw01 ~ aisw50)
    ───────────────────────────────────────────────────────────────────
    이미 있는 계정의 비밀번호만 바꿉니다.
 
@@ -17,18 +17,25 @@
 
    쓰는 법 (PowerShell)
      $env:SUPABASE_SERVICE_ROLE_KEY = '...'
-     node scripts/reset-admin-passwords.mjs --check     # 확인만
-     node scripts/reset-admin-passwords.mjs --dry-run   # 새 비밀번호까지 만들어 검사(전송 안 함)
-     node scripts/reset-admin-passwords.mjs --apply     # 실제 변경
+     node scripts/reset-admin-passwords.mjs --start 21 --end 25
+     node scripts/reset-admin-passwords.mjs --start 21 --end 25 --apply
+
+   --apply 가 없으면 아무것도 바꾸지 않고 점검 결과만 보여 줍니다.
+   범위를 주지 않으면 지금까지 다뤄 온 aisw01~20 입니다.
+
+   요청한 범위의 계정이 하나라도 없으면 아무것도 바꾸지 않고
+   멈춥니다. 일부만 바뀌어 있으면 어디까지 됐는지 알기 어렵습니다.
    =================================================================== */
 
-import { writeFileSync } from 'node:fs';
+import { writeFileSync, existsSync, renameSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import {
-  SUPABASE_URL, ID_DOMAIN, PROTECTED, targets,
+  SUPABASE_URL, ID_DOMAIN, ID_MIN, ID_MAX, DEFAULT_END, PROTECTED,
+  targets, rangeProblem, parseRange,
   line, head, ok, bad, note, die, requireKey,
+  finish, closeConnections,
   api, listAuthUsers, listStaffProfiles, usersByEmail, profilesById,
   makePassword, passwordProblem, selfTestPasswords,
   fingerprint, diffFingerprints
@@ -43,23 +50,37 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const OUT_CSV = resolve(HERE, '..', 'admin-accounts.csv');
 
 const argv = process.argv.slice(2);
-const MODE = argv.includes('--apply') ? 'apply'
-  : argv.includes('--dry-run') ? 'dry-run'
-  : 'check';
+// --apply 가 있을 때만 실제로 바꿉니다. 없으면 무조건 점검만 합니다.
+const MODE = argv.includes('--apply') ? 'apply' : 'plan';
 
 async function main() {
+  /* 0. 범위 — 무엇보다 먼저 봅니다. 서버에 묻기 전에 걸러야
+        잘못된 범위로 키를 들고 접속하는 일이 없습니다.
+        주지 않으면 지금까지 다뤄 온 aisw01~20 입니다. */
+  const given = parseRange(argv);
+  const range = given || { start: ID_MIN, end: DEFAULT_END };
+
+  const bad0 = rangeProblem(range.start, range.end);
+  if (bad0) {
+    die(bad0 + '\n' +
+      '  허용 범위: ' + ID_MIN + ' ~ ' + ID_MAX + ' 이고, 시작 번호가 끝 번호보다 작거나 같아야 합니다.\n' +
+      '  예:  node scripts/reset-admin-passwords.mjs --start 21 --end 25');
+  }
+
+  const list = targets(range.start, range.end);
+
   line();
-  line('관리자 비밀번호 재설정 — aisw01 ~ aisw20');
+  line('관리자 비밀번호 재설정 — ' + list[0].id + ' ~ ' + list[list.length - 1].id);
   line('프로젝트: ' + SUPABASE_URL);
   line('도메인  : @' + ID_DOMAIN);
+  line('요청범위: ' + range.start + ' ~ ' + range.end + '  (대상 ' + list.length + '개)' +
+    (given ? '' : '   ← 범위를 주지 않아 기본값'));
   line('길이    : ' + PW_LENGTH + '자');
   line('모드    : ' + MODE + (MODE === 'apply'
     ? '   (실제로 비밀번호를 바꿉니다)'
-    : '   (읽기만 합니다. 아무것도 바꾸지 않습니다)'));
+    : '   (점검만 합니다. 아무것도 바꾸지 않습니다)'));
 
   requireKey();
-
-  const list = targets();
 
   /* 0. 보호 계정이 대상에 섞였는지 — 무엇보다 먼저 봅니다. */
   const clash = list.filter(function (t) { return PROTECTED.indexOf(t.email) >= 0; });
@@ -101,12 +122,18 @@ async function main() {
     else missing.push(t);
   });
 
+  // 하나라도 없으면 아무것도 바꾸지 않고 멈춥니다.
+  // 일부만 바꿔 두면 어디까지 됐는지 알기 어려워집니다.
   if (missing.length) {
     bad('없는 계정 ' + missing.length + '개: ' + missing.map(function (m) { return m.id; }).join(', '));
-    die('이 스크립트는 계정을 만들지 않습니다.\n' +
-      '  없는 계정은 scripts/create-admin-users.mjs --apply 로 먼저 만들어 주세요.');
+    die('요청한 범위에 없는 계정이 있어 멈춥니다. 아무것도 바꾸지 않았습니다.\n' +
+      '  이 스크립트는 계정을 만들지 않습니다.\n' +
+      '  없는 계정을 먼저 만들려면:\n' +
+      '    node scripts/create-admin-users.mjs --start ' + range.start +
+      ' --end ' + range.end + ' --apply');
   }
-  ok('aisw01~20 계정 ' + found.length + '/20 개 모두 있음');
+  ok('요청 범위 ' + list[0].id + '~' + list[list.length - 1].id +
+    ' 계정 ' + found.length + '/' + list.length + '개 모두 있음');
 
   // 프로필과 권한이 지금 멀쩡한지 확인해 둡니다. 나중에 대조하려면
   // 시작 상태가 옳다는 것부터 알아야 합니다.
@@ -116,9 +143,9 @@ async function main() {
     return p && p.role !== 'admin';
   });
   if (noProfile.length) bad('staff_profiles 줄이 없는 계정: ' + noProfile.map(function (f) { return f.id; }).join(', '));
-  else ok('staff_profiles 연결 20/20');
+  else ok('staff_profiles 연결 ' + found.length + '/' + list.length);
   if (notAdmin.length) bad("role 이 admin 이 아닌 계정: " + notAdmin.map(function (f) { return f.id; }).join(', '));
-  else ok("role='admin' 20/20");
+  else ok("role='admin' " + found.length + '/' + list.length);
 
   /* 지문: 보호 계정은 엄격히, 대상 계정은 updated_at 만 빼고 */
   const watch = PROTECTED.concat(found.map(function (f) { return f.email; }));
@@ -156,22 +183,29 @@ async function main() {
   ok('새 비밀번호 ' + plan.length + '개 생성 — 전부 ' + PW_LENGTH + '자, 조건 충족');
   ok('서로 다른 비밀번호 ' + used.size + '/' + plan.length + '개 (중복 없음)');
 
+  /* 4. 계획 */
+  head('4. ' + (MODE === 'apply' ? '계획' : '점검 결과'));
+  line('  요청 범위: ' + list[0].id + ' ~ ' + list[list.length - 1].id);
+  line('  대상 계정: ' + list.length + '개 (모두 존재 확인됨)');
+  line();
+  line('  재설정 예정:');
+  plan.forEach(function (p) {
+    line('    - ' + p.id + '  uid ' + p.uid + '  새 비밀번호 ' + p.password.length + '자');
+  });
+  note('비밀번호 값은 화면에 찍지 않습니다. --apply 때 CSV 로만 저장됩니다.');
+
   if (MODE !== 'apply') {
-    head('4. ' + (MODE === 'check' ? '확인만 하고 끝냅니다' : '바꿀 목록 (전송하지 않음)'));
-    if (MODE === 'dry-run') {
-      plan.forEach(function (p) {
-        note(p.id.padEnd(8) + ' uid ' + p.uid + '  비밀번호 ' + p.password.length + '자');
-      });
-      note('비밀번호 값은 화면에 찍지 않습니다. --apply 때 CSV 로 저장됩니다.');
-    }
     line();
-    line('  실제로 바꾸려면:  node scripts/reset-admin-passwords.mjs --apply');
+    line('  실제 변경: 없음 (--apply 를 붙여야 바꿉니다)');
+    line();
+    line('  실제로 바꾸려면:  node scripts/reset-admin-passwords.mjs --start ' +
+      range.start + ' --end ' + range.end + ' --apply');
     line();
     return;
   }
 
-  /* 4. 실제 변경 — password 한 칸만 보냅니다 */
-  head('4. 변경');
+  /* 5. 실제 변경 — password 한 칸만 보냅니다 */
+  head('5. 변경');
   const done = [];
   const failed = [];
 
@@ -191,20 +225,48 @@ async function main() {
     }
   }
 
-  /* 5. 비밀번호 목록 */
+  /* 6. 비밀번호 목록 — 이번에 바꾼 계정만 적습니다. */
   if (done.length) {
-    head('5. 비밀번호 목록');
+    head('6. 비밀번호 목록 (이번에 바꾼 계정만)');
+
+    // 예전 목록을 말없이 덮어쓰지 않습니다. 아직 나눠 주지 않은
+    // 비밀번호가 그 안에 있을 수 있습니다. 옆으로 치워 둡니다.
+    if (existsSync(OUT_CSV)) {
+      const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+      const backup = OUT_CSV.replace(/\.csv$/, '') + '.' + stamp + '.csv';
+      try {
+        renameSync(OUT_CSV, backup);
+        note('예전 목록을 옮겨 두었습니다: ' + backup);
+        note('(admin-accounts.* 는 모두 .gitignore 로 제외됩니다)');
+      } catch (e) {
+        bad('예전 admin-accounts.csv 를 옮기지 못했습니다: ' + e.message);
+        bad('비밀번호는 이미 바뀌었습니다. 아래 목록을 지금 받아 두세요.');
+        done.forEach(function (m) { line('    ' + m.id + ',' + m.email + ',' + m.password); });
+      }
+    }
+
     const rows = ['아이디,로그인이메일,초기비밀번호,uid'].concat(
       done.map(function (m) { return [m.id, m.email, m.password, m.uid].join(','); })
     );
-    // ﻿ — Excel 이 UTF-8 로 열게 하는 표식입니다. 없으면 한글이 깨집니다.
-    writeFileSync(OUT_CSV, '﻿' + rows.join('\r\n') + '\r\n', 'utf8');
-    ok('저장: ' + OUT_CSV);
-    note('이 파일은 .gitignore 로 제외되어 있습니다. 전달이 끝나면 지우세요.');
+    try {
+      // ﻿ — Excel 이 UTF-8 로 열게 하는 표식입니다. 없으면 한글이 깨집니다.
+      writeFileSync(OUT_CSV, '﻿' + rows.join('\r\n') + '\r\n', 'utf8');
+      ok('저장: ' + OUT_CSV + '  (' + done.length + '줄)');
+      note('이 파일은 .gitignore 로 제외되어 있습니다. 전달이 끝나면 지우세요.');
+    } catch (e) {
+      // 비밀번호는 이미 바뀌었습니다. 파일에 못 쓰더라도 화면으로는
+      // 반드시 넘겨 줘야 합니다 — 여기서 잃으면 되돌릴 수 없습니다.
+      bad('목록을 파일로 저장하지 못했습니다: ' + e.message);
+      bad('비밀번호는 이미 바뀌었습니다. 아래를 지금 받아 두세요.');
+      line('    아이디,로그인이메일,초기비밀번호,uid');
+      done.forEach(function (m) {
+        line('    ' + [m.id, m.email, m.password, m.uid].join(','));
+      });
+    }
   }
 
-  /* 6. 변경 후 검증 */
-  head('6. 변경 후 검증');
+  /* 7. 변경 후 검증 */
+  head('7. 변경 후 검증');
   const users1 = await listAuthUsers();
   const profiles1 = await listStaffProfiles();
   const byEmail1 = usersByEmail(users1);
@@ -214,24 +276,24 @@ async function main() {
     (users0.length === users1.length ? '(변화 없음)' : '(!!! ' + (users1.length - users0.length) + ' 변동)'));
 
   const stillThere = found.filter(function (f) { return byEmail1.has(f.email); });
-  line('  (2) aisw01~20 존재: ' + stillThere.length + '/20');
+  line('  (2) 요청 범위 ' + list[0].id + '~' + list[list.length - 1].id + ' 존재: ' + stillThere.length + '/' + list.length);
 
   const uidSame = found.filter(function (f) {
     const u = byEmail1.get(f.email);
     return u && u.id === f.uid;
   });
-  line('  (3) UID 동일: ' + uidSame.length + '/20');
+  line('  (3) UID 동일: ' + uidSame.length + '/' + list.length);
 
   const profSame = found.filter(function (f) {
     return JSON.stringify(byId0.get(f.uid)) === JSON.stringify(byId1.get(f.uid));
   });
-  line('  (4) staff_profiles 변화 없음: ' + profSame.length + '/20');
+  line('  (4) staff_profiles 변화 없음: ' + profSame.length + '/' + list.length);
 
   const adminOk = found.filter(function (f) {
     const p = byId1.get(f.uid);
     return p && p.role === 'admin';
   });
-  line("  (5) role='admin' 유지: " + adminOk.length + '/20');
+  line("  (5) role='admin' 유지: " + adminOk.length + '/' + list.length);
 
   const after = fingerprint(users1, profiles1, watch);
 
@@ -247,7 +309,7 @@ async function main() {
       line('      후: ' + JSON.stringify(targetAfter[e]));
     });
   } else {
-    line('  (6) 대상 20개 — 비밀번호 외 변화 없음 (UID·이메일·프로필·권한 그대로)');
+    line('  (6) 대상 ' + list.length + '개 — 비밀번호 외 변화 없음 (UID·이메일·프로필·권한 그대로)');
   }
 
   // 보호 계정: updated_at 까지 그대로여야 합니다.
@@ -274,14 +336,8 @@ async function main() {
   line('  실패            : ' + failed.length + '개');
   line('  Auth 총 사용자  : ' + users1.length + '명 (변화 없어야 정상)');
   line();
-  line('  로그인 확인: /admin 에서 아이디 "aisw01" 과 CSV 의 새 비밀번호로 들어가 보세요.');
+  if (done.length) line('  로그인 확인: /admin 에서 아이디 "' + done[0].id + '" 과 CSV 의 새 비밀번호로 들어가 보세요.');
   line();
 }
 
-main().catch(function (e) {
-  line();
-  line('[오류] ' + (e && e.message ? e.message : e));
-  if (e && e.body) line('  ' + JSON.stringify(e.body));
-  line();
-  process.exit(1);
-});
+main().catch(finish).then(closeConnections);

@@ -201,12 +201,24 @@ powershell -ExecutionPolicy Bypass -File .\scripts\create-admin-users.ps1 -Start
 #### 비밀번호만 다시 나눠 줄 때
 
 계정은 그대로 두고 비밀번호만 바꿉니다. **전용 스크립트가 따로 있습니다.**
+생성과 같은 범위 인자를 씁니다.
 
 ```powershell
-.\scripts\reset-admin-passwords.ps1            # 확인만
-.\scripts\reset-admin-passwords.ps1 -DryRun    # 새 비밀번호까지 만들어 검사(전송 안 함)
-.\scripts\reset-admin-passwords.ps1 -Apply     # 실제 변경
+# 점검만 — 아무것도 바꾸지 않습니다
+powershell -ExecutionPolicy Bypass -File .\scripts\reset-admin-passwords.ps1 -Start 21 -End 25
+
+# 실제 변경
+powershell -ExecutionPolicy Bypass -File .\scripts\reset-admin-passwords.ps1 -Start 21 -End 25 -Apply
 ```
+
+| | |
+|---|---|
+| 허용 범위 | `1 ~ 50`, 그리고 `Start ≤ End` |
+| 범위 생략 | `aisw01 ~ aisw20` (예전과 같은 동작) |
+| 범위 밖 | 아무것도 하지 않고 멈춥니다 (service_role 키도 묻지 않습니다) |
+| 범위에 없는 계정 | **하나라도 없으면 아무것도 바꾸지 않고 중단**합니다. 계정을 만들지 않습니다 |
+| `-Apply` 없음 | 점검 결과만 출력. 실제 변경 없음 |
+| 다시 실행 | 그때마다 **새 비밀번호**가 나옵니다(재설정이니 정상). `-Apply` 없이는 절대 바뀌지 않습니다 |
 
 `reset-admin-passwords.mjs` 에는 계정을 만들거나 지우는 코드가
 **없습니다.** 쓰는 것은 `PUT /auth/v1/admin/users/<uid>` 하나뿐이고
@@ -216,12 +228,13 @@ powershell -ExecutionPolicy Bypass -File .\scripts\create-admin-users.ps1 -Start
 계정이 새로 생기는 사고를 코드 수준에서 막으려고 나눠 두었습니다.
 
 - 재설정 비밀번호는 **8자** 입니다(나눠 주기 쉽도록).
-  ⚠️ 8자는 약 49비트로, 16자(98비트)보다 훨씬 약합니다. 관리자 계정은
-  운영 콘텐츠 전체를 편집할 수 있으므로, **행사가 끝나면 계정을 정리**하거나
+  ⚠️ 8자는 약 49비트로 짧습니다. 관리자 계정은 운영 콘텐츠 전체를
+  편집할 수 있으므로, **행사가 끝나면 계정을 정리**하거나
   `ADMIN_PW_LENGTH` 로 길이를 올리는 것을 권합니다.
 - 바꾸고 나면 예전 비밀번호는 즉시 못 씁니다. 이미 나눠 준 것이 있다면 다시 전달해야 합니다.
-- 없는 계정이 있으면 만들지 않고 멈춥니다. 먼저 `create-admin-users.ps1 -Apply` 를 돌리세요.
-- 새 비밀번호는 `admin-accounts.csv` 에 **덮어써집니다**(`.gitignore` 제외).
+- 없는 계정이 있으면 만들지 않고 멈춥니다. 먼저 `create-admin-users.ps1 -Start .. -End .. -Apply` 를 돌리세요.
+- `admin-accounts.csv` 에는 **이번에 바꾼 계정만** 적힙니다.
+  예전 파일이 있으면 지우지 않고 시각을 붙여 옆으로 옮겨 둡니다.
 
 두 스크립트는 `scripts/lib/admin-api.mjs` 를 같이 씁니다. 비밀번호
 규칙과 계정 대조 방법이 한 곳에만 있어야, 한쪽만 고쳐지고 다른 쪽이
