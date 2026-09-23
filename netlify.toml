@@ -26,6 +26,21 @@
     Referrer-Policy = "strict-origin-when-cross-origin"
     Permissions-Policy = "geolocation=(), microphone=(), camera=()"
 
+# 관리자 페이지는 저장해 두지 않습니다.
+# no-store 는 브라우저가 이 페이지를 뒤로가기 캐시(bfcache)에
+# 넣는 것도 막습니다. 로그아웃한 뒤 뒤로가기를 눌렀을 때 관리
+# 화면이 되살아나지 않게 하는 두 번째 방어선입니다.
+# (첫 번째는 admin.js 의 pageshow 처리입니다.)
+[[headers]]
+  for = "/admin.html"
+  [headers.values]
+    Cache-Control = "no-store"
+
+[[headers]]
+  for = "/admin"
+  [headers.values]
+    Cache-Control = "no-store"
+
 # 설정 파일은 캐시하지 않습니다. Supabase 주소나 키를 바꿨을 때
 # 예전 값이 남아 "연결 안 됨"으로 보이는 일을 막습니다.
 [[headers]]

@@ -78,24 +78,102 @@ window.Core = (function () {
     return '관리자로 등록되지 않은 계정입니다.';
   }
 
+  /* 아이디를 로그인용 이메일로 바꿉니다.
+
+     관리자 계정은 aisw01 ~ aisw20 처럼 아이디로 나눠 주지만,
+     Supabase Auth 에는 이메일로만 로그인할 수 있습니다. 그래서
+     화면에서 받은 값에 설정의 도메인을 붙여 보냅니다.
+
+     @ 가 들어 있으면 이미 이메일이므로 그대로 둡니다. 그래야
+     기존 계정(aifest@ice.go.kr 등)이 예전처럼 로그인됩니다.
+     아이디 모양이 아닌 값도 손대지 않고 넘깁니다 — 여기서
+     고쳐 주려 들면 "왜 안 되는지" 알 수 없는 오류가 됩니다. */
+  function loginEmail(input) {
+    var v = String(input == null ? '' : input).trim();
+    if (!v || v.indexOf('@') >= 0) return v;
+
+    var domain = cfg.adminIdDomain || '';
+    if (!domain) return v;
+    if (!/^[A-Za-z0-9._-]+$/.test(v)) return v;
+
+    return (v + '@' + domain).toLowerCase();
+  }
+
   /* 관리자 로그인. 권한(admin) 확인은 부르는 쪽이 fetchProfile 로
      이어서 합니다. 여기서 바로 내보내지 않는 이유는, "권한이 없는
      계정"과 "조회가 잠깐 실패한 상황"을 화면에서 다르게 안내해야
      하기 때문입니다. */
-  function signIn(email, password) {
+  function signIn(idOrEmail, password) {
     var c = db();
     if (!c) return Promise.reject(new Error('Supabase 설정이 없습니다.'));
-    return c.auth.signInWithPassword({ email: email, password: password })
+    return c.auth.signInWithPassword({ email: loginEmail(idOrEmail), password: password })
       .then(function (r) {
         if (r.error) throw r.error;
         return r.data.session;
       });
   }
 
+  /* supabase-js 가 토큰을 넣어 두는 칸 이름.
+     기본값은 sb-<프로젝트>-auth-token 이고, 로그인 과정에서
+     -code-verifier 가 함께 남을 수 있습니다. 우리 것만 고릅니다.
+
+     저장소 접근 자체가 막힌 브라우저(사생활 보호 모드 등)가 있어
+     읽기도 try 로 감쌉니다. 못 읽으면 지울 것도 없습니다. */
+  function storedSessionKeys() {
+    var found = [];
+    [window.localStorage, window.sessionStorage].forEach(function (store) {
+      try {
+        if (!store) return;
+        for (var i = 0; i < store.length; i++) {
+          var k = store.key(i);
+          if (/^sb-.+-(auth-token|code-verifier)/.test(k)) found.push({ store: store, key: k });
+        }
+      } catch (e) { /* 저장소를 못 읽는 브라우저 */ }
+    });
+    return found;
+  }
+
+  function clearStoredSession() {
+    // 먼저 다 모은 뒤에 지웁니다. 돌면서 지우면 번호가 밀려
+    // 건너뛰는 칸이 생깁니다.
+    storedSessionKeys().forEach(function (e) {
+      try { e.store.removeItem(e.key); } catch (e2) { /* 무시 */ }
+    });
+  }
+
+  function hasStoredSession() { return storedSessionKeys().length > 0; }
+
+  /* 로그아웃.
+
+     supabase-js 의 signOut 은 서버에 로그아웃을 알린 뒤 브라우저에
+     저장된 토큰을 지웁니다. 그런데 서버 호출이 401·403·404 가 아닌
+     이유로 실패하면 — 오프라인, 500, 요청 제한(429) — 토큰을 지우지
+     않고 { error } 만 돌려주고 끝냅니다.
+
+     예전에는 그 error 를 보지 않아서, 화면은 로그아웃한 것처럼
+     넘어가는데 토큰은 그대로 남았습니다. getSession() 은 저장소만
+     읽으므로 다시 들어오면 로그인된 상태 그대로였습니다.
+
+     그래서 결과를 확인하고, 실패했으면 저장소에서 직접 지웁니다.
+     로그아웃은 실패한 채로 넘어가면 안 되는 동작입니다. */
   function signOut() {
     var c = db();
     profile = null;
-    return c ? c.auth.signOut() : Promise.resolve();
+    if (!c) { clearStoredSession(); return Promise.resolve(); }
+
+    return c.auth.signOut()
+      .then(function (r) {
+        if (r && r.error) {
+          console.warn('[core] 서버 로그아웃이 실패해 저장된 토큰을 직접 지웁니다', r.error);
+        }
+      })
+      .catch(function (e) {
+        console.warn('[core] 로그아웃 중 오류 — 저장된 토큰을 직접 지웁니다', e);
+      })
+      .then(function () {
+        // 어느 길로 왔든 토큰이 남지 않았는지 마지막으로 확인합니다.
+        if (hasStoredSession()) clearStoredSession();
+      });
   }
 
   function profileFailed() { return !!profileError; }
@@ -106,7 +184,7 @@ window.Core = (function () {
   /* 로그인 오류를 사람이 읽을 수 있는 말로 바꿉니다(TASK 22). */
   function authMessage(e) {
     var m = (e && e.message) || '';
-    if (/Invalid login/i.test(m)) return '이메일 또는 비밀번호가 맞지 않습니다.';
+    if (/Invalid login/i.test(m)) return '아이디 또는 비밀번호가 맞지 않습니다.';
     if (/Email not confirmed/i.test(m)) return '이메일 인증이 완료되지 않은 계정입니다. 운영 총괄에게 문의해 주세요.';
     if (/rate limit|Too many/i.test(m)) return '시도가 너무 잦습니다. 잠시 후 다시 시도해 주세요.';
     if (/Failed to fetch|NetworkError/i.test(m)) return '네트워크에 연결하지 못했습니다. 인터넷 상태를 확인해 주세요.';
@@ -347,7 +425,8 @@ window.Core = (function () {
 
   return {
     isConfigured: isConfigured, db: db,
-    session: session, signIn: signIn, signOut: signOut,
+    session: session, signIn: signIn, signOut: signOut, loginEmail: loginEmail,
+    hasStoredSession: hasStoredSession, clearStoredSession: clearStoredSession,
     fetchProfile: fetchProfile, me: me, isAdmin: isAdmin, accessMessage: accessMessage,
     profileFailed: profileFailed,
     authMessage: authMessage, dataMessage: dataMessage,
