@@ -183,9 +183,38 @@ aisw01  →  aisw01@aisw.local  →  signInWithPassword()
   `admin-accounts.csv` 로 저장되며 `.gitignore` 에 걸려 있습니다.
   **전달이 끝나면 지우세요.**
 
-아이디를 바꾸거나 도메인을 바꾸려면 스크립트의 `IDS` · `ID_DOMAIN` 과
-`assets/config.js` 의 `adminIdDomain` 을 **같이** 고쳐야 합니다.
-두 값이 어긋나면 로그인되지 않습니다.
+#### 비밀번호만 다시 나눠 줄 때
+
+계정은 그대로 두고 비밀번호만 바꿉니다. **전용 스크립트가 따로 있습니다.**
+
+```powershell
+.\scripts\reset-admin-passwords.ps1            # 확인만
+.\scripts\reset-admin-passwords.ps1 -DryRun    # 새 비밀번호까지 만들어 검사(전송 안 함)
+.\scripts\reset-admin-passwords.ps1 -Apply     # 실제 변경
+```
+
+`reset-admin-passwords.mjs` 에는 계정을 만들거나 지우는 코드가
+**없습니다.** 쓰는 것은 `PUT /auth/v1/admin/users/<uid>` 하나뿐이고
+본문에 `password` 말고는 싣지 않습니다. 그래서 UID ·
+`staff_profiles` · `role` 이 움직일 수 없습니다. 계정을 만드는 일은
+`create-admin-users.mjs` 가 따로 맡습니다 — 비밀번호를 바꾸려다
+계정이 새로 생기는 사고를 코드 수준에서 막으려고 나눠 두었습니다.
+
+- 재설정 비밀번호는 **8자** 입니다(나눠 주기 쉽도록).
+  ⚠️ 8자는 약 49비트로, 16자(98비트)보다 훨씬 약합니다. 관리자 계정은
+  운영 콘텐츠 전체를 편집할 수 있으므로, **행사가 끝나면 계정을 정리**하거나
+  `ADMIN_PW_LENGTH` 로 길이를 올리는 것을 권합니다.
+- 바꾸고 나면 예전 비밀번호는 즉시 못 씁니다. 이미 나눠 준 것이 있다면 다시 전달해야 합니다.
+- 없는 계정이 있으면 만들지 않고 멈춥니다. 먼저 `create-admin-users.ps1 -Apply` 를 돌리세요.
+- 새 비밀번호는 `admin-accounts.csv` 에 **덮어써집니다**(`.gitignore` 제외).
+
+두 스크립트는 `scripts/lib/admin-api.mjs` 를 같이 씁니다. 비밀번호
+규칙과 계정 대조 방법이 한 곳에만 있어야, 한쪽만 고쳐지고 다른 쪽이
+조용히 어긋나는 일이 없습니다.
+
+아이디를 바꾸거나 도메인을 바꾸려면 `scripts/lib/admin-api.mjs` 의
+`IDS` · `ID_DOMAIN` 과 `assets/config.js` 의 `adminIdDomain` 을
+**같이** 고쳐야 합니다. 두 값이 어긋나면 로그인되지 않습니다.
 
 ## 이미지 (안내도 · 배치도 · 공간 사진)
 
