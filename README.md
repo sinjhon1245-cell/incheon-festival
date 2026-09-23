@@ -139,15 +139,53 @@ Supabase 대시보드 → **SQL Editor** 에서 순서대로 실행합니다.
 
 ### 3. 관리자 계정
 
-관리자는 Supabase Auth 의 이메일·비밀번호 계정 하나면 됩니다.
+관리자 여부는 `staff_profiles.role = 'admin'` 으로 판단합니다.
+관계자용 계정은 만들지 않습니다 — 포털에 로그인이 없기 때문입니다.
+
+#### 로그인은 아이디로 합니다
+
+Supabase Auth 는 이메일로만 로그인할 수 있지만, 관리자에게는
+`aisw01` 같은 **아이디만** 알려 주면 됩니다. 로그인 화면이
+`assets/config.js` 의 `adminIdDomain` 을 붙여 보냅니다.
+
+```
+aisw01  →  aisw01@aisw.local  →  signInWithPassword()
+```
+
+`@` 가 들어간 값을 치면 그대로 씁니다. 그래서 `aifest@ice.go.kr`
+처럼 이메일로 만든 기존 계정도 예전과 똑같이 로그인됩니다.
+
+#### 한 개만 만들 때
 
 1. Supabase → **Authentication → Users → Add user**
    (이메일·비밀번호 입력, *Auto Confirm User* 켜기)
 2. `migration-portal.sql` 이 `aifest@ice.go.kr` 을 자동으로 관리자로 등록합니다.
    다른 주소를 쓰면 그 파일 마지막의 이메일을 바꾸세요.
 
-관리자 여부는 `staff_profiles.role = 'admin'` 으로 판단합니다.
-관계자용 계정은 만들지 않습니다 — 포털에 로그인이 없기 때문입니다.
+#### 여러 개를 한 번에 만들 때 (aisw01 ~ aisw20)
+
+`scripts/create-admin-users.mjs` 가 Auth 계정 생성과
+`staff_profiles` 연결(`role='admin'`)을 한 번에 합니다.
+
+```powershell
+.\scripts\create-admin-users.ps1            # 확인만 — 아무것도 만들지 않습니다
+.\scripts\create-admin-users.ps1 -DryRun    # 만들 목록까지 보여 줍니다
+.\scripts\create-admin-users.ps1 -Apply     # 실제로 만듭니다
+```
+
+- **service_role 키**를 물어봅니다. Supabase → Project Settings → API 에 있습니다.
+  키는 그 창의 환경변수로만 쓰이고 파일에 남지 않습니다.
+  ⚠️ 이 키는 RLS 를 전부 무시합니다. `assets/config.js` 나 git 에 절대 넣지 마세요.
+- 이미 있는 계정은 **건너뜁니다.** 덮어쓰거나 비밀번호를 바꾸지 않습니다.
+- `aifest@ice.go.kr` · `sinjhon0105@naver.com` 은 보호 목록에 있어
+  대상에 섞이면 스크립트가 멈춥니다. 생성 전후를 대조해 변화가 없는지도 확인합니다.
+- 초기 비밀번호는 16자 무작위(대·소문자·숫자·특수문자 포함)로 계정마다 다릅니다.
+  `admin-accounts.csv` 로 저장되며 `.gitignore` 에 걸려 있습니다.
+  **전달이 끝나면 지우세요.**
+
+아이디를 바꾸거나 도메인을 바꾸려면 스크립트의 `IDS` · `ID_DOMAIN` 과
+`assets/config.js` 의 `adminIdDomain` 을 **같이** 고쳐야 합니다.
+두 값이 어긋나면 로그인되지 않습니다.
 
 ## 이미지 (안내도 · 배치도 · 공간 사진)
 
@@ -316,6 +354,7 @@ node dev-server.js
 | “이미지 보관함이 아직 없습니다” | `migration-media-support.sql` 실행 여부 |
 | 이미지 저장이 “요청 형식이 맞지 않습니다” | 같은 파일의 이미지 칼럼이 추가됐는지 |
 | 관리자 로그인 후 “권한 없음” | `staff_profiles.role` 이 `admin` 인지 |
+| 아이디로 “아이디 또는 비밀번호가 맞지 않습니다” | `config.js` 의 `adminIdDomain` 과 계정 이메일 도메인이 같은지 |
 | 저장·삭제가 “0건” | 로그인 만료 → 재로그인 |
 | 배포본만 옛 화면 | 쓰고 있는 호스팅의 최신 배포 로그와 캐시 확인 |
 

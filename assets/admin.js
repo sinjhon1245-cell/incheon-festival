@@ -1456,21 +1456,23 @@
   /* 로그인 폼 */
   $('#loginform').addEventListener('submit', function (e) {
     e.preventDefault();
-    var email = $('#login-email'), pw = $('#login-pw');
+    // 아이디(aisw01) 또는 이메일 둘 다 받습니다.
+    // 이메일로 바꾸는 일은 core.signIn 이 합니다.
+    var who = $('#login-email'), pw = $('#login-pw');
     var err = $('#login-error'), btn = $('#login-btn');
     err.hidden = true;
-    email.setAttribute('aria-invalid', 'false');
+    who.setAttribute('aria-invalid', 'false');
     pw.setAttribute('aria-invalid', 'false');
 
-    if (!email.value.trim() || !pw.value) {
-      err.textContent = '이메일과 비밀번호를 모두 입력해 주세요.';
+    if (!who.value.trim() || !pw.value) {
+      err.textContent = '아이디와 비밀번호를 모두 입력해 주세요.';
       err.hidden = false;
-      (!email.value.trim() ? email : pw).focus();
+      (!who.value.trim() ? who : pw).focus();
       return;
     }
 
     btn.disabled = true; btn.textContent = '확인 중…';
-    C.signIn(email.value.trim(), pw.value).then(function (sess) {
+    C.signIn(who.value.trim(), pw.value).then(function (sess) {
       pw.value = '';
       return admitOrGate(sess);
     }).catch(function (e2) {

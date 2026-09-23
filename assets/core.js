@@ -78,14 +78,35 @@ window.Core = (function () {
     return '관리자로 등록되지 않은 계정입니다.';
   }
 
+  /* 아이디를 로그인용 이메일로 바꿉니다.
+
+     관리자 계정은 aisw01 ~ aisw20 처럼 아이디로 나눠 주지만,
+     Supabase Auth 에는 이메일로만 로그인할 수 있습니다. 그래서
+     화면에서 받은 값에 설정의 도메인을 붙여 보냅니다.
+
+     @ 가 들어 있으면 이미 이메일이므로 그대로 둡니다. 그래야
+     기존 계정(aifest@ice.go.kr 등)이 예전처럼 로그인됩니다.
+     아이디 모양이 아닌 값도 손대지 않고 넘깁니다 — 여기서
+     고쳐 주려 들면 "왜 안 되는지" 알 수 없는 오류가 됩니다. */
+  function loginEmail(input) {
+    var v = String(input == null ? '' : input).trim();
+    if (!v || v.indexOf('@') >= 0) return v;
+
+    var domain = cfg.adminIdDomain || '';
+    if (!domain) return v;
+    if (!/^[A-Za-z0-9._-]+$/.test(v)) return v;
+
+    return (v + '@' + domain).toLowerCase();
+  }
+
   /* 관리자 로그인. 권한(admin) 확인은 부르는 쪽이 fetchProfile 로
      이어서 합니다. 여기서 바로 내보내지 않는 이유는, "권한이 없는
      계정"과 "조회가 잠깐 실패한 상황"을 화면에서 다르게 안내해야
      하기 때문입니다. */
-  function signIn(email, password) {
+  function signIn(idOrEmail, password) {
     var c = db();
     if (!c) return Promise.reject(new Error('Supabase 설정이 없습니다.'));
-    return c.auth.signInWithPassword({ email: email, password: password })
+    return c.auth.signInWithPassword({ email: loginEmail(idOrEmail), password: password })
       .then(function (r) {
         if (r.error) throw r.error;
         return r.data.session;
@@ -106,7 +127,7 @@ window.Core = (function () {
   /* 로그인 오류를 사람이 읽을 수 있는 말로 바꿉니다(TASK 22). */
   function authMessage(e) {
     var m = (e && e.message) || '';
-    if (/Invalid login/i.test(m)) return '이메일 또는 비밀번호가 맞지 않습니다.';
+    if (/Invalid login/i.test(m)) return '아이디 또는 비밀번호가 맞지 않습니다.';
     if (/Email not confirmed/i.test(m)) return '이메일 인증이 완료되지 않은 계정입니다. 운영 총괄에게 문의해 주세요.';
     if (/rate limit|Too many/i.test(m)) return '시도가 너무 잦습니다. 잠시 후 다시 시도해 주세요.';
     if (/Failed to fetch|NetworkError/i.test(m)) return '네트워크에 연결하지 못했습니다. 인터넷 상태를 확인해 주세요.';
@@ -347,7 +368,7 @@ window.Core = (function () {
 
   return {
     isConfigured: isConfigured, db: db,
-    session: session, signIn: signIn, signOut: signOut,
+    session: session, signIn: signIn, signOut: signOut, loginEmail: loginEmail,
     fetchProfile: fetchProfile, me: me, isAdmin: isAdmin, accessMessage: accessMessage,
     profileFailed: profileFailed,
     authMessage: authMessage, dataMessage: dataMessage,

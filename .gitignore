@@ -10,6 +10,11 @@ id_rsa*
 *credentials*
 service-account*.json
 
+# 관리자 계정 초기 비밀번호 목록.
+# scripts/create-admin-users.mjs 가 만듭니다. 전달용이라
+# 잠깐 있다 사라져야 하는 파일입니다. 절대 올리지 마세요.
+admin-accounts.*
+
 # ── 작업 중 임시 파일 ───────────────────────────────────────────────
 # 진단·점검용으로 잠깐 만드는 파일은 밑줄로 시작합니다.
 _*.html
