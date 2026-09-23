@@ -113,10 +113,67 @@ window.Core = (function () {
       });
   }
 
+  /* supabase-js 가 토큰을 넣어 두는 칸 이름.
+     기본값은 sb-<프로젝트>-auth-token 이고, 로그인 과정에서
+     -code-verifier 가 함께 남을 수 있습니다. 우리 것만 고릅니다.
+
+     저장소 접근 자체가 막힌 브라우저(사생활 보호 모드 등)가 있어
+     읽기도 try 로 감쌉니다. 못 읽으면 지울 것도 없습니다. */
+  function storedSessionKeys() {
+    var found = [];
+    [window.localStorage, window.sessionStorage].forEach(function (store) {
+      try {
+        if (!store) return;
+        for (var i = 0; i < store.length; i++) {
+          var k = store.key(i);
+          if (/^sb-.+-(auth-token|code-verifier)/.test(k)) found.push({ store: store, key: k });
+        }
+      } catch (e) { /* 저장소를 못 읽는 브라우저 */ }
+    });
+    return found;
+  }
+
+  function clearStoredSession() {
+    // 먼저 다 모은 뒤에 지웁니다. 돌면서 지우면 번호가 밀려
+    // 건너뛰는 칸이 생깁니다.
+    storedSessionKeys().forEach(function (e) {
+      try { e.store.removeItem(e.key); } catch (e2) { /* 무시 */ }
+    });
+  }
+
+  function hasStoredSession() { return storedSessionKeys().length > 0; }
+
+  /* 로그아웃.
+
+     supabase-js 의 signOut 은 서버에 로그아웃을 알린 뒤 브라우저에
+     저장된 토큰을 지웁니다. 그런데 서버 호출이 401·403·404 가 아닌
+     이유로 실패하면 — 오프라인, 500, 요청 제한(429) — 토큰을 지우지
+     않고 { error } 만 돌려주고 끝냅니다.
+
+     예전에는 그 error 를 보지 않아서, 화면은 로그아웃한 것처럼
+     넘어가는데 토큰은 그대로 남았습니다. getSession() 은 저장소만
+     읽으므로 다시 들어오면 로그인된 상태 그대로였습니다.
+
+     그래서 결과를 확인하고, 실패했으면 저장소에서 직접 지웁니다.
+     로그아웃은 실패한 채로 넘어가면 안 되는 동작입니다. */
   function signOut() {
     var c = db();
     profile = null;
-    return c ? c.auth.signOut() : Promise.resolve();
+    if (!c) { clearStoredSession(); return Promise.resolve(); }
+
+    return c.auth.signOut()
+      .then(function (r) {
+        if (r && r.error) {
+          console.warn('[core] 서버 로그아웃이 실패해 저장된 토큰을 직접 지웁니다', r.error);
+        }
+      })
+      .catch(function (e) {
+        console.warn('[core] 로그아웃 중 오류 — 저장된 토큰을 직접 지웁니다', e);
+      })
+      .then(function () {
+        // 어느 길로 왔든 토큰이 남지 않았는지 마지막으로 확인합니다.
+        if (hasStoredSession()) clearStoredSession();
+      });
   }
 
   function profileFailed() { return !!profileError; }
@@ -369,6 +426,7 @@ window.Core = (function () {
   return {
     isConfigured: isConfigured, db: db,
     session: session, signIn: signIn, signOut: signOut, loginEmail: loginEmail,
+    hasStoredSession: hasStoredSession, clearStoredSession: clearStoredSession,
     fetchProfile: fetchProfile, me: me, isAdmin: isAdmin, accessMessage: accessMessage,
     profileFailed: profileFailed,
     authMessage: authMessage, dataMessage: dataMessage,

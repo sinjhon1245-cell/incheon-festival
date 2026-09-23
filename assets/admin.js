@@ -1338,8 +1338,15 @@
 
   function bind() {
     window.addEventListener('hashchange', go);
-    $('#signout').addEventListener('click', function () {
-      C.signOut().then(function () { location.href = 'index.html'; });
+    $('#signout').addEventListener('click', function (e) {
+      var btn = e.currentTarget;
+      btn.disabled = true;
+      // 화면을 먼저 닫습니다. 서버 응답을 기다리는 동안 관리 화면이
+      // 그대로 보이면, 느린 회선에서 로그아웃이 안 된 것처럼 보입니다.
+      gate('gate-login');
+      // replace 로 옮깁니다. href 로 옮기면 관리자 페이지가 방문
+      // 기록에 남아, 뒤로가기로 되돌아올 수 있습니다.
+      C.signOut().then(function () { location.replace('index.html'); });
     });
 
     document.addEventListener('click', function (e) {
@@ -1425,6 +1432,12 @@
   function gate(id) {
     GATES.forEach(function (g) { $('#' + g).hidden = g !== id; });
     $('#app').hidden = true;
+
+    // 막을 때는 이미 그려 둔 관리 화면을 남겨 두지 않습니다.
+    // hidden 만으로도 보이지 않지만, 뒤로가기로 되살아난 화면이나
+    // 개발자도구에서 내용이 읽히는 것까지 막습니다.
+    $('#view').innerHTML = '';
+    $('#side-who').innerHTML = '';
   }
 
   function enter() {
@@ -1485,9 +1498,31 @@
   });
 
   /* 관리자가 아닌 계정으로 들어왔을 때 빠져나갈 길 */
-  $('#denied-signout').addEventListener('click', function () {
+  $('#denied-signout').addEventListener('click', function (e) {
+    e.currentTarget.disabled = true;
     C.signOut().then(function () { location.reload(); });
   });
+
+  /* 뒤로가기로 되살아난 화면.
+
+     브라우저는 뒤로가기 때 페이지를 통째로 캐시(bfcache)에서 꺼내
+     보여 줍니다. 스크립트가 다시 돌지 않기 때문에, 로그아웃한 뒤에도
+     관리 화면이 그대로 보일 수 있습니다. 되살아났으면 세션을 다시
+     확인해서 없으면 로그인 화면으로 돌립니다. */
+  window.addEventListener('pageshow', function (e) {
+    if (!e.persisted) return;
+    C.session().then(admitOrGate).catch(function () { gate('gate-login'); });
+  });
+
+  /* 다른 탭에서 로그아웃했거나 토큰이 만료되면 이 탭도 따라갑니다.
+     같은 브라우저의 탭들은 저장소를 함께 쓰기 때문에, 한쪽만
+     열어 두면 이미 끝난 세션으로 화면이 남습니다. */
+  var client = C.db();
+  if (client) {
+    client.auth.onAuthStateChange(function (event) {
+      if (event === 'SIGNED_OUT') gate('gate-login');
+    });
+  }
 
   C.session().then(admitOrGate).catch(function (e) {
     console.error('[admin] 시작 실패', e);
