@@ -177,7 +177,7 @@ aisw01  →  aisw01@aisw.local  →  signInWithPassword()
   키는 그 창의 환경변수로만 쓰이고 파일에 남지 않습니다.
   ⚠️ 이 키는 RLS 를 전부 무시합니다. `assets/config.js` 나 git 에 절대 넣지 마세요.
 - 이미 있는 계정은 **건너뜁니다.** 덮어쓰거나 비밀번호를 바꾸지 않습니다.
-- `aifest@ice.go.kr` · `sinjhon0105@naver.com` 은 보호 목록에 있어
+- `aifest@ice.go.kr` 은 보호 목록에 있어
   대상에 섞이면 스크립트가 멈춥니다. 생성 전후를 대조해 변화가 없는지도 확인합니다.
 - 초기 비밀번호는 16자 무작위(대·소문자·숫자·특수문자 포함)로 계정마다 다릅니다.
   `admin-accounts.csv` 로 저장되며 `.gitignore` 에 걸려 있습니다.

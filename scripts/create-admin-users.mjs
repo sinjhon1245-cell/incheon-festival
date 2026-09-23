@@ -46,7 +46,8 @@ const IDS = Array.from({ length: 20 }, function (_, i) {
 
 // 절대 건드리면 안 되는 기존 계정.
 // 대상 목록에 이 주소가 하나라도 섞이면 스크립트를 멈춥니다.
-const PROTECTED = ['aifest@ice.go.kr', 'sinjhon0105@naver.com'];
+// sinjhon0105@naver.com 은 운영자가 직접 지워 더 이상 없습니다.
+const PROTECTED = ['aifest@ice.go.kr'];
 
 const PW_LENGTH = 16;
 

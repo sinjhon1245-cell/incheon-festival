@@ -76,7 +76,7 @@ if ($Apply)  { $modeArg = '--apply' }
 if ($Apply) {
   Write-Host ''
   Write-Host '실제로 Supabase Auth 에 계정 20개를 만듭니다.' -ForegroundColor Yellow
-  Write-Host '  · 기존 계정(aifest@ice.go.kr, sinjhon0105@naver.com) 은 건드리지 않습니다.'
+  Write-Host '  · 기존 계정(aifest@ice.go.kr) 은 건드리지 않습니다.'
   Write-Host '  · 초기 비밀번호는 admin-accounts.csv 에 저장됩니다 (git 제외).'
   Write-Host ''
   $answer = Read-Host '계속하려면 yes 를 입력하세요'
