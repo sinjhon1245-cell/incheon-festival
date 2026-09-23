@@ -28,20 +28,93 @@ export const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 // 바꾸려면 assets/config.js 의 adminIdDomain 도 같이 바꿔야 합니다.
 export const ID_DOMAIN = process.env.ADMIN_ID_DOMAIN || 'aisw.local';
 
-// 다루는 아이디: aisw01 ~ aisw20
-export const IDS = Array.from({ length: 20 }, function (_, i) {
-  return 'aisw' + String(i + 1).padStart(2, '0');
-});
+// 다룰 수 있는 아이디 번호. aisw01 ~ aisw50 까지만 허용합니다.
+// 위를 넓히려면 여기만 고치면 됩니다.
+export const ID_MIN = 1;
+export const ID_MAX = 50;
+
+// 범위를 주지 않고 부를 때 쓰는 끝 번호.
+// reset-admin-passwords.mjs 가 지금까지 다뤄 온 범위(aisw01~20)와
+// 같습니다 — 그 스크립트의 동작이 바뀌지 않도록 그대로 둡니다.
+export const DEFAULT_END = 20;
 
 // 절대 건드리면 안 되는 기존 계정.
 // 대상 목록에 이 주소가 하나라도 섞이면 스크립트를 멈춥니다.
 export const PROTECTED = ['aifest@ice.go.kr'];
 
-/* 아이디 → 다룰 대상 한 줄. 두 스크립트가 같은 목록을 보게 합니다. */
-export function targets() {
-  return IDS.map(function (id, i) {
-    return { id: id, email: (id + '@' + ID_DOMAIN).toLowerCase(), sort_order: 100 + i };
-  });
+/* 번호 → 아이디. 언제나 두 자리입니다(1 → aisw01, 50 → aisw50). */
+export function idFor(n) { return 'aisw' + String(n).padStart(2, '0'); }
+
+/* 번호 → sort_order.
+
+   ⚠️ 목록 안의 순서가 아니라 계정 번호로 정합니다. 순서로 정하면
+   aisw21 하나만 만들 때 그 계정이 100 을 받아 aisw01 과 겹칩니다.
+   번호로 정하면 aisw01=100 … aisw20=119 로 지금 값과 똑같고,
+   aisw21=120 … aisw50=149 로 겹치지 않게 이어집니다. */
+export function sortOrderFor(n) { return 100 + (n - 1); }
+
+/* 범위가 쓸 수 있는 값인지 봅니다. 문제가 있으면 사람이 읽을
+   설명을, 없으면 null 을 돌려줍니다. 부르는 쪽이 같은 판단을
+   되풀이하지 않도록 여기 한 곳에 둡니다. */
+export function rangeProblem(start, end) {
+  if (!Number.isInteger(start) || !Number.isInteger(end)) {
+    return '시작·끝 번호는 정수여야 합니다 (받은 값: ' + start + ', ' + end + ').';
+  }
+  if (start < ID_MIN || start > ID_MAX) {
+    return '시작 번호가 허용 범위를 벗어났습니다: ' + start +
+      ' (허용 ' + ID_MIN + '~' + ID_MAX + ')';
+  }
+  if (end < ID_MIN || end > ID_MAX) {
+    return '끝 번호가 허용 범위를 벗어났습니다: ' + end +
+      ' (허용 ' + ID_MIN + '~' + ID_MAX + ')';
+  }
+  if (start > end) {
+    return '시작 번호가 끝 번호보다 큽니다: ' + start + ' > ' + end;
+  }
+  return null;
+}
+
+/* 범위 안의 아이디 목록. */
+export function idsFor(start, end) {
+  const out = [];
+  for (let n = start; n <= end; n++) out.push(idFor(n));
+  return out;
+}
+
+/* 범위 → 다룰 대상 줄들. 두 스크립트가 같은 목록을 보게 합니다.
+   범위를 주지 않으면 aisw01~20 입니다(기존 동작). */
+export function targets(start, end) {
+  start = start === undefined ? ID_MIN : start;
+  end = end === undefined ? DEFAULT_END : end;
+
+  const bad = rangeProblem(start, end);
+  if (bad) throw new Error(bad);
+
+  const out = [];
+  for (let n = start; n <= end; n++) {
+    out.push({
+      n: n,
+      id: idFor(n),
+      email: (idFor(n) + '@' + ID_DOMAIN).toLowerCase(),
+      sort_order: sortOrderFor(n)
+    });
+  }
+  return out;
+}
+
+/* --start 21 --end 25 를 읽습니다. --start=21 형태도 받습니다.
+   없으면 null 을 돌려줘서, 부르는 쪽이 "안 줬다"와 "잘못 줬다"를
+   나눠 안내할 수 있게 합니다. */
+export function parseRange(argv) {
+  function pick(name) {
+    const eq = argv.find(function (a) { return a.indexOf('--' + name + '=') === 0; });
+    if (eq) return eq.split('=')[1];
+    const i = argv.indexOf('--' + name);
+    return i >= 0 ? argv[i + 1] : undefined;
+  }
+  const s = pick('start'), e = pick('end');
+  if (s === undefined && e === undefined) return null;
+  return { start: Number(s), end: Number(e) };
 }
 
 /* ── 출력 잔손질 ────────────────────────────────────────────── */
