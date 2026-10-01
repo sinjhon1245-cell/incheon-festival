@@ -1,5 +1,5 @@
 -- ===================================================================
--- 2026년 인천 AI·SW미래채움 교육페스티벌 — 데이터베이스 스키마
+-- 2026 인천 AI미래채움 교육페스티벌 — 데이터베이스 스키마
 --
 -- 사용법: Supabase 대시보드 → SQL Editor → 이 파일 내용을 붙여넣고 실행
 -- 여러 번 실행해도 안전합니다(있으면 건너뜁니다).
@@ -10,21 +10,22 @@ create extension if not exists "pgcrypto";
 -- ── 1. 행사 설정 (항상 한 줄만 씁니다) ────────────────────────────
 create table if not exists public.settings (
   id                 smallint primary key default 1,
-  event_title        text        not null default '2026년 인천 AI·SW미래채움 교육페스티벌',
+  event_title        text        not null default '2026 인천 AI미래채움 교육페스티벌',
   event_start        timestamptz not null default '2026-11-06T10:00:00+09:00',
-  time_label         text        not null default '10:00 – 17:00',
+  time_label         text        not null default '10:00 ~ 17:00',
   date_label         text        not null default '2026. 11. 6.(금) ~ 11. 7.(토)',
-  venue              text        not null default '송도컨벤시아',
-  venue_address      text        not null default '인천광역시 연수구 센트럴로 123',
+  venue              text        not null default '인천 상상플랫폼',
+  venue_address      text        not null default '인천광역시 제물포구 월미로 33',
   -- 확정되지 않은 값은 비워 둡니다. '032-000-0000' 같은 자리표시 번호를
   -- 기본값으로 두면 새 환경에서 실제 대표 전화처럼 보입니다. 비어 있으면
   -- 관리자 → 행사 기본정보에서 채우면 됩니다.
   contact_phone      text        not null default '',
   contact_email      text        not null default 'aifest@ice.go.kr',
+  -- 포털 홈 맨 아래 안내 한 줄(관리자 → 기본정보 '하단 안내 문구').
   -- 옛 관람객 안내 사이트의 '검토용 예시 데이터입니다' 문구가 기본값으로
-  -- 남아 있었습니다. 지금 화면 어디에서도 쓰지 않아 비워 둡니다.
+  -- 남아 있었습니다. 기본값은 비워 두고 운영 값은 마이그레이션이 넣습니다.
   footer_note        text        not null default '',
-  -- 장소 상세: 2026 행사의 전시홀 번호는 아직 확정 전이라 비워 둡니다.
+  -- 장소 상세: 행사장 안의 세부 위치는 아직 확정 전이라 비워 둡니다.
   -- 확정되면 관리자 → 행사 기본정보에서 채웁니다.
   venue_detail       text        not null default '',
   -- 아래 셋은 옛 부스 모집 안내에 쓰던 칸입니다. 지금 포털·관리자
@@ -180,7 +181,7 @@ insert into public.settings (id) values (1) on conflict (id) do nothing;
 -- 예전에는 여기서 부스 16건을 넣었습니다. 그 예시가 실제 운영 DB에
 -- 남아 '일정 0건일 때만 예시' 와 같은 이유로 새 UI-only 예시가 나오지
 -- 않았고, 기관명에 옛 행사장(인천교육과학연구원)이 남아 있었습니다.
--- 부스 예시는 화면(assets/portal.js) 한 곳에서만 관리합니다.
+-- 지금은 화면에도 예시 부스를 두지 않습니다(부스 정보 준비 중 안내).
 -- zones · booths 표 정의는 그대로 둡니다.
 
 -- FAQ 예시는 DB에 넣지 않습니다.

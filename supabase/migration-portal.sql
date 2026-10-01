@@ -1,5 +1,5 @@
 -- ===================================================================
--- 2026년 인천 AI·SW미래채움 교육페스티벌
+-- 2026 인천 AI미래채움 교육페스티벌
 -- 관계자 운영 포털 마이그레이션
 --
 -- 사용법: Supabase 대시보드 → SQL Editor → 전체 붙여넣고 Run
@@ -63,9 +63,13 @@ alter table public.settings
   add column if not exists venue_map_url text not null default '',
   add column if not exists portal_note   text not null default '';
 
+-- 행사명은 2026. 9. 29. 공문의 공식 명칭입니다. 예전에는 옛 명칭
+-- ('2026년 인천 AI·SW미래채움 …')을 넣었는데, 이 파일을 다시 돌리면
+-- 공식 명칭을 옛 명칭으로 덮어써서 바꿨습니다.
+-- (기존 환경은 migration-official-info-2026.sql 이 바로잡습니다.)
 update public.settings
-set event_title = '2026년 인천 AI·SW미래채움 교육페스티벌'
-where id = 1 and event_title <> '2026년 인천 AI·SW미래채움 교육페스티벌';
+set event_title = '2026 인천 AI미래채움 교육페스티벌'
+where id = 1 and event_title <> '2026 인천 AI미래채움 교육페스티벌';
 
 -- 종료 시각이 비어 있으면 시작 +7시간으로 채웁니다(10:00–17:00 기준).
 update public.settings

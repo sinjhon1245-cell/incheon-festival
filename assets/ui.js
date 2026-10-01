@@ -303,7 +303,7 @@ window.UI = (function () {
       body = '<input class="input" type="time" id="' + id + '" data-k="' + f.k + '" value="' + esc(value) + '"' +
         (f.required ? ' required' : '') + ' />';
     } else {
-      body = '<input class="input" type="' + (f.type === 'email' ? 'email' : f.type === 'tel' ? 'tel' : 'text') +
+      body = '<input class="input" type="' + (f.type === 'email' ? 'email' : f.type === 'tel' ? 'tel' : f.type === 'url' ? 'url' : 'text') +
         '" id="' + id + '" data-k="' + f.k + '" value="' + esc(value) + '"' +
         (f.required ? ' required' : '') + ' />';
     }

@@ -166,11 +166,15 @@
         { k: 'event_start',   label: '개막 일시', type: 'datetime' },
         { k: 'event_end',     label: '종료 일시', type: 'datetime' },
         { k: 'date_label',    label: '날짜 표기', hint: '예: 2026. 11. 6.(금) ~ 11. 7.(토)' },
-        { k: 'time_label',    label: '운영시간 표기', hint: '예: 10:00 – 17:00' },
+        { k: 'time_label',    label: '운영시간 표기', hint: '예: 10:00 ~ 17:00' },
         { k: 'venue',         label: '장소' },
         { k: 'venue_detail',  label: '장소 상세',
-          hint: '2026 전시홀 번호는 추후 확정입니다. 확정 전에는 비워 두세요 — 비면 화면에서 그 줄이 사라집니다' },
+          hint: '건물 · 층처럼 행사장 안의 위치. 확정 전에는 비워 두세요 — 비면 화면에서 그 줄이 사라집니다' },
         { k: 'venue_address', label: '주소', wide: true },
+        /* 예전에는 행사장 안내도 이미지 칸이었습니다. 안내도는 부스 배치도
+           한 장으로 합쳐 비어 있던 칸이라, 이름 그대로 지도 링크로 씁니다. */
+        { k: 'venue_map_url', label: '지도 링크', type: 'url', wide: true,
+          hint: '네이버 · 카카오 지도 등 장소 페이지 주소(https://…). 비워 두면 행사장 화면의 “지도에서 보기” 단추가 숨겨집니다' },
 
         { type: 'group', label: '운영 안내' },
         { k: 'contact_phone', label: '대표 전화' },
@@ -178,12 +182,14 @@
         { k: 'portal_note',   label: '포털 안내 문구', type: 'textarea', wide: true },
         { k: 'ops_guide',     label: '대시보드 운영 안내', type: 'textarea', wide: true,
           hint: '행사 당일 먼저 확인할 내용. 줄바꿈은 포털에서도 그대로 보입니다' },
+        { k: 'footer_note',   label: '하단 안내 문구', type: 'textarea', wide: true,
+          hint: '포털 홈 맨 아래에 작게 한 번 보입니다. 예: 운영 내용 및 규모는 변경될 수 있습니다' },
 
         /* 지도는 부스 배치도 한 장만 관리합니다. 행사장 안내도까지
            두면 그림을 두 번 올려야 하는데, 현장에서 실제로 찾는 것은
            부스 자리입니다. 이 한 장을 부스·행사장 두 화면이 함께
-           씁니다. venue_map_* 칸은 표에 그대로 남겨 둡니다 — 지우면
-           예전에 올린 그림을 되살릴 길이 없어집니다. */
+           씁니다. 안내도용이던 venue_map_alt · venue_map_caption 칸은
+           표에 그대로 남겨 둡니다(venue_map_url 은 위의 지도 링크). */
         { type: 'group', label: '부스 배치도' },
         { k: 'booth_map_url',     label: '부스 배치도', type: 'image', folder: 'booth-map',
           hint: '가로형 이미지를 권합니다. 부스 현황과 행사장 화면에 함께 쓰입니다' },
@@ -929,7 +935,7 @@
       if (!cur) { out += '<section class="fgroup"><div class="list">'; cur = true; }
       if (!(f.k in s)) return;
       var v = s[f.k];
-      /* 개막·종료 일시는 연도까지 보여 줍니다. 목록에 쓰는 '11/13 10:00'
+      /* 개막·종료 일시는 연도까지 보여 줍니다. 목록에 쓰는 '11/6 10:00'
          짧은 표기는 최근 글 순서를 볼 때나 쓸모 있고, 행사 기본정보에서는
          연도가 틀린 것을 한눈에 알아차려야 합니다. */
       if (f.type === 'datetime') {
