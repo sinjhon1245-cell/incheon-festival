@@ -163,27 +163,36 @@
       fields: [
         { type: 'group', label: '기본 정보' },
         { k: 'event_title',   label: '행사 이름', wide: true, required: true },
-        { k: 'event_start',   label: '개막 일시', type: 'datetime' },
+        { k: 'event_start',   label: '개막 일시', type: 'datetime',
+          hint: '일정의 일자 단추와 D-day 가 이 기간을 따릅니다' },
         { k: 'event_end',     label: '종료 일시', type: 'datetime' },
-        { k: 'date_label',    label: '날짜 표기', hint: '예: 2026. 11. 6.(금) ~ 11. 7.(토)' },
-        { k: 'time_label',    label: '운영시간 표기', hint: '예: 10:00 ~ 17:00' },
+        { k: 'date_label',    label: '날짜 표기', placeholder: '2026. 11. 6.(금) ~ 11. 7.(토)' },
+        { k: 'time_label',    label: '운영시간 표기', placeholder: '10:00 ~ 17:00' },
         { k: 'venue',         label: '장소' },
-        { k: 'venue_detail',  label: '장소 상세',
-          hint: '건물 · 층처럼 행사장 안의 위치. 확정 전에는 비워 두세요 — 비면 화면에서 그 줄이 사라집니다' },
+        { k: 'venue_detail',  label: '장소 상세', placeholder: '건물 · 층',
+          hint: '확정 전에는 비워 두세요. 비면 포털에서 이 줄이 빠집니다' },
         { k: 'venue_address', label: '주소', wide: true },
         /* 예전에는 행사장 안내도 이미지 칸이었습니다. 안내도는 부스 배치도
            한 장으로 합쳐 비어 있던 칸이라, 이름 그대로 지도 링크로 씁니다. */
         { k: 'venue_map_url', label: '지도 링크', type: 'url', wide: true,
-          hint: '네이버 · 카카오 지도 등 장소 페이지 주소(https://…). 비워 두면 행사장 화면의 “지도에서 보기” 단추가 숨겨집니다' },
+          placeholder: 'https://map.naver.com/…',
+          hint: '네이버 · 카카오 지도의 장소 페이지 주소. 비우면 “지도에서 보기” 단추가 숨겨집니다' },
 
-        { type: 'group', label: '운영 안내' },
-        { k: 'contact_phone', label: '대표 전화' },
-        { k: 'contact_email', label: '대표 메일' },
-        { k: 'portal_note',   label: '포털 안내 문구', type: 'textarea', wide: true },
-        { k: 'ops_guide',     label: '대시보드 운영 안내', type: 'textarea', wide: true,
-          hint: '행사 당일 먼저 확인할 내용. 줄바꿈은 포털에서도 그대로 보입니다' },
+        /* 운영 문의 — 포털 행사장 화면의 장소 카드에 한 줄로 보입니다(비면 숨김).
+           관리자 로그인 계정과는 상관없는 칸입니다. 예전 기본값
+           '032-000-0000' · 'aifest@ice.go.kr' 은 자리표시 · 로그인 계정이라
+           migration-lock-portal-actions.sql 에서 비웠습니다.
+           portal_note(포털 안내 문구)는 포털 어디에도 쓰이지 않아 창에서
+           뺐습니다. 표의 칸과 값은 그대로 있습니다. */
+        { type: 'group', label: '운영 문의 · 안내' },
+        { k: 'contact_phone', label: '운영 문의 전화', type: 'tel', placeholder: '기관 · 운영본부 대표번호',
+          hint: '공용 번호만 적습니다(개인 휴대전화 금지). 비우면 포털에 나오지 않습니다' },
+        { k: 'contact_email', label: '운영 문의 메일', type: 'email', placeholder: '문의를 받는 메일 주소',
+          hint: '관리자 로그인 아이디와 별개입니다. 실제 문의 창구가 있을 때만 적습니다' },
+        { k: 'ops_guide',     label: '홈 운영 안내', type: 'textarea', wide: true,
+          hint: '행사 당일 먼저 확인할 내용. 포털 홈 아래에 보이고 줄바꿈도 그대로 보입니다' },
         { k: 'footer_note',   label: '하단 안내 문구', type: 'textarea', wide: true,
-          hint: '포털 홈 맨 아래에 작게 한 번 보입니다. 예: 운영 내용 및 규모는 변경될 수 있습니다' },
+          hint: '포털 홈 맨 아래 작은 글씨 한 줄. 예: 운영 내용 및 규모는 변경될 수 있습니다' },
 
         /* 지도는 부스 배치도 한 장만 관리합니다. 행사장 안내도까지
            두면 그림을 두 번 올려야 하는데, 현장에서 실제로 찾는 것은
@@ -220,22 +229,38 @@
       },
       tags: function (r) { return badge(r.status || '예정') + tag(r.category || '운영') +
         (r.is_highlight ? tag('핵심') : ''); },
+      /* 입력 순서는 일정을 떠올리는 순서대로 둡니다.
+           무엇을(일정명 · 구분) → 언제(일자 · 시각) → 어디서 누가 → 상태 · 메모
+         구분 · 일자 · 상태처럼 고를 것이 몇 개뿐인 칸은 목록을 펼치지 않고
+         한 번 눌러 고르는 단추(choice)로 둡니다. */
       fields: [
+        { type: 'group', label: '일정' },
+        { k: 'title',      label: '일정명', wide: true, required: true,
+          placeholder: '예: 개막식, 부스 순회 점검' },
+        { k: 'category',   label: '구분', type: 'choice', wide: true, required: true,
+          options: opts(SCHEDULE_CATS) },
+
+        { type: 'group', label: '일시' },
         // 일자와 시각은 따로 받습니다. 시작·종료는 'HH:MM' 이라 날짜를
         // 함께 담을 수 없고, 이틀 행사에서는 날짜가 반드시 필요합니다.
+        // 행사 기간을 알면 fieldsFor 가 그 날짜들만 고르는 단추로 바꿉니다.
         // migration-schedule-event-date.sql 을 돌리기 전에는 칸이 없습니다.
-        { k: 'event_date', label: '일자', type: 'date', needsColumn: true,
-          hint: '예: 2026-11-06 · 이틀 행사에서는 반드시 고릅니다' },
-        { k: 'start_time', label: '시작시간', type: 'time', required: true },
-        { k: 'end_time',   label: '종료시간', type: 'time', required: true },
-        { k: 'title',      label: '일정명', wide: true, required: true },
-        { k: 'category',   label: '구분', type: 'select', options: opts(SCHEDULE_CATS) },
-        { k: 'place',      label: '장소' },
-        { k: 'team',       label: '담당팀' },
-        { k: 'owner',      label: '담당자' },
-        { k: 'status',     label: '상태', type: 'select', options: opts(SCHEDULE_STATES) },
-        { k: 'is_highlight', label: '핵심 일정 (대시보드 하이라이트에 표시)', type: 'bool' },
-        { k: 'memo',       label: '메모', type: 'textarea', wide: true }
+        { k: 'event_date', label: '일자', type: 'date', wide: true, needsColumn: true },
+        { k: 'start_time', k2: 'end_time', label: '시작시간', label2: '종료시간',
+          type: 'timespan', required: true },
+
+        { type: 'group', label: '장소 · 담당' },
+        { k: 'place',      label: '장소', wide: true, placeholder: '예: 읽걷쓰AI 열린마당' },
+        { k: 'team',       label: '담당팀', placeholder: '예: 운영본부' },
+        { k: 'owner',      label: '담당자', placeholder: '이름 또는 역할' },
+
+        { type: 'group', label: '상태 · 메모' },
+        { k: 'status',     label: '상태', type: 'choice', wide: true, required: true,
+          options: opts(SCHEDULE_STATES),
+          hint: '예정 · 진행 중 · 종료는 행사 당일 시각으로 자동 표시됩니다. 취소 · 변경만 직접 고르세요' },
+        { k: 'is_highlight', label: '핵심 일정 (포털 홈 · 일정 화면에 강조)', type: 'bool' },
+        { k: 'memo',       label: '메모', type: 'textarea', wide: true,
+          placeholder: '현장 운영에 필요한 메모 (포털 일정 카드에 보입니다)' }
       ],
       /* time_label 은 구 스키마의 NOT NULL 칼럼입니다. 시작·종료로
          항상 채워야 INSERT 가 23502 로 막히지 않습니다. */
@@ -247,17 +272,25 @@
         if ('event_date' in v && !v.event_date) v.event_date = null;
         return v;
       },
+      /* 오류는 { message, field } 로 돌려줍니다 — 창이 그 칸으로 초점을 옮깁니다. */
       validate: function (v) {
+        if (!String(v.title || '').trim()) return { message: '일정명을 입력해 주세요.', field: 'title' };
         var a = C.toMin(v.start_time), b = C.toMin(v.end_time);
-        if (a == null || b == null) return '시간은 HH:MM 형식으로 입력해 주세요.';
-        if (b <= a) return '종료시간은 시작시간보다 뒤여야 합니다.';
-        /* 이틀 이상 행사에서 일자가 없으면 포털이 그 일정을 첫날 것으로
+        if (a == null) return { message: '시작시간을 골라 주세요.', field: 'start_time' };
+        if (b == null) return { message: '종료시간을 골라 주세요.', field: 'end_time' };
+        if (b <= a) return { message: '종료시간이 시작시간보다 빠르거나 같습니다. 종료시간을 다시 골라 주세요.', field: 'end_time' };
+        /* 일자는 행사 기간 안에서만. 고르는 단추가 기간 안의 날짜만 보여 주지만,
+           예전에 기간 밖 날짜로 저장된 일정은 그 값이 그대로 남아 있습니다.
+           이틀 이상 행사에서 일자가 없으면 포털이 그 일정을 첫날 것으로
            봅니다. 짐작으로 남기지 않고 여기서 고르게 합니다. 하루 행사면
            나눌 날이 없으므로 비워 두어도 됩니다. */
         var days = eventDays();
+        var range = days.map(dayShort).join(' · ');
+        if ('event_date' in v && v.event_date && days.length && days.indexOf(v.event_date) < 0) {
+          return { message: '일자는 행사 기간(' + range + ') 안에서 골라 주세요.', field: 'event_date' };
+        }
         if ('event_date' in v && !v.event_date && days.length > 1) {
-          return '이틀 이상 행사입니다. 일자를 골라 주세요 (' +
-            days.map(dayShort).join(' · ') + ').';
+          return { message: '이틀 이상 행사입니다. 일자를 골라 주세요 (' + range + ').', field: 'event_date' };
         }
         return null;
       }
@@ -984,16 +1017,20 @@
             : '먼저 “' + (ENTITIES[f.ref] || {}).label + '”에서 등록해 주세요'
         });
       }
-      /* 일정의 일자는 행사 기간 안에서만 고르게 합니다. 달력에서
-         엉뚱한 해·달을 고르는 실수를 입력 단계에서 막습니다.
-         기간을 모르면(기본정보 미설정) 제한 없이 그대로 둡니다. */
+      /* 일정의 일자는 행사 기간 안에서만 고르게 합니다. 달력을 펼치면
+         엉뚱한 해·달을 고르기 쉽고, 이틀 행사에서 고를 날은 둘뿐입니다.
+         그래서 행사 날짜를 단추로 늘어놓습니다(11.6. 금 · 11.7. 토).
+         기간을 모르면(기본정보 미설정) 달력 칸 그대로 둡니다. */
       if (f.type === 'date' && f.k === 'event_date') {
         var days = eventDays();
         if (!days.length) return f;
         return Object.assign({}, f, {
-          min: days[0], max: days[days.length - 1],
-          hint: '행사 기간 ' + days.map(dayShort).join(' · ') +
-            (days.length > 1 ? ' 중에서 고릅니다' : '')
+          type: 'choice', required: days.length > 1,
+          // 단추 글자는 공문 표기('11. 6.(금)')와 같게 씁니다.
+          options: days.map(function (d) {
+            var p = d.split('-'), dt = new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]));
+            return [d, (dt.getMonth() + 1) + '. ' + dt.getDate() + '.(' + WEEKDAYS[dt.getDay()] + ')'];
+          })
         });
       }
       /* 여러 줄 칸의 고를 목록은 다른 표에서 옵니다. 정의할 때는

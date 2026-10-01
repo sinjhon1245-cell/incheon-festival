@@ -20,7 +20,7 @@ create table if not exists public.settings (
   -- 기본값으로 두면 새 환경에서 실제 대표 전화처럼 보입니다. 비어 있으면
   -- 관리자 → 행사 기본정보에서 채우면 됩니다.
   contact_phone      text        not null default '',
-  contact_email      text        not null default 'aifest@ice.go.kr',
+  contact_email      text        not null default '',
   -- 포털 홈 맨 아래 안내 한 줄(관리자 → 기본정보 '하단 안내 문구').
   -- 옛 관람객 안내 사이트의 '검토용 예시 데이터입니다' 문구가 기본값으로
   -- 남아 있었습니다. 기본값은 비워 두고 운영 값은 마이그레이션이 넣습니다.

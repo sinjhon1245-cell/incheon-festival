@@ -193,8 +193,8 @@ window.UI = (function () {
   function rowsFieldHtml(f, value) {
     var rows = Array.isArray(value) ? value : [];
     return '<div class="field field--wide">' +
-      '<span class="field__label">' + esc(f.label) +
-      (f.hint ? ' <span style="font-weight:500;opacity:.75">· ' + esc(f.hint) + '</span>' : '') + '</span>' +
+      '<span class="field__label">' + esc(f.label) + '</span>' +
+      (f.hint ? '<p class="field__hint field__hint--top">' + esc(f.hint) + '</p>' : '') +
       '<div class="rowsfield" data-rows="' + esc(f.k) + '">' +
         '<div class="rowsfield__list">' + rows.map(function (r) { return rowsRowHtml(f, r); }).join('') + '</div>' +
         '<p class="rowsfield__none"' + (rows.length ? ' hidden' : '') + '>' +
@@ -245,23 +245,198 @@ window.UI = (function () {
     });
   }
 
+  /* ── 시각 입력 ──────────────────────────────────────────────────
+     브라우저 기본 시각 칸(type="time")을 쓰지 않습니다. 데스크톱 크롬에서는
+     시 · 분 목록이 칸 위에 겹쳐 떠서 어디를 고르는지 알기 어렵고, 오전/오후가
+     따로 놀아 '오후 2시' 를 고르는 데 여러 번 눌러야 했습니다.
+
+     대신 고르기 상자 두 개를 둡니다.
+       [ 오후 2시 ▾ ] [ 30분 ▾ ]
+     시 목록이 오전/오후를 함께 말하고, 분은 5분 단위입니다. 휴대폰에서는
+     기기의 목록 선택기(휠)가 그대로 열려 손가락으로 고르기 쉽습니다.
+     저장되는 값은 예전과 같은 'HH:MM' 이라 표 · 포털은 바뀌지 않습니다.
+     5분 단위가 아닌 예전 값(예: 14:07)은 목록에 끼워 그대로 살립니다. */
+  function hourLabel(h) {
+    return (h < 12 ? '오전 ' : '오후 ') + (h % 12 === 0 && h !== 0 ? 12 : h % 12) + '시';
+  }
+  function timeParts(value) {
+    var m = /^(\d{1,2}):(\d{2})/.exec(String(value || ''));
+    return m ? { h: Number(m[1]), m: Number(m[2]) } : null;
+  }
+  function timeSelectsHtml(id, k, value, required, label) {
+    var p = timeParts(value);
+    var hours = '', mins = '';
+    // 비어 있으면 '시' · '분' 자리표시를 둡니다. 고른 뒤에는 되돌릴 수 없게(필수 칸) 막습니다.
+    hours += '<option value=""' + (p ? '' : ' selected') + (required ? ' disabled' : '') + '>' +
+      (required ? '시' : '미정') + '</option>';
+    for (var h = 0; h < 24; h++) {
+      hours += '<option value="' + h + '"' + (p && p.h === h ? ' selected' : '') + '>' + hourLabel(h) + '</option>';
+    }
+    var steps = [];
+    for (var m = 0; m < 60; m += 5) steps.push(m);
+    if (p && steps.indexOf(p.m) < 0) { steps.push(p.m); steps.sort(function (a, b) { return a - b; }); }
+    mins += '<option value=""' + (p ? '' : ' selected') + ' disabled>분</option>';
+    steps.forEach(function (mm) {
+      mins += '<option value="' + mm + '"' + (p && p.m === mm ? ' selected' : '') + '>' +
+        (mm < 10 ? '0' : '') + mm + '분</option>';
+    });
+    return '<div class="timepick" data-timepick role="group" aria-label="' + esc(label) + '">' +
+      '<select class="select timepick__h" id="' + id + '" aria-label="' + esc(label) + ' 시">' + hours + '</select>' +
+      '<select class="select timepick__m" aria-label="' + esc(label) + ' 분"' + (p ? '' : ' disabled') + '>' + mins + '</select>' +
+      '<input type="hidden" data-k="' + esc(k) + '" value="' + esc(p ? pad(p.h) + ':' + pad(p.m) : '') + '" />' +
+      '</div>';
+  }
+  function pad(n) { return (n < 10 ? '0' : '') + n; }
+
+  /* 목적격 조사. 마지막 글자에 받침이 있으면 '을', 없으면 '를'.
+     '일정명을(를)' 처럼 둘 다 적으면 읽다가 걸립니다. */
+  function objectJosa(word) {
+    var c = String(word).charCodeAt(String(word).length - 1);
+    if (c < 0xAC00 || c > 0xD7A3) return '을(를)';
+    return (c - 0xAC00) % 28 ? '을' : '를';
+  }
+
+  /* 시 · 분 상자를 고를 때마다 감춰진 칸(data-k)에 'HH:MM' 을 맞춰 둡니다.
+     시만 고르면 분은 00 으로 채웁니다 — 분이 비어 저장이 막히는 일을 없앱니다.
+     시를 '미정' 으로 되돌리면 값도 비웁니다. */
+  function wireTimeFields(panel) {
+    Array.prototype.forEach.call(panel.querySelectorAll('[data-timepick]'), function (box) {
+      var hs = box.querySelector('.timepick__h'), ms = box.querySelector('.timepick__m');
+      var hidden = box.querySelector('[data-k]');
+      function sync() {
+        if (hs.value === '') { hidden.value = ''; ms.disabled = true; }
+        else {
+          ms.disabled = false;
+          if (ms.value === '') ms.value = '0';
+          hidden.value = pad(Number(hs.value)) + ':' + pad(Number(ms.value));
+        }
+        hs.setAttribute('aria-invalid', 'false');
+        hidden.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+      hs.addEventListener('change', sync);
+      ms.addEventListener('change', sync);
+    });
+  }
+  // 바깥(시간 범위 단추 등)에서 값을 넣을 때 쓰는 길.
+  function setTimeValue(box, hhmm) {
+    var p = timeParts(hhmm);
+    if (!p) return;
+    var hs = box.querySelector('.timepick__h'), ms = box.querySelector('.timepick__m');
+    if (!ms.querySelector('option[value="' + p.m + '"]')) {
+      ms.insertAdjacentHTML('beforeend', '<option value="' + p.m + '">' + pad(p.m) + '분</option>');
+    }
+    hs.value = String(p.h); ms.value = String(p.m);
+    hs.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+
+  /* 시작 · 종료를 한 덩어리로 받는 칸(type: 'timespan').
+     k = 시작 칸, k2 = 종료 칸. 두 칸은 지금처럼 따로 저장됩니다.
+     아래 '종료 빠르게' 단추는 시작 시각에 길이를 더해 종료를 채우고,
+     맨 아래 한 줄이 고른 결과(10:00–10:30 · 30분)를 바로 보여 줍니다.
+     종료가 시작보다 이르면 그 줄이 빨갛게 바뀝니다 — 저장을 눌러 보기
+     전에 알 수 있게 합니다. */
+  var QUICK_DURATIONS = [[30, '30분'], [60, '1시간'], [90, '1시간 30분'], [120, '2시간']];
+  function timespanHtml(f, vals) {
+    var req = f.required ? '<span class="field__req" aria-hidden="true">*</span>' : '';
+    return '<div class="field field--wide timespan" data-timespan="' + esc(f.k) + '">' +
+      '<div class="timespan__row">' +
+        '<div class="timespan__col"><label class="field__label" for="m_' + esc(f.k) + '">' + esc(f.label) + req + '</label>' +
+          timeSelectsHtml('m_' + f.k, f.k, vals[f.k], f.required, f.label) + '</div>' +
+        '<span class="timespan__sep" aria-hidden="true">–</span>' +
+        '<div class="timespan__col"><label class="field__label" for="m_' + esc(f.k2) + '">' + esc(f.label2) + req + '</label>' +
+          timeSelectsHtml('m_' + f.k2, f.k2, vals[f.k2], f.required, f.label2) + '</div>' +
+      '</div>' +
+      '<div class="timespan__quick" role="group" aria-label="종료시간 빠르게 정하기">' +
+        '<span class="timespan__ql">길이</span>' +
+        QUICK_DURATIONS.map(function (d) {
+          return '<button class="chip chip--sm" type="button" data-dur="' + d[0] + '">' + d[1] + '</button>';
+        }).join('') +
+      '</div>' +
+      '<p class="timespan__sum" aria-live="polite"></p>' +
+      '</div>';
+  }
+  function wireTimespans(panel) {
+    Array.prototype.forEach.call(panel.querySelectorAll('[data-timespan]'), function (box) {
+      var picks = box.querySelectorAll('[data-timepick]');
+      var a = picks[0], b = picks[1];
+      var sum = box.querySelector('.timespan__sum');
+      function mins(pick) {
+        var p = timeParts(pick.querySelector('[data-k]').value);
+        return p ? p.h * 60 + p.m : null;
+      }
+      function paint() {
+        var x = mins(a), y = mins(b);
+        box.classList.remove('is-bad');
+        if (x == null || y == null) { sum.textContent = '시작과 종료 시각을 골라 주세요.'; return; }
+        if (y <= x) {
+          box.classList.add('is-bad');
+          sum.textContent = '종료시간이 시작시간보다 빠르거나 같습니다.';
+          return;
+        }
+        var d = y - x;
+        sum.textContent = pad(Math.floor(x / 60)) + ':' + pad(x % 60) + '–' +
+          pad(Math.floor(y / 60)) + ':' + pad(y % 60) + ' · ' +
+          (d >= 60 ? Math.floor(d / 60) + '시간' + (d % 60 ? ' ' + (d % 60) + '분' : '') : d + '분');
+      }
+      box.addEventListener('change', paint);
+      box.addEventListener('click', function (e) {
+        var q = e.target.closest('[data-dur]');
+        if (!q) return;
+        var x = mins(a);
+        if (x == null) { sum.textContent = '시작시간을 먼저 골라 주세요.'; a.querySelector('select').focus(); return; }
+        var y = Math.min(x + Number(q.getAttribute('data-dur')), 23 * 60 + 55);
+        setTimeValue(b, pad(Math.floor(y / 60)) + ':' + pad(y % 60));
+      });
+      paint();
+    });
+  }
+
+  /* 몇 개 중 하나를 고르는 칸(type: 'choice').
+     고를 것이 대여섯 개뿐이면 목록을 펼치는 것보다 한 번 눌러 고르는 편이
+     빠릅니다. 실제 라디오 단추라 화살표 키로도 옮겨 다닙니다.
+     options: [[값, 보이는 글자], …] */
+  function choiceHtml(f, value) {
+    var id = 'm_' + f.k;
+    var req = f.required ? '<span class="field__req" aria-hidden="true">*</span>' : '';
+    var list = (f.options || []).slice();
+    var has = list.some(function (o) { return String(o[0]) === String(value); });
+    // 목록에 없는 예전 값은 지우지 않고 '(이전 값)' 으로 남겨 둡니다.
+    if (!has && value !== '' && value != null) { list.push([value, String(value) + ' (이전 값)']); has = true; }
+    return '<div class="field' + (f.wide ? ' field--wide' : '') + '">' +
+      '<span class="field__label" id="' + id + '_l">' + esc(f.label) + req + '</span>' +
+      '<div class="choice" role="radiogroup" aria-labelledby="' + id + '_l"' +
+        (f.hint ? ' aria-describedby="' + id + '_h"' : '') + '>' +
+      list.map(function (o, i) {
+        var on = has ? String(o[0]) === String(value) : (i === 0 && f.required);
+        return '<label class="choice__opt"><input type="radio" name="' + id + '" data-k="' + esc(f.k) + '" value="' + esc(o[0]) + '"' +
+          (on ? ' checked' : '') + ' /><span>' + esc(o[1]) + '</span></label>';
+      }).join('') + '</div>' +
+      (f.hint ? '<p class="field__hint" id="' + id + '_h">' + esc(f.hint) + '</p>' : '') + '</div>';
+  }
+
   /* ── 입력칸 ─────────────────────────────────────────────────── */
-  function fieldHtml(f, value) {
+  function fieldHtml(f, value, vals) {
     if (f.type === 'rows') return rowsFieldHtml(f, value);
+    if (f.type === 'timespan') return timespanHtml(f, vals || {});
+    if (f.type === 'choice') return choiceHtml(f, value);
     var id = 'm_' + f.k;
     var wide = f.wide || f.type === 'textarea';
     var req = f.required ? '<span class="field__req" aria-hidden="true">*</span>' : '';
-    var label = '<label class="field__label" for="' + id + '">' + esc(f.label) + req +
-      (f.hint ? ' <span style="font-weight:500;opacity:.75">· ' + esc(f.hint) + '</span>' : '') + '</label>';
+    /* 도움말은 라벨 옆이 아니라 칸 아래 한 줄로 둡니다. 라벨에 이어 붙이면
+       좁은 칸에서 라벨이 두세 줄로 접혀 어디까지가 이름인지 흐려집니다. */
+    var label = '<label class="field__label" for="' + id + '">' + esc(f.label) + req + '</label>';
+    var hint = f.hint ? '<p class="field__hint" id="' + id + '_h">' + esc(f.hint) + '</p>' : '';
+    var desc = f.hint ? ' aria-describedby="' + id + '_h"' : '';
+    var ph = f.placeholder ? ' placeholder="' + esc(f.placeholder) + '"' : '';
 
     if (f.type === 'bool') {
       return '<div class="field field--wide"><label class="check">' +
-        '<input type="checkbox" id="' + id + '" data-k="' + f.k + '"' + (value ? ' checked' : '') + ' /> ' +
-        esc(f.label) + '</label></div>';
+        '<input type="checkbox" id="' + id + '" data-k="' + f.k + '"' + (value ? ' checked' : '') + desc + ' /> ' +
+        esc(f.label) + '</label>' + hint + '</div>';
     }
 
     if (f.type === 'image') {
-      return '<div class="field field--wide">' + label +
+      return '<div class="field field--wide">' + label + hint +
         '<div class="imgpick" data-imgpick="' + esc(f.k) + '" data-folder="' + esc(f.folder || 'etc') + '">' +
           '<div class="imgpick__view">' + imgPreview(value) + '</div>' +
           '<div class="imgpick__acts">' +
@@ -279,10 +454,10 @@ window.UI = (function () {
 
     var body;
     if (f.type === 'textarea') {
-      body = '<textarea class="textarea" id="' + id + '" data-k="' + f.k + '" rows="3"' +
+      body = '<textarea class="textarea" id="' + id + '" data-k="' + f.k + '" rows="3"' + ph + desc +
         (f.required ? ' required' : '') + '>' + esc(value) + '</textarea>';
     } else if (f.type === 'select') {
-      body = '<select class="select" id="' + id + '" data-k="' + f.k + '">' +
+      body = '<select class="select" id="' + id + '" data-k="' + f.k + '"' + desc + '>' +
         (f.options || []).map(function (o) {
           var v = Array.isArray(o) ? o[0] : o, t = Array.isArray(o) ? o[1] : o;
           return '<option value="' + esc(v) + '"' + (String(value) === String(v) ? ' selected' : '') + '>' + esc(t) + '</option>';
@@ -294,20 +469,19 @@ window.UI = (function () {
       // 날짜만 받는 칸(예: 일정의 일자). 값은 'YYYY-MM-DD' 그대로 오갑니다 —
       // 시각이 없어 시간대 환산이 필요 없습니다(datetime 과 다른 점).
       body = '<input class="input" type="date" id="' + id + '" data-k="' + f.k + '" value="' + esc(value) + '"' +
-        (f.min ? ' min="' + esc(f.min) + '"' : '') + (f.max ? ' max="' + esc(f.max) + '"' : '') +
+        (f.min ? ' min="' + esc(f.min) + '"' : '') + (f.max ? ' max="' + esc(f.max) + '"' : '') + desc +
         (f.required ? ' required' : '') + ' />';
     } else if (f.type === 'datetime') {
       body = '<input class="input" type="datetime-local" id="' + id + '" data-k="' + f.k + '" data-dt="1" value="' +
-        esc(value) + '" />';
+        esc(value) + '"' + desc + ' />';
     } else if (f.type === 'time') {
-      body = '<input class="input" type="time" id="' + id + '" data-k="' + f.k + '" value="' + esc(value) + '"' +
-        (f.required ? ' required' : '') + ' />';
+      body = timeSelectsHtml(id, f.k, value, f.required, f.label);
     } else {
       body = '<input class="input" type="' + (f.type === 'email' ? 'email' : f.type === 'tel' ? 'tel' : f.type === 'url' ? 'url' : 'text') +
-        '" id="' + id + '" data-k="' + f.k + '" value="' + esc(value) + '"' +
+        '" id="' + id + '" data-k="' + f.k + '" value="' + esc(value) + '"' + ph + desc +
         (f.required ? ' required' : '') + ' />';
     }
-    return '<div class="field' + (wide ? ' field--wide' : '') + '">' + label + body + '</div>';
+    return '<div class="field' + (wide ? ' field--wide' : '') + '">' + label + body + hint + '</div>';
   }
 
   function readFields(panel) {
@@ -319,6 +493,8 @@ window.UI = (function () {
     });
     Array.prototype.forEach.call(panel.querySelectorAll('[data-k]'), function (el) {
       var k = el.dataset.k;
+      // 고르기 칸(choice)은 같은 이름의 라디오 여럿 — 눌린 것 하나만 값입니다.
+      if (el.type === 'radio') { if (el.checked) out[k] = el.value; else if (!(k in out)) out[k] = ''; return; }
       if (el.type === 'checkbox') out[k] = el.checked;
       else if (el.type === 'number') out[k] = el.value === '' ? null : Number(el.value);
       else out[k] = el.value;
@@ -336,7 +512,7 @@ window.UI = (function () {
          fold 가 붙은 묶음은 접어 둡니다 — 늘 쓰는 칸이 아니라서
          처음 열었을 때 보이지 않는 편이 낫습니다. 접기는 details 를
          그대로 씁니다. 직접 만들면 키보드 동작까지 다시 만들어야 합니다. */
-      function cell(f) { return fieldHtml(f, vals[f.k] == null ? '' : vals[f.k]); }
+      function cell(f) { return fieldHtml(f, vals[f.k] == null ? '' : vals[f.k], vals); }
 
       var groups = [], cur = null;
       opts.fields.forEach(function (f) {
@@ -383,9 +559,11 @@ window.UI = (function () {
           '<form class="modal__body" id="modal-form" novalidate>' +
             (opts.desc ? '<p class="modal__desc">' + esc(opts.desc) + '</p>' : '') +
             body +
-            '<p class="alert alert--error" id="modal-err" role="alert" hidden></p>' +
           '</form>' +
+          /* 오류는 저장 단추 바로 위에 둡니다. 본문 맨 끝에 두면 긴 창에서는
+             스크롤 아래에 묻혀, 저장을 눌러도 아무 일도 없는 것처럼 보입니다. */
           '<div class="modal__foot">' +
+            '<p class="alert alert--error modal__err" id="modal-err" role="alert" hidden></p>' +
             '<button class="btn btn--ghost" type="button" data-cancel>취소</button>' +
             '<button class="btn btn--primary" type="submit" form="modal-form" id="modal-ok">' +
               esc(opts.submitLabel || '저장') + '</button>' +
@@ -401,40 +579,77 @@ window.UI = (function () {
 
           wireImageFields(panel, session);
           wireRowsFields(panel, opts.fields);
+          wireTimeFields(panel);
+          wireTimespans(panel);
 
           Array.prototype.forEach.call(h.querySelectorAll('[data-cancel]'), function (b) {
             b.addEventListener('click', cancel);
           });
 
+          /* 본문이 아래로 더 있으면 하단 단추 줄에 옅은 그림자를 둡니다.
+             잘린 것이 아니라 스크롤할 내용이 남았다는 표시입니다. */
+          var bodyEl = panel.querySelector('.modal__body'), footEl = panel.querySelector('.modal__foot');
+          function edge() {
+            footEl.classList.toggle('is-floating',
+              bodyEl.scrollHeight - bodyEl.scrollTop - bodyEl.clientHeight > 4);
+          }
+          bodyEl.addEventListener('scroll', edge, { passive: true });
+          panel.addEventListener('toggle', edge, true);   // 접힌 묶음을 펼쳤을 때
+          edge();
+
+          var err = panel.querySelector('#modal-err');
+          // 무엇이든 고치기 시작하면 앞서 띄운 오류는 걷습니다.
+          panel.querySelector('#modal-form').addEventListener('change', function () { err.hidden = true; });
+
+          /* 오류 칸으로 초점을 옮깁니다. 시각 칸은 감춰진 값 대신 '시' 상자로,
+             고르기 칸은 첫 단추로 갑니다. 보이지 않는 칸에 초점을 두면 아무
+             일도 일어나지 않은 것처럼 보입니다. */
+          function focusField(k) {
+            var el = panel.querySelector('[data-k="' + k + '"]');
+            if (!el) return;
+            var pick = el.closest('[data-timepick]');
+            var target = pick ? pick.querySelector('.timepick__h') : el;
+            target.setAttribute('aria-invalid', 'true');
+            target.focus();
+            if (target.scrollIntoView) target.scrollIntoView({ block: 'center' });
+          }
+          function fail(msg, k) {
+            err.textContent = msg;
+            err.hidden = false;
+            if (k) focusField(k);
+          }
+
           panel.querySelector('#modal-form').addEventListener('submit', function (e) {
             e.preventDefault();
-            var err = panel.querySelector('#modal-err');
             err.hidden = true;
 
             var values = readFields(panel);
 
             // 필수값 확인 — 첫 번째 빈 칸으로 초점을 옮깁니다.
-            var missing = opts.fields.filter(function (f) {
-              if (f.type === 'group' || f.type === 'rows') return false;
-              return f.required && !String(values[f.k] == null ? '' : values[f.k]).trim();
+            // 시작 · 종료를 한 칸에 받는 timespan 은 두 값을 따로 봅니다.
+            var missing = [];
+            opts.fields.forEach(function (f) {
+              if (!f.required || f.type === 'group' || f.type === 'rows') return;
+              function empty(k) { return !String(values[k] == null ? '' : values[k]).trim(); }
+              if (empty(f.k)) missing.push({ k: f.k, label: f.label });
+              if (f.type === 'timespan' && empty(f.k2)) missing.push({ k: f.k2, label: f.label2 });
             });
-            Array.prototype.forEach.call(panel.querySelectorAll('[data-k]'), function (el) {
+            Array.prototype.forEach.call(panel.querySelectorAll('[data-k], .timepick__h'), function (el) {
               el.setAttribute('aria-invalid', 'false');
             });
             if (missing.length) {
-              err.textContent = missing.map(function (f) { return f.label; }).join(', ') + '을(를) 입력해 주세요.';
-              err.hidden = false;
-              var bad = panel.querySelector('[data-k="' + missing[0].k + '"]');
-              if (bad) { bad.setAttribute('aria-invalid', 'true'); bad.focus(); }
+              var names = missing.map(function (m) { return m.label; }).join(', ');
+              fail(names + objectJosa(names) + ' 입력해 주세요.', missing[0].k);
               return;
             }
 
-            // 추가 검증(시간 순서 등)은 호출한 쪽에서 넘겨받습니다.
+            /* 추가 검증(시간 순서 · 행사 기간 등)은 호출한 쪽에서 넘겨받습니다.
+               글자 하나를 돌려주거나, { message, field } 로 문제 칸까지 알려 줍니다. */
             if (opts.validate) {
-              var msg = opts.validate(values);
-              if (msg) {
-                err.textContent = msg;
-                err.hidden = false;
+              var res = opts.validate(values);
+              if (res) {
+                if (typeof res === 'string') fail(res);
+                else fail(res.message, res.field);
                 return;
               }
             }

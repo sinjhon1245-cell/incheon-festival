@@ -4,10 +4,11 @@
    화면 구성은 해시 라우팅입니다(#dashboard, #booths …).
    모든 데이터는 Supabase 에서 옵니다.
 
-   이 화면에는 로그인이 없습니다. 주소를 아는 관계자는 바로 들어와
-   열람하고, 운영 요청 등록 · 해결 완료와 담당 업무 시작/완료를 할 수 있습니다.
-   그 밖의 편집은 전부 /admin 에서 관리자만 합니다 — 화면에서
-   감추는 게 아니라 데이터베이스 정책이 막습니다.
+   이 화면에는 로그인 단계가 없습니다. 주소를 아는 관계자는 바로 들어와
+   열람하고 운영 요청을 등록할 수 있습니다. 요청 해결 완료와 담당 업무
+   시작/완료는 운영진 로그인(관리자 화면에서 로그인)이 남아 있을 때만
+   단추가 보입니다. 그 밖의 편집은 전부 /admin 에서 관리자만 합니다 —
+   화면에서 감추는 게 아니라 데이터베이스 정책과 함수가 막습니다.
    =================================================================== */
 (function () {
   'use strict';
@@ -108,8 +109,23 @@
     settings: null, schedule: [], booths: [], zones: [], notices: [],
     requests: [], resources: [], contacts: [], places: [], faqs: [],
     tasks: [], assigns: [], supplyItems: [], supplyTargets: [], supplyAllocs: [],
+    staff: null,   // 이 브라우저에 로그인한 운영진(staff_profiles 줄). 없으면 null
     error: null, loading: false
   };
+
+  /* 상태 바꾸기(요청 해결 완료 · 업무 시작/완료)는 로그인한 운영진만
+     할 수 있습니다. 데이터베이스 함수가 is_staff() 로 막고, 화면은 그
+     규칙에 맞춰 단추를 감춥니다 — 눌러 봐야 거절당하는 단추는 두지 않습니다.
+     관리자 화면(admin.html)에서 로그인하면 같은 주소의 포털도 그 로그인을
+     함께 씁니다. */
+  function canAct() { return !!S.staff; }
+
+  /* 단추 대신 놓는 한 줄. 처리할 것이 있는 화면에서만 씁니다. */
+  function actGate(what) {
+    return '<p class="actgate"><span class="actgate__t">' + esc(what) +
+      '는 운영진 로그인 후 할 수 있습니다.</span>' +
+      '<a class="linkbtn" href="admin.html">로그인 →</a></p>';
+  }
   var view = 'dashboard';
   var ui = { boothQ: '', boothZone: '전체', boothType: '전체',
              schedCat: '전체', schedQ: '', schedHalf: '전체', schedKey: false, schedDay: '',
@@ -374,12 +390,125 @@
   }
 
   // note: 안내 아래 덧붙이는 확정 정보 한 줄(예: 행사 기간 · 운영시간).
-  function emptyBox(title, hint, note) {
+  // act:  맨 아래 단추(예: 검토용 예시 보기). 이미 만든 HTML 을 받습니다.
+  function emptyBox(title, hint, note, act) {
     return '<div class="state state--empty">' +
       '<span class="state__icon">' + ICON_EMPTY + '</span>' +
       '<p class="state__title">' + esc(title) + '</p>' +
       (hint ? '<p class="state__hint">' + esc(hint) + '</p>' : '') +
-      (note ? '<p class="state__note">' + esc(note) + '</p>' : '') + '</div>';
+      (note ? '<p class="state__note">' + esc(note) + '</p>' : '') +
+      (act ? '<div class="state__act">' + act + '</div>' : '') + '</div>';
+  }
+
+  /* ══ 검토용 예시 (일정 · 부스) ══════════════════════════════════
+     일정과 부스는 다른 화면과 달리 예시를 저절로 보여 주지 않습니다.
+     행사 날짜 탭 아래 시각까지 적힌 시간표, 'A-01' 같은 부스 번호는
+     확정 정보로 읽히기 쉽기 때문입니다. 그렇다고 화면이 늘 비어 있으면
+     어떤 모양이 될지 협의할 수가 없습니다.
+
+     그래서 사람이 직접 고르게 합니다.
+       기본       "준비 중" 안내 + [검토용 예시 보기]
+       예시 켬    맨 위 "검토용 예시" 띠 + 카드마다 '예시' + [예시 닫기]
+       실제 등록  예시와 단추가 모두 사라지고 실제 데이터만 보입니다
+
+     예시는 화면에서만 만듭니다. 데이터베이스에 넣지 않고, 홈의 운영
+     브리핑이나 숫자에는 섞지 않습니다(withSample 이 이 두 화면 안에서만
+     잠시 바꿔 끼웁니다). 켜 둔 상태는 이 탭을 닫을 때까지만 기억합니다. */
+  var SAMPLE_KEY = 'portal.sample';
+  var sampleState = (function () {
+    try { return JSON.parse(window.sessionStorage.getItem(SAMPLE_KEY) || '{}') || {}; }
+    catch (e) { return {}; }
+  })();
+  function sampleWanted(kind) { return !!sampleState[kind]; }
+  function setSample(kind, on) {
+    sampleState[kind] = !!on;
+    try { window.sessionStorage.setItem(SAMPLE_KEY, JSON.stringify(sampleState)); } catch (e) { /* 저장 못 해도 화면은 그대로 */ }
+  }
+
+  /* 예시 일정 — 운영 흐름(집결 → 세팅 → 개막 → 강연·체험 → 점검 → 마감)이
+     보일 만큼만. 연사 · 순서처럼 정해지지 않은 것은 '미정' 으로 적고,
+     장소는 공문의 운영구역 이름만 씁니다(구역 안 위치는 짓지 않습니다).
+     day 는 행사 며칠째인지(0 = 첫날). 날짜는 기본정보의 행사 기간에서 옵니다. */
+  var SAMPLE_SCHED_ROWS = [
+    [0, '09:00', '09:30', '운영진 집결 · 당일 브리핑', '운영본부', '운영', '운영본부'],
+    [0, '09:30', '10:00', '부스 세팅 · 전원·네트워크 점검', '각 부스', '운영', '부스지원'],
+    [0, '10:00', '10:30', '개막 행사 (순서 미정)', '읽걷쓰AI 열린마당', '무대', '운영본부', true],
+    [0, '10:30', '11:20', 'AI 체험 프로그램 1회차', '읽걷쓰AI 체험존', '부스', '운영지원'],
+    [0, '11:00', '12:00', '초청 강연 (연사 미정)', '읽걷쓰AI 열린마당', '강연', '운영본부', true],
+    [0, '14:00', '14:20', '부스 운영 순회 점검', '읽걷쓰AI 스쿨존', '행사 지원', '부스지원'],
+    [0, '16:50', '17:30', '1일차 운영 마감 · 정리', '행사장 전체', '운영', '운영본부'],
+    [1, '09:30', '10:00', '부스 재세팅 · 안전 점검', '각 부스', '행사 지원', '안전지원'],
+    [1, '11:00', '12:00', '교육 성과 발표 (발표자 미정)', '읽걷쓰AI 열린마당', '무대', '운영본부', true],
+    [1, '14:00', '14:50', 'AI 체험 프로그램 회차 운영', '읽걷쓰AI 체험존', '부스', '운영지원'],
+    [1, '17:00', '18:00', '부스 철수 · 물품 회수', '행사장 전체', '운영', '운영지원']
+  ];
+  /* 실제 일정 줄(schedule_items)과 같은 모양으로 만들어 같은 판단·그리기를
+     그대로 씁니다. 예시 전용 화면을 따로 두면 실제 화면과 모양이 어긋납니다. */
+  function sampleSchedule() {
+    var days = (eventInfo().days || []).map(ymd);
+    return SAMPLE_SCHED_ROWS.map(function (r, n) {
+      return { id: 'sample-s' + n, sample: true,
+        event_date: days.length ? days[Math.min(r[0], days.length - 1)] : '',
+        start_time: r[1], end_time: r[2], title: r[3], place: r[4], category: r[5],
+        team: r[6], owner: '', memo: '', status: '예정', is_highlight: !!r[7], sort_order: n };
+    });
+  }
+
+  /* 예시 부스 — 공문의 운영구역(스쿨존 · 체험존 · 미래채움존 · 빅테크존 ·
+     홍보존)마다 한두 개씩. 구역 글자(A~E)와 번호는 예시에서 붙인 것이고
+     실제 배치와 상관없습니다. 기관 이름은 ○○ · △△ · □□ 로만 씁니다. */
+  var SAMPLE_ZONES = [
+    { key: 'A', label: '스쿨존' }, { key: 'B', label: '체험존' }, { key: 'C', label: '미래채움존' },
+    { key: 'D', label: '빅테크존' }, { key: 'E', label: '홍보존' }
+  ];
+  var SAMPLE_BOOTHS = [
+    ['A', 1, '생성형 AI로 만드는 그림책', '○○초등학교', '초등', '학생 작품 전시 · 그림책 만들기 체험', true, false],
+    ['A', 2, '코딩 로봇 미션 체험', '△△초등학교', '초등', '로봇 미션 체험', true, false],
+    ['A', 3, 'AI 분리배출 도우미 만들기', '○○중학교', '중등', '이미지 분류 모델 체험', true, true],
+    ['A', 4, '데이터로 보는 우리 동네', '□□고등학교', '고등', '공공데이터 분석 결과 전시', true, true],
+    ['B', 1, 'AI 브릿지 체험 과정', '○○교육기관', '기관', 'AI 브릿지 체험 회차 운영', true, true],
+    ['B', 2, '미래채움 AI 체험 과정', '△△교육지원센터', '기관', '체험 · 교육 회차 운영', true, true],
+    ['C', 1, '강사 개발 교구 체험', '○○ 강사단', '기관', '교구 체험 프로그램', false, false],
+    ['C', 2, '피지컬 컴퓨팅 교구 체험', '△△ 강사단', '기관', '교구 체험 프로그램', true, false],
+    ['D', 1, 'AI 서비스 체험', '○○테크', '기업', 'AI 기술 · 서비스 체험', true, true],
+    ['E', 1, '교육 정책 홍보 부스', '○○ 홍보팀', '기타', '홍보 자료 안내', false, false]
+  ].map(function (r, n) {
+    return { id: 'sample-b' + n, sample: true, zone_key: r[0], no: r[1],
+      code: r[0] + '-' + C.pad2(r[1]), name: r[2], org: r[3], org_type: r[4], program: r[5],
+      needs_power: r[6], needs_network: r[7], manager: '', hours: '', supplies: '', memo: '', notes: '' };
+  });
+
+  /* 일정 · 부스 화면을 그리는 동안만 예시를 끼워 넣습니다. 끝나면 반드시
+     되돌립니다 — 홈 · 요청 양식 같은 다른 곳은 실제 데이터만 봐야 합니다. */
+  function withSample(kind, fn) {
+    var keep = { schedule: S.schedule, booths: S.booths, zones: S.zones };
+    if (kind === 'sched') S.schedule = sampleSchedule();
+    else { S.booths = SAMPLE_BOOTHS; S.zones = SAMPLE_ZONES; }
+    try { return fn(); }
+    finally { S.schedule = keep.schedule; S.booths = keep.booths; S.zones = keep.zones; }
+  }
+  // 지금 이 화면이 예시를 보여 주는 중인가. 실제 데이터가 한 건이라도 있으면 아닙니다.
+  function sampleShown(kind) {
+    return sampleWanted(kind) && !(kind === 'sched' ? S.schedule.length : S.booths.length);
+  }
+  function isSampleSched() { return !!(S.schedule[0] && S.schedule[0].sample); }
+
+  var SAMPLE_TEXT = {
+    sched:  { what: '실제 운영 일정이 아닙니다.' },
+    booths: { what: '실제 부스 배치 및 운영정보가 아닙니다.' }
+  };
+  function sampleOffer(kind) {
+    return '<button class="btn btn--ghost btn--sm" type="button" data-sampleon="' + kind + '">검토용 예시 보기</button>';
+  }
+  function sampleBar(kind) {
+    return '<div class="samplebar" role="note" aria-label="검토용 예시 안내">' +
+      '<div class="samplebar__body">' +
+        '<p class="samplebar__head"><span class="samplebar__badge">검토용 예시</span>' +
+        '<span class="samplebar__t">' + esc(SAMPLE_TEXT[kind].what) + '</span></p>' +
+        '<p class="samplebar__d">실제 운영 일정 · 부스 정보가 확정되기 전 협의를 위한 예시 화면입니다.</p>' +
+      '</div>' +
+      '<button class="btn btn--ghost btn--sm samplebar__off" type="button" data-sampleoff="' + kind + '">예시 닫기</button>' +
+      '</div>';
   }
 
   /* 화면별 예시. 행사 운영에서 실제로 생길 법한 사례로 두되,
@@ -1285,8 +1414,12 @@
         '<p class="schedlive__meta">' + meta.join(' · ') + '</p>' +
         (o.extra ? '<p class="schedlive__left">' + o.extra + '</p>' : '');
     }
-    function cell(cls, label, inner) {
-      return '<div class="schedlive__cell ' + cls + '"><p class="schedlive__label">' + label + '</p>' + inner + '</div>';
+    // 예시 일정으로 그린 요약이면 일정을 담은 칸 제목마다 '예시' 를 붙입니다.
+    // 행사 준비(D-day · 기간) 칸은 실제 정보라 붙이지 않습니다(real).
+    var sampleTag = isSampleSched() ? ' ' + SAMPLE_END : '';
+    function cell(cls, label, inner, real) {
+      return '<div class="schedlive__cell ' + cls + '"><p class="schedlive__label">' + label +
+        (real ? '' : sampleTag) + '</p>' + inner + '</div>';
     }
     function note(text, sub) {
       return '<p class="schedlive__empty">' + esc(text) + '</p>' +
@@ -1315,7 +1448,7 @@
         // 행사일 전에는 실시간 칸을 과장하지 않고 준비 상태와 다음 일정 하나만.
         cells = cell('schedlive__cell--prep', '행사 준비',
             '<p class="schedlive__dday">D-' + Math.max(0, ev.dday || 0) + '</p>' +
-            '<p class="schedlive__meta">' + [st.date_label, st.time_label].filter(Boolean).map(esc).join(' · ') + '</p>') +
+            '<p class="schedlive__meta">' + [st.date_label, st.time_label].filter(Boolean).map(esc).join(' · ') + '</p>', true) +
           cell('schedlive__cell--next schedlive__cell--focus', '다음 일정',
             br.key ? item(br.key, { day: itemDay(br.key) ? dayShort(itemDay(br.key)) : ev.start ? fmtEventDay(ev.start) : '', cat: true })
               : note('시작 시각이 정해진 일정이 없습니다.'));
@@ -1356,20 +1489,27 @@
   }
 
   function viewSchedule() {
-    var ev = eventInfo();
-
     /* 등록된 일정이 하나도 없으면 시간표 틀(요약 · 날짜 · 필터 · 검색)을
        두지 않습니다. 빈 필터만 늘어서면 고장 난 화면처럼 보입니다.
-       확정된 행사 기간과 운영시간까지만 적습니다. */
+       확정된 행사 기간과 운영시간까지만 적고, 원하면 검토용 예시를 엽니다. */
     if (!S.schedule.length) {
+      if (sampleWanted('sched')) {
+        return withSample('sched', function () { return scheduleBody(sampleBar('sched')); });
+      }
       var st = S.settings || {};
       var when = [st.date_label, st.time_label ? '운영시간 ' + st.time_label : '']
         .filter(Boolean).join(' · ');
       return '<div class="page sched">' + pageHead('운영 일정') +
-        emptyBox('세부 운영 일정 준비 중', '행사 세부 일정은 확정되는 대로 업데이트됩니다.', when) +
+        emptyBox('세부 운영 일정 준비 중', '행사 세부 일정은 확정되는 대로 업데이트됩니다.', when,
+          sampleOffer('sched')) +
         '</div>';
     }
+    return scheduleBody('');
+  }
 
+  // bar: 맨 위에 끼울 띠(검토용 예시 안내). 실제 일정이면 ''.
+  function scheduleBody(bar) {
+    var ev = eventInfo();
     var hasKey = S.schedule.some(function (i) { return i.is_highlight; });
     var days = scheduleDays(ev);
     var sel = selectedDay(ev, days);
@@ -1391,9 +1531,9 @@
       : '';
 
     return '<div class="page sched">' +
-      pageHead('운영 일정', ev.sameDay
+      pageHead('운영 일정', ev.sameDay && !bar
         ? '요약은 오늘 전체 일정 기준, 목록은 선택한 조건 기준입니다.'
-        : '') +
+        : '') + bar +
       '<section class="schedlive' + (ev.sameDay ? ' is-today' : '') + '" id="sched-live" aria-label="실시간 일정 요약">' +
       scheduleLiveHtml(ev) + '</section>' +
       // 순서: 날짜 → 오전·오후(+핵심) → 분류 → 검색. 여러 날 행사에서는 날짜가 가장 큰 갈래입니다.
@@ -1478,15 +1618,17 @@
     if (showNow && !marked) body += nowLine(ev.now);
 
     var head = sel ? dayLong(sel) + ' · ' : '';
+    var sample = isSampleSched();
     return '<p class="resultline">' + esc(head) + list.length + '건' +
-      (filtered ? ' · 선택한 조건' : '') + '</p>' +
-      '<div class="tml tml--sched">' + body + '</div>';
+      (sample ? ' · 검토용 예시' : filtered ? ' · 선택한 조건' : '') + '</p>' +
+      '<div class="tml tml--sched"' + (sample ? ' aria-label="검토용 예시 일정"' : '') + '>' + body + '</div>';
   }
 
   function scheduleRow(i, ev, nowMin) {
     var st = liveStatus(i, ev);
     var cls = st === '진행 중' ? ' tmlrow--now' : st === '종료' ? ' tmlrow--done' : '';
     if (st === '취소' || st === '변경') cls = ' tmlrow--off';
+    if (i.sample) cls += ' is-sample';
     var sp = spanOf(i);
     var liveLabel = st === '진행 중' && sp
       ? '<p class="tmlrow__livehead"><span class="livepill">진행 중</span>' +
@@ -1501,7 +1643,8 @@
       (i.end_time ? '<span class="tmlrow__to">' + esc(i.end_time) + '</span>' : '') + '</div>' +
       '<div class="tmlrow__body">' + liveLabel +
       '<h3 class="tmlrow__title">' + esc(i.title) +
-      (i.is_highlight ? '<span class="keymark" title="핵심 일정">핵심</span>' : '') + '</h3>' +
+      (i.is_highlight ? '<span class="keymark" title="핵심 일정">핵심</span>' : '') +
+      (i.sample ? SAMPLE_END : '') + '</h3>' +
       '<p class="tmlrow__meta">' + esc(i.place || '장소 미정') +
       (i.team ? ' · ' + esc(i.team) : '') + (i.owner ? ' · ' + esc(i.owner) : '') + '</p>' +
       (i.memo ? '<p class="tmlrow__memo">' + esc(i.memo) + '</p>' : '') +
@@ -1529,8 +1672,12 @@
     schedLastMin = m;
     var ev = eventInfo();
     var live = $('#sched-live'), listEl = $('#sched-list');
-    if (live) live.innerHTML = scheduleLiveHtml(ev);
-    if (listEl) listEl.innerHTML = scheduleListHtml(ev);
+    function paint() {
+      if (live) live.innerHTML = scheduleLiveHtml(ev);
+      if (listEl) listEl.innerHTML = scheduleListHtml(ev);
+    }
+    // 예시를 보고 있었다면 다시 그릴 때도 같은 예시로 그립니다.
+    if (sampleShown('sched')) withSample('sched', paint); else paint();
   }
 
   /* ── 화면: 부스 현황 ────────────────────────────────────────── */
@@ -1581,7 +1728,7 @@
        zone  구역 키(저장된 zone_key 그대로)   foot  카드 맨 아래 위치 줄 */
   function boothItems() {
     return S.booths.map(function (b) {
-      return { id: b.id, code: b.code || (b.zone_key + '-' + b.no), type: orgType(b),
+      return { id: b.id, sample: !!b.sample, code: b.code || (b.zone_key + '-' + b.no), type: orgType(b),
         zone: b.zone_key || '', name: b.name, org: b.org || '운영기관 미정',
         foot: [zoneName(b.zone_key), b.program].filter(Boolean).join(' · '),
         find: (b.program || '') + ' ' + zoneName(b.zone_key) };
@@ -1598,9 +1745,19 @@
   }
 
   function viewBooths() {
+    // 등록된 부스가 없고 예시를 켜 두었으면 예시 부스로 같은 화면을 그립니다.
+    if (sampleShown('booths')) {
+      return withSample('booths', function () { return boothsBody(sampleBar('booths')); });
+    }
+    return boothsBody('');
+  }
+
+  // bar: 맨 위에 끼울 띠(검토용 예시 안내). 실제 부스면 ''.
+  function boothsBody(bar) {
     var q = ui.boothQ.trim().toLowerCase();
     var items = boothItems();
     var s = S.settings || {};
+    var sample = !!bar;
 
     /* 배치도는 올라와 있을 때만 그립니다. 없을 때 '준비 중' 큰 빈 상자를
        두면 필터와 부스 목록이 첫 화면 아래로 밀립니다. 행사장 안내 화면은
@@ -1613,9 +1770,12 @@
     // 등록된 부스가 없으면 필터 · 검색 없이 준비 중 안내만 둡니다.
     if (!items.length) {
       return '<div class="page">' + pageHead('부스 현황') + map +
-        emptyBox('부스 정보 준비 중', '부스 배치 및 운영기관 정보는 확정되는 대로 업데이트됩니다.') +
+        emptyBox('부스 정보 준비 중', '부스 배치 및 운영기관 정보는 확정되는 대로 업데이트됩니다.', '',
+          sampleOffer('booths')) +
         '</div>';
     }
+    // 예시 부스 화면에는 실제 배치도를 섞지 않습니다. 예시 부스가 그 그림 위의 자리처럼 읽힙니다.
+    if (sample) map = '';
 
     // 구역은 개수보다 '그 구역만 보기' 로 쓰입니다. 고를 것이 하나뿐이면 두지 않습니다.
     var zoneKeys = boothZoneKeys(items);
@@ -1650,13 +1810,13 @@
         ' ' + b.zone + ' ' + b.find).toLowerCase().indexOf(q) >= 0;
     });
 
-    var body = list.length ? '<div class="boothgrid">' +
+    var body = list.length ? '<div class="boothgrid"' + (sample ? ' aria-label="검토용 예시 부스 목록"' : '') + '>' +
       list.map(function (b) {
         // 읽는 순서: 번호 · 유형 → 부스명 · 기관 → 구역.
         // 구역은 상자 없이 카드 맨 아래 작은 글자로. 위치 정보라 유형 표시와 겹쳐 보이면 안 됩니다.
-        return '<button class="booth" type="button" data-booth="' + esc(b.id) + '">' +
+        return '<button class="booth' + (b.sample ? ' is-sample' : '') + '" type="button" data-booth="' + esc(b.id) + '">' +
           '<span class="booth__top"><span class="booth__code">' + esc(b.code) + '</span>' +
-          orgBadge(b.type) + '</span>' +
+          orgBadge(b.type) + (b.sample ? SAMPLE_END : '') + '</span>' +
           '<span class="booth__name">' + esc(b.name) + '</span>' +
           '<span class="booth__org">' + esc(b.org) + '</span>' +
           (b.foot ? '<span class="booth__foot">' + esc(b.foot) + '</span>' : '') +
@@ -1665,9 +1825,9 @@
       : noMatchBox('조건에 맞는 부스가 없습니다.');
 
     return '<div class="page">' +
-      pageHead('부스 현황') +
+      pageHead('부스 현황') + bar +
       map +
-      '<p class="countline">전체 부스 <b>' + items.length + '</b>개</p>' +
+      '<p class="countline">' + (sample ? '예시 부스' : '전체 부스') + ' <b>' + items.length + '</b>개</p>' +
       zoneHtml +
       typeHtml +
       '<div class="tools"><div class="search"><label class="sr-only" for="booth-q">부스 검색</label>' +
@@ -1677,6 +1837,11 @@
   }
 
   function boothDetail(id) {
+    // 예시 부스는 예시 목록에서 찾습니다(withSample 안에서 다시 부릅니다).
+    if (/^sample-/.test(id) && !S.booths.some(function (x) { return x.id === id; })) {
+      if (sampleShown('booths')) withSample('booths', function () { boothDetail(id); });
+      return;
+    }
     var b = S.booths.filter(function (x) { return x.id === id; })[0];
     if (!b) return;
     var rows = [
@@ -1696,7 +1861,10 @@
       ['특이사항', b.notes]
     ].filter(function (r) { return r[1]; });
 
-    var html = '';
+    var html = b.sample
+      ? '<p class="samplenote"><span class="samplebar__badge">검토용 예시</span>' +
+        '실제 부스 배치 및 운영정보가 아닙니다.</p>'
+      : '';
 
     // 부스 사진은 있을 때만 보여 줍니다. 상세는 목록과 달리 자리를
     // 미리 잡아 둘 이유가 없어, 없으면 그냥 넘어갑니다.
@@ -1723,13 +1891,15 @@
     // 부스 번호가 있어야 요청·물품과 이을 수 있습니다. 번호가 없으면 이름으로 찾습니다.
     var code = b.code || (b.zone_key && b.no ? b.zone_key + '-' + b.no : '');
     var key = code || b.name;
-    html += boothOpsHtml(key,
+    // 예시 부스에는 실제 요청 · 물품을 잇지 않고, 문제 보고 단추도 두지 않습니다
+    // (예시 번호가 실제 요청의 위치로 저장되면 안 됩니다).
+    html += b.sample ? boothOpsHtml(key, [], [], false) : boothOpsHtml(key,
       S.requests.filter(function (r) { return mentionsBooth((r.location || '') + ' ' + (r.title || ''), key); }),
       S.supplyTargets.filter(function (t) { return mentionsBooth((t.name || '') + ' ' + (t.memo || ''), key); })
         .map(function (t) { return { name: t.name, status: t.status, items: allocsOf(t.id) }; }),
       true);
 
-    openDrawer(b.code || b.name, html, { footer: true });
+    openDrawer((b.code || b.name) + (b.sample ? ' · 예시' : ''), html, { footer: true });
   }
 
   /* ── 화면: 공지 ─────────────────────────────────────────────── */
@@ -1849,8 +2019,8 @@
         team: r.assignee_team, done: done,
         meta: (r.location || '위치 미지정') + ' · ' + (done ? fmtDay(r.created_at) : agoLabel(r.created_at)) }) +
       '</button>';
-    // 끝난 요청에는 단추를 두지 않습니다.
-    return done ? card : actionCard(card, actBtn('data-reqdone="' + esc(r.id) + '"', '해결 완료'));
+    // 끝난 요청과, 로그인하지 않은 화면에는 단추를 두지 않습니다.
+    return done || !canAct() ? card : actionCard(card, actBtn('data-reqdone="' + esc(r.id) + '"', '해결 완료'));
   }
 
   /* 미처리 요청 순서 — 요청 화면과 부스 상세가 함께 씁니다. 긴급 → 높음 → 보통, 같으면 최신. */
@@ -1877,6 +2047,7 @@
         ]) +
         '<section class="listsec"><h2 class="section-title">처리가 필요한 요청' +
         '<span class="section-title__n">' + open.length + '</span></h2>' +
+        (open.length && !canAct() ? actGate('해결 완료 처리') : '') +
         (open.length
           ? '<div class="tl tl--2 reqlist">' + open.map(requestCard).join('') + '</div>'
           : '<p class="allclear">' + doneMark('남은 요청이 없습니다.') + '</p>') +
@@ -2185,11 +2356,22 @@
        단추가 생깁니다. 주소로 지도 주소를 지어내지 않습니다. */
     var mapLink = safeLink(s.venue_map_url);
     var venueName = (s.venue || '') + (s.venue_detail ? ' · ' + s.venue_detail : '');
+    /* 운영 문의(대표 전화 · 메일) — 관리자가 넣었을 때만 한 줄. 비어 있으면
+       줄 자체를 두지 않습니다. 기관 대표번호 같은 공용 연락처만 들어오는 칸이고
+       (관리자 화면에 그렇게 적어 두었습니다) 개인 번호는 받지 않습니다. */
+    var phone = String(s.contact_phone || '').trim(), mail = String(s.contact_email || '').trim();
+    var contactLine = phone || mail
+      ? '<p class="venuecard__contact"><span class="venuecard__cl">운영 문의</span>' +
+        [phone ? (C.telHref(phone) ? '<a href="' + esc(C.telHref(phone)) + '">' + esc(phone) + '</a>' : esc(phone)) : '',
+         mail ? '<a href="mailto:' + esc(mail) + '">' + esc(mail) + '</a>' : '']
+          .filter(Boolean).join('<span aria-hidden="true"> · </span>') + '</p>'
+      : '';
     var venueCard = venueName || s.venue_address
       ? '<section class="rowcard venuecard" aria-label="행사 장소">' +
         '<div class="rowcard__body">' +
         (venueName ? '<p class="venuecard__name">' + esc(venueName) + '</p>' : '') +
         (s.venue_address ? '<p class="venuecard__addr">' + esc(s.venue_address) + '</p>' : '') +
+        contactLine +
         '</div>' +
         (mapLink ? '<a class="btn btn--ghost btn--sm rowcard__act" href="' + esc(mapLink) + '" ' +
           'target="_blank" rel="noopener noreferrer">지도에서 보기</a>' : '') +
@@ -2514,6 +2696,7 @@
     ]);
 
     return summary + tools +
+      (activeGroups.length && !canAct() ? actGate('업무 시작 · 완료 처리') : '') +
       (activeGroups.length
         ? activeGroups.map(function (g) {
             return '<section class="taskgroup">' +
@@ -2563,7 +2746,7 @@
         : '<span class="task__who"><span class="task__wholabel">담당자</span>' +
           '<span class="badge badge--warn badge--plain">미배정</span></span>') +
       '</button>';
-    return actionCard(card, taskActions(t));
+    return actionCard(card, canAct() ? taskActions(t) : '');
   }
 
   function taskDetail(id) {
@@ -2949,10 +3132,13 @@
     }
     // 관리자 링크는 늘 보입니다. 눌러도 admin.html 이 스스로 로그인을
     // 요구하므로, 링크가 보인다고 해서 열리는 것은 아닙니다.
+    // 로그인한 상태면 옆에 작게 적어 둡니다 — 처리 단추가 왜 보이는지 알 수 있게.
+    var adminLink = '<a href="admin.html">관리자' +
+      (canAct() ? '<span class="nav__state">로그인됨</span>' : '') + '</a>';
     $('#sidenav').innerHTML =
       NAV.filter(function (n) { return !n.group; }).map(link).join('') +
       NAV_GROUPS.map(group).join('') +
-      '<p class="side__group">관리</p><a href="admin.html">관리자</a>';
+      '<p class="side__group">관리</p>' + adminLink;
 
     var tabs = NAV.filter(function (n) { return n.tab; });
     $('#tabbar').innerHTML = tabs.map(function (n) {
@@ -2975,7 +3161,7 @@
       var items = NAV.filter(function (n) { return n.group === name && !n.tab; });
       if (!items.length) return '';
       return '<p class="sheet__group">' + esc(name) + '</p>' + items.map(sheetLink).join('');
-    }).join('') + '<p class="sheet__group">관리</p><a href="admin.html">관리자</a>';
+    }).join('') + '<p class="sheet__group">관리</p>' + adminLink;
   }
 
   function routeFromHash() {
@@ -3002,6 +3188,22 @@
       if (t.closest('[data-close-sheet]')) { closeSheet(); return; }
       if (t.closest('[data-close-drawer]')) { closeDrawer(); return; }
       if (t.closest('[data-retry]')) { boot(true); return; }
+
+      /* 검토용 예시 켜기 · 끄기. 걸어 둔 필터와 검색어는 함께 풉니다 —
+         예시의 구역(A~E)이나 분류가 남아 있으면 실제 목록이 비어 보입니다.
+         다시 그린 뒤 반대쪽 단추에 초점을 둡니다(키보드로 바로 되돌릴 수 있게). */
+      var smp = t.closest('[data-sampleon],[data-sampleoff]');
+      if (smp) {
+        var on = smp.hasAttribute('data-sampleon');
+        var kind = smp.getAttribute(on ? 'data-sampleon' : 'data-sampleoff');
+        setSample(kind, on);
+        if (kind === 'sched') { ui.schedCat = '전체'; ui.schedHalf = '전체'; ui.schedKey = false; ui.schedQ = ''; ui.schedDay = ''; }
+        else { ui.boothZone = '전체'; ui.boothType = '전체'; ui.boothQ = ''; }
+        render();
+        var back = $('#view [data-sample' + (on ? 'off' : 'on') + '="' + kind + '"]');
+        if (back) back.focus();
+        return;
+      }
 
       /* 역할 맥락 없이 담당자 화면을 여는 자리 — 홈의 '담당자 찾기' 와,
          맞는 담당자가 없을 때의 '담당자에서 찾기'. 걸려 있던
@@ -3146,10 +3348,11 @@
   }
 
   /* ══ 현장 상태 처리 ════════════════════════════════════════════
-     관계자가 현장에서 직접 바꿀 수 있는 것은 "상태" 뿐입니다.
+     로그인한 운영진이 포털에서 바로 바꿀 수 있는 것은 "상태" 뿐입니다.
      이름·수량·담당자 같은 값은 관리자 몫이고, 서버에서도 그렇게
      막혀 있습니다 — 표에 쓰기 권한을 여는 대신 상태 한 칸만 바꾸는
-     함수만 열어 두었습니다.
+     함수만 운영진(is_staff)에게 열어 두었습니다. 로그인하지 않은
+     화면에는 단추가 나오지 않습니다(canAct).
 
      요청·업무 두 화면이 같은 길을 씁니다.
        누름 → (필요하면) 확인 → 버튼 잠금 → 서버 → 화면 갱신 → 알림
@@ -3190,6 +3393,8 @@
     }
     if (code === '22023') return m;      // 함수가 남긴 안내를 그대로 보여 줍니다
     if (code === 'P0002') return '이미 지워졌거나 찾을 수 없습니다. 새로고침해 주세요.';
+    // 로그인이 풀렸거나 운영진 명단에 없는 계정 — 서버가 거절했습니다.
+    if (code === '42501') return '운영진 로그인이 필요합니다. 관리자 화면에서 다시 로그인해 주세요.';
     return C.dataMessage(e);
   }
 
@@ -3336,10 +3541,23 @@
     S.loading = true;
     view = routeFromHash();
     render();
-    return loadAll().then(function () {
+    return Promise.all([loadAll(), checkStaff()]).then(function () {
       go();
       startClock();
     });
+  }
+
+  /* 이 브라우저에 운영진 로그인이 남아 있는지 봅니다. 저장된 토큰이 없으면
+     서버에 묻지 않습니다 — 대부분의 방문자는 로그인하지 않습니다.
+     확인이 실패해도 포털은 그대로 열립니다(단추만 감춰진 채로). */
+  function checkStaff() {
+    S.staff = null;
+    if (!C.hasStoredSession()) return Promise.resolve();
+    return C.session().then(function (sess) {
+      if (!sess || !sess.user) return null;
+      return C.fetchProfile(sess.user.id);
+    }).then(function (p) { S.staff = p || null; })
+      .catch(function (e) { console.warn('[portal] 로그인 확인 실패', e); });
   }
 
   bind();
