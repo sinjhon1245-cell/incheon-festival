@@ -252,10 +252,11 @@ window.UI = (function () {
 
      대신 고르기 상자 두 개를 둡니다.
        [ 오후 2시 ▾ ] [ 30분 ▾ ]
-     시 목록이 오전/오후를 함께 말하고, 분은 5분 단위입니다. 휴대폰에서는
-     기기의 목록 선택기(휠)가 그대로 열려 손가락으로 고르기 쉽습니다.
+     시 목록이 오전/오후를 함께 말하고, 분은 10분 단위(00 · 10 · … · 50)입니다.
+     휴대폰에서는 기기의 목록 선택기(휠)가 그대로 열려 손가락으로 고르기 쉽습니다.
      저장되는 값은 예전과 같은 'HH:MM' 이라 표 · 포털은 바뀌지 않습니다.
-     5분 단위가 아닌 예전 값(예: 14:07)은 목록에 끼워 그대로 살립니다. */
+     10분 단위가 아닌 예전 값(예: 14:05)은 목록에 끼워 그대로 살립니다 —
+     수정창을 열었다 저장해도 값이 바뀌지 않습니다. */
   function hourLabel(h) {
     return (h < 12 ? '오전 ' : '오후 ') + (h % 12 === 0 && h !== 0 ? 12 : h % 12) + '시';
   }
@@ -273,7 +274,7 @@ window.UI = (function () {
       hours += '<option value="' + h + '"' + (p && p.h === h ? ' selected' : '') + '>' + hourLabel(h) + '</option>';
     }
     var steps = [];
-    for (var m = 0; m < 60; m += 5) steps.push(m);
+    for (var m = 0; m < 60; m += 10) steps.push(m);
     if (p && steps.indexOf(p.m) < 0) { steps.push(p.m); steps.sort(function (a, b) { return a - b; }); }
     mins += '<option value=""' + (p ? '' : ' selected') + ' disabled>분</option>';
     steps.forEach(function (mm) {
@@ -335,7 +336,9 @@ window.UI = (function () {
      맨 아래 한 줄이 고른 결과(10:00–10:30 · 30분)를 바로 보여 줍니다.
      종료가 시작보다 이르면 그 줄이 빨갛게 바뀝니다 — 저장을 눌러 보기
      전에 알 수 있게 합니다. */
-  var QUICK_DURATIONS = [[30, '30분'], [60, '1시간'], [90, '1시간 30분'], [120, '2시간']];
+  /* 50분은 체험 회차(50분 운영 + 10분 정리) 길이입니다. */
+  var QUICK_DURATIONS = [[30, '+30분'], [50, '+50분'], [60, '+1시간'], [90, '+1시간 30분'], [120, '+2시간']];
+  var DEFAULT_DURATION = 30;
   function timespanHtml(f, vals) {
     var req = f.required ? '<span class="field__req" aria-hidden="true">*</span>' : '';
     return '<div class="field field--wide timespan" data-timespan="' + esc(f.k) + '">' +
@@ -378,14 +381,24 @@ window.UI = (function () {
           pad(Math.floor(y / 60)) + ':' + pad(y % 60) + ' · ' +
           (d >= 60 ? Math.floor(d / 60) + '시간' + (d % 60 ? ' ' + (d % 60) + '분' : '') : d + '분');
       }
+      function endAt(x, d) {
+        var y = Math.min(x + d, 23 * 60 + 50);
+        setTimeValue(b, pad(Math.floor(y / 60)) + ':' + pad(y % 60));
+      }
       box.addEventListener('change', paint);
+      /* 시작을 고르면 종료를 제안합니다(10:00 → 10:30). 종료가 비었거나
+         새 시작보다 이르거나 같을 때만 — 이미 맞게 고른 종료는 건드리지 않습니다. */
+      a.addEventListener('change', function (e) {
+        if (!e.target.matches('[data-k]')) return;
+        var x = mins(a), y = mins(b);
+        if (x != null && (y == null || y <= x)) endAt(x, DEFAULT_DURATION);
+      });
       box.addEventListener('click', function (e) {
         var q = e.target.closest('[data-dur]');
         if (!q) return;
         var x = mins(a);
         if (x == null) { sum.textContent = '시작시간을 먼저 골라 주세요.'; a.querySelector('select').focus(); return; }
-        var y = Math.min(x + Number(q.getAttribute('data-dur')), 23 * 60 + 55);
-        setTimeValue(b, pad(Math.floor(y / 60)) + ':' + pad(y % 60));
+        endAt(x, Number(q.getAttribute('data-dur')));
       });
       paint();
     });
@@ -599,24 +612,48 @@ window.UI = (function () {
 
           var err = panel.querySelector('#modal-err');
           // 무엇이든 고치기 시작하면 앞서 띄운 오류는 걷습니다.
-          panel.querySelector('#modal-form').addEventListener('change', function () { err.hidden = true; });
+          panel.querySelector('#modal-form').addEventListener('change', function () { err.hidden = true; clearFieldErrors(); });
 
           /* 오류 칸으로 초점을 옮깁니다. 시각 칸은 감춰진 값 대신 '시' 상자로,
              고르기 칸은 첫 단추로 갑니다. 보이지 않는 칸에 초점을 두면 아무
              일도 일어나지 않은 것처럼 보입니다. */
-          function focusField(k) {
+          /* 칸 아래에도 같은 문구를 한 줄 붙이고(.field__err), 그 칸이 이
+             문구를 설명으로 읽게 합니다(aria-describedby). 아래 단추 줄의
+             문구만 있으면 긴 창에서 어느 칸 이야기인지 다시 찾아야 합니다. */
+          function clearFieldErrors() {
+            Array.prototype.forEach.call(panel.querySelectorAll('.field__err'), function (p) { p.remove(); });
+            Array.prototype.forEach.call(panel.querySelectorAll('.field.is-bad'), function (f) { f.classList.remove('is-bad'); });
+            Array.prototype.forEach.call(panel.querySelectorAll('[data-errfor]'), function (el) {
+              var keep = (el.getAttribute('aria-describedby') || '').split(' ')
+                .filter(function (id) { return id && id.indexOf('err_') !== 0; }).join(' ');
+              if (keep) el.setAttribute('aria-describedby', keep); else el.removeAttribute('aria-describedby');
+              el.removeAttribute('data-errfor');
+            });
+          }
+          function focusField(k, msg) {
             var el = panel.querySelector('[data-k="' + k + '"]');
             if (!el) return;
             var pick = el.closest('[data-timepick]');
             var target = pick ? pick.querySelector('.timepick__h') : el;
+            var box = (pick && pick.closest('.timespan__col')) || el.closest('.field');
+            if (box && msg) {
+              var id = 'err_' + k;
+              box.classList.add('is-bad');
+              box.insertAdjacentHTML('beforeend', '<p class="field__err" id="' + id + '">' + esc(msg) + '</p>');
+              var ids = (target.getAttribute('aria-describedby') || '').split(' ').filter(Boolean);
+              ids.push(id);
+              target.setAttribute('aria-describedby', ids.join(' '));
+              target.setAttribute('data-errfor', k);
+            }
             target.setAttribute('aria-invalid', 'true');
             target.focus();
             if (target.scrollIntoView) target.scrollIntoView({ block: 'center' });
           }
-          function fail(msg, k) {
+          function fail(msg, k, fieldMsg) {
+            clearFieldErrors();
             err.textContent = msg;
             err.hidden = false;
-            if (k) focusField(k);
+            if (k) focusField(k, fieldMsg || msg);
           }
 
           panel.querySelector('#modal-form').addEventListener('submit', function (e) {
@@ -639,7 +676,8 @@ window.UI = (function () {
             });
             if (missing.length) {
               var names = missing.map(function (m) { return m.label; }).join(', ');
-              fail(names + objectJosa(names) + ' 입력해 주세요.', missing[0].k);
+              fail(names + objectJosa(names) + ' 입력해 주세요.', missing[0].k,
+                missing[0].label + objectJosa(missing[0].label) + ' 입력해 주세요.');
               return;
             }
 

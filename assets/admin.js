@@ -17,7 +17,6 @@
 
   var cache = {};
   var current = 'overview';
-  var zoneKeys = [];
 
   var SCHEDULE_CATS = ['무대', '강연', '부스', '운영', '행사 지원'];
   var SCHEDULE_STATES = ['예정', '진행 중', '종료', '취소', '변경'];
@@ -32,6 +31,8 @@
   var ORG_TYPES     = ['초등', '중등', '고등', '기관', '기업', '기타'];
   var TASK_STATES   = ['예정', '진행 중', '완료'];
   var SUPPLY_STATES = ['미배부', '일부 배부', '배부 완료'];
+  // booths_status_check 와 같은 목록 · 같은 순서입니다.
+  var BOOTH_STATES  = ['준비 전', '준비 완료', '운영 중', '일시 중단', '운영 종료'];
   /* 역할 구분은 DB 에서 값을 제한하지 않습니다. 현장에서 쓰는 말이
      해마다 달라서, 여기서는 추천값으로만 보여 줍니다.
 
@@ -142,6 +143,34 @@
     return isNaN(d) ? '' : (d.getMonth() + 1) + '.' + d.getDate() + '. ' + WEEKDAYS[d.getDay()];
   }
 
+  /* '2026-11-06' → '11. 6.(금)'. 공문 표기와 같은 모양으로, 날짜 단추 ·
+     목록의 날짜 묶음 제목에 씁니다. */
+  function dayLabel(day) {
+    var p = String(day || '').split('-');
+    if (p.length !== 3) return '';
+    var d = new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]));
+    return isNaN(d) ? '' : (d.getMonth() + 1) + '. ' + d.getDate() + '.(' + WEEKDAYS[d.getDay()] + ')';
+  }
+
+  /* ── 부스 구역 ───────────────────────────────────────────────
+     구역은 zones 표에서 옵니다(관리자 → 부스 구역). booths.zone_key 가
+     이 표의 key 를 가리키므로, 구역이 하나도 없으면 부스를 저장할 수
+     없습니다. 구역 코드(A · B …)와 이름(스쿨존 …)의 짝은 관리자가
+     정합니다 — 'A = 스쿨존' 을 화면이 정해 두지 않습니다. */
+  function zoneList() { return cache.zones || []; }
+  function zoneLabel(key) {
+    var z = zoneList().filter(function (x) { return x.key === key; })[0];
+    return z ? (z.label ? z.label + ' (' + z.key + ')' : z.key + '구역') : (key ? key + '구역' : '구역 미정');
+  }
+  function zoneOrder(key) {
+    var i = zoneList().map(function (z) { return z.key; }).indexOf(key);
+    return i < 0 ? 999 : i;
+  }
+  // 'A-2' 와 'A-10' 을 사람 순서대로(숫자는 숫자로) 견줍니다.
+  function natCmp(a, b) {
+    return String(a || '').localeCompare(String(b || ''), 'ko', { numeric: true, sensitivity: 'base' });
+  }
+
   function toLocalInput(iso) {
     if (!iso) return '';
     var d = new Date(iso);
@@ -218,29 +247,74 @@
         return { event_date: eventDays()[0] || '', start_time: '10:00', end_time: '10:30',
                  title: '', category: '운영', status: '예정' };
       },
+      /* 목록 한 줄의 무게
+           1순위  시각(왼쪽 기둥) · 일정명
+           2순위  장소 · 담당팀 (meta)
+           3순위  구분 · 상태 · 담당자 · 핵심 (작은 표시)
+         날짜는 줄마다 적지 않고 날짜 묶음 제목(11. 6.(금))으로 나눕니다.
+         상태 '예정' 은 기본값이라 표시하지 않습니다 — 취소 · 변경처럼
+         눈여겨볼 상태만 남깁니다. */
+      lead: function (r) { return (r.start_time || '--:--') + '–' + (r.end_time || '--:--'); },
       title: function (r) { return r.title || '(제목 없음)'; },
-      /* 이틀 행사에서는 어느 날 일정인지가 시각보다 먼저 보여야 합니다.
-         배지로 키우지 않고 meta 한 줄 앞에 작게 둡니다. */
+      metaHtml: true,
       meta: function (r) {
-        var day = dayShort(r.event_date);
-        var head = day ? day + ' · ' : (eventDays().length > 1 ? '일자 미정 · ' : '');
-        return head + (r.start_time || '--:--') + '–' + (r.end_time || '--:--') +
-          (r.place ? ' · ' + r.place : '') + (r.team ? ' · ' + r.team : '') + (r.owner ? ' · ' + r.owner : '');
+        var main = [r.place, r.team].filter(Boolean).map(esc).join(' · ');
+        return (main || '<span class="muted">장소 미정</span>') +
+          (r.owner ? '<span class="listrow__sub"> · ' + esc(r.owner) + '</span>' : '');
       },
-      tags: function (r) { return badge(r.status || '예정') + tag(r.category || '운영') +
-        (r.is_highlight ? tag('핵심') : ''); },
+      tags: function (r) {
+        return tag(r.category || '운영') +
+          (r.status && r.status !== '예정' ? badge(r.status) : '') +
+          (r.is_highlight ? '<span class="badge badge--info">핵심</span>' : '');
+      },
+      // 시각 순으로 보여 주므로 위로 · 아래로 순서 바꾸기는 두지 않습니다.
+      noReorder: true,
+      sort: function (a, b) {
+        var da = a.event_date || '9999', db = b.event_date || '9999';
+        if (da !== db) return da < db ? -1 : 1;
+        var x = C.toMin(a.start_time), y = C.toMin(b.start_time);
+        if (x == null) x = 9999;
+        if (y == null) y = 9999;
+        if (x !== y) return x - y;
+        var ex = C.toMin(a.end_time) || 0, ey = C.toMin(b.end_time) || 0;
+        return ex !== ey ? ex - ey : (a.sort_order || 0) - (b.sort_order || 0);
+      },
+      groupBy: function (r) { return r.event_date ? dayLabel(r.event_date) : '일자 미정'; },
+      searchText: function (r) {
+        return [r.title, r.place, r.team, r.owner, r.memo].join(' ');
+      },
+      searchPlaceholder: '일정명 · 장소 · 담당팀 · 담당자 검색',
+      filters: [
+        { key: 'day', label: '날짜', kind: 'chips',
+          options: function (all) {
+            var days = eventDays().slice();
+            all.forEach(function (r) { if (r.event_date && days.indexOf(r.event_date) < 0) days.push(r.event_date); });
+            days.sort();
+            return days.map(function (d) { return [d, dayLabel(d)]; })
+              .concat(all.some(function (r) { return !r.event_date; }) ? [['__none', '일자 미정']] : []);
+          },
+          test: function (r, v) { return v === '__none' ? !r.event_date : r.event_date === v; } },
+        { key: 'cat', label: '구분', kind: 'select', options: function () { return opts(SCHEDULE_CATS); },
+          test: function (r, v) { return (r.category || '운영') === v; } },
+        { key: 'st', label: '상태', kind: 'select', options: function () { return opts(SCHEDULE_STATES); },
+          test: function (r, v) { return (r.status || '예정') === v; } }
+      ],
+      empty: {
+        title: '등록된 실제 일정이 없습니다.',
+        hint: '공개 포털에는 협의용 예시가 표시됩니다. 실제 일정을 1건 이상 등록하면 예시는 자동으로 숨겨집니다.'
+      },
       /* 입력 순서는 일정을 떠올리는 순서대로 둡니다.
-           무엇을(일정명 · 구분) → 언제(일자 · 시각) → 어디서 누가 → 상태 · 메모
+           무엇을(일정명 · 구분) → 언제(일자 · 시각) → 어디서 · 누가 → 운영 상태
          구분 · 일자 · 상태처럼 고를 것이 몇 개뿐인 칸은 목록을 펼치지 않고
          한 번 눌러 고르는 단추(choice)로 둡니다. */
       fields: [
-        { type: 'group', label: '일정' },
+        { type: 'group', label: '무엇을' },
         { k: 'title',      label: '일정명', wide: true, required: true,
-          placeholder: '예: 개막식, 부스 순회 점검' },
+          placeholder: '예: 개막 행사, 부스 순회 점검' },
         { k: 'category',   label: '구분', type: 'choice', wide: true, required: true,
           options: opts(SCHEDULE_CATS) },
 
-        { type: 'group', label: '일시' },
+        { type: 'group', label: '언제' },
         // 일자와 시각은 따로 받습니다. 시작·종료는 'HH:MM' 이라 날짜를
         // 함께 담을 수 없고, 이틀 행사에서는 날짜가 반드시 필요합니다.
         // 행사 기간을 알면 fieldsFor 가 그 날짜들만 고르는 단추로 바꿉니다.
@@ -249,12 +323,12 @@
         { k: 'start_time', k2: 'end_time', label: '시작시간', label2: '종료시간',
           type: 'timespan', required: true },
 
-        { type: 'group', label: '장소 · 담당' },
+        { type: 'group', label: '어디서 · 누가' },
         { k: 'place',      label: '장소', wide: true, placeholder: '예: 읽걷쓰AI 열린마당' },
         { k: 'team',       label: '담당팀', placeholder: '예: 운영본부' },
         { k: 'owner',      label: '담당자', placeholder: '이름 또는 역할' },
 
-        { type: 'group', label: '상태 · 메모' },
+        { type: 'group', label: '운영 상태' },
         { k: 'status',     label: '상태', type: 'choice', wide: true, required: true,
           options: opts(SCHEDULE_STATES),
           hint: '예정 · 진행 중 · 종료는 행사 당일 시각으로 자동 표시됩니다. 취소 · 변경만 직접 고르세요' },
@@ -296,59 +370,180 @@
       }
     },
 
+    /* 부스 — 스쿨존만 84부스라 80~100개가 등록된다고 보고 만듭니다.
+       목록은 줄 하나에 번호(왼쪽 기둥) → 부스명 → 운영기관 · 구역 순으로,
+       구역별 묶음 제목으로 나누고, 번호 · 이름 · 기관 · 담당자 · 프로그램
+       검색과 구역 · 기관 유형 · 상태 · 운영 필요사항 걸러 보기를 둡니다. */
     booths: {
       label: '부스', table: 'booths', addLabel: '+ 부스 추가',
-      desc: '부스 정보와 운영기관을 관리합니다.',
-      blank: { no: 1, zone_key: 'A', name: '', org: '' },
-      title: function (r) { return (r.code || (r.zone_key + '-' + r.no)) + ' · ' + (r.name || '(이름 없음)'); },
-      meta: function (r) { return (r.org || '운영기관 미정') + (r.manager ? ' · 부스 담당 ' + r.manager : ''); },
-      tags: function (r) {
-        return (r.org_type ? tag(r.org_type) : '') +
-          (r.needs_power ? tag('전기') : '') + (r.needs_network ? tag('네트워크') : '');
+      desc: '부스 정보와 운영기관을 관리합니다. 부스 번호는 배치가 확정되기 전까지 임시 번호로 적어도 됩니다.',
+      blank: function () {
+        return { code: '', zone_key: (zoneList()[0] || {}).key || '', name: '', org: '', status: '준비 전' };
       },
+      lead: function (r) { return r.code || (r.zone_key + '-' + C.pad2(r.no)); },
+      title: function (r) { return r.name || '(이름 없음)'; },
+      metaHtml: true,
+      meta: function (r) {
+        return (r.org ? esc(r.org) : '<span class="muted">운영기관 미정</span>') +
+          ' · ' + esc(zoneLabel(r.zone_key)) +
+          (r.manager ? '<span class="listrow__sub"> · 담당 ' + esc(r.manager) + '</span>' : '');
+      },
+      tags: function (r) {
+        return (r.org_type ? tag(r.org_type) : '') + badge(r.status || '준비 전') +
+          (r.needs_power ? '<span class="badge badge--plain badge--need">전기</span>' : '') +
+          (r.needs_network ? '<span class="badge badge--plain badge--need">네트워크</span>' : '');
+      },
+      noReorder: true,
+      sort: function (a, b) {
+        var za = zoneOrder(a.zone_key), zb = zoneOrder(b.zone_key);
+        if (za !== zb) return za - zb;
+        return natCmp(a.code || a.no, b.code || b.no);
+      },
+      groupBy: function (r) { return zoneLabel(r.zone_key); },
+      searchText: function (r) {
+        return [r.code, r.name, r.org, r.manager, r.program, zoneLabel(r.zone_key)].join(' ');
+      },
+      searchPlaceholder: '부스번호 · 부스명 · 운영기관 · 담당자 · 프로그램 검색',
+      filters: [
+        { key: 'zone', label: '구역', kind: 'chips',
+          options: function (all) {
+            return zoneList().filter(function (z) { return all.some(function (r) { return r.zone_key === z.key; }); })
+              .map(function (z) { return [z.key, z.label || z.key + '구역']; });
+          },
+          test: function (r, v) { return r.zone_key === v; } },
+        { key: 'org', label: '기관 유형', kind: 'select',
+          options: function () { return opts(ORG_TYPES).concat([['__none', '유형 미정']]); },
+          test: function (r, v) { return v === '__none' ? !r.org_type : r.org_type === v; } },
+        { key: 'st', label: '상태', kind: 'select', options: function () { return opts(BOOTH_STATES); },
+          test: function (r, v) { return (r.status || '준비 전') === v; } },
+        { key: 'need', label: '운영 필요', kind: 'select',
+          options: function () { return [['power', '전기 필요'], ['network', '네트워크 필요']]; },
+          test: function (r, v) { return v === 'power' ? !!r.needs_power : !!r.needs_network; } }
+      ],
+      empty: function () {
+        return zoneList().length
+          ? { title: '등록된 실제 부스가 없습니다.',
+              hint: '공개 포털에는 협의용 예시가 표시됩니다. 실제 부스를 1건 이상 등록하면 예시는 자동으로 숨겨집니다.' }
+          : { title: '등록된 실제 부스가 없습니다.',
+              hint: '부스는 구역에 속합니다. 먼저 “부스 구역”에서 구역을 하나 이상 만든 뒤 부스를 추가해 주세요. ' +
+                    '그 전까지 공개 포털에는 협의용 예시가 표시됩니다.',
+              go: ['zones', '부스 구역으로 가기'] };
+      },
+      /* 입력 순서: 기본정보 → 위치 → 프로그램 → 운영 필요사항 → 담당 · 상태 → 메모.
+         부스 번호는 자유롭게 적습니다(A-01, 스쿨-12 …). 실제 번호 체계가
+         정해지기 전이라 모양을 강제하지 않고, 같은 번호만 막습니다. */
       fields: [
         { type: 'group', label: '기본 정보' },
-        { k: 'no',            label: '부스 번호', type: 'number', required: true },
-        { k: 'zone_key',      label: '구역', type: 'zone' },
-        { k: 'name',          label: '부스명', wide: true, required: true },
-        { k: 'org',           label: '운영기관', wide: true },
-        { k: 'org_type',      label: '운영기관 유형', type: 'select',
+        { k: 'code',          label: '부스 번호', required: true, placeholder: '예: A-01',
+          hint: '배치 확정 전에는 임시 번호도 됩니다. 같은 번호는 저장되지 않습니다' },
+        { k: 'org_type',      label: '기관 유형', type: 'select',
           options: [['', '(선택 안 함)']].concat(opts(ORG_TYPES)),
-          hint: '포털 카드에 초등·중등·고등 표시로 보입니다',
+          hint: '포털 카드에 초등 · 중등 · 고등 표시로 보입니다',
           // migration-portal-actions.sql 을 돌리기 전에는 칸이 없습니다.
           needsColumn: true },
-        { k: 'manager',       label: '부스 담당자' },
+        { k: 'name',          label: '부스명', wide: true, required: true },
+        { k: 'org',           label: '운영기관', wide: true, placeholder: '예: ○○초등학교' },
 
-        { type: 'group', label: '운영 정보' },
-        { k: 'hours',         label: '운영 시간' },
-        /* 부스 표는 로그인 없이 읽힙니다. 개인 번호를 둘 자리가 아니라서
-           새로 적는 칸은 없앴습니다 — 연락이 필요한 담당자는 연락망에
-           담당자로 등록하고 '관리자 전용 정보' 에 번호를 적습니다.
-           예전 값이 남은 부스에만 보여서 비울 수 있게 합니다. */
-        { k: 'manager_phone', label: '부스 담당자 연락처 (이전 값)', type: 'tel', legacyOnly: true,
-          hint: '⚠️ 이 칸은 로그인 없이 읽힙니다. 비워 주시고, 연락처는 연락망 담당자의 “개인 연락처” 에 적어 주세요' },
-        { k: 'program',       label: '운영 프로그램', wide: true },
+        { type: 'group', label: '위치' },
+        { k: 'zone_key',      label: '구역', type: 'zone', wide: true, required: true },
+
+        { type: 'group', label: '프로그램' },
+        { k: 'program',       label: '체험 · 전시 내용', type: 'textarea', wide: true },
+
+        { type: 'group', label: '운영 필요사항' },
         { k: 'needs_power',   label: '전기 사용 필요', type: 'bool' },
         { k: 'needs_network', label: '네트워크 필요', type: 'bool' },
+        { k: 'hours',         label: '운영 시간', placeholder: '예: 10:00 ~ 17:00' },
+        { k: 'supplies',      label: '준비물 · 필요 물품', placeholder: '예: 테이블 2, 멀티탭 1' },
 
-        { type: 'group', label: '상세 설정', fold: true },
-        { k: 'supplies',      label: '필요 물품', wide: true },
+        { type: 'group', label: '담당 · 상태' },
+        { k: 'manager',       label: '부스 담당자', placeholder: '이름 또는 역할' },
+        /* 부스 표는 로그인 없이 읽힙니다. 개인 번호를 둘 자리가 아니라서
+           새로 적는 칸은 없앴습니다 — 연락이 필요한 담당자는 운영 인력에
+           등록하고 '관리자 전용 정보' 에 번호를 적습니다.
+           예전 값이 남은 부스에만 보여서 비울 수 있게 합니다. */
+        { k: 'manager_phone', label: '부스 담당자 연락처 (이전 값)', type: 'tel', legacyOnly: true,
+          hint: '⚠️ 이 칸은 로그인 없이 읽힙니다. 비워 주시고, 연락처는 운영 인력 담당자의 “개인 연락처” 에 적어 주세요' },
+        { k: 'status',        label: '운영 상태', type: 'choice', wide: true, required: true,
+          options: opts(BOOTH_STATES) },
+
+        { type: 'group', label: '메모' },
         { k: 'memo',          label: '운영 메모', type: 'textarea', wide: true },
         { k: 'notes',         label: '특이사항', type: 'textarea', wide: true },
+
+        { type: 'group', label: '부스 사진 (선택)', fold: true },
         { k: 'image_url',     label: '부스 대표 이미지', type: 'image', folder: 'booth' },
         { k: 'image_alt',     label: '이미지 설명', wide: true },
         { k: 'image_caption', label: '이미지 캡션', wide: true }
       ],
-      beforeSave: function (v) {
-        if (!v.code) v.code = v.zone_key + '-' + String(v.no).padStart(2, '0');
+      validate: function (v, row) {
+        var code = String(v.code || '').trim();
+        if (!zoneList().length) {
+          return { message: '등록된 구역이 없습니다. 먼저 “부스 구역”에서 구역을 만들어 주세요.', field: 'zone_key' };
+        }
+        if (!v.zone_key) return { message: '구역을 골라 주세요.', field: 'zone_key' };
+        var dup = (cache.booths || []).filter(function (b) {
+          return (!row || b.id !== row.id) && String(b.code || '').trim().toLowerCase() === code.toLowerCase();
+        })[0];
+        if (dup) {
+          return { message: '부스 번호 ' + code + ' 은(는) 이미 “' + (dup.name || '이름 없음') + '” 부스가 쓰고 있습니다.', field: 'code' };
+        }
+        return null;
+      },
+      /* no(정수)는 표의 필수 칸이라 채워 둡니다. 번호 끝의 숫자(A-12 → 12)를
+         쓰고, 숫자가 없으면 기존 값 또는 마지막 번호 + 1. 화면은 code 만 씁니다. */
+      beforeSave: function (v, row) {
+        v.code = String(v.code || '').trim();
+        var m = /(\d+)\D*$/.exec(v.code);
+        if (m) v.no = Number(m[1]);
+        else if (row && row.no != null) v.no = row.no;
+        else v.no = (cache.booths || []).reduce(function (n, b) { return Math.max(n, b.no || 0); }, 0) + 1;
         // '선택 안 함' 은 빈 글자가 아니라 null 로 보냅니다(표의 허용값 검사).
         if ('org_type' in v && !v.org_type) v.org_type = null;
         return v;
       }
     },
 
+    /* 부스 구역 — booths.zone_key 가 가리키는 표. 구역을 지우면 데이터베이스가
+       그 구역의 부스까지 함께 지우므로(on delete cascade), 부스가 남은 구역은
+       지우지 못하게 막습니다(confirmDelete). */
+    zones: {
+      label: '부스 구역', formLabel: '구역', table: 'zones', addLabel: '+ 구역 추가',
+      desc: '부스를 묶는 구역입니다. 부스를 등록하기 전에 먼저 만듭니다. 구역 코드는 확정 전까지 임시로 정해도 됩니다.',
+      blank: { key: '', label: '', sub: '' },
+      lead: function (r) { return r.key; },
+      title: function (r) { return r.label || r.key + '구역'; },
+      meta: function (r) {
+        var n = (cache.booths || []).filter(function (b) { return b.zone_key === r.key; }).length;
+        return (r.sub ? r.sub + ' · ' : '') + '부스 ' + n + '개';
+      },
+      empty: {
+        title: '등록된 구역이 없습니다.',
+        hint: '부스는 구역에 속합니다. 예: 코드 A · 이름 읽걷쓰AI 스쿨존. 구역 코드와 이름의 짝은 배치가 확정되면 바꿀 수 있습니다.'
+      },
+      fields: [
+        { k: 'key',   label: '구역 코드', required: true, placeholder: '예: A',
+          hint: '짧은 영문 · 숫자. 부스 번호 앞부분과 맞추면 찾기 쉽습니다. 바꾸면 그 구역 부스도 따라 바뀝니다' },
+        { k: 'label', label: '구역 이름', required: true, placeholder: '예: 읽걷쓰AI 스쿨존' },
+        { k: 'sub',   label: '설명', wide: true, placeholder: '예: 초·중·고 AI체험 · 교육활동 결과 전시' }
+      ],
+      validate: function (v, row) {
+        var key = String(v.key || '').trim();
+        var dup = zoneList().some(function (z) { return (!row || z.id !== row.id) && z.key === key; });
+        return dup ? { message: '구역 코드 ' + key + ' 은(는) 이미 있습니다.', field: 'key' } : null;
+      },
+      beforeSave: function (v) { v.key = String(v.key || '').trim(); v.label = String(v.label || '').trim(); return v; },
+      // 코드를 바꾸면 데이터베이스가 부스의 zone_key 도 따라 바꿉니다(on update cascade).
+      // 화면이 가진 부스 목록도 맞춥니다.
+      afterSave: function (updated, row) {
+        if (!row || row.key === updated.key) return;
+        (cache.booths || []).forEach(function (b) { if (b.zone_key === row.key) b.zone_key = updated.key; });
+      }
+    },
+
     notices: {
       label: '공지', table: 'notices', addLabel: '+ 공지 작성',
+      empty: { title: '등록된 공지가 없습니다.', hint: '행사 관계자가 먼저 확인해야 할 내용을 공지로 등록해 주세요.' },
       order: [['pinned', false], ['created_at', false]],
       desc: '관계자에게 전달할 운영 안내를 관리합니다.',
       blank: { level: '일반', title: '', body: '', pinned: false },
@@ -366,6 +561,7 @@
 
     operation_requests: {
       label: '운영 요청', table: 'operation_requests', addLabel: '+ 요청 등록',
+      empty: { title: '접수된 운영 요청이 없습니다.', hint: '현장 관계자가 포털에서 문제를 보고하면 여기에 쌓입니다. 관리자가 직접 등록할 수도 있습니다.' },
       order: [['created_at', false]],
       desc: '현장 요청의 처리 상태를 관리합니다.',
       blank: { location: '', kind: '기타', priority: '보통', title: '', status: '접수' },
@@ -389,7 +585,8 @@
     },
 
     resources: {
-      label: '자료실', table: 'resources', addLabel: '+ 자료 추가',
+      label: '자료실', formLabel: '자료', table: 'resources', addLabel: '+ 자료 추가',
+      empty: { title: '등록된 자료가 없습니다.', hint: '운영 매뉴얼 · 안전 지침처럼 관계자가 찾아볼 문서의 주소를 등록해 주세요.' },
       desc: '운영 매뉴얼과 안내 자료의 주소를 등록합니다.',
       blank: { title: '', category: '기타', url: '', is_public: true },
       title: function (r) { return r.title || '(제목 없음)'; },
@@ -419,7 +616,8 @@
        단계) 새로 쓰지 않습니다. 예전에 값이 들어간 담당자에게만
        그 칸이 보이고, 비워서 저장하면 다음부터는 보이지 않습니다. */
     contacts: {
-      label: '연락망', table: 'contacts', addLabel: '+ 담당자 추가',
+      label: '운영 인력', formLabel: '담당자', table: 'contacts', addLabel: '+ 담당자 추가',
+      empty: { title: '등록된 운영 인력이 없습니다.', hint: '역할별 담당자를 등록하면 포털의 운영 인력 화면과 업무 배정에 쓰입니다. 개인 번호는 관리자 전용 칸에만 적습니다.' },
       desc: '운영 담당자를 관리합니다. 개인 연락처는 관리자만 볼 수 있습니다.',
       blank: { name: '', category: '기타' },
       title: function (r) { return r.name || '(이름 없음)'; },
@@ -478,7 +676,8 @@
     },
 
     venue_places: {
-      label: '행사장', table: 'venue_places', addLabel: '+ 공간 추가',
+      label: '행사장 공간', formLabel: '공간', table: 'venue_places', addLabel: '+ 공간 추가',
+      empty: { title: '등록된 주요 공간이 없습니다.', hint: '운영본부 · 안내데스크처럼 현장에서 찾는 공간을 위치가 확정되는 대로 등록해 주세요.' },
       desc: '행사장 주요 공간을 관리합니다.',
       blank: { name: '', category: '기타', detail: '' },
       title: function (r) { return r.name || '(이름 없음)'; },
@@ -502,7 +701,8 @@
        만들면서 물품을 함께 적습니다. 표 구조는 그대로 씁니다. */
 
     operation_tasks: {
-      label: '담당 업무', table: 'operation_tasks', addLabel: '+ 업무 추가', soft: true,
+      label: '업무 배정', formLabel: '업무', table: 'operation_tasks', addLabel: '+ 업무 추가', soft: true,
+      empty: { title: '등록된 운영 업무가 없습니다.', hint: '업무를 만들고 담당자를 배정하면 포털의 업무 배정 화면에 보입니다.' },
       desc: '행사 당일 업무와 담당자를 관리합니다.',
       blank: { area: '운영', title: '', start_time: '', end_time: '', status: '예정' },
       title: function (r) { return r.title || '(업무명 없음)'; },
@@ -532,7 +732,7 @@
         { type: 'group', label: '담당자' },
         { k: '__assigns', type: 'rows', label: '배정된 담당자',
           addLabel: '+ 담당자 추가', emptyText: '아직 배정된 담당자가 없습니다.',
-          hint: '연락망에서 고르거나, 없으면 이름을 직접 적습니다. 역할은 이 업무에서 맡은 몫으로, 연락망의 역할 구분과 다릅니다',
+          hint: '운영 인력에서 고르거나, 없으면 이름을 직접 적습니다. 역할은 이 업무에서 맡은 몫으로, 운영 인력의 역할 구분과 다릅니다',
           cols: [],   // 연락망 목록이 있어야 만들 수 있어 fieldsFor 에서 채웁니다
           blank: { contact_id: '', person_name: '', role: '' } },
 
@@ -574,7 +774,8 @@
     },
 
     supply_targets: {
-      label: '배부 현황', table: 'supply_targets', addLabel: '+ 대상 추가', soft: true,
+      label: '배부 현황', formLabel: '배부 대상', table: 'supply_targets', addLabel: '+ 대상 추가', soft: true,
+      empty: { title: '등록된 배부 대상이 없습니다.', hint: '기관 · 팀 · 부스별로 받을 물품과 수량을 등록해 주세요. 물품 종류는 “물품 설정” 탭에서 먼저 만듭니다.' },
       hidden: true, parentMenu: 'supplies',
       desc: '기관·팀·부스별 물품 배부를 관리합니다.',
       blank: { name: '', kind: '팀', status: '미배부', headcount: 0 },
@@ -603,6 +804,7 @@
       },
       statuses: SUPPLY_STATES,
       statusKey: 'status',
+      searchPlaceholder: '대상 · 담당자 · 물품 검색',
       searchText: function (r) {
         return r.name + ' ' + (r.manager || '') + ' ' + (r.kind || '') + ' ' +
           allocNames(r.id).join(' ');
@@ -633,7 +835,8 @@
     },
 
     supply_items: {
-      label: '물품 설정', table: 'supply_items', addLabel: '+ 물품 추가', soft: true,
+      label: '물품 설정', formLabel: '물품', table: 'supply_items', addLabel: '+ 물품 추가', soft: true,
+      empty: { title: '등록된 물품이 없습니다.', hint: '명찰 · 식권 · 생수처럼 배부할 물품 종류를 먼저 만들어 주세요.' },
       hidden: true, parentMenu: 'supplies',
       desc: '배부할 물품의 종류를 관리합니다.',
       blank: { name: '', unit: '개', category: '기타' },
@@ -660,7 +863,8 @@
     },
 
     faqs: {
-      label: 'FAQ', table: 'faqs', addLabel: '+ 질문 추가',
+      label: 'FAQ', formLabel: '질문', table: 'faqs', addLabel: '+ 질문 추가',
+      empty: { title: '등록된 질문이 없습니다.', hint: '현장에서 자주 받는 질문과 답을 등록하고 공개를 켜 주세요.' },
       desc: '자주 확인하는 질문과 답변을 관리합니다.',
       blank: { question: '', answer: '', category: '기타', is_public: false },
       title: function (r) { return r.question || '(질문 없음)'; },
@@ -685,17 +889,17 @@
      고를 메뉴로 세우지 않습니다(표와 데이터는 그대로입니다).
      hidden 인 항목은 메뉴에 없지만 불러오기·편집 정의는 살아 있어
      통합 화면이 그대로 빌려 씁니다. */
-  var ORDER = ['overview', 'settings', 'schedule_items', 'booths', 'notices',
+  var ORDER = ['overview', 'settings', 'schedule_items', 'booths', 'zones', 'venue_places', 'notices',
                'operation_requests', 'operation_tasks', 'supplies',
-               'contacts', 'resources', 'venue_places', 'faqs',
+               'contacts', 'resources', 'faqs',
                // 아래는 메뉴에 없지만 데이터는 함께 불러옵니다.
                'task_assignments', 'supply_targets', 'supply_items', 'supply_allocations',
                'contact_private'];
   var GROUPS = [
     { label: '', keys: ['overview'] },
-    { label: '행사 관리', keys: ['settings', 'schedule_items', 'booths'] },
+    { label: '행사 관리', keys: ['settings', 'schedule_items', 'booths', 'zones', 'venue_places'] },
     { label: '현장 운영', keys: ['notices', 'operation_requests', 'operation_tasks', 'supplies'] },
-    { label: '정보 관리', keys: ['contacts', 'resources', 'venue_places', 'faqs'] }
+    { label: '정보 관리', keys: ['contacts', 'resources', 'faqs'] }
   ];
   var TABS = ['overview', 'schedule_items', 'booths', 'notices', 'operation_requests'];
 
@@ -706,8 +910,8 @@
     var e = ENTITIES[current];
     return (e && e.virtual) ? subTab[current] : current;
   }
-  /* 목록 걸러 보기(운영 물품에서만 씁니다). */
-  var listQ = '', listStatus = '전체';
+  /* 목록 검색 · 걸러 보기 상태. 다른 화면으로 옮기면 지웁니다. */
+  var listQ = '', listStatus = '전체', listF = {};
 
   /* ── 알림 ───────────────────────────────────────────────────── */
   var toastTimer;
@@ -770,36 +974,62 @@
   /* ── 대시보드 ───────────────────────────────────────────────── */
   function renderOverview() {
     var reqs = cache.operation_requests || [];
-    var openN = reqs.filter(function (r) { return r.status !== '완료'; }).length;
-    var urgent = (cache.notices || []).filter(function (x) { return x.level === '긴급'; }).length;
-    /* 관리자 대시보드는 전시장이 아니라 출발점입니다. 지금 손봐야
-       할 것이 있는지만 알려 주고, 나머지는 바로 일할 수 있는 단추로
-       둡니다. 자료실·연락망 건수 같은 값은 그 메뉴에 들어가면
-       사이드바 숫자로 이미 보입니다. */
-    var cards = [
-      { n: openN, l: '미처리 운영 요청', go: 'operation_requests', tone: openN ? 'warn' : null },
-      { n: urgent, l: '긴급 공지', go: 'notices', tone: urgent ? 'danger' : null },
-      { n: (cache.schedule_items || []).length, l: '등록된 일정', go: 'schedule_items' },
-      { n: (cache.booths || []).length, l: '등록된 부스', go: 'booths' }
+    var openReq = reqs.filter(function (r) { return r.status !== '완료'; });
+    var urgentReq = openReq.filter(function (r) { return r.priority === '긴급'; }).length;
+    var leftTasks = (cache.operation_tasks || []).filter(function (t) { return (t.status || '예정') !== '완료'; }).length;
+    var leftSupply = (cache.supply_targets || []).filter(function (t) { return t.status !== '배부 완료'; }).length;
+    var urgentNotice = (cache.notices || []).filter(function (x) { return x.level === '긴급'; }).length;
+    var nSched = (cache.schedule_items || []).length, nBooth = (cache.booths || []).length;
+
+    /* 관리자 대시보드는 전시장이 아니라 출발점입니다.
+         1. 지금 손봐야 할 것(요청 · 업무 · 배부 · 긴급 공지) — 숫자가 있으면 색이 붙습니다
+         2. 등록 현황(일정 · 부스 · 공지 · 운영 인력) — 한 줄 요약
+         3. 자주 하는 일 단추
+       일정 · 부스가 0건이면 공개 포털이 협의용 예시를 보여 주는 중이라는
+       것을 함께 적어 둡니다 — 실제 등록을 시작하면 예시가 사라진다는 뜻입니다. */
+    var act = [
+      { n: openReq.length, l: '미처리 운영 요청', go: 'operation_requests',
+        sub: urgentReq ? '긴급 ' + urgentReq + '건 포함' : (openReq.length ? '확인이 필요합니다' : '모두 처리됨'),
+        tone: urgentReq ? 'danger' : openReq.length ? 'warn' : null },
+      { n: leftTasks, l: '미완료 업무', go: 'operation_tasks',
+        sub: (cache.operation_tasks || []).length ? '예정 · 진행 중' : '등록된 업무 없음', tone: leftTasks ? 'warn' : null },
+      { n: leftSupply, l: '배부 확인 필요', go: 'supplies',
+        sub: (cache.supply_targets || []).length ? '배부 완료 전' : '등록된 대상 없음', tone: leftSupply ? 'warn' : null },
+      { n: urgentNotice, l: '긴급 공지', go: 'notices',
+        sub: urgentNotice ? '포털 맨 위에 보이는 중' : '없음', tone: urgentNotice ? 'danger' : null }
+    ];
+    var reg = [
+      { n: nSched, l: '일정', go: 'schedule_items', sub: nSched ? '' : '포털에 협의용 예시 표시 중' },
+      { n: nBooth, l: '부스', go: 'booths', sub: nBooth ? (zoneList().length + '개 구역') : '포털에 협의용 예시 표시 중' },
+      { n: (cache.notices || []).length, l: '공지', go: 'notices' },
+      { n: (cache.contacts || []).length, l: '운영 인력', go: 'contacts' }
     ];
     var quick = [
-      { l: '+ 일정 추가', go: 'schedule_items', add: true, primary: true },
-      { l: '+ 공지 작성', go: 'notices', add: true, primary: true },
-      { l: '운영 요청 확인', go: 'operation_requests' },
-      { l: '부스 관리', go: 'booths' }
+      { l: '+ 일정 추가', go: 'schedule_items', add: true },
+      { l: '+ 부스 추가', go: zoneList().length ? 'booths' : 'zones', add: true },
+      { l: '+ 공지 작성', go: 'notices', add: true },
+      { l: '운영 요청 확인', go: 'operation_requests' }
     ];
     return '<div class="page"><div class="page__head"><div>' +
       '<h1 class="page__title">관리자</h1>' +
       '<p class="page__desc">바꾼 내용은 관계자 포털에 바로 반영됩니다.</p></div></div>' +
-      '<div class="statgrid">' + cards.map(function (c) {
+      '<section class="ovsec" aria-labelledby="ov-act"><h2 class="fgroup__t" id="ov-act">지금 확인할 일</h2>' +
+      '<div class="statgrid statgrid--4">' + act.map(function (c) {
         return '<button class="adminstat' + (c.tone ? ' adminstat--' + c.tone : '') +
           '" type="button" data-go="' + c.go + '">' +
           '<span class="adminstat__n">' + c.n + '</span>' +
-          '<span class="adminstat__l">' + esc(c.l) + '</span></button>';
-      }).join('') + '</div>' +
+          '<span class="adminstat__l">' + esc(c.l) + '</span>' +
+          '<span class="adminstat__sub">' + esc(c.sub) + '</span></button>';
+      }).join('') + '</div></section>' +
+      '<section class="ovsec" aria-labelledby="ov-reg"><h2 class="fgroup__t" id="ov-reg">등록 현황</h2>' +
+      '<div class="regline">' + reg.map(function (c) {
+        return '<button class="regitem" type="button" data-go="' + c.go + '">' +
+          '<span class="regitem__l">' + esc(c.l) + '</span><b class="regitem__n">' + c.n + '</b>' +
+          (c.sub ? '<span class="regitem__sub">' + esc(c.sub) + '</span>' : '') + '</button>';
+      }).join('') + '</div></section>' +
       '<section class="qbox"><h2 class="fgroup__t">빠른 관리</h2>' +
       '<div class="qrow">' + quick.map(function (q) {
-        return '<button class="btn ' + (q.primary ? 'btn--primary' : 'btn--ghost') + '" type="button" ' +
+        return '<button class="btn ' + (q.add ? 'btn--primary' : 'btn--ghost') + '" type="button" ' +
           'data-go="' + q.go + '"' + (q.add ? ' data-goadd="1"' : '') + '>' + esc(q.l) + '</button>';
       }).join('') + '</div></section></div>';
   }
@@ -808,7 +1038,77 @@
      관리자 목록은 오래 읽는 화면이 아니라 찾아서 고치는 화면입니다.
      카드처럼 띄우지 않고 줄로 세웁니다 — 줄이면 눈이 왼쪽 한 줄만
      따라 내려가면 되고, 카드면 매번 사각형 안을 훑어야 합니다.
-     자주 쓰는 '수정'은 바로 두고, 삭제와 순서는 '⋯' 안에 둡니다. */
+     자주 쓰는 '수정'은 바로 두고, 삭제와 순서는 '⋯' 안에 둡니다.
+
+     항목 정의에 둘 수 있는 것(모두 선택):
+       searchText(r) · searchPlaceholder   검색
+       filters [{ key, label, kind: 'chips'|'select', options(all), test(r, v) }]
+       statuses · statusKey                예전 방식의 상태 칩(배부 현황)
+       sort(a, b) · groupBy(r)             정렬 · 묶음 제목
+       noReorder                           ↑ · ↓ 를 두지 않음(시각 · 번호 순 목록)
+       empty | empty()                     { title, hint, go: [화면, 단추 글자] } */
+  function filterHtml(listEnt, all) {
+    var chipRows = '', selects = '';
+    (listEnt.filters || []).forEach(function (f) {
+      var options = f.options(all);
+      if (!options.length) return;
+      var cur = listF[f.key] || '';
+      if (f.kind === 'chips') {
+        // 고를 것이 하나뿐이면(예: 구역 하나) 칩 줄을 두지 않습니다.
+        if (options.length < 2 && !cur) return;
+        chipRows += '<div class="filterrow"><span class="filterrow__l">' + esc(f.label) + '</span>' +
+          '<div class="chiprow" role="group" aria-label="' + esc(f.label) + '">' +
+          [['', '전체']].concat(options).map(function (o) {
+            var n = o[0] === '' ? all.length : all.filter(function (r) { return f.test(r, o[0]); }).length;
+            var on = cur === o[0];
+            return '<button class="chip' + (on ? ' is-on' : '') + '" type="button" data-listf="' + esc(f.key) + '" ' +
+              'data-v="' + esc(o[0]) + '" aria-pressed="' + on + '">' + esc(o[1]) +
+              '<span class="chip__n">' + n + '</span></button>';
+          }).join('') + '</div></div>';
+      } else {
+        selects += '<label class="listsel"><span class="sr-only">' + esc(f.label) + '</span>' +
+          '<select class="select select--sm" data-listf="' + esc(f.key) + '">' +
+          '<option value="">' + esc(f.label) + ' 전체</option>' +
+          options.map(function (o) {
+            return '<option value="' + esc(o[0]) + '"' + (cur === o[0] ? ' selected' : '') + '>' + esc(o[1]) + '</option>';
+          }).join('') + '</select></label>';
+      }
+    });
+    var search = listEnt.searchText
+      ? '<div class="search"><label class="sr-only" for="list-q">검색</label>' +
+        '<input class="input" id="list-q" type="search" placeholder="' +
+        esc(listEnt.searchPlaceholder || '검색') + '" value="' + esc(listQ) + '" /></div>'
+      : '';
+    var statusChips = listEnt.statuses
+      ? '<div class="chiprow" role="group">' + ['전체'].concat(listEnt.statuses).map(function (st) {
+          var n = st === '전체' ? all.length
+            : all.filter(function (r) { return r[listEnt.statusKey] === st; }).length;
+          return '<button class="chip' + (listStatus === st ? ' is-on' : '') + '" type="button" ' +
+            'data-liststatus="' + esc(st) + '" aria-pressed="' + (listStatus === st) + '">' +
+            esc(st) + '<span class="chip__n">' + n + '</span></button>';
+        }).join('') + '</div>'
+      : '';
+    if (!chipRows && !selects && !search && !statusChips) return '';
+    return '<div class="tools listtools">' + chipRows + statusChips +
+      ((search || selects) ? '<div class="listtools__row">' + search +
+        (selects ? '<div class="listtools__sel">' + selects + '</div>' : '') + '</div>' : '') +
+      '</div>';
+  }
+
+  function emptyState(ent) {
+    var e = typeof ent.empty === 'function' ? ent.empty() : (ent.empty || {});
+    var title = e.title || '아직 등록된 항목이 없습니다.';
+    var hint = e.hint || '등록하면 관계자 포털에 바로 반영됩니다.';
+    var btn = e.go
+      ? '<button class="btn btn--primary btn--sm" type="button" data-go="' + esc(e.go[0]) + '" data-goadd="1">' + esc(e.go[1]) + '</button>'
+      : (ent.addLabel ? '<button class="btn btn--primary btn--sm" type="button" data-add>' + esc(ent.addLabel) + '</button>' : '');
+    return '<div class="state state--empty">' +
+      '<span class="state__icon">' + ICON_EMPTY + '</span>' +
+      '<p class="state__title">' + esc(title) + '</p>' +
+      '<p class="state__hint">' + esc(hint) + '</p>' +
+      (btn ? '<div class="state__act">' + btn + '</div>' : '') + '</div>';
+  }
+
   function renderPanel() {
     var ent = ENTITIES[current], host = $('#view');
 
@@ -835,33 +1135,6 @@
 
     var all = cache[key] || [];
 
-    /* 걸러 보기 — 정의한 항목에서만 나옵니다(지금은 배부 현황). */
-    var toolsHtml = '';
-    var rows = all;
-    if (listEnt.statuses || listEnt.searchText) {
-      var q = listQ.trim().toLowerCase();
-      rows = all.filter(function (r) {
-        if (listEnt.statuses && listStatus !== '전체' && r[listEnt.statusKey] !== listStatus) return false;
-        if (!q || !listEnt.searchText) return true;
-        return listEnt.searchText(r).toLowerCase().indexOf(q) >= 0;
-      });
-      toolsHtml = '<div class="tools">' +
-        (listEnt.searchText
-          ? '<div class="search"><label class="sr-only" for="list-q">검색</label>' +
-            '<input class="input" id="list-q" type="search" placeholder="대상 · 담당자 · 물품 검색" value="' +
-            esc(listQ) + '" /></div>'
-          : '') +
-        (listEnt.statuses
-          ? '<div class="chiprow" role="group">' + ['전체'].concat(listEnt.statuses).map(function (st) {
-              var n = st === '전체' ? all.length
-                : all.filter(function (r) { return r[listEnt.statusKey] === st; }).length;
-              return '<button class="chip' + (listStatus === st ? ' is-on' : '') + '" type="button" ' +
-                'data-liststatus="' + esc(st) + '" aria-pressed="' + (listStatus === st) + '">' +
-                esc(st) + '<span class="chip__n">' + n + '</span></button>';
-            }).join('') + '</div>'
-          : '') + '</div>';
-    }
-
     /* 요약 숫자 — 정의한 항목에서만. */
     var sumHtml = '';
     if (listEnt.summary && all.length) {
@@ -873,25 +1146,39 @@
     }
 
     if (!all.length) {
-      host.innerHTML = '<div class="page">' + head + tabsHtml +
-        '<div class="state state--empty">' +
-          '<span class="state__icon">' + ICON_EMPTY + '</span>' +
-          '<p class="state__title">아직 등록된 항목이 없습니다.</p>' +
-          '<p class="state__hint">오른쪽 위 “' + esc(listEnt.addLabel || '새로 추가') +
-          '”로 시작하세요. 등록하면 관계자 포털에 바로 반영됩니다.</p>' +
-        '</div></div>';
+      host.innerHTML = '<div class="page">' + head + tabsHtml + emptyState(listEnt) + '</div>';
       paintNav(); return;
     }
+
+    /* 걸러 보기 · 검색 · 정렬. 화면에서만 거르고 순서를 바꿉니다 —
+       cache 의 순서(sort_order)는 그대로라 ↑ · ↓ 가 엉키지 않습니다. */
+    var q = listQ.trim().toLowerCase();
+    var rows = all.filter(function (r) {
+      if (listEnt.statuses && listStatus !== '전체' && r[listEnt.statusKey] !== listStatus) return false;
+      var ok = (listEnt.filters || []).every(function (f) {
+        var v = listF[f.key];
+        return !v || f.test(r, v);
+      });
+      if (!ok) return false;
+      if (!q || !listEnt.searchText) return true;
+      return listEnt.searchText(r).toLowerCase().indexOf(q) >= 0;
+    });
+    if (listEnt.sort) rows = rows.slice().sort(listEnt.sort);
+    var toolsHtml = filterHtml(listEnt, all);
+    var filtered = rows.length !== all.length;
+    var countHtml = '<p class="resultline">' + (filtered ? '조건에 맞는 ' + rows.length + '건 / 전체 ' + all.length + '건'
+      : '전체 ' + all.length + '건') + '</p>';
 
     if (!rows.length) {
       host.innerHTML = '<div class="page">' + head + tabsHtml + sumHtml + toolsHtml +
         '<div class="state state--empty"><span class="state__icon">' + ICON_EMPTY + '</span>' +
         '<p class="state__title">조건에 맞는 항목이 없습니다.</p>' +
-        '<p class="state__hint">검색어나 상태를 바꿔 보세요.</p></div></div>';
+        '<p class="state__hint">검색어나 걸러 보기를 바꿔 보세요.</p>' +
+        '<div class="state__act"><button class="btn btn--ghost btn--sm" type="button" data-listreset>조건 지우기</button></div></div></div>';
       paintNav(); return;
     }
 
-    /* 업무 영역처럼 묶어 보여 주는 항목은 제목을 사이에 끼웁니다.
+    /* 날짜 · 구역처럼 묶어 보여 주는 항목은 제목을 사이에 끼웁니다.
        카드 안에 카드를 넣지 않고 줄 사이에 제목만 둡니다. */
     var body = '';
     if (listEnt.groupBy) {
@@ -914,7 +1201,7 @@
       }).join('') + '</div>';
     }
 
-    host.innerHTML = '<div class="page">' + head + tabsHtml + sumHtml + toolsHtml + body + '</div>';
+    host.innerHTML = '<div class="page">' + head + tabsHtml + sumHtml + toolsHtml + countHtml + body + '</div>';
     paintNav();
   }
 
@@ -935,10 +1222,11 @@
           'aria-expanded="false" aria-label="' + esc(ent.title(r)) + ' 추가 작업">⋯</button>' +
       '</div>' +
       '<div class="listrow__more" hidden>' +
-        '<button class="btn btn--ghost btn--sm" type="button" data-act="up"' +
+        (ent.noReorder ? '' :
+          '<button class="btn btn--ghost btn--sm" type="button" data-act="up"' +
           (i === 0 ? ' disabled' : '') + '>↑ 위로</button>' +
-        '<button class="btn btn--ghost btn--sm" type="button" data-act="down"' +
-          (i === total - 1 ? ' disabled' : '') + '>↓ 아래로</button>' +
+          '<button class="btn btn--ghost btn--sm" type="button" data-act="down"' +
+          (i === total - 1 ? ' disabled' : '') + '>↓ 아래로</button>') +
         '<button class="btn btn--danger btn--sm" type="button" data-act="del">삭제</button>' +
       '</div></div>';
   }
@@ -1002,7 +1290,9 @@
       if (f.type === 'zone') {
         return Object.assign({}, f, {
           type: 'select',
-          options: zoneKeys.map(function (z) { return [z.key, z.key + '존 · ' + z.label]; })
+          options: zoneList().length
+            ? zoneList().map(function (z) { return [z.key, (z.label || z.key + '구역') + ' (' + z.key + ')']; })
+            : [['', '(등록된 구역 없음 — 먼저 “부스 구역”을 만들어 주세요)']]
         });
       }
       /* 다른 표의 줄을 고르는 칸. id 를 손으로 적게 하면 반드시
@@ -1046,8 +1336,8 @@
   function rowCols(k) {
     if (k === '__assigns') {
       return [
-        { k: 'contact_id', label: '연락망에서 고르기', type: 'select',
-          options: [['', '연락망에 없음 (이름 직접 입력)']].concat(
+        { k: 'contact_id', label: '운영 인력에서 고르기', type: 'select',
+          options: [['', '운영 인력에 없음 (이름 직접 입력)']].concat(
             (cache.contacts || []).map(function (c) {
               return [c.id, c.name + (c.org ? ' · ' + c.org : '')];
             })) },
@@ -1126,11 +1416,13 @@
     }
 
     UI.form({
-      title: ent.label.replace(' 관리', '') + (isNew ? ' 추가' : ' 수정'),
+      // 창 제목은 메뉴 이름이 아니라 다루는 것 하나(예: '업무 배정' → '업무 추가').
+      title: (ent.formLabel || ent.label.replace(' 관리', '')) + (isNew ? ' 추가' : ' 수정'),
       fields: kept,
       values: values,
       submitLabel: isNew ? '추가' : '저장',
-      validate: ent.validate
+      // 수정 중인 줄을 함께 넘깁니다 — 같은 번호 검사에서 자기 자신은 빼야 합니다.
+      validate: ent.validate ? function (vals) { return ent.validate(vals, row); } : null
     }).then(function (v) {
       if (!v) return;
       ent.fields.forEach(function (f) {
@@ -1153,7 +1445,7 @@
           delete v[fk];
         });
       }
-      if (ent.beforeSave) v = ent.beforeSave(v);
+      if (ent.beforeSave) v = ent.beforeSave(v, row);
 
       if (isNew) {
         var rows = cache[key] || [];
@@ -1179,6 +1471,7 @@
           var i = -1;
           (cache[key] || []).forEach(function (x, idx) { if (x.id === row.id) i = idx; });
           if (i >= 0) cache[key][i] = updated;
+          if (ent.afterSave) ent.afterSave(updated, row);
           // 저장이 끝난 뒤에 지웁니다. 먼저 지웠다가 저장이 실패하면
           // 화면에는 이미지가 있는데 파일은 없는 상태가 됩니다.
           dropReplacedImages(ent, row, updated);
@@ -1282,6 +1575,15 @@
 
   function confirmDelete(key, row) {
     var ent = ENTITIES[key];
+    /* 구역을 지우면 데이터베이스가 그 구역의 부스까지 지웁니다(on delete
+       cascade). 부스가 남아 있으면 지우지 않고 이유를 알립니다. */
+    if (key === 'zones') {
+      var inZone = (cache.booths || []).filter(function (b) { return b.zone_key === row.key; }).length;
+      if (inZone) {
+        toast('이 구역에 부스 ' + inZone + '개가 있습니다. 부스의 구역을 먼저 옮긴 뒤 지워 주세요.', true);
+        return;
+      }
+    }
     UI.confirm({
       title: '삭제할까요?',
       message: '“' + ent.title(row) + '”을(를) 삭제합니다. 되돌릴 수 없습니다.',
@@ -1339,11 +1641,7 @@
       var get = e.soft ? C.selectSoft : C.select;
       return get(e.table, { order: e.order === false ? false : (e.order || [['sort_order', true]]) })
         .then(function (d) { cache[k] = d; });
-    }).concat([
-      C.select('zones').then(function (z) {
-        zoneKeys = z.map(function (x) { return { key: x.key, label: x.label }; });
-      })
-    ])).then(renderPanel).catch(function (e) {
+    })).then(renderPanel).catch(function (e) {
       console.error('[admin] 로드 실패', e);
       $('#view').innerHTML = '<div class="state state--error">' + esc(C.dataMessage(e)) +
         '<div class="state__act"><button class="btn btn--ghost btn--sm" type="button" data-retry>다시 시도</button></div></div>';
@@ -1370,7 +1668,7 @@
   }
   function go() {
     current = routeFromHash();
-    listQ = ''; listStatus = '전체';
+    listQ = ''; listStatus = '전체'; listF = {};
     renderPanel();
     if (pendingAdd) { var k = pendingAdd; pendingAdd = null; openEditor(k, null); }
     window.scrollTo({ top: 0, behavior: 'instant' });
@@ -1411,10 +1709,22 @@
       }
 
       var st = t.closest('[data-subtab]');
-      if (st) { subTab[current] = st.dataset.subtab; listQ = ''; listStatus = '전체'; renderPanel(); return; }
+      if (st) { subTab[current] = st.dataset.subtab; listQ = ''; listStatus = '전체'; listF = {}; renderPanel(); return; }
 
       var ls = t.closest('[data-liststatus]');
       if (ls) { listStatus = ls.dataset.liststatus; renderPanel(); return; }
+
+      // 걸러 보기 칩(날짜 · 구역). 고른 칩을 다시 누르면 '전체' 로 돌아갑니다.
+      var lf = t.closest('button[data-listf]');
+      if (lf) {
+        var fk = lf.dataset.listf, fv = lf.dataset.v || '';
+        listF[fk] = listF[fk] === fv ? '' : fv;
+        renderPanel();
+        var again = $('#view button[data-listf="' + fk + '"][data-v="' + (listF[fk] || '') + '"]');
+        if (again) again.focus();
+        return;
+      }
+      if (t.closest('[data-listreset]')) { listQ = ''; listStatus = '전체'; listF = {}; renderPanel(); return; }
 
       if (t.closest('[data-add]')) { openEditor(listKey(), null); return; }
       if (t.closest('[data-edit-settings]')) { openEditor('settings', (cache.settings || [])[0]); return; }
@@ -1448,6 +1758,16 @@
 
       // 줄 바깥을 누르면 열려 있던 ⋯ 를 닫습니다.
       if (!t.closest('.listrow__more')) closeRowMenus();
+    });
+
+    // 걸러 보기 고르기 상자(구분 · 상태 · 기관 유형 …)
+    document.addEventListener('change', function (e) {
+      var sel = e.target.closest && e.target.closest('select[data-listf]');
+      if (!sel) return;
+      listF[sel.dataset.listf] = sel.value;
+      renderPanel();
+      var again = $('#view select[data-listf="' + sel.dataset.listf + '"]');
+      if (again) again.focus();
     });
 
     document.addEventListener('input', function (e) {
