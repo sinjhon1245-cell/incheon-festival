@@ -390,7 +390,7 @@
   }
 
   // note: 안내 아래 덧붙이는 확정 정보 한 줄(예: 행사 기간 · 운영시간).
-  // act:  맨 아래 단추(예: 검토용 예시 보기). 이미 만든 HTML 을 받습니다.
+  // act:  맨 아래 단추(예: 협의용 예시 보기). 이미 만든 HTML 을 받습니다.
   function emptyBox(title, hint, note, act) {
     return '<div class="state state--empty">' +
       '<span class="state__icon">' + ICON_EMPTY + '</span>' +
@@ -400,16 +400,20 @@
       (act ? '<div class="state__act">' + act + '</div>' : '') + '</div>';
   }
 
-  /* ══ 검토용 예시 (일정 · 부스) ══════════════════════════════════
+  /* ══ 협의용 예시 (일정 · 부스) ══════════════════════════════════
      일정과 부스는 다른 화면과 달리 예시를 저절로 보여 주지 않습니다.
      행사 날짜 탭 아래 시각까지 적힌 시간표, 'A-01' 같은 부스 번호는
      확정 정보로 읽히기 쉽기 때문입니다. 그렇다고 화면이 늘 비어 있으면
      어떤 모양이 될지 협의할 수가 없습니다.
 
-     그래서 사람이 직접 고르게 합니다.
-       기본       "준비 중" 안내 + [검토용 예시 보기]
-       예시 켬    맨 위 "검토용 예시" 띠 + 카드마다 '예시' + [예시 닫기]
-       실제 등록  예시와 단추가 모두 사라지고 실제 데이터만 보입니다
+     그래서 두 단계로 나눕니다.
+       기본       "준비 중" 안내 + 그 아래 협의용 예시 미리보기 서너 건
+                  + [전체 협의용 예시 보기 →]
+       예시 켬    맨 위 "협의용 예시" 띠 + 카드마다 '예시' + [예시 닫기]
+       실제 등록  미리보기 · 단추 · 예시가 모두 사라지고 실제 데이터만 보입니다
+     미리보기는 '준비 중' 안내와 구분선으로 떼어 두고, 머리에 '협의용 예시 ·
+     실제 행사 정보가 아닙니다' 를 답니다 — 사이트가 비어 보이지 않게 하되
+     확정 정보로 읽히지 않게 합니다.
 
      예시는 화면에서만 만듭니다. 데이터베이스에 넣지 않고, 홈의 운영
      브리핑이나 숫자에는 섞지 않습니다(withSample 이 이 두 화면 안에서만
@@ -425,21 +429,29 @@
     try { window.sessionStorage.setItem(SAMPLE_KEY, JSON.stringify(sampleState)); } catch (e) { /* 저장 못 해도 화면은 그대로 */ }
   }
 
-  /* 예시 일정 — 운영 흐름(집결 → 세팅 → 개막 → 강연·체험 → 점검 → 마감)이
-     보일 만큼만. 연사 · 순서처럼 정해지지 않은 것은 '미정' 으로 적고,
+  /* 예시 일정 — 운영 흐름(집결 → 세팅 → 개막 → 강연·체험 → 점검 → 마감)을
+     협의할 만큼만. 연사 · 순서처럼 정해지지 않은 것은 '미정' 으로 적고,
      장소는 공문의 운영구역 이름만 씁니다(구역 안 위치는 짓지 않습니다).
-     day 는 행사 며칠째인지(0 = 첫날). 날짜는 기본정보의 행사 기간에서 옵니다. */
+     개막식 세부 순서(오프닝 영상 · 환영사 …) 같은 분 단위 일정은 만들지
+     않습니다 — 확정된 식순으로 읽힙니다.
+     day 는 행사 며칠째인지(0 = 첫날). 날짜는 기본정보의 행사 기간에서 옵니다.
+     preview 가 붙은 줄이 '준비 중' 아래 미리보기에 나옵니다(첫날 오전 흐름). */
   var SAMPLE_SCHED_ROWS = [
-    [0, '09:00', '09:30', '운영진 집결 · 당일 브리핑', '운영본부', '운영', '운영본부'],
+    [0, '09:00', '09:30', '운영진 집결 · 당일 브리핑', '운영본부', '운영', '운영본부', false, true],
     [0, '09:30', '10:00', '부스 세팅 · 전원·네트워크 점검', '각 부스', '운영', '부스지원'],
-    [0, '10:00', '10:30', '개막 행사 (순서 미정)', '읽걷쓰AI 열린마당', '무대', '운영본부', true],
-    [0, '10:30', '11:20', 'AI 체험 프로그램 1회차', '읽걷쓰AI 체험존', '부스', '운영지원'],
-    [0, '11:00', '12:00', '초청 강연 (연사 미정)', '읽걷쓰AI 열린마당', '강연', '운영본부', true],
+    [0, '10:00', '10:30', '개막 행사 (순서 미정)', '읽걷쓰AI 열린마당', '무대', '운영본부', true, true],
+    [0, '10:30', '11:20', 'AI 체험 프로그램 1회차', '읽걷쓰AI 체험존', '부스', '운영지원', false, true],
+    [0, '11:00', '12:00', '초청 강연 (연사 미정)', '읽걷쓰AI 열린마당', '강연', '운영본부', true, true],
+    [0, '12:00', '13:00', '운영요원 점심 · 부스 교대', '각 부스', '운영', '부스지원'],
     [0, '14:00', '14:20', '부스 운영 순회 점검', '읽걷쓰AI 스쿨존', '행사 지원', '부스지원'],
+    [0, '15:30', '16:00', '현장 운영 점검', '행사장 전체', '행사 지원', '운영본부'],
+    [0, '16:30', '17:00', '체험 프로그램 마감 준비', '읽걷쓰AI 체험존', '부스', '운영지원'],
     [0, '16:50', '17:30', '1일차 운영 마감 · 정리', '행사장 전체', '운영', '운영본부'],
     [1, '09:30', '10:00', '부스 재세팅 · 안전 점검', '각 부스', '행사 지원', '안전지원'],
     [1, '11:00', '12:00', '교육 성과 발표 (발표자 미정)', '읽걷쓰AI 열린마당', '무대', '운영본부', true],
+    [1, '12:00', '13:00', '운영요원 점심 · 부스 교대', '각 부스', '운영', '부스지원'],
     [1, '14:00', '14:50', 'AI 체험 프로그램 회차 운영', '읽걷쓰AI 체험존', '부스', '운영지원'],
+    [1, '16:30', '17:00', '체험 프로그램 마감 준비', '읽걷쓰AI 체험존', '부스', '운영지원'],
     [1, '17:00', '18:00', '부스 철수 · 물품 회수', '행사장 전체', '운영', '운영지원']
   ];
   /* 실제 일정 줄(schedule_items)과 같은 모양으로 만들어 같은 판단·그리기를
@@ -450,13 +462,17 @@
       return { id: 'sample-s' + n, sample: true,
         event_date: days.length ? days[Math.min(r[0], days.length - 1)] : '',
         start_time: r[1], end_time: r[2], title: r[3], place: r[4], category: r[5],
-        team: r[6], owner: '', memo: '', status: '예정', is_highlight: !!r[7], sort_order: n };
+        team: r[6], owner: '', memo: '', status: '예정', is_highlight: !!r[7], sort_order: n,
+        preview: !!r[8] };
     });
   }
 
   /* 예시 부스 — 공문의 운영구역(스쿨존 · 체험존 · 미래채움존 · 빅테크존 ·
-     홍보존)마다 한두 개씩. 구역 글자(A~E)와 번호는 예시에서 붙인 것이고
-     실제 배치와 상관없습니다. 기관 이름은 ○○ · △△ · □□ 로만 씁니다. */
+     홍보존)마다 한두 개씩. 구역 글자(A~E)와 번호는 협의용으로 붙인 임시
+     코드이고 실제 배치와 상관없습니다(A 가 스쿨존이라고 정해진 것이 아닙니다).
+     기관 이름은 ○○ · △△ · □□ 로만 씁니다.
+     미리보기에는 PREVIEW_BOOTHS 의 부스번호만 나옵니다. */
+  var PREVIEW_BOOTHS = ['A-01', 'A-02', 'B-01', 'C-01'];
   var SAMPLE_ZONES = [
     { key: 'A', label: '스쿨존' }, { key: 'B', label: '체험존' }, { key: 'C', label: '미래채움존' },
     { key: 'D', label: '빅테크존' }, { key: 'E', label: '홍보존' }
@@ -494,21 +510,53 @@
   function isSampleSched() { return !!(S.schedule[0] && S.schedule[0].sample); }
 
   var SAMPLE_TEXT = {
-    sched:  { what: '실제 운영 일정이 아닙니다.' },
-    booths: { what: '실제 부스 배치 및 운영정보가 아닙니다.' }
+    sched:  { what: '실제 행사 정보가 아닙니다.', short: '실제 행사 정보가 아닙니다.',
+              more: '세부 내용은 운영 흐름을 협의하기 위한 예시입니다.' },
+    booths: { what: '실제 부스 배치가 아닙니다.', short: '실제 부스 배치가 아닙니다.',
+              more: 'A~E 는 협의용 임시 구역 코드이고, 부스 번호 · 기관명도 예시입니다.' }
   };
-  function sampleOffer(kind) {
-    return '<button class="btn btn--ghost btn--sm" type="button" data-sampleon="' + kind + '">검토용 예시 보기</button>';
-  }
   function sampleBar(kind) {
-    return '<div class="samplebar" role="note" aria-label="검토용 예시 안내">' +
+    return '<div class="samplebar" role="note" aria-label="협의용 예시 안내">' +
       '<div class="samplebar__body">' +
-        '<p class="samplebar__head"><span class="samplebar__badge">검토용 예시</span>' +
+        '<p class="samplebar__head"><span class="samplebar__badge">협의용 예시</span>' +
         '<span class="samplebar__t">' + esc(SAMPLE_TEXT[kind].what) + '</span></p>' +
-        '<p class="samplebar__d">실제 운영 일정 · 부스 정보가 확정되기 전 협의를 위한 예시 화면입니다.</p>' +
+        '<p class="samplebar__d">' + esc(SAMPLE_TEXT[kind].more) + '</p>' +
       '</div>' +
       '<button class="btn btn--ghost btn--sm samplebar__off" type="button" data-sampleoff="' + kind + '">예시 닫기</button>' +
       '</div>';
+  }
+
+  /* '준비 중' 아래에 붙는 미리보기. 실제 화면과 같은 글자 위계(시각 →
+     일정명 → 장소 / 번호 → 부스명 → 기관)로 서너 건만 보여 주고, 전체
+     예시는 단추로 엽니다. 상태 · 담당 · 메모는 미리보기에서 뺍니다.
+     미리보기 카드는 누를 수 없습니다(단추와 헷갈리지 않게 div 로 둡니다). */
+  function samplePreview(kind) {
+    var body;
+    if (kind === 'sched') {
+      body = '<ol class="sprev__list" aria-label="협의용 예시 일정 미리보기">' +
+        sampleSchedule().filter(function (i) { return i.preview; }).map(function (i) {
+          return '<li class="sprev__row">' +
+            '<span class="sprev__time">' + esc(i.start_time) + '–' + esc(i.end_time) + '</span>' +
+            '<span class="sprev__what"><span class="sprev__title">' + esc(i.title) + '</span>' +
+            '<span class="sprev__place">' + esc(i.place) + '</span></span></li>';
+        }).join('') + '</ol>';
+    } else {
+      body = '<div class="sprev__booths" aria-label="협의용 예시 부스 미리보기">' +
+        SAMPLE_BOOTHS.filter(function (b) { return PREVIEW_BOOTHS.indexOf(b.code) >= 0; }).map(function (b) {
+          return '<div class="booth is-sample sprev__booth">' +
+            '<span class="booth__top"><span class="booth__code">' + esc(b.code) + '</span>' +
+            orgBadge(orgType(b)) + SAMPLE_END + '</span>' +
+            '<span class="booth__name">' + esc(b.name) + '</span>' +
+            '<span class="booth__org">' + esc(b.org) + '</span></div>';
+        }).join('') + '</div>';
+    }
+    return '<section class="sprev" aria-label="협의용 예시 미리보기">' +
+      '<p class="sprev__head"><span class="samplebar__badge">협의용 예시</span>' +
+      '<span class="sprev__t">' + esc(SAMPLE_TEXT[kind].short) + '</span></p>' +
+      body +
+      '<div class="sprev__act"><button class="btn btn--ghost btn--sm" type="button" data-sampleon="' + kind + '">' +
+      '전체 협의용 예시 보기 <span aria-hidden="true">→</span></button></div>' +
+      '</section>';
   }
 
   /* 화면별 예시. 행사 운영에서 실제로 생길 법한 사례로 두되,
@@ -1491,7 +1539,7 @@
   function viewSchedule() {
     /* 등록된 일정이 하나도 없으면 시간표 틀(요약 · 날짜 · 필터 · 검색)을
        두지 않습니다. 빈 필터만 늘어서면 고장 난 화면처럼 보입니다.
-       확정된 행사 기간과 운영시간까지만 적고, 원하면 검토용 예시를 엽니다. */
+       확정된 행사 기간과 운영시간까지만 적고, 원하면 협의용 예시를 엽니다. */
     if (!S.schedule.length) {
       if (sampleWanted('sched')) {
         return withSample('sched', function () { return scheduleBody(sampleBar('sched')); });
@@ -1500,14 +1548,14 @@
       var when = [st.date_label, st.time_label ? '운영시간 ' + st.time_label : '']
         .filter(Boolean).join(' · ');
       return '<div class="page sched">' + pageHead('운영 일정') +
-        emptyBox('세부 운영 일정 준비 중', '행사 세부 일정은 확정되는 대로 업데이트됩니다.', when,
-          sampleOffer('sched')) +
+        emptyBox('세부 운영 일정 준비 중', '실제 일정은 확정되는 대로 반영됩니다.', when) +
+        samplePreview('sched') +
         '</div>';
     }
     return scheduleBody('');
   }
 
-  // bar: 맨 위에 끼울 띠(검토용 예시 안내). 실제 일정이면 ''.
+  // bar: 맨 위에 끼울 띠(협의용 예시 안내). 실제 일정이면 ''.
   function scheduleBody(bar) {
     var ev = eventInfo();
     var hasKey = S.schedule.some(function (i) { return i.is_highlight; });
@@ -1620,8 +1668,8 @@
     var head = sel ? dayLong(sel) + ' · ' : '';
     var sample = isSampleSched();
     return '<p class="resultline">' + esc(head) + list.length + '건' +
-      (sample ? ' · 검토용 예시' : filtered ? ' · 선택한 조건' : '') + '</p>' +
-      '<div class="tml tml--sched"' + (sample ? ' aria-label="검토용 예시 일정"' : '') + '>' + body + '</div>';
+      (sample ? ' · 협의용 예시' : filtered ? ' · 선택한 조건' : '') + '</p>' +
+      '<div class="tml tml--sched"' + (sample ? ' aria-label="협의용 예시 일정"' : '') + '>' + body + '</div>';
   }
 
   function scheduleRow(i, ev, nowMin) {
@@ -1752,7 +1800,7 @@
     return boothsBody('');
   }
 
-  // bar: 맨 위에 끼울 띠(검토용 예시 안내). 실제 부스면 ''.
+  // bar: 맨 위에 끼울 띠(협의용 예시 안내). 실제 부스면 ''.
   function boothsBody(bar) {
     var q = ui.boothQ.trim().toLowerCase();
     var items = boothItems();
@@ -1770,8 +1818,8 @@
     // 등록된 부스가 없으면 필터 · 검색 없이 준비 중 안내만 둡니다.
     if (!items.length) {
       return '<div class="page">' + pageHead('부스 현황') + map +
-        emptyBox('부스 정보 준비 중', '부스 배치 및 운영기관 정보는 확정되는 대로 업데이트됩니다.', '',
-          sampleOffer('booths')) +
+        emptyBox('부스 정보 준비 중', '부스 배치 및 운영기관 정보는 확정되는 대로 업데이트됩니다.') +
+        samplePreview('booths') +
         '</div>';
     }
     // 예시 부스 화면에는 실제 배치도를 섞지 않습니다. 예시 부스가 그 그림 위의 자리처럼 읽힙니다.
@@ -1782,7 +1830,10 @@
     var zoneHtml = zoneKeys.length > 1
       ? '<div class="filterrow"><span class="filterrow__l">구역</span>' +
         chips([{ label: '전체', n: items.length }].concat(zoneKeys.map(function (k) {
-          return { label: k + '구역', short: k, value: k,
+          var z = S.zones.filter(function (x) { return x.key === k; })[0];
+          // 구역 이름이 있으면 이름으로(예: 스쿨존), 없으면 'A구역'. 좁은 화면에서는 '읽걷쓰AI' 를 뗍니다.
+          var name = z && z.label ? z.label : k + '구역';
+          return { label: name, short: name.replace(/^읽걷쓰AI\s*/, ''), value: k,
             n: items.filter(function (b) { return b.zone === k; }).length };
         })), ui.boothZone, 'data-boothzone', '', '구역') + '</div>'
       : '';
@@ -1810,7 +1861,7 @@
         ' ' + b.zone + ' ' + b.find).toLowerCase().indexOf(q) >= 0;
     });
 
-    var body = list.length ? '<div class="boothgrid"' + (sample ? ' aria-label="검토용 예시 부스 목록"' : '') + '>' +
+    var body = list.length ? '<div class="boothgrid"' + (sample ? ' aria-label="협의용 예시 부스 목록"' : '') + '>' +
       list.map(function (b) {
         // 읽는 순서: 번호 · 유형 → 부스명 · 기관 → 구역.
         // 구역은 상자 없이 카드 맨 아래 작은 글자로. 위치 정보라 유형 표시와 겹쳐 보이면 안 됩니다.
@@ -1862,7 +1913,7 @@
     ].filter(function (r) { return r[1]; });
 
     var html = b.sample
-      ? '<p class="samplenote"><span class="samplebar__badge">검토용 예시</span>' +
+      ? '<p class="samplenote"><span class="samplebar__badge">협의용 예시</span>' +
         '실제 부스 배치 및 운영정보가 아닙니다.</p>'
       : '';
 
@@ -3189,7 +3240,7 @@
       if (t.closest('[data-close-drawer]')) { closeDrawer(); return; }
       if (t.closest('[data-retry]')) { boot(true); return; }
 
-      /* 검토용 예시 켜기 · 끄기. 걸어 둔 필터와 검색어는 함께 풉니다 —
+      /* 협의용 예시 켜기 · 끄기. 걸어 둔 필터와 검색어는 함께 풉니다 —
          예시의 구역(A~E)이나 분류가 남아 있으면 실제 목록이 비어 보입니다.
          다시 그린 뒤 반대쪽 단추에 초점을 둡니다(키보드로 바로 되돌릴 수 있게). */
       var smp = t.closest('[data-sampleon],[data-sampleoff]');

@@ -2471,7 +2471,7 @@ button.boothops__row:hover { border-color: var(--primary); }
    좋은 폭에서 멈춥니다(페이지 폭 정책은 그대로). 두 칸은 쓰지 않습니다. */
 #view[data-view="faq"] .tl { max-width: 880px; }
 
-/* ═══ 검토용 예시 (일정 · 부스) ═══════════════════════════════════
+/* ═══ 협의용 예시 (일정 · 부스) ═══════════════════════════════════
    사람이 직접 켠 예시 화면입니다. 카드마다 붙는 작은 '예시'(.sampletag)
    만으로는 부족해서, 맨 위에 띠를 한 번 더 둡니다 — 실제 일정 · 부스로
    오해하면 안 되는 화면입니다. 색은 보라(예시 표시와 같은 계열) 하나만
@@ -2493,6 +2493,39 @@ button.boothops__row:hover { border-color: var(--primary); }
 .samplebar__off { flex: none; background: #fff; }
 @media (max-width: 560px) {
   .samplebar__off { width: 100%; min-height: 40px; }
+}
+/* '준비 중' 아래 협의용 예시 미리보기. 실제 목록처럼 보이되, 점선 테두리 ·
+   옅은 보라 바탕 · 머리의 '협의용 예시' 표시로 확정 정보와 갈라 둡니다.
+   경고 상자처럼 강하게 칠하지는 않습니다. */
+.sprev {
+  display: flex; flex-direction: column; gap: 12px;
+  padding: 14px; border: 1.5px dashed #CFC6F6; border-radius: var(--r);
+  background: linear-gradient(var(--primary-t), var(--primary-t)) top / 100% 46px no-repeat, #fff;
+}
+.sprev__head { display: flex; align-items: center; gap: 6px 8px; flex-wrap: wrap; margin: 0; min-height: 22px; }
+.sprev__t { font-size: 13.5px; font-weight: 600; color: var(--ink-2); }
+.sprev__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.sprev__row {
+  display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 2px 12px; align-items: baseline;
+  padding: 10px 2px; border-top: 1px solid var(--line-2);
+}
+.sprev__row:first-child { border-top: 0; padding-top: 2px; }
+.sprev__time { font-size: 13.5px; font-weight: 700; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.sprev__what { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.sprev__title { font-size: 15px; font-weight: 700; color: var(--ink); letter-spacing: -0.02em; }
+.sprev__place { font-size: 13px; color: var(--muted); }
+.sprev__booths {
+  display: grid; gap: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 200px), 1fr));
+}
+.sprev__booth { cursor: default; }
+.sprev__booth:hover { border-color: var(--line); }
+.sprev__act { display: flex; justify-content: flex-end; }
+@media (max-width: 560px) {
+  .sprev { padding: 12px; }
+  .sprev__row { grid-template-columns: 84px minmax(0, 1fr); gap: 2px 10px; }
+  .sprev__time { font-size: 13px; }
+  .sprev__act .btn { width: 100%; min-height: 40px; }
 }
 /* 예시 부스 상세 맨 위 한 줄 */
 .samplenote {
