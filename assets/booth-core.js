@@ -17,9 +17,10 @@
 
    두 가지 방식으로 돕니다.
      실제 모드  assets/config.js 의 Supabase 로 읽고 씁니다.
-     시연 모드  주소에 ?demo 가 있을 때만. assets/mock-data.js 의 예시 부스를
-                이 브라우저의 localStorage 에 펼쳐 두고 씁니다. DB 에는 아무것도
-                쓰지 않습니다.
+     시연 모드  주소에 ?demo 가 있을 때만(?demo=1 도 같음). assets/mock-data.js 의
+                예시 부스를 이 브라우저의 localStorage 에 펼쳐 두고 씁니다. DB 에는
+                아무것도 쓰지도 읽지도 않습니다. 관람객 화면에서는 '협의용 예시
+                화면', 운영자 화면에서는 시연(연수)으로 보입니다.
    실제 모드에서 읽기에 실패해도 시연 데이터로 대신하지 않습니다.
    관람객에게 꾸며낸 대기 시간을 보여 주면 안 되기 때문입니다.
 
@@ -469,9 +470,10 @@
   }
 
   /* ── 시연 모드 저장소 ──────────────────────────────────────────────
-     예시 부스를 이 브라우저에 펼쳐 둡니다. 펼친 지 6시간이 지났거나 날짜가
-     바뀌면 다시 펼칩니다 — 어제 눌러 둔 값이 남아 '정보 없음' 투성이가
-     되거나, 시연할 때마다 손으로 지워야 하는 일을 막습니다.
+     예시 부스를 이 브라우저에 펼쳐 둡니다. 펼친 지 6시간이 지났거나, 날짜가
+     바뀌었거나, 예시 목록(mock-data.js)이 바뀌었으면 다시 펼칩니다 — 어제 눌러
+     둔 값이 남아 '정보 없음' 투성이가 되거나, 시연할 때마다 손으로 지워야 하는
+     일을 막습니다.
      아직 아무도 누르지 않은 부스(touched false)는 펼친 시각이 아니라 '지금'
      으로부터 age_min 분 전 값으로 봅니다. 펼친 시각에 묶어 두면 30분 뒤 거의
      모든 부스가 '확인 필요' 로 흐려져, 연수처럼 긴 시연이 30분 만에 무너집니다.
@@ -483,8 +485,14 @@
     var m = /(\d+)\s*$/.exec(String(code || ''));
     return m ? parseInt(m[1], 10) : null;
   }
+  // 예시 목록의 내용 전체. id 만 견주면 이름 · 구역 · 상태를 고쳐도 이 브라우저에 펼쳐 둔
+  // 옛 예시가 6시간 동안 그대로 남습니다. 목록은 페이지를 연 동안 바뀌지 않으니 한 번만 셉니다.
+  var demoSig = null;
   function demoSignature() {
-    return (window.MOCK_BOOTHS || []).map(function (m) { return m.id; }).join('|');
+    if (demoSig === null) {
+      try { demoSig = JSON.stringify(window.MOCK_BOOTHS || []); } catch (e) { demoSig = ''; }
+    }
+    return demoSig;
   }
   function demoSeed(nowMs) {
     var rows = (window.MOCK_BOOTHS || []).map(function (m) {
@@ -584,12 +592,14 @@
     demoNotify(null);
   }
 
+  // 행사 이름 · 장소 · 날짜를 지어 넣지 않습니다. 예시 화면은 서버를 읽지 않아 실제 값을
+  // 모르고, 지어 넣은 날짜 · 장소는 실제 행사 정보로 읽히기 쉽습니다.
   function demoSettings() {
     return {
-      event_title: '2026 인천 AI미래채움 교육페스티벌 (시연)',
-      venue: '인천 상상플랫폼',
-      date_label: '2026. 11. 6.(금) ~ 11. 7.(토)',
-      time_label: '10:00 ~ 17:00',
+      event_title: '협의용 예시 화면',
+      venue: '',
+      date_label: '',
+      time_label: '',
       event_start: null,
       event_end: null,
       booth_map_url: '',

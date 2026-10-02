@@ -24,6 +24,14 @@
   <!-- 관람객 전용 화면입니다. 운영 화면으로 가는 링크나 주소를 이 파일에 두지 않습니다.
        배포 스크립트가 그런 흔적을 찾으면 배포를 멈춥니다. -->
 
+  <!-- 협의용 예시 화면(주소에 ?demo=1)일 때만 보이는 띠. 스크롤해도 맨 위에 붙어 있어
+       예시 부스를 실제 운영 정보로 읽지 않게 합니다. -->
+  <div class="demobar" id="demobar" role="note" hidden>
+    <div class="col demobar__in">
+      <p class="demobar__t"><span class="demotag">협의용 예시</span><span class="sr-only"> · </span><span class="demobar__w">실제 행사 정보가 아닙니다.</span></p>
+    </div>
+  </div>
+
   <header class="band">
     <div class="col band__in">
       <div class="band__row">
@@ -43,7 +51,11 @@
 
   <main id="main">
     <div class="col">
-      <p class="demo" id="demo" hidden>시연 화면 · 실제 부스 정보가 아닙니다</p>
+      <section class="demoinfo" id="demoinfo" aria-labelledby="demoinfo-t" hidden>
+        <p class="demoinfo__t" id="demoinfo-t">실제 부스가 등록되면 이런 모습이 돼요</p>
+        <p class="demoinfo__d">아래 부스 · 구역 · 대기 시간은 화면을 협의하려고 이 브라우저 안에서만 만든 예시예요. 서버에 저장하지 않고 실제 부스 정보와 섞지 않아요. 검색 · 구역 · 상태 · 정렬 · 한눈에 보기는 실제 화면과 똑같이 움직여요.</p>
+        <button type="button" class="line-btn demoinfo__btn" data-act="demo-exit">실제 화면으로 돌아가기</button>
+      </section>
       <div id="here" hidden></div>
       <section class="hero" id="hero" aria-label="지금 상황 요약"></section>
     </div>
@@ -80,6 +92,10 @@
            프로그램이 부스 수십 개를 처음부터 다시 읽게 됩니다. 바뀐 요약만
            아래 sr-summary 가 알립니다. -->
       <div id="list"></div>
+      <!-- 목록 끝까지 내려온 뒤에도 위로 올라가지 않고 나갈 수 있게 한 번 더 둡니다(예시 화면에서만). -->
+      <div class="demoexit" id="demoexit" hidden>
+        <button type="button" class="line-btn" data-act="demo-exit">실제 화면으로 돌아가기</button>
+      </div>
     </div>
   </main>
 
@@ -794,7 +810,10 @@
 
     /* ── 8 · 9. 목록 · 한눈에 ──────────────────────────────────── */
     function zoneHead(g, n) {
-      var showKey = /^[A-Za-z0-9]{1,3}$/.test(g.key) && String(g.label).indexOf(g.key) !== 0;
+      // 구역 글자가 이름에 이미 들어 있으면('A구역' · '예시 구역 A') 앞에 또 붙이지 않습니다.
+      var label = String(g.label);
+      var showKey = /^[A-Za-z0-9]{1,3}$/.test(g.key) && label.indexOf(g.key) !== 0 &&
+        label.split(/\s+/).indexOf(g.key) < 0;
       return '<h2 class="zone" id="zone-' + esc(String(g.key).replace(/\s+/g, '_')) + '">' +
         '<span class="zone__label">' + (showKey ? '<span class="zone__key">' + esc(g.key) + '</span>' : '') + esc(g.label) + '</span>' +
         '<span class="zone__n">' + n + '곳</span></h2>';
@@ -880,6 +899,18 @@
       return '<div class="empty"><p class="empty__t">' + esc(t) + '</p>' + (d ? '<p class="empty__d">' + esc(d) + '</p>' : '') + '</div>';
     }
 
+    // 실제 부스가 한 곳도 없을 때 '부스 정보 준비 중' 아래에 붙는 협의용 예시 입구.
+    // 실제 부스가 한 곳이라도 생기면 이 안내까지 오지 않으니 저절로 사라집니다(?demo=1 주소는 계속 열림).
+    // 예시는 이 페이지에 섞지 않고 새로 연 페이지(?demo=1)에서만 그립니다. 그쪽은 서버를 읽지도
+    // 쓰지도 않고, 실제 화면이 받아 둔 값(S · 지난번 결과)과 따로 돕니다.
+    function demoCtaHtml() {
+      return '<div class="democta">' +
+        '<p class="democta__head"><span class="demotag">협의용 예시</span><span class="democta__t">실제 행사 정보가 아닙니다.</span></p>' +
+        '<p class="democta__d">실제 부스가 등록되면 이 화면이 어떤 모습이 되는지 예시 부스로 미리 볼 수 있어요.</p>' +
+        '<a class="line-btn democta__btn" href="?demo=1">협의용 예시 화면 보기</a>' +
+      '</div>';
+    }
+
     function skeletonHtml() {
       var h = '<div aria-hidden="true">';
       for (var i = 0; i < 6; i++) h += '<div class="sk"><i></i><i></i><i></i></div>';
@@ -939,7 +970,8 @@
       if (!S.booths.length) {
         if (S.keys.list !== 'none') {
           S.keys.list = 'none';
-          box.innerHTML = emptyHtml('부스 정보 준비 중', '부스 배치가 확정되면 이곳에 표시돼요.').replace('class="empty"', 'class="empty empty--none"');
+          box.innerHTML = emptyHtml('부스 정보 준비 중', '부스 배치가 확정되면 이곳에 표시돼요.').replace('class="empty"', 'class="empty empty--none"') +
+            (core.isMock ? '' : demoCtaHtml());
         }
         return;
       }
@@ -1068,7 +1100,6 @@
       // 고른 상태가 이제 뜻이 없으면(운영 시간이 끝남 등) 풉니다.
       if (S.ui.count && !liveOn()) S.ui.count = '';
       var items = visible();
-      $('demo').hidden = !core.isMock;
       renderBand();
       renderStrip();
       renderHere();
@@ -1152,7 +1183,8 @@
     function showResults(fromBar, instant) {
       var res = $('result');
       if (res.hidden) return;
-      var barH = $('bar').hidden ? 0 : $('bar').offsetHeight;
+      // 예시 화면에서는 맨 위 '협의용 예시' 띠도 붙박이라, 그 높이까지 더해 가리지 않게 합니다.
+      var barH = ($('bar').hidden ? 0 : $('bar').offsetHeight) + ($('demobar').hidden ? 0 : $('demobar').offsetHeight);
       var top = res.getBoundingClientRect().top;
       if (fromBar ? top < barH : top > window.innerHeight - 160) {
         var y = window.pageYOffset + top - barH - 8;
@@ -1281,8 +1313,8 @@
           case 'here-close':
             S.hereGone = true;
             try {
-              // 시연 중이면 ?demo 는 남깁니다. 지우면 다음 새로 고침에 실제 화면으로 바뀝니다.
-              history.replaceState(null, '', location.pathname + (core.isMock ? '?demo' : ''));
+              // 예시 화면이면 ?demo=1 은 남깁니다. 지우면 다음 새로 고침에 실제 화면으로 바뀝니다.
+              history.replaceState(null, '', location.pathname + (core.isMock ? '?demo=1' : ''));
             } catch (err) { /* file:// 등 */ }
             render(false);
             break;
@@ -1311,6 +1343,11 @@
             else { S.ui.q = ''; $('q').value = ''; render(false); $('q').focus(); }
             break;
           case 'sheet-close': closeSheet(true); break;
+          case 'demo-exit':
+            // 실제 화면은 새로 연 페이지에서 처음부터 그립니다. 이 페이지에서 모드만 바꾸면 예시 값이
+            // 기억(S)에 남아 실제 값과 섞일 수 있습니다. replace 라 뒤로 가기에 예시 화면이 끼지 않습니다.
+            location.replace(location.pathname);
+            break;
           case 'retry':
             if (S.errCode === 'NO_CONFIG') { location.reload(); break; }
             refresh(!S.fresh);
@@ -1363,6 +1400,14 @@
         if (b && b.length <= 80) S.hereParam = b;
       } catch (e) { S.hereParam = null; }
       S.navOffline = navigator.onLine === false;
+      // 협의용 예시 화면: 맨 위 띠 · 안내 · 나가기 단추를 켭니다. 주소로만 정해지고 이 페이지를
+      // 연 동안 바뀌지 않습니다(BoothCore.isMock). 붙박이 줄은 띠 아래로 내립니다(visitor.css).
+      if (core.isMock) {
+        document.documentElement.classList.add('is-demo');
+        $('demobar').hidden = false;
+        $('demoinfo').hidden = false;
+        $('demoexit').hidden = false;
+      }
       $('foot-text').textContent = '대기 시간은 각 부스 선생님이 현장에서 직접 입력해요. 실제와 조금 다를 수 있어요. ' +
         core.staleMinutes() + '분 넘게 바뀌지 않은 부스는 숫자를 흐리게 보여 줘요.';
 
