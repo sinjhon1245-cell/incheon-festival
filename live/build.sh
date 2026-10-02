@@ -20,12 +20,17 @@
 # 공통 엔진이나 두 화면에 운영 포털 이야기를 적어 넣어도 그대로 관람객에게
 # 나가지 않게 하는 마지막 그물입니다.
 #
-# Netlify 가 배포할 때 자동으로 돌립니다(live/netlify.toml).
+# Netlify(live/netlify.toml) · Vercel(live/vercel.json) 이 배포할 때 자동으로
+# 돌립니다. 둘 다 이 폴더(live)를 사이트의 뿌리로 두고 sh build.sh → dist 입니다.
 # 손으로 확인하려면:  sh live/build.sh   →  live/dist/index.html
 # (live/dist 는 .gitignore 에 걸려 있습니다. 확인한 뒤 지워도 됩니다.)
 #
-# POSIX sh 로 씁니다. Netlify 빌드 서버(리눅스)와 Windows 의 Git Bash
-# 양쪽에서 같은 결과가 나와야 합니다.
+# 이 폴더 밖(../)의 원본을 읽습니다. Vercel 은 Root Directory 를 live 로 두면
+# 설정에 따라 그 밖의 파일을 빌드에 넣지 않을 수 있습니다. 그러면 아래 첫 확인에서
+# 멈추므로, 빈 사이트가 올라가는 일은 없습니다(README '배포' 참고).
+#
+# POSIX sh 로 씁니다. Netlify 빌드 서버(우분투, sh = dash) · Vercel 빌드 서버
+# (Amazon Linux 2023, sh = bash) · Windows 의 Git Bash 에서 같은 결과가 나와야 합니다.
 # ===================================================================
 set -e
 cd "$(dirname "$0")"
@@ -170,7 +175,8 @@ pick_help() {
   printf '%s\n' "$_val"
 }
 
-[ -f "$SRC" ] || fail "$SRC 가 없습니다."
+# Vercel 에서 이 줄에 걸리면 저장소 뿌리의 파일이 빌드에 들어오지 않은 것입니다.
+[ -f "$SRC" ] || fail "$SRC 가 없습니다. Vercel 이면 Settings → Build and Deployment → Root Directory 의 'Include files outside the root directory in the Build Step' 을 켜고 다시 배포하세요."
 
 # 값을 꺼내기 전에 이름마다 주석 밖에 한 번만 있는지 봅니다(only_once).
 # 여기는 명령 치환 밖이라 fail 이 곧바로 빌드를 멈춥니다.
@@ -186,7 +192,7 @@ HELP_LINE=$(pick_help) || exit 1
 
 # 연결 정보가 없으면 두 화면은 "연결 설정을 불러오지 못했습니다" 만
 # 보여 줍니다. 그런 배포본을 조용히 올리느니 빌드를 멈추는 편이
-# 낫습니다 — Netlify 는 실패한 빌드를 올리지 않고 앞 배포본을 그대로 둡니다.
+# 낫습니다 — Netlify · Vercel 모두 실패한 빌드는 올리지 않고 앞 배포본을 그대로 둡니다.
 [ -n "$SB_URL" ] || fail "assets/config.js 에서 supabaseUrl 을 읽지 못했습니다. 주석 밖에 supabaseUrl: '...', 한 줄만(이어 붙이기 · 다른 이름 없이) 적었는지 확인하세요."
 [ -n "$SB_KEY" ] || fail "assets/config.js 에서 supabaseAnonKey 를 읽지 못했습니다. 주석 밖에 supabaseAnonKey: '...', 한 줄만(이어 붙이기 · 다른 이름 없이) 적었는지 확인하세요."
 
@@ -270,8 +276,8 @@ printf 'User-agent: *\nDisallow: /\n' > dist/robots.txt
 # 두 화면이 부르는 이 사이트 안의 파일(src · href)이 배포본에 모두 있는지 봅니다.
 # 누가 화면에 새 스크립트나 스타일을 더하고 위 복사 목록에 빠뜨리면, 운영자
 # 화면이 행사 날 빈 화면이 됩니다. 주소(https:// · //) · # 링크 · JS 로 이어 붙인
-# 문자열(따옴표가 섞인 값)은 건너뜁니다. visitor.html 은 live/netlify.toml 이
-# 첫 화면(index.html)으로 이어 줍니다.
+# 문자열(따옴표가 섞인 값)은 건너뜁니다. visitor.html 은 live/netlify.toml ·
+# live/vercel.json 이 첫 화면(index.html)으로 이어 줍니다.
 MISSING=$(grep -ohE '(src|href)="[^"]*"' dist/index.html dist/booth-ctrl.html |
   sed -e 's/^[a-z]*="//' -e 's/"$//' -e 's/[?#].*$//' | sort -u |
   while IFS= read -r ref; do
@@ -280,7 +286,7 @@ MISSING=$(grep -ohE '(src|href)="[^"]*"' dist/index.html dist/booth-ctrl.html |
     esac
     [ -f "dist/$ref" ] || printf ' %s' "$ref"
   done)
-[ -z "$MISSING" ] || fail "배포본에 없는 파일을 화면이 부릅니다:$MISSING — live/build.sh 의 복사 목록과 live/netlify.toml 의 ignore 목록에 더하세요."
+[ -z "$MISSING" ] || fail "배포본에 없는 파일을 화면이 부릅니다:$MISSING — live/build.sh 의 복사 목록과 live/netlify.toml 의 ignore 목록에 더하세요(assets/ 밖의 파일이면 live/vercel.json 의 ignoreCommand 에도)."
 
 # 운영 포털의 흔적이 배포본에 섞였는지 마지막으로 확인합니다.
 # 부스 운영자 화면(booth-ctrl)은 이 사이트에 있어야 하므로 찾지 않습니다.

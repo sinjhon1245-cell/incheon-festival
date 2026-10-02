@@ -28,7 +28,7 @@ admin.html            운영 콘텐츠 관리자(CMS) · 관리자 로그인
 visitor.html          관람객용 부스 대기 현황 (부스 Live 사이트의 첫 화면)
 booth-ctrl.html       부스 운영자 대기 시간 입력 화면 (부스 Live 사이트 · 운영자 카드 QR 로만 열림)
 print-qr.html         운영자 카드 · 부스 앞 안내 · 입구 포스터 QR 인쇄 (운영 포털 · 관리자 로그인)
-live/                 부스 Live 사이트 배포 설정 · build.sh (Netlify 두 번째 사이트)
+live/                 부스 Live 사이트 배포 설정 · build.sh (Netlify 두 번째 사이트 또는 Vercel 프로젝트)
 netlify.toml          Netlify 에 올렸을 때의 배포 설정 · 보안 헤더 · /admin 경로
 robots.txt            검색엔진 수집 차단
 
@@ -456,12 +456,14 @@ node dev-server.js
 출발했지만, 모든 부스가 같은 PIN 을 쓰던 방식을 버리고 **부스마다 다른 QR
 열쇠**로 다시 만들었습니다.
 
-**사이트는 둘입니다.** 같은 저장소를 Netlify 사이트 두 개로 배포합니다.
+**사이트는 둘입니다.** 같은 저장소를 사이트 두 개로 배포합니다. 운영 포털은
+Netlify, 부스 Live 사이트는 Netlify 두 번째 사이트나 Vercel 프로젝트 중 하나입니다
+(`live/` 에 두 설정이 모두 있습니다).
 
 | 사이트 | 올라가는 화면 | 누가 여나 |
 |---|---|---|
 | **운영 포털** (지금 이 사이트) | 포털 `index.html` · 관리자 `admin.html` · QR 인쇄 `print-qr.html` | 관계자 · 운영본부 |
-| **부스 Live 사이트** (Netlify 두 번째 사이트, `live/`) | 관람객 화면(사이트 첫 화면, 원본은 `visitor.html`) · 부스 운영자 화면 `booth-ctrl.html` | 관람객 · 부스 담당 선생님 |
+| **부스 Live 사이트** (Netlify 두 번째 사이트 또는 Vercel 프로젝트, `live/`) | 관람객 화면(사이트 첫 화면, 원본은 `visitor.html`) · 부스 운영자 화면 `booth-ctrl.html` | 관람객 · 부스 담당 선생님 |
 
 종이에 찍히는 QR 은 관람객용이든 운영자 카드든 **모두 부스 Live 사이트**를
 가리킵니다. 관람객도 부스 선생님도 운영 포털 주소를 받지 않습니다. QR 인쇄만
@@ -556,6 +558,29 @@ node dev-server.js
    (Netlify 는 빌드 훅으로 부른 빌드에는 건너뛰기 조건을 적용하지 않습니다).
    그냥 ‘Deploy site’ 는 건너뛰기 조건을 그대로 따르니 해결책이 아닙니다.
    `Failed` 이고 로그에 `빌드 중단: …` 이 있으면 아래 ‘문제가 생겼을 때’ 를 보세요.
+
+   **Vercel 로 올릴 때**(Netlify 대신) — *Add New… → Project* 에서 이 저장소를
+   Import 합니다. 빌드 명령 · 배포 폴더 · 헤더 · 빌드를 건너뛸 조건은
+   `live/vercel.json` 이 정하므로, 대시보드에서는 아래만 맞춥니다.
+
+   | Vercel 설정 | 값 |
+   |---|---|
+   | Framework Preset | `Other` |
+   | Root Directory | `live` |
+   | ↳ Include files outside the root directory in the Build Step | **켬** — 두 화면 원본이 `live/` 밖에 있습니다. 꺼져 있으면 `빌드 중단: ../assets/config.js 가 없습니다` 로 멈춥니다 |
+   | ↳ Skip deployments when there are no changes to the root directory … | **끔** — 켜 두면 `visitor.html` 만 고친 push 가 배포되지 않을 수 있습니다 |
+   | Build / Output / Install Command | 그대로(Override 끔). `vercel.json` 이 `sh build.sh` · `dist` · 설치 없음으로 정합니다 |
+   | Settings → Environments → Production → Branch | Netlify 와 같은 `main`. `live/` 가 아직 `main` 에 합쳐지지 않았으면 `booth-live` |
+   | Environment Variables | 없음 |
+
+   Import 직후 첫 배포는 `main` 으로 돌기 때문에, `main` 에 `live/` 가 없으면
+   `Error` 로 끝나는 것이 정상입니다. Production Branch 를 바꾼 뒤 그 브랜치에
+   push 하거나 Deployments 에서 그 브랜치로 새로 배포합니다. 주소는
+   `https://프로젝트이름.vercel.app/` 입니다(Netlify 처럼 **QR 인쇄 뒤에는 바꿀 수
+   없으니** 프로젝트 이름을 행사 내내 쓸 이름으로 정합니다). Production 이 아닌
+   브랜치의 미리 보기 배포는 Vercel 로그인이 있어야 열리므로(Deployment
+   Protection) 관람객 주소로 쓰지 않습니다.
+
    **확인:** 휴대폰으로 그 https 주소의 첫 화면(관람객 화면)과
    `…/booth-ctrl.html?demo`(시연용 운영자 화면)가 열리는지 봅니다.
    내 컴퓨터에서 미리 보려면 Git Bash 에서 `sh live/build.sh` →
@@ -724,6 +749,21 @@ select coalesce(nullif(b.code, ''),
 | 운영 포털 (포털 · 관리자 · QR 인쇄) | (비움) | 없음 | 뿌리의 `netlify.toml` |
 | 부스 Live 사이트 (관람객 화면 · 부스 운영자 화면) | `live` | `sh build.sh` → `live/dist` | `live/netlify.toml` |
 
+부스 Live 사이트를 **Vercel** 에 올릴 때는 Root Directory 를 `live` 로 두고
+`live/vercel.json` 이 같은 일을 합니다(만드는 법은 켜는 순서 2번). 두 설정은 함께
+둡니다 — 어느 쪽으로든 되돌릴 수 있게 하려는 것이고, 각 서비스는 자기 파일만 읽습니다.
+`vercel.json` 은 JSON 이라 설명을 적을 수 없어 여기 적어 둡니다.
+
+| `live/netlify.toml` | `live/vercel.json` | 다른 점 |
+|---|---|---|
+| `command` · `publish` | `buildCommand` · `outputDirectory` (+ `framework: null` · `installCommand: ""`) | 없음 |
+| `/visitor.html` → `/index.html` (200) | `rewrites` | 없음. 둘 다 같은 이름의 파일이 없을 때만 이어 주고, `?demo` 가 남습니다 |
+| Netlify 가 `/booth-ctrl` 에도 `booth-ctrl.html` 을 내줌 | `rewrites` 로 `/booth-ctrl` → `/booth-ctrl.html` | Vercel 은 따로 적어야 합니다(`cleanUrls` 는 `.html` 주소를 다른 주소로 넘기므로 쓰지 않음) |
+| `/*` 보안 헤더 다섯 | `/(.*)` 에 넷 + `Referrer-Policy` 는 운영자 화면 두 주소를 뺀 나머지에 | 같은 헤더를 두 규칙이 겹쳐 주지 않도록 나눴습니다. 결과는 같습니다 |
+| `/assets/*` · `/index.html` no-cache | 같은 둘 + `/` · `/visitor.html` | 관람객 QR 이 여는 `/?b=…` 와 `/visitor.html` 도 같은 캐시 헤더를 받게 했습니다(Vercel 헤더는 다시쓰기 전 주소로 붙음) |
+| `/booth-ctrl.html` · `/booth-ctrl` no-referrer · no-cache | 같음 | 없음 |
+| `ignore` (Netlify 변수 `CACHED_COMMIT_REF`) | `ignoreCommand` (Vercel 변수 `VERCEL_GIT_PREVIOUS_SHA`) | Vercel 은 256자 제한이 있어 `assets/` 의 파일 다섯 대신 `assets/` 폴더 전체와 비교합니다. 포털 스크립트만 바뀐 push 에도 한 번 더 빌드할 뿐, 빠뜨리는 쪽으로 틀리지는 않습니다 |
+
 부스 Live 사이트는 `live/build.sh` 가 배포 때마다 `assets/config.js` 에서 필요한 값
 (연결 값 넷 · `boothHelpLine`)만 뽑아 자기 설정 파일을 만듭니다. 그래서 그 값이 읽을
 수 없는 모양이면 빌드가 멈추고(`빌드 중단: …`), 두 화면과 관계없는 파일만 바뀐
@@ -764,9 +804,12 @@ push 는 건너뜁니다(`Canceled`). 만드는 순서는 ‘부스 실시간 �
 | 저장·삭제가 “0건” | 로그인 만료 → 재로그인 |
 | 배포본만 옛 화면 | 쓰고 있는 호스팅의 최신 배포 로그와 캐시 확인 |
 | 부스 Live 사이트가 안 바뀜 · 배포가 `Canceled` | 관람객 화면 · 운영자 화면과 관계없는 파일만 바뀌면 건너뛰는 것이 정상입니다. 바뀌어야 하는데 `Canceled` 면 부스 Live 사이트의 Deploys → Trigger deploy → **Clear cache and deploy site**(캐시 없는 빌드는 건너뛰지 않음), 그래도 안 되면 빌드 훅으로 부릅니다(켜는 순서 2번) |
+| (Vercel) 부스 Live 사이트 배포가 `Canceled` | 위와 같이 건너뛴 것입니다. 바뀌어야 하는데 건너뛰었으면 Deployments 에서 그 배포의 **Redeploy** 를 누르고 *Use project's Ignore Build Step* 을 끕니다(켜 둬도 같은 커밋을 다시 배포하면 건너뛰지 않습니다) |
+| (Vercel) 빌드 로그에 `빌드 중단: ../assets/config.js 가 없습니다` | Root Directory 의 *Include files outside the root directory in the Build Step* 이 꺼져 있습니다. 켜고 다시 배포합니다(켜는 순서 2번) |
+| (Vercel) 배포가 `Error` · Root Directory 가 없다고 나옴 | 그 브랜치에 `live/` 가 없는 것입니다(아직 `main` 에 합치기 전). Production Branch 를 `booth-live` 로 둡니다. 합치기 전까지 `main` push 의 미리 보기 배포는 계속 이렇게 끝나지만, 부스 Live 사이트 주소에는 영향이 없습니다 |
 | 부스 Live 사이트 빌드 로그에 `빌드 중단: …` | 그 줄이 말하는 `assets/config.js` 값을 고칩니다(한 줄에 `이름: '값',` · 숫자는 계산식 없이 숫자 하나 · 공개용 키만 · `boothHelpLine` 은 작은따옴표 한 줄에 `'` 와 `\` 없이). 실패한 빌드는 올라가지 않고 앞 배포본이 그대로 남습니다 |
 | 부스 Live 사이트 빌드 로그에 “운영 포털 흔적이 있습니다” | 바로 아래 찍힌 줄의 낱말(QR 인쇄 · 관리자 화면 이름, 운영 포털 주소, `adminIdDomain`)을 `visitor.html` · `booth-ctrl.html` · `assets/booth-core.js` · `assets/mock-data.js` · `assets/visitor.css` · `assets/booth-ctrl.css` · `boothHelpLine` 에서 뺍니다 |
-| 부스 Live 사이트 빌드 로그에 “배포본에 없는 파일을 화면이 부릅니다” | 두 화면에 새 스크립트 · 스타일을 더했는데 배포본에 빠진 것입니다. 그 파일을 `live/build.sh` 의 복사 목록과 `live/netlify.toml` 의 `ignore` 목록에 같이 더합니다 |
+| 부스 Live 사이트 빌드 로그에 “배포본에 없는 파일을 화면이 부릅니다” | 두 화면에 새 스크립트 · 스타일을 더했는데 배포본에 빠진 것입니다. 그 파일을 `live/build.sh` 의 복사 목록과 `live/netlify.toml` 의 `ignore` 목록에 같이 더합니다. `assets/` 밖의 파일이면 `live/vercel.json` 의 `ignoreCommand` 끝에도 더합니다(256자 안에서) |
 | 인쇄 화면이 관람객용 · 운영자용 QR 을 만들지 않음 | `config.js` 의 `visitorSiteUrl` · `staffSiteUrl` 이 비었거나 https 부스 Live 사이트 주소가 아닌지(켜는 순서 3번). 둘이 같은 주소인 것은 정상입니다 |
 | 관람객 화면에 행사 전 숫자가 안 뜸 | 정상입니다 — 운영 시간에만 보입니다(켜는 순서 6번) |
 
