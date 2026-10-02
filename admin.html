@@ -81,7 +81,8 @@
     <div class="side__foot">
       <p class="side__who" id="side-who"></p>
       <a class="btn btn--ghost btn--sm btn--full" href="index.html">운영 포털</a>
-      <button class="btn btn--ghost btn--sm btn--full" type="button" id="signout">로그아웃</button>
+      <button class="btn btn--ghost btn--sm btn--full" type="button" data-pwchange>내 비밀번호 변경</button>
+      <button class="btn btn--ghost btn--sm btn--full" type="button" id="signout" data-signout>로그아웃</button>
     </div>
   </aside>
 
@@ -107,6 +108,14 @@
     </div>
     <nav class="sheet__nav" id="sheetnav" aria-label="추가 관리 메뉴"></nav>
     <a class="btn btn--ghost btn--full" href="index.html">운영 포털</a>
+    <!-- 계정 — 휴대폰에서는 옆 메뉴가 없어 로그아웃할 곳이 여기뿐입니다. -->
+    <div class="sheet__acct">
+      <p class="sheet__who" id="sheet-who"></p>
+      <div class="sheet__acts">
+        <button class="btn btn--ghost" type="button" data-pwchange>내 비밀번호 변경</button>
+        <button class="btn btn--ghost" type="button" data-signout>로그아웃</button>
+      </div>
+    </div>
   </div>
 </div>
 

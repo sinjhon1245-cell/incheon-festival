@@ -238,3 +238,24 @@
   background: var(--bg-sink); font-size: 15px; font-weight: 700; color: var(--ink);
   font-variant-numeric: tabular-nums;
 }
+
+/* ── 비밀번호 칸 + 보기 단추 ───────────────────────────────────
+   단추는 칸 안 오른쪽 끝, 44px 정사각형(손가락 최소 크기). 칸의 오른쪽
+   여백을 그만큼 비워 글자가 단추 밑으로 들어가지 않게 합니다. */
+.pwbox { position: relative; }
+.pwbox .input { padding-right: 52px; }
+.pwbox__eye {
+  position: absolute; top: 50%; right: 2px; transform: translateY(-50%);
+  width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;
+  border: 0; border-radius: 9px; background: transparent; color: var(--muted);
+  cursor: pointer;
+}
+.pwbox__eye:hover { color: var(--ink); }
+.pwbox__eye:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+.pwbox__eye svg { display: block; }
+
+/* ── 더보기 시트의 계정 칸(휴대폰) ─────────────────────────────── */
+.sheet__acct { display: flex; flex-direction: column; gap: 8px; padding-top: 12px; border-top: 1px solid var(--line-2); }
+.sheet__who { margin: 0; font-size: 13px; color: var(--muted); }
+.sheet__acts { display: flex; gap: 8px; }
+.sheet__acts .btn { flex: 1 1 0; min-height: 44px; }

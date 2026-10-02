@@ -155,13 +155,18 @@ window.Core = (function () {
      읽으므로 다시 들어오면 로그인된 상태 그대로였습니다.
 
      그래서 결과를 확인하고, 실패했으면 저장소에서 직접 지웁니다.
-     로그아웃은 실패한 채로 넘어가면 안 되는 동작입니다. */
+     로그아웃은 실패한 채로 넘어가면 안 되는 동작입니다.
+
+     끝내는 것은 이 기기의 로그인 하나뿐입니다(scope 'local'). supabase-js 의 기본값
+     (global)은 같은 계정의 모든 기기를 함께 끝내서, 행사장 공용 PC 에서 로그아웃하면
+     내 휴대폰까지 다시 로그인해야 했습니다. 모든 기기를 끝내야 할 때(비밀번호가
+     새었을 때)는 '내 비밀번호 변경' 이 그렇게 합니다. */
   function signOut() {
     var c = db();
     profile = null;
     if (!c) { clearStoredSession(); return Promise.resolve(); }
 
-    return c.auth.signOut()
+    return c.auth.signOut({ scope: 'local' })
       .then(function (r) {
         if (r && r.error) {
           console.warn('[core] 서버 로그아웃이 실패해 저장된 토큰을 직접 지웁니다', r.error);
@@ -174,6 +179,69 @@ window.Core = (function () {
         // 어느 길로 왔든 토큰이 남지 않았는지 마지막으로 확인합니다.
         if (hasStoredSession()) clearStoredSession();
       });
+  }
+
+  /* 내 비밀번호 바꾸기 (로그인한 관리자 본인).
+
+     Supabase 가 권하는 길은 로그인한 세션으로 updateUser({ password }) 입니다.
+     그대로만 쓰면 두 가지가 걸립니다.
+       · 현재 비밀번호를 묻지 않습니다. 열어 둔 관리자 화면을 누가 잠깐 만져도 바뀝니다.
+         (supabase-js 2.102+ 의 currentPassword 옵션은 이 사이트가 쓰는 2.45.4 에 없습니다.)
+       · 프로젝트에 '비밀번호 변경 시 재인증' 이 켜져 있으면, 로그인한 지 24시간이 지난
+         세션은 이메일로 받은 확인 코드가 있어야 합니다. 관리자 계정은 aisw01@<도메인>
+         같은 받을 수 없는 주소라 그 길이 막힙니다.
+     그래서 이렇게 합니다.
+       1. 지금 계정의 이메일 + 현재 비밀번호로 다시 로그인합니다. 틀리면 여기서 멈추고
+          지금 로그인은 그대로입니다. 맞으면 이 화면은 갓 만든 세션으로 바뀝니다
+          (이 판의 supabase-js 는 로그인할 때 예전 세션을 먼저 지우지 않아, 로그아웃
+          알림 없이 SIGNED_IN 만 나갑니다).
+       2. 그 세션으로 비밀번호를 바꿉니다. 방금 로그인했으니 24시간 재인증에 걸리지 않고,
+          '현재 비밀번호 요구' 설정이 켜져 있어도 맞도록 current_password 를 함께 보냅니다
+          (이 판의 supabase-js 는 받은 칸을 그대로 서버에 넘깁니다).
+       3. 이 세션만 남기고 다른 로그인을 모두 끝냅니다(scope 'others'). 비밀번호를 바꾸는
+          흔한 까닭이 '누가 알았을지 몰라서' 이기 때문입니다. 이 기기의 예전 세션도 여기서
+          끝납니다. (Supabase 도 비밀번호가 바뀌면 다른 세션을 끝내지만, 설정 · 판에
+          기대지 않으려고 직접 한 번 더 부릅니다.)
+     비밀번호는 이 함수 밖으로 나가지 않고, 어디에도 적지 않습니다(콘솔 · 저장소 · 주소).
+     실패하면 오류에 step('session' | 'current' | 'update')을 붙여 던집니다 → passwordMessage(e). */
+  function changePassword(current, next) {
+    var c = db();
+    if (!c) return Promise.reject(new Error('Supabase 설정이 없습니다.'));
+    return session().then(function (s) {
+      var email = s && s.user && s.user.email;
+      if (!email) throw Object.assign(new Error('no session'), { step: 'session' });
+      return c.auth.signInWithPassword({ email: email, password: current });
+    }).then(function (r) {
+      if (r.error) throw Object.assign(r.error, { step: 'current' });
+      return c.auth.updateUser({ password: next, current_password: current });
+    }).then(function (u) {
+      if (u.error) throw Object.assign(u.error, { step: 'update' });
+      // 다른 로그인 끝내기가 실패해도(네트워크 등) 비밀번호는 이미 바뀌었습니다.
+      return c.auth.signOut({ scope: 'others' }).catch(function () {}).then(function () { return true; });
+    });
+  }
+
+  /* 비밀번호 변경 오류 → { message, field }. field 는 오류를 띄울 칸입니다. */
+  function passwordMessage(e) {
+    var m = (e && e.message) || '';
+    var code = (e && e.code) || '';
+    var step = e && e.step;
+    if (/Failed to fetch|NetworkError/i.test(m)) return { message: '네트워크에 연결하지 못했습니다. 인터넷 상태를 확인해 주세요.' };
+    if (code === 'over_request_rate_limit' || (e && e.status === 429) || /rate limit|Too many/i.test(m)) {
+      return { message: '시도가 너무 잦습니다. 잠시 후 다시 시도해 주세요.' };
+    }
+    if (step === 'session') return { message: '로그인이 만료되었습니다. 다시 로그인한 뒤 바꿔 주세요.' };
+    if ((step === 'current' && (code === 'invalid_credentials' || /Invalid login/i.test(m))) || /current.?password/i.test(code)) {
+      return { message: '현재 비밀번호가 맞지 않습니다.', field: 'current' };
+    }
+    if (code === 'same_password') return { message: '새 비밀번호가 지금 비밀번호와 같습니다.', field: 'next' };
+    if (code === 'weak_password' || (e && e.name === 'AuthWeakPasswordError')) {
+      var reasons = (e && e.reasons) || [];
+      if (reasons.indexOf('pwned') >= 0) return { message: '유출된 적이 있는 비밀번호입니다. 다른 비밀번호를 정해 주세요.', field: 'next' };
+      return { message: '비밀번호가 너무 짧거나 단순합니다. 더 길게, 문자와 숫자를 섞어 주세요.', field: 'next' };
+    }
+    if (code === 'reauthentication_needed') return { message: '보안 설정 때문에 지금 바꿀 수 없습니다. 로그아웃 후 다시 로그인해 바꿔 주세요.' };
+    return { message: '비밀번호를 바꾸지 못했습니다. 잠시 후 다시 시도해 주세요.' };
   }
 
   function profileFailed() { return !!profileError; }
@@ -432,6 +500,7 @@ window.Core = (function () {
   return {
     isConfigured: isConfigured, db: db,
     session: session, signIn: signIn, signOut: signOut, loginEmail: loginEmail,
+    changePassword: changePassword, passwordMessage: passwordMessage,
     hasStoredSession: hasStoredSession, clearStoredSession: clearStoredSession,
     fetchProfile: fetchProfile, me: me, isAdmin: isAdmin, accessMessage: accessMessage,
     profileFailed: profileFailed,

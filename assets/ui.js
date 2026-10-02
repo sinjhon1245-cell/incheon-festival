@@ -6,7 +6,9 @@
    한 번에 받아야 하기 때문입니다.
 
    UI.form({ title, fields, values })  → Promise<값 객체 | null>
+     submit: values → Promise 를 주면 창을 연 채로 기다렸다가 그 결과로 끝납니다
    UI.confirm({ title, message })      → Promise<true | false>
+   UI.passwordToggle(input) · UI.hidePasswords(root)  비밀번호 보기 단추
 
    이미지 칸(type: 'image')은 고르는 즉시 올리고 주소를 감춰진 칸에
    담아 둡니다. 제출할 때 올리면 폼이 비동기가 되어 버려서, 지금의
@@ -427,6 +429,58 @@ window.UI = (function () {
       (f.hint ? '<p class="field__hint" id="' + id + '_h">' + esc(f.hint) + '</p>' : '') + '</div>';
   }
 
+  /* ── 비밀번호 보기 단추 ─────────────────────────────────────────
+     눈 모양(보기) ↔ 빗금 친 눈(숨기기). 그림 글자(이모지)는 기기마다 모양이
+     달라 쓰지 않고 선 그림(SVG)을 씁니다. 누르면 칸의 type 을 password ↔ text
+     로 바꾸고, 읽어 주는 이름(aria-label)도 함께 바꿉니다. 단추는 칸 안
+     오른쪽 끝에 44px 정사각형으로 둡니다(손가락으로 누르는 최소 크기). */
+  var EYE = '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+    '<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>';
+  var EYE_OFF = '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+    '<path d="M10.6 5.1A10.4 10.4 0 0 1 12 5c6.4 0 10 7 10 7a17.6 17.6 0 0 1-2.6 3.6"/>' +
+    '<path d="M6.6 6.6C3.8 8.4 2 12 2 12s3.6 7 10 7a9.8 9.8 0 0 0 5.4-1.6"/>' +
+    '<path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/><path d="M2 2l20 20"/></svg>';
+
+  function eyeButtonHtml(inputId) {
+    return '<button class="pwbox__eye" type="button" data-pwtoggle aria-controls="' + esc(inputId) + '"' +
+      ' aria-label="비밀번호 보기" aria-pressed="false">' + EYE + '</button>';
+  }
+
+  function paintEye(btn, shown) {
+    btn.innerHTML = shown ? EYE_OFF : EYE;
+    btn.setAttribute('aria-label', shown ? '비밀번호 숨기기' : '비밀번호 보기');
+    btn.setAttribute('aria-pressed', shown ? 'true' : 'false');
+  }
+
+  /* 화면에 이미 있는 비밀번호 칸(관리자 로그인)에 같은 단추를 붙입니다. */
+  function passwordToggle(input) {
+    if (!input || input.closest('.pwbox')) return;
+    var box = document.createElement('div');
+    box.className = 'pwbox';
+    input.parentNode.insertBefore(box, input);
+    box.appendChild(input);
+    box.insertAdjacentHTML('beforeend', eyeButtonHtml(input.id));
+  }
+
+  /* 보이게 해 둔 칸을 다시 가립니다(로그인한 뒤 · 화면을 닫을 때). */
+  function hidePasswords(root) {
+    Array.prototype.forEach.call((root || document).querySelectorAll('[data-pwtoggle]'), function (b) {
+      var input = document.getElementById(b.getAttribute('aria-controls'));
+      if (input && input.type === 'text') input.type = 'password';
+      paintEye(b, false);
+    });
+  }
+
+  document.addEventListener('click', function (e) {
+    var b = e.target && e.target.closest ? e.target.closest('[data-pwtoggle]') : null;
+    if (!b) return;
+    var input = document.getElementById(b.getAttribute('aria-controls'));
+    if (!input) return;
+    var show = input.type === 'password';
+    input.type = show ? 'text' : 'password';
+    paintEye(b, show);
+  });
+
   /* ── 입력칸 ─────────────────────────────────────────────────── */
   function fieldHtml(f, value, vals) {
     if (f.type === 'rows') return rowsFieldHtml(f, value);
@@ -500,6 +554,12 @@ window.UI = (function () {
         esc(value) + '"' + desc + ' />';
     } else if (f.type === 'time') {
       body = timeSelectsHtml(id, f.k, value, f.required, f.label);
+    } else if (f.type === 'password') {
+      // 값을 미리 채우지 않습니다(value 없음). 눈 단추로 잠깐 보이게 할 수 있습니다.
+      body = '<div class="pwbox"><input class="input" type="password" id="' + id + '" data-k="' + f.k + '"' +
+        ' autocomplete="' + esc(f.autocomplete || 'current-password') + '"' +
+        ' autocapitalize="none" autocorrect="off" spellcheck="false"' + desc +
+        (f.required ? ' required' : '') + ' />' + eyeButtonHtml(id) + '</div>';
     } else {
       body = '<input class="input" type="' + (f.type === 'email' ? 'email' : f.type === 'tel' ? 'tel' : f.type === 'url' ? 'url' : 'text') +
         '" id="' + id + '" data-k="' + f.k + '" value="' + esc(value) + '"' + ph + desc +
@@ -571,7 +631,10 @@ window.UI = (function () {
         session.uploaded = [];
       }
 
-      function cancel() { dropUnused([]); close(); resolve(null); }
+      // opts.submit 이 일하는 동안에는 닫지 않습니다. 닫아도 서버 쪽 일은 멈추지 않아,
+      // '취소했는데 바뀌어 있는' 일이 생깁니다.
+      var busy = false;
+      function cancel() { if (busy) return; dropUnused([]); close(); resolve(null); }
 
       open(
         '<div class="modal__scrim" data-cancel></div>' +
@@ -726,7 +789,27 @@ window.UI = (function () {
 
             var ok = panel.querySelector('#modal-ok');
             ok.disabled = true;
-            ok.textContent = '저장 중…';
+            ok.textContent = opts.busyLabel || '저장 중…';
+
+            /* opts.submit 이 있으면 창을 연 채로 그 일을 기다립니다(예: 비밀번호 변경).
+               실패하면 { message, field } 를 받아 그 칸에 오류를 띄우고, 입력한 값은
+               그대로 둡니다. 성공하면 submit 의 결과로 끝냅니다 — 입력값(비밀번호 등)을
+               부른 쪽에 돌려주지 않습니다. */
+            if (opts.submit) {
+              busy = true;
+              Promise.resolve().then(function () { return opts.submit(values); }).then(function (result) {
+                busy = false;
+                close();
+                resolve(result === undefined ? true : result);
+              }, function (e2) {
+                busy = false;
+                ok.disabled = false;
+                ok.textContent = opts.submitLabel || '저장';
+                fail((e2 && e2.message) || '처리하지 못했습니다. 다시 시도해 주세요.', e2 && e2.field);
+              });
+              return;
+            }
+
             close();
             resolve(values);
           });
@@ -765,5 +848,5 @@ window.UI = (function () {
     });
   }
 
-  return { form: form, confirm: confirm, close: close };
+  return { form: form, confirm: confirm, close: close, passwordToggle: passwordToggle, hidePasswords: hidePasswords };
 })();

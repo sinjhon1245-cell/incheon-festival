@@ -1101,6 +1101,7 @@
 
     var me = C.me() || {};
     $('#side-who').innerHTML = esc(me.name || me.email || '') + '<br /><span class="badge badge--plain">관리자</span>';
+    $('#sheet-who').textContent = (me.name || me.email || '') + ' · 관리자';
     $('#topbar-title').textContent = ENTITIES[current].label;
     document.title = ENTITIES[current].label + ' · 관리자';
   }
@@ -1902,21 +1903,58 @@
     $('#main').focus({ preventScroll: true });
   }
 
+  /* 로그아웃 — 옆 메뉴(데스크톱)와 더보기 시트(휴대폰) 두 곳의 단추가 같은 일을 합니다. */
+  function signOutNow(btn) {
+    if (btn) btn.disabled = true;
+    $('#sheet').hidden = true;
+    document.body.style.overflow = '';
+    // 화면을 먼저 닫습니다. 서버 응답을 기다리는 동안 관리 화면이
+    // 그대로 보이면, 느린 회선에서 로그아웃이 안 된 것처럼 보입니다.
+    gate('gate-login');
+    // replace 로 옮깁니다. href 로 옮기면 관리자 페이지가 방문
+    // 기록에 남아, 뒤로가기로 되돌아올 수 있습니다.
+    C.signOut().then(function () { location.replace('index.html'); });
+  }
+
+  /* 내 비밀번호 변경 — 현재 비밀번호를 확인한 뒤 바꿉니다(core.changePassword).
+     입력한 비밀번호는 이 창 안에서만 쓰고, 창이 닫히면 칸째 사라집니다.
+     잊어버린 비밀번호는 여기서 찾지 않습니다 — 총괄 관리자가 Supabase 에서 다시 정합니다. */
+  function openPasswordChange() {
+    $('#sheet').hidden = true;
+    document.body.style.overflow = '';
+    UI.form({
+      title: '내 비밀번호 변경',
+      desc: '바꾸면 이 기기는 그대로 로그인되어 있고, 다른 기기의 로그인은 끝납니다.',
+      submitLabel: '비밀번호 변경',
+      busyLabel: '바꾸는 중…',
+      fields: [
+        { k: 'current', label: '현재 비밀번호', type: 'password', autocomplete: 'current-password', required: true, wide: true },
+        { k: 'next', label: '새 비밀번호', type: 'password', autocomplete: 'new-password', required: true, wide: true,
+          hint: '8자 이상. 다른 곳에서 쓰지 않는 비밀번호로 정해 주세요.' },
+        { k: 'again', label: '새 비밀번호 확인', type: 'password', autocomplete: 'new-password', required: true, wide: true }
+      ],
+      validate: function (v) {
+        if (v.next.length < 8) return { message: '새 비밀번호는 8자 이상이어야 합니다.', field: 'next' };
+        if (v.next !== v.again) return { message: '새 비밀번호와 확인이 다릅니다. 다시 입력해 주세요.', field: 'again' };
+        if (v.next === v.current) return { message: '새 비밀번호가 지금 비밀번호와 같습니다.', field: 'next' };
+        return null;
+      },
+      submit: function (v) {
+        return C.changePassword(v.current, v.next).catch(function (e) { throw C.passwordMessage(e); });
+      }
+    }).then(function (done) {
+      if (done) toast('비밀번호를 바꿨습니다. 다른 기기의 로그인은 끝났습니다.');
+    });
+  }
+
   function bind() {
     window.addEventListener('hashchange', go);
-    $('#signout').addEventListener('click', function (e) {
-      var btn = e.currentTarget;
-      btn.disabled = true;
-      // 화면을 먼저 닫습니다. 서버 응답을 기다리는 동안 관리 화면이
-      // 그대로 보이면, 느린 회선에서 로그아웃이 안 된 것처럼 보입니다.
-      gate('gate-login');
-      // replace 로 옮깁니다. href 로 옮기면 관리자 페이지가 방문
-      // 기록에 남아, 뒤로가기로 되돌아올 수 있습니다.
-      C.signOut().then(function () { location.replace('index.html'); });
-    });
 
     document.addEventListener('click', function (e) {
       var t = e.target;
+      var so = t.closest('[data-signout]');
+      if (so) { signOutNow(so); return; }
+      if (t.closest('[data-pwchange]')) { openPasswordChange(); return; }
       if (t.closest('[data-open-sheet]')) { $('#sheet').hidden = false; document.body.style.overflow = 'hidden'; return; }
       if (t.closest('[data-close-sheet]')) { $('#sheet').hidden = true; document.body.style.overflow = ''; return; }
       if (t.closest('[data-retry]')) { loadAll(); return; }
@@ -2030,6 +2068,9 @@
     // 개발자도구에서 내용이 읽히는 것까지 막습니다.
     $('#view').innerHTML = '';
     $('#side-who').innerHTML = '';
+    $('#sheet-who').textContent = '';
+    UI.close();                       // 열려 있던 입력창(비밀번호 변경 등)도 닫습니다
+    UI.hidePasswords($('#loginform'));
   }
 
   function enter() {
@@ -2057,6 +2098,7 @@
   if (!C.isConfigured()) { gate('gate-setup'); return; }
 
   bind();
+  UI.passwordToggle($('#login-pw'));
 
   /* 로그인 폼 */
   $('#loginform').addEventListener('submit', function (e) {
@@ -2079,6 +2121,7 @@
     btn.disabled = true; btn.textContent = '확인 중…';
     C.signIn(who.value.trim(), pw.value).then(function (sess) {
       pw.value = '';
+      UI.hidePasswords($('#loginform'));
       return admitOrGate(sess);
     }).catch(function (e2) {
       err.textContent = C.authMessage(e2);
