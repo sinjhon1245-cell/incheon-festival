@@ -442,6 +442,15 @@ window.UI = (function () {
     var desc = f.hint ? ' aria-describedby="' + id + '_h"' : '';
     var ph = f.placeholder ? ' placeholder="' + esc(f.placeholder) + '"' : '';
 
+    /* 읽기만 하는 한 줄. 입력칸이 아니라 저장되지 않습니다(data-k 없음).
+       f.live(지금 값들) 가 있으면 칸을 고칠 때마다 글을 다시 씁니다(form 참고). */
+    if (f.type === 'note') {
+      return '<div class="field field--wide">' +
+        (f.label ? '<span class="field__label">' + esc(f.label) + '</span>' : '') +
+        '<p class="field__note" data-note="' + esc(f.k) + '" aria-live="polite">' + esc(f.text || '') + '</p>' +
+        hint + '</div>';
+    }
+
     if (f.type === 'bool') {
       return '<div class="field field--wide"><label class="check">' +
         '<input type="checkbox" id="' + id + '" data-k="' + f.k + '"' + (value ? ' checked' : '') + desc + ' /> ' +
@@ -477,6 +486,8 @@ window.UI = (function () {
         }).join('') + '</select>';
     } else if (f.type === 'number') {
       body = '<input class="input" type="number" id="' + id + '" data-k="' + f.k + '" value="' + esc(value) + '"' +
+        (f.min != null ? ' min="' + esc(f.min) + '"' : '') + (f.max != null ? ' max="' + esc(f.max) + '"' : '') +
+        (f.step != null ? ' step="' + esc(f.step) + '"' : '') + ' inputmode="numeric"' + ph + desc +
         (f.required ? ' required' : '') + ' />';
     } else if (f.type === 'date') {
       // 날짜만 받는 칸(예: 일정의 일자). 값은 'YYYY-MM-DD' 그대로 오갑니다 —
@@ -613,6 +624,22 @@ window.UI = (function () {
           var err = panel.querySelector('#modal-err');
           // 무엇이든 고치기 시작하면 앞서 띄운 오류는 걷습니다.
           panel.querySelector('#modal-form').addEventListener('change', function () { err.hidden = true; clearFieldErrors(); });
+
+          /* 읽기 전용 줄(note) 가운데 live 가 있는 것은 칸을 고칠 때마다 다시 씁니다.
+             예: 부스의 구역 · 번호를 고르면 'A-12' 로 보일지 바로 보여 줍니다. */
+          var liveNotes = opts.fields.filter(function (f) { return f.type === 'note' && typeof f.live === 'function'; });
+          if (liveNotes.length) {
+            var refreshNotes = function () {
+              var now = readFields(panel);
+              liveNotes.forEach(function (f) {
+                var el = panel.querySelector('[data-note="' + f.k + '"]');
+                if (el) el.textContent = f.live(now);
+              });
+            };
+            panel.querySelector('#modal-form').addEventListener('input', refreshNotes);
+            panel.querySelector('#modal-form').addEventListener('change', refreshNotes);
+            refreshNotes();
+          }
 
           /* 오류 칸으로 초점을 옮깁니다. 시각 칸은 감춰진 값 대신 '시' 상자로,
              고르기 칸은 첫 단추로 갑니다. 보이지 않는 칸에 초점을 두면 아무

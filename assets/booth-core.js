@@ -69,6 +69,7 @@
        { id, no, code, zone_key, zone_name, name, org, program,
          congestion, wait_minutes, congestion_updated_at }
        code      = b.code 가 비면 zone_key + '-' + pad2(no)   예: 'A-03'
+                   (구역이나 번호가 없으면 '' — 미배정 부스는 공개 읽기에 오지 않습니다)
        zone_name = zones 의 label, 없으면 zone_key + '구역'
        congestion · wait_minutes · congestion_updated_at 은 입력이 없거나
        '오늘(한국 날짜)' 입력이 아니면 셋 다 null 입니다.
@@ -653,10 +654,13 @@
 
     var list = (boothRows || []).map(function (b) {
       var f = liveFields(has(live, b.id) ? live[b.id] : null, todayNum);
+      // 표시 번호(code)는 데이터베이스가 zone_key + no 로 만듭니다. 비어 있으면 같은 셈법으로
+      // 채우되, 구역이나 번호가 없으면(미배정 — 관람객에게는 오지 않음) '-00' 처럼 꾸며 내지 않습니다.
+      var hasSlot = !!b.zone_key && b.no !== null && b.no !== undefined && b.no !== '';
       return {
         id: b.id,
         no: (b.no === null || b.no === undefined) ? null : b.no,
-        code: b.code ? String(b.code) : (b.zone_key || '') + '-' + pad2(b.no),
+        code: b.code ? String(b.code) : (hasSlot ? b.zone_key + '-' + pad2(b.no) : ''),
         zone_key: b.zone_key || '',
         zone_name: zoneNameOf(labels, b.zone_key),
         name: b.name || '',

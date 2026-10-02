@@ -286,10 +286,13 @@
   var PUBLIC_COLS = {
     contacts: { base: ['id', 'name', 'org', 'duty', 'category', 'memo'],
                 later: ['is_staff', 'role_group'] },
-    booths:   { base: ['id', 'no', 'zone_key', 'code', 'name', 'org', 'manager', 'hours',
-                       'program', 'needs_power', 'needs_network', 'supplies', 'memo', 'notes',
+    /* booths 의 담당자 · 연락처 · 운영 메모 · 특이사항은 관리자 전용 표(booth_private)로
+       옮겼습니다(supabase/migration-booth-private.sql). 여기서 요청하지 않습니다 — 요청하면
+       그 칸이 없어진 뒤 포털 전체가 오류가 됩니다. 공개 설명은 program 입니다. */
+    booths:   { base: ['id', 'no', 'zone_key', 'code', 'name', 'org', 'hours',
+                       'program', 'needs_power', 'needs_network', 'supplies',
                        'image_url', 'image_alt', 'image_caption'],
-                later: ['org_type'] }
+                later: ['org_type', 'is_published'] }
   };
   function selectPublic(table) {
     var cols = PUBLIC_COLS[table];
@@ -298,6 +301,23 @@
         if (!e || e.code !== '42703' || !cols.later.length) throw e;
         return C.select(table, { columns: cols.base.join(',') });
       });
+  }
+
+  /* 공개한 구역 · 부스만 포털에 둡니다. 로그인 없이 읽으면 데이터베이스가 이미 공개한
+     것만 주지만(RLS), 관리자로 로그인한 채 포털을 열면 관리자 정책으로 비공개 · 미배정
+     부스까지 내려옵니다. 관람객이 보는 화면과 같아야 하므로 같은 규칙으로 한 번 더 거릅니다:
+     구역 배정 · 번호 배정 · 구역 공개 · 부스 공개. 공개 칸이 아직 없는 DB(마이그레이션 전)에서는
+     값이 undefined 라 모두 그대로 둡니다. */
+  function publicZones(zones) {
+    return (zones || []).filter(function (z) { return z.is_published !== false; });
+  }
+  function publicBooths(booths, zones) {
+    var shown = {};
+    zones.forEach(function (z) { shown[z.key] = true; });
+    return (booths || []).filter(function (b) {
+      if (b.is_published === undefined) return true;
+      return b.is_published && b.zone_key && b.no !== null && b.no !== undefined && shown[b.zone_key];
+    });
   }
 
   function loadAll() {
@@ -327,7 +347,7 @@
       selectBoothLive()
     ]).then(function (r) {
       S.settings = r[0][0] || {};
-      S.schedule = r[1]; S.zones = r[2]; S.booths = r[3]; S.notices = r[4];
+      S.schedule = r[1]; S.zones = publicZones(r[2]); S.booths = publicBooths(r[3], S.zones); S.notices = r[4];
       S.requests = r[5]; S.resources = r[6]; S.contacts = r[7];
       S.places = r[8]; S.faqs = r[9];
       S.tasks = r[10]; S.assigns = r[11];
@@ -500,7 +520,7 @@
   ].map(function (r, n) {
     return { id: 'sample-b' + n, sample: true, zone_key: r[0], no: r[1],
       code: r[0] + '-' + C.pad2(r[1]), name: r[2], org: r[3], org_type: r[4], program: r[5],
-      needs_power: r[6], needs_network: r[7], manager: '', hours: '', supplies: '', memo: '', notes: '' };
+      needs_power: r[6], needs_network: r[7], hours: '', supplies: '' };
   });
 
   /* 일정 · 부스 화면을 그리는 동안만 예시를 끼워 넣습니다. 끝나면 반드시
@@ -2185,15 +2205,12 @@
       ['운영기관', b.org],
       ['운영기관 유형', orgType(b)],
       ['구역', zoneName(b.zone_key)],
-      ['부스 담당자', b.manager],
       ['운영 프로그램', b.program],
       ['운영 시간', b.hours],
       // 필요할 때만 적습니다. '불필요' 두 줄은 읽을 거리만 늘립니다.
       ['전기 사용', b.needs_power ? '필요' : ''],
       ['네트워크', b.needs_network ? '필요' : ''],
-      ['필요 물품', b.supplies],
-      ['운영 메모', b.memo],
-      ['특이사항', b.notes]
+      ['필요 물품', b.supplies]
     ].filter(function (r) { return r[1]; });
 
     var html = b.sample
@@ -2213,11 +2230,9 @@
         '</figure>';
     }
 
-    /* 부스 담당자 번호(booths.manager_phone)도 화면에 적지 않습니다.
-       개인 휴대전화인지 업무용 공용번호인지 값만 보고는 알 수 없고,
-       이 화면은 로그인 없이 열립니다. 필요한 사람은 운영본부를 통해
-       확인합니다. 표의 값은 그대로 두었습니다 — 지우는 것은 확인한
-       뒤에 할 일입니다. */
+    /* 부스 담당자 · 연락처 · 운영 메모 · 특이사항은 이 화면에 적지 않습니다.
+       관리자 전용 표(booth_private)에 있고, 이 화면은 로그인 없이 열립니다.
+       필요한 사람은 운영본부를 통해 확인합니다. */
 
     html += '<dl class="dl">' + rows.map(function (r) {
       return '<div class="dl__row"><dt>' + esc(r[0]) + '</dt><dd>' + esc(r[1]) + '</dd></div>';

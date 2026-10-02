@@ -100,7 +100,9 @@
     // 연락망에서 '운영 인력' 으로 표시한 사람을 눈에 띄게 합니다.
     '운영 인력': 'info',
     // 공개 칸에 전화번호가 남은 담당자 — 옮기고 비워야 합니다.
-    '공개 칸 번호 정리 필요': 'warn'
+    '공개 칸 번호 정리 필요': 'warn',
+    // 부스 · 구역의 공개 상태(publishState)
+    '공개': 'ok', '비공개': 'off', '미배정': 'warn', '구역 비공개': 'warn'
   };
   function badge(t) { return '<span class="badge badge--' + (TONE[t] || 'off') + '">' + esc(t) + '</span>'; }
   function tag(t) { return '<span class="badge badge--plain">' + esc(t) + '</span>'; }
@@ -158,13 +160,49 @@
      없습니다. 구역 코드(A · B …)와 이름(스쿨존 …)의 짝은 관리자가
      정합니다 — 'A = 스쿨존' 을 화면이 정해 두지 않습니다. */
   function zoneList() { return cache.zones || []; }
+  function zoneOf(key) {
+    return key ? zoneList().filter(function (x) { return x.key === key; })[0] || null : null;
+  }
   function zoneLabel(key) {
-    var z = zoneList().filter(function (x) { return x.key === key; })[0];
-    return z ? (z.label ? z.label + ' (' + z.key + ')' : z.key + '구역') : (key ? key + '구역' : '구역 미정');
+    var z = zoneOf(key);
+    return z ? (z.label ? z.label + ' (' + z.key + ')' : z.key + '구역') : (key ? key + '구역' : '미배정');
   }
   function zoneOrder(key) {
     var i = zoneList().map(function (z) { return z.key; }).indexOf(key);
     return i < 0 ? 999 : i;
+  }
+
+  /* ── 부스의 자리 · 공개 ──────────────────────────────────────
+     자리 = 구역(zone_key) + 번호(no). 'A-12' 같은 표시(code)는 데이터베이스가
+     둘을 합쳐 만듭니다(supabase/migration-booth-master-data.sql). 화면은 비어 있는
+     쪽을 'A-00' · '-00' 처럼 꾸며 내지 않고 무엇이 비었는지 그대로 적습니다. */
+  function hasSlot(b) { return !!(b && b.zone_key && b.no != null && b.no !== ''); }
+  function boothSlot(b) {
+    if (hasSlot(b)) return b.code || (b.zone_key + '-' + C.pad2(b.no));
+    if (b && b.zone_key) return b.zone_key + ' · 번호 미정';
+    if (b && b.no != null && b.no !== '') return '구역 미정 · ' + b.no;
+    return '미배정';
+  }
+  /* 관람객 · 부스 운영자에게 실제로 보이는가. 넷 다여야 합니다:
+     구역 배정 · 번호 배정 · 구역 공개 · 부스 공개(데이터베이스의 공개 읽기 정책과 같은 규칙). */
+  function boothShown(b) {
+    var z = zoneOf(b.zone_key);
+    return !!(b.is_published && hasSlot(b) && z && z.is_published);
+  }
+  // 목록 · 걸러 보기에 쓰는 공개 상태 한 낱말.
+  function publishState(b) {
+    if (!hasSlot(b)) return '미배정';
+    if (!b.is_published) return '비공개';
+    var z = zoneOf(b.zone_key);
+    return z && z.is_published ? '공개' : '구역 비공개';
+  }
+  /* 공개를 켤 수 있는가. 안 되면 까닭을 돌려줍니다(데이터베이스 트리거와 같은 문구).
+     v: 지금 고르려는 값(zone_key · no) — 저장 전 편집 창에서도 씁니다. */
+  function publishBlock(v) {
+    if (!v.zone_key || v.no == null || v.no === '') return '구역과 부스 번호를 먼저 지정해 주세요.';
+    var z = zoneOf(v.zone_key);
+    if (!z || !z.is_published) return '현재 구역이 비공개 상태입니다. 구역을 먼저 공개해 주세요.';
+    return '';
   }
   // 'A-2' 와 'A-10' 을 사람 순서대로(숫자는 숫자로) 견줍니다.
   function natCmp(a, b) {
@@ -372,42 +410,71 @@
 
     /* 부스 — 스쿨존만 84부스라 80~100개가 등록된다고 보고 만듭니다.
        목록은 줄 하나에 번호(왼쪽 기둥) → 부스명 → 운영기관 · 구역 순으로,
-       구역별 묶음 제목으로 나누고, 번호 · 이름 · 기관 · 담당자 · 프로그램
-       검색과 구역 · 기관 유형 · 상태 · 운영 필요사항 걸러 보기를 둡니다. */
+       구역별 묶음 제목으로 나누고(미배정은 맨 뒤), 번호 · 이름 · 기관 · 담당자 ·
+       프로그램 검색과 공개 · 구역 · 기관 유형 · 상태 · 운영 필요사항 걸러 보기를 둡니다.
+
+       위치는 구역과 번호 두 칸으로 받습니다. 'A-12' 같은 표시 번호(code)는 데이터베이스가
+       둘을 합쳐 만듭니다 — 손으로 적지 않습니다. 구역 · 번호가 정해지기 전에도 '미배정' 으로
+       먼저 등록하고, 공개는 구역 · 번호를 정하고 그 구역을 공개한 뒤에만 켤 수 있습니다
+       (데이터베이스도 같은 규칙으로 막고, 미배정이 되면 저절로 비공개로 돌립니다).
+       공개 여부와 운영 상태(준비 전 … 운영 종료)는 서로 다른 칸입니다.
+
+       담당자 · 담당자 연락처 · 운영 메모 · 특이사항은 관리자 전용 표(booth_private)에 따로
+       둡니다. booths 는 로그인 없이 읽히는 표라서, 이 넷은 booths 로 보내지 않습니다(private). */
     booths: {
       label: '부스', table: 'booths', addLabel: '+ 부스 추가',
       // 부스 QR(운영자 카드 · 부스 앞 안내 · 입구 포스터)은 부스를 등록한 뒤
       // 여기서 바로 뽑습니다. 새 탭으로 열어 관리 화면의 입력을 잃지 않게 합니다.
       headLink: ['print-qr.html', '부스 QR 인쇄'],
-      desc: '부스 정보와 운영기관을 관리합니다. 부스 번호는 배치가 확정되기 전까지 임시 번호로 적어도 됩니다.',
+      desc: '부스 정보와 운영기관을 관리합니다. 구역 · 번호가 정해지기 전에도 미배정으로 먼저 등록할 수 있고, ' +
+        '공개한 부스(공개한 구역 안)만 관람객 · 부스 운영자에게 보입니다.',
       blank: function () {
-        return { code: '', zone_key: (zoneList()[0] || {}).key || '', name: '', org: '', status: '준비 전' };
+        return { zone_key: '', no: null, name: '', org: '', status: '준비 전', is_published: false };
       },
-      lead: function (r) { return r.code || (r.zone_key + '-' + C.pad2(r.no)); },
+      lead: function (r) { return boothSlot(r); },
       title: function (r) { return r.name || '(이름 없음)'; },
       metaHtml: true,
       meta: function (r) {
+        var p = privateOf('booths', r.id);
         return (r.org ? esc(r.org) : '<span class="muted">운영기관 미정</span>') +
           ' · ' + esc(zoneLabel(r.zone_key)) +
-          (r.manager ? '<span class="listrow__sub"> · 담당 ' + esc(r.manager) + '</span>' : '');
+          (p && p.manager ? '<span class="listrow__sub"> · 담당 ' + esc(p.manager) + '</span>' : '');
       },
       tags: function (r) {
-        return (r.org_type ? tag(r.org_type) : '') + badge(r.status || '준비 전') +
+        return badge(publishState(r)) + (r.org_type ? tag(r.org_type) : '') + badge(r.status || '준비 전') +
           (r.needs_power ? '<span class="badge badge--plain badge--need">전기</span>' : '') +
           (r.needs_network ? '<span class="badge badge--plain badge--need">네트워크</span>' : '');
       },
+      // 목록에서 바로 켜고 끄는 공개 단추(quickHtml · onQuick).
+      quick: function (r) { return { on: !!r.is_published, label: '공개', what: '부스' }; },
+      onQuick: function (r) { return togglePublish('booths', r); },
       noReorder: true,
+      // 구역 순서 → 번호. 미배정(구역 없음)은 맨 뒤, 같은 구역에서 번호가 없으면 그 구역의 끝.
       sort: function (a, b) {
-        var za = zoneOrder(a.zone_key), zb = zoneOrder(b.zone_key);
+        var za = a.zone_key ? zoneOrder(a.zone_key) : 1000, zb = b.zone_key ? zoneOrder(b.zone_key) : 1000;
         if (za !== zb) return za - zb;
-        return natCmp(a.code || a.no, b.code || b.no);
+        var na = a.no == null ? 1e6 : a.no, nb = b.no == null ? 1e6 : b.no;
+        if (na !== nb) return na - nb;
+        return natCmp(a.name || '', b.name || '');
       },
-      groupBy: function (r) { return zoneLabel(r.zone_key); },
+      groupBy: function (r) {
+        if (!r.zone_key) return '미배정';
+        var z = zoneOf(r.zone_key);
+        return zoneLabel(r.zone_key) + (z && !z.is_published ? ' · 구역 비공개' : '');
+      },
       searchText: function (r) {
-        return [r.code, r.name, r.org, r.manager, r.program, zoneLabel(r.zone_key)].join(' ');
+        var p = privateOf('booths', r.id);
+        return [boothSlot(r), r.code, r.name, r.org, p ? p.manager : '', r.program, zoneLabel(r.zone_key)].join(' ');
       },
       searchPlaceholder: '부스번호 · 부스명 · 운영기관 · 담당자 · 프로그램 검색',
       filters: [
+        { key: 'pub', label: '공개', kind: 'chips',
+          options: function () { return [['on', '공개'], ['off', '비공개'], ['none', '미배정']]; },
+          test: function (r, v) {
+            if (v === 'none') return !hasSlot(r);
+            if (v === 'on') return !!r.is_published;
+            return hasSlot(r) && !r.is_published;
+          } },
         { key: 'zone', label: '구역', kind: 'chips',
           options: function (all) {
             return zoneList().filter(function (z) { return all.some(function (r) { return r.zone_key === z.key; }); })
@@ -424,124 +491,188 @@
           test: function (r, v) { return v === 'power' ? !!r.needs_power : !!r.needs_network; } }
       ],
       empty: function () {
-        return zoneList().length
-          ? { title: '등록된 실제 부스가 없습니다.',
-              hint: '공개 포털에는 협의용 예시가 표시됩니다. 실제 부스를 1건 이상 등록하면 예시는 자동으로 숨겨집니다.' }
-          : { title: '등록된 실제 부스가 없습니다.',
-              hint: '부스는 구역에 속합니다. 먼저 “부스 구역”에서 구역을 하나 이상 만든 뒤 부스를 추가해 주세요. ' +
-                    '그 전까지 공개 포털에는 협의용 예시가 표시됩니다.',
-              go: ['zones', '부스 구역으로 가기'] };
+        return { title: '등록된 실제 부스가 없습니다.',
+          hint: '구역 · 번호가 정해지기 전에도 미배정으로 먼저 등록할 수 있습니다. 공개 포털에는 협의용 예시가 ' +
+                '표시되고, 실제 부스를 1곳 이상 공개하면 예시는 자동으로 숨겨집니다.' };
       },
-      /* 입력 순서: 기본정보 → 위치 → 프로그램 → 운영 필요사항 → 담당 · 상태 → 메모.
-         부스 번호는 자유롭게 적습니다(A-01, 스쿨-12 …). 실제 번호 체계가
-         정해지기 전이라 모양을 강제하지 않고, 같은 번호만 막습니다. */
+      /* 입력 순서: 기본 정보(프로그램 포함) → 위치 → 운영 → 공개 → 관리자 전용 → 사진. */
       fields: [
         { type: 'group', label: '기본 정보' },
-        { k: 'code',          label: '부스 번호', required: true, placeholder: '예: A-01',
-          hint: '배치 확정 전에는 임시 번호도 됩니다. 같은 번호는 저장되지 않습니다' },
+        { k: 'name',          label: '부스명', wide: true, required: true },
+        { k: 'org',           label: '운영기관', wide: true, placeholder: '예: ○○초등학교' },
         { k: 'org_type',      label: '기관 유형', type: 'select',
           options: [['', '(선택 안 함)']].concat(opts(ORG_TYPES)),
           hint: '포털 카드에 초등 · 중등 · 고등 표시로 보입니다',
           // migration-portal-actions.sql 을 돌리기 전에는 칸이 없습니다.
           needsColumn: true },
-        { k: 'name',          label: '부스명', wide: true, required: true },
-        { k: 'org',           label: '운영기관', wide: true, placeholder: '예: ○○초등학교' },
 
-        { type: 'group', label: '위치' },
-        { k: 'zone_key',      label: '구역', type: 'zone', wide: true, required: true },
+        { k: 'program',       label: '프로그램', type: 'textarea', wide: true,
+          hint: '체험 · 전시 내용. 관람객 화면 · 포털에 그대로 보이는 공개 설명입니다' },
 
-        { type: 'group', label: '프로그램' },
-        { k: 'program',       label: '체험 · 전시 내용', type: 'textarea', wide: true },
+        { type: 'group', label: '위치',
+          hint: '구역 · 번호가 정해지지 않았으면 미배정으로 두세요. 부스 번호(A-12)는 구역과 번호로 저절로 만들어집니다.' },
+        { k: 'zone_key',      label: '구역', type: 'zone', allowEmpty: true },
+        { k: 'no',            label: '번호', type: 'number', min: 1, max: 999, step: 1, placeholder: '예: 12',
+          hint: '구역 안의 부스 번호(1~999). 비우면 번호 미정' },
+        { k: '__slot',        label: '부스 번호', type: 'note',
+          live: function (v) {
+            var b = { zone_key: v.zone_key || null, no: v.no == null || v.no === '' ? null : v.no };
+            if (hasSlot(b)) return b.zone_key + '-' + C.pad2(b.no);
+            return boothSlot(b) + ' — 구역과 번호를 모두 정하면 A-12 처럼 만들어집니다';
+          } },
 
-        { type: 'group', label: '운영 필요사항' },
-        { k: 'needs_power',   label: '전기 사용 필요', type: 'bool' },
-        { k: 'needs_network', label: '네트워크 필요', type: 'bool' },
+        { type: 'group', label: '운영' },
         { k: 'hours',         label: '운영 시간', placeholder: '예: 10:00 ~ 17:00' },
         { k: 'supplies',      label: '준비물 · 필요 물품', placeholder: '예: 테이블 2, 멀티탭 1' },
-
-        { type: 'group', label: '담당 · 상태' },
-        { k: 'manager',       label: '부스 담당자', placeholder: '이름 또는 역할' },
-        /* 부스 표는 로그인 없이 읽힙니다. 개인 번호를 둘 자리가 아니라서
-           새로 적는 칸은 없앴습니다 — 연락이 필요한 담당자는 운영 인력에
-           등록하고 '관리자 전용 정보' 에 번호를 적습니다.
-           예전 값이 남은 부스에만 보여서 비울 수 있게 합니다. */
-        { k: 'manager_phone', label: '부스 담당자 연락처 (이전 값)', type: 'tel', legacyOnly: true,
-          hint: '⚠️ 이 칸은 로그인 없이 읽힙니다. 비워 주시고, 연락처는 운영 인력 담당자의 “개인 연락처” 에 적어 주세요' },
+        { k: 'needs_power',   label: '전기 사용 필요', type: 'bool' },
+        { k: 'needs_network', label: '네트워크 필요', type: 'bool' },
         { k: 'status',        label: '운영 상태', type: 'choice', wide: true, required: true,
           options: opts(BOOTH_STATES) },
 
-        { type: 'group', label: '메모' },
-        { k: 'memo',          label: '운영 메모', type: 'textarea', wide: true },
-        { k: 'notes',         label: '특이사항', type: 'textarea', wide: true },
+        { type: 'group', label: '공개' },
+        { k: 'is_published',  label: '관람객 · 부스 운영자에게 공개', type: 'bool',
+          hint: '구역과 번호가 있고 그 구역이 공개일 때만 켤 수 있습니다. 운영자 QR은 공개 전에도 발급 · 인쇄할 수 있지만, ' +
+                '공개해야 그 QR로 운영할 수 있습니다.' },
+
+        { type: 'group', label: '관리자 전용 정보',
+          hint: '관리자만 볼 수 있습니다(booth_private). 포털 · 관람객 화면과 비로그인 사용자에게는 전달되지 않습니다.' },
+        { k: '__private_manager', label: '부스 담당자', placeholder: '이름 또는 역할' },
+        { k: '__private_phone',   label: '담당자 연락처', type: 'tel' },
+        { k: '__private_memo',    label: '내부 메모', type: 'textarea', wide: true },
+        { k: '__private_notes',   label: '특이사항', type: 'textarea', wide: true },
 
         { type: 'group', label: '부스 사진 (선택)', fold: true },
         { k: 'image_url',     label: '부스 대표 이미지', type: 'image', folder: 'booth' },
         { k: 'image_alt',     label: '이미지 설명', wide: true },
         { k: 'image_caption', label: '이미지 캡션', wide: true }
       ],
+      /* 관리자 전용 칸을 booth_private 한 줄과 잇습니다(contacts → contact_private 와 같은 방식). */
+      private: {
+        key: 'booth_private', parent: 'booth_id', onConflict: 'booth_id',
+        what: '부스 정보', privWhat: '관리자 전용 정보(담당자 · 연락처 · 내부 메모 · 특이사항)', noun: '부스',
+        map: { __private_manager: 'manager', __private_phone: 'manager_phone',
+               __private_memo: 'memo', __private_notes: 'notes' }
+      },
       validate: function (v, row) {
-        var code = String(v.code || '').trim();
-        if (!zoneList().length) {
-          return { message: '등록된 구역이 없습니다. 먼저 “부스 구역”에서 구역을 만들어 주세요.', field: 'zone_key' };
+        var no = v.no;
+        if (no != null && no !== '' && (!/^\d+$/.test(String(no)) || Number(no) < 1 || Number(no) > 999)) {
+          return { message: '번호는 1~999 사이의 숫자로 적어 주세요.', field: 'no' };
         }
-        if (!v.zone_key) return { message: '구역을 골라 주세요.', field: 'zone_key' };
-        var dup = (cache.booths || []).filter(function (b) {
-          return (!row || b.id !== row.id) && String(b.code || '').trim().toLowerCase() === code.toLowerCase();
-        })[0];
-        if (dup) {
-          return { message: '부스 번호 ' + code + ' 은(는) 이미 “' + (dup.name || '이름 없음') + '” 부스가 쓰고 있습니다.', field: 'code' };
+        if (v.zone_key && no != null && no !== '') {
+          var dup = (cache.booths || []).filter(function (b) {
+            return (!row || b.id !== row.id) && b.zone_key === v.zone_key && Number(b.no) === Number(no);
+          })[0];
+          if (dup) {
+            return { message: v.zone_key + '-' + C.pad2(no) + ' 은(는) 이미 “' + (dup.name || '이름 없음') + '” 부스가 쓰고 있습니다.', field: 'no' };
+          }
+        }
+        // 공개를 '켜는' 저장만 막습니다. 이미 공개된 부스는 구역이 나중에 비공개가 돼도 고칠 수 있어야 합니다.
+        if (v.is_published && !(row && row.is_published)) {
+          var why = publishBlock(v);
+          if (why) return { message: why, field: 'is_published' };
         }
         return null;
       },
-      /* no(정수)는 표의 필수 칸이라 채워 둡니다. 번호 끝의 숫자(A-12 → 12)를
-         쓰고, 숫자가 없으면 기존 값 또는 마지막 번호 + 1. 화면은 code 만 씁니다. */
-      beforeSave: function (v, row) {
-        v.code = String(v.code || '').trim();
-        var m = /(\d+)\D*$/.exec(v.code);
-        if (m) v.no = Number(m[1]);
-        else if (row && row.no != null) v.no = row.no;
-        else v.no = (cache.booths || []).reduce(function (n, b) { return Math.max(n, b.no || 0); }, 0) + 1;
+      beforeSave: function (v) {
+        v.zone_key = v.zone_key || null;
+        v.no = (v.no == null || v.no === '') ? null : Number(v.no);
+        // 미배정이면 공개할 수 없습니다(데이터베이스도 저절로 끕니다).
+        if (!v.zone_key || v.no == null) v.is_published = false;
+        delete v.code;   // 표시 번호는 데이터베이스가 만듭니다
         // '선택 안 함' 은 빈 글자가 아니라 null 로 보냅니다(표의 허용값 검사).
         if ('org_type' in v && !v.org_type) v.org_type = null;
         return v;
+      },
+      // 공개였던 부스가 미배정이 되어 저절로 비공개가 됐으면 그렇게 알립니다.
+      afterSave: function (updated, row) {
+        if (row && row.is_published && !updated.is_published && !hasSlot(updated)) {
+          return '저장했습니다. 구역 · 번호가 비어 비공개로 바뀌었습니다.';
+        }
+        return null;
+      },
+      deleteMessage: function (r) {
+        return '“' + (r.name || '이름 없음') + '” 부스를 삭제합니다. 이 부스의 운영자 QR · 대기 현황 · 입력 기록 · ' +
+          '관리자 전용 정보도 함께 지워지고 되돌릴 수 없습니다. 잠시 숨기려면 삭제 대신 공개를 끄세요.';
       }
     },
 
-    /* 부스 구역 — booths.zone_key 가 가리키는 표. 구역을 지우면 데이터베이스가
-       그 구역의 부스까지 함께 지우므로(on delete cascade), 부스가 남은 구역은
-       지우지 못하게 막습니다(confirmDelete). */
+    /* 부스 구역 — booths.zone_key 가 가리키는 표.
+       구역을 지워도 부스는 지워지지 않습니다. 데이터베이스가 그 구역의 부스를 미배정 ·
+       비공개로 돌립니다(on delete set null + 저장 트리거). 그래서 지울 때는 몇 곳이
+       미배정이 되는지 알리고 확인만 받습니다(deleteMessage · afterDelete).
+       구역을 비공개로 바꾸면 그 구역의 부스는 관람객 · 운영자에게서 모두 숨겨지지만,
+       부스마다의 공개 값은 그대로 남습니다 — 구역을 다시 공개하면 그대로 돌아옵니다. */
     zones: {
       label: '부스 구역', formLabel: '구역', table: 'zones', addLabel: '+ 구역 추가',
-      desc: '부스를 묶는 구역입니다. 부스를 등록하기 전에 먼저 만듭니다. 구역 코드는 확정 전까지 임시로 정해도 됩니다.',
-      blank: { key: '', label: '', sub: '' },
+      desc: '부스를 묶는 구역입니다. 구역 코드 · 이름은 확정 전까지 임시로 정해도 됩니다. ' +
+        '공개한 구역의 공개 부스만 관람객 · 부스 운영자에게 보입니다.',
+      blank: { key: '', label: '', sub: '', is_published: false },
       lead: function (r) { return r.key; },
       title: function (r) { return r.label || r.key + '구역'; },
       meta: function (r) {
-        var n = (cache.booths || []).filter(function (b) { return b.zone_key === r.key; }).length;
-        return (r.sub ? r.sub + ' · ' : '') + '부스 ' + n + '개';
+        var inZone = (cache.booths || []).filter(function (b) { return b.zone_key === r.key; });
+        var shown = inZone.filter(boothShown).length;
+        return (r.sub ? r.sub + ' · ' : '') + '부스 ' + inZone.length + '곳' +
+          (inZone.length ? ' (관람객에게 보이는 부스 ' + shown + '곳)' : '');
+      },
+      tags: function (r) { return badge(r.is_published ? '공개' : '비공개'); },
+      quick: function (r) { return { on: !!r.is_published, label: '공개', what: '구역' }; },
+      onQuick: function (r) { return togglePublish('zones', r); },
+      // 표시 순서 칸을 직접 고쳐도 목록 · ↑ · ↓ 가 같은 순서를 보도록 저장 뒤 다시 줄 세웁니다.
+      resort: function (a, b) {
+        return ((a.sort_order || 0) - (b.sort_order || 0)) || natCmp(a.key || '', b.key || '');
       },
       empty: {
         title: '등록된 구역이 없습니다.',
-        hint: '부스는 구역에 속합니다. 예: 코드 A · 이름 읽걷쓰AI 스쿨존. 구역 코드와 이름의 짝은 배치가 확정되면 바꿀 수 있습니다.'
+        hint: '예: 코드 A · 이름 읽걷쓰AI 스쿨존. 구역 코드와 이름의 짝은 배치가 확정되면 바꿀 수 있습니다. ' +
+              '부스는 구역이 없어도 미배정으로 먼저 등록할 수 있습니다.'
       },
       fields: [
         { k: 'key',   label: '구역 코드', required: true, placeholder: '예: A',
-          hint: '짧은 영문 · 숫자. 부스 번호 앞부분과 맞추면 찾기 쉽습니다. 바꾸면 그 구역 부스도 따라 바뀝니다' },
+          hint: '짧은 영문 · 숫자. 부스 번호 앞부분(A-12 의 A)이 됩니다. 바꾸면 그 구역 부스의 번호도 따라 바뀝니다' },
         { k: 'label', label: '구역 이름', required: true, placeholder: '예: 읽걷쓰AI 스쿨존' },
-        { k: 'sub',   label: '설명', wide: true, placeholder: '예: 초·중·고 AI체험 · 교육활동 결과 전시' }
+        { k: 'sub',   label: '설명', wide: true, placeholder: '예: 초·중·고 AI체험 · 교육활동 결과 전시' },
+        { k: 'sort_order', label: '표시 순서', type: 'number', min: 0, step: 1,
+          hint: '작을수록 앞에 보입니다. 목록의 ⋯ → 위로 · 아래로로도 바꿀 수 있습니다' },
+        { k: 'is_published', label: '관람객 · 부스 운영자에게 공개', type: 'bool',
+          hint: '끄면 이 구역의 부스는 관람객 · 운영자 화면에서 모두 숨겨집니다. 부스마다의 공개 설정은 그대로 남습니다.' }
       ],
       validate: function (v, row) {
         var key = String(v.key || '').trim();
+        if (!/^[A-Za-z0-9]{1,8}$/.test(key)) {
+          return { message: '구역 코드는 영문 · 숫자 1~8자로 적어 주세요(예: A).', field: 'key' };
+        }
         var dup = zoneList().some(function (z) { return (!row || z.id !== row.id) && z.key === key; });
         return dup ? { message: '구역 코드 ' + key + ' 은(는) 이미 있습니다.', field: 'key' } : null;
       },
-      beforeSave: function (v) { v.key = String(v.key || '').trim(); v.label = String(v.label || '').trim(); return v; },
-      // 코드를 바꾸면 데이터베이스가 부스의 zone_key 도 따라 바꿉니다(on update cascade).
-      // 화면이 가진 부스 목록도 맞춥니다.
+      beforeSave: function (v) {
+        v.key = String(v.key || '').trim();
+        v.label = String(v.label || '').trim();
+        if (v.sort_order == null || v.sort_order === '') delete v.sort_order;   // 새 구역은 맨 뒤(엔진이 채움)
+        return v;
+      },
+      // 코드를 바꾸면 데이터베이스가 부스의 zone_key 와 표시 번호(code)를 따라 바꿉니다
+      // (on update cascade + 저장 트리거). 화면이 가진 부스 목록은 새로 읽어 맞춥니다.
       afterSave: function (updated, row) {
-        if (!row || row.key === updated.key) return;
-        (cache.booths || []).forEach(function (b) { if (b.zone_key === row.key) b.zone_key = updated.key; });
-      }
+        if (row && row.key !== updated.key) return reloadBooths();
+        return null;
+      },
+      deleteMessage: function (r) {
+        var n = (cache.booths || []).filter(function (b) { return b.zone_key === r.key; }).length;
+        return '“' + (r.label || r.key) + '” 구역을 삭제합니다.' +
+          (n ? ' 이 구역의 부스 ' + n + '곳은 지워지지 않고 미배정 · 비공개가 됩니다(운영자 QR · 기록은 남음).' : '') +
+          ' 되돌릴 수 없습니다.';
+      },
+      afterDelete: function () { return reloadBooths(); }
+    },
+
+    /* 메뉴에는 없지만 부스 편집 창이 씁니다(관리자 전용 칸). 관리자 로그인일 때만
+       줄이 내려옵니다(RLS). 표가 없는 환경(마이그레이션 전)에서는 빈 목록이 됩니다. */
+    booth_private: {
+      label: '부스 관리자 전용 정보', table: 'booth_private', soft: true, hidden: true,
+      order: [['created_at', true]],   // 이 표에는 sort_order 가 없습니다
+      title: function () { return '(부스 관리자 전용 정보)'; },
+      fields: []
     },
 
     notices: {
@@ -897,7 +1028,7 @@
                'contacts', 'resources', 'faqs',
                // 아래는 메뉴에 없지만 데이터는 함께 불러옵니다.
                'task_assignments', 'supply_targets', 'supply_items', 'supply_allocations',
-               'contact_private'];
+               'contact_private', 'booth_private'];
   var GROUPS = [
     { label: '', keys: ['overview'] },
     { label: '행사 관리', keys: ['settings', 'schedule_items', 'booths', 'zones', 'venue_places'] },
@@ -983,6 +1114,9 @@
     var leftSupply = (cache.supply_targets || []).filter(function (t) { return t.status !== '배부 완료'; }).length;
     var urgentNotice = (cache.notices || []).filter(function (x) { return x.level === '긴급'; }).length;
     var nSched = (cache.schedule_items || []).length, nBooth = (cache.booths || []).length;
+    // 포털 · 관람객 화면은 '공개' 부스만 봅니다. 등록만 하고 공개하지 않았으면 예시가 그대로 보입니다.
+    var nShown = (cache.booths || []).filter(boothShown).length;
+    var nUnassigned = (cache.booths || []).filter(function (b) { return !hasSlot(b); }).length;
 
     /* 관리자 대시보드는 전시장이 아니라 출발점입니다.
          1. 지금 손봐야 할 것(요청 · 업무 · 배부 · 긴급 공지) — 숫자가 있으면 색이 붙습니다
@@ -1003,13 +1137,17 @@
     ];
     var reg = [
       { n: nSched, l: '일정', go: 'schedule_items', sub: nSched ? '' : '포털에 협의용 예시 표시 중' },
-      { n: nBooth, l: '부스', go: 'booths', sub: nBooth ? (zoneList().length + '개 구역') : '포털에 협의용 예시 표시 중' },
+      { n: nBooth, l: '부스', go: 'booths',
+        sub: !nBooth ? '포털에 협의용 예시 표시 중'
+          : '공개 ' + nShown + '곳' + (nUnassigned ? ' · 미배정 ' + nUnassigned + '곳' : '') +
+            (nShown ? '' : ' · 포털에 협의용 예시 표시 중') },
       { n: (cache.notices || []).length, l: '공지', go: 'notices' },
       { n: (cache.contacts || []).length, l: '운영 인력', go: 'contacts' }
     ];
     var quick = [
       { l: '+ 일정 추가', go: 'schedule_items', add: true },
-      { l: '+ 부스 추가', go: zoneList().length ? 'booths' : 'zones', add: true },
+      // 구역이 아직 없어도 부스는 미배정으로 먼저 등록할 수 있습니다.
+      { l: '+ 부스 추가', go: 'booths', add: true },
       { l: '+ 공지 작성', go: 'notices', add: true },
       { l: '운영 요청 확인', go: 'operation_requests' }
     ];
@@ -1223,6 +1361,7 @@
       '</div>' +
       (ent.tags ? '<div class="listrow__tags">' + ent.tags(r) + '</div>' : '') +
       '<div class="listrow__act">' +
+        quickHtml(ent, r) +
         '<button class="btn btn--ghost btn--sm" type="button" data-act="edit">수정</button>' +
         '<button class="iconbtn iconbtn--sm" type="button" data-act="more" ' +
           'aria-expanded="false" aria-label="' + esc(ent.title(r)) + ' 추가 작업">⋯</button>' +
@@ -1235,6 +1374,64 @@
           (i === total - 1 ? ' disabled' : '') + '>↓ 아래로</button>') +
         '<button class="btn btn--danger btn--sm" type="button" data-act="del">삭제</button>' +
       '</div></div>';
+  }
+
+  /* 목록에서 바로 켜고 끄는 단추(지금은 부스 · 구역의 공개). 항목 정의의 quick(r) 이
+     { on, label, what } 을 돌려주면 그리고, 누르면 onQuick(r) 이 처리합니다. */
+  function quickHtml(ent, r) {
+    if (!ent.quick) return '';
+    var q = ent.quick(r);
+    return '<button class="pubswitch' + (q.on ? ' is-on' : '') + '" type="button" data-act="quick" role="switch" ' +
+      'aria-checked="' + q.on + '" aria-label="' + esc(ent.title(r) + ' ' + q.label) + '">' +
+      '<span class="pubswitch__dot" aria-hidden="true"></span>' + esc(q.label) + ' ' + (q.on ? 'ON' : 'OFF') + '</button>';
+  }
+
+  /* 부스 · 구역의 공개를 켜고 끕니다(목록의 공개 단추).
+     부스를 켤 때는 편집 창과 같은 규칙으로 먼저 확인합니다(데이터베이스도 같은 규칙으로 막습니다).
+     구역은 바뀌는 부스가 있으면 몇 곳이 보이고 숨겨지는지 알리고 확인을 받습니다. */
+  function togglePublish(key, row) {
+    var ent = ENTITIES[key];
+    var turnOn = !row.is_published;
+    var ask = Promise.resolve(true);
+    if (key === 'booths' && turnOn) {
+      var why = publishBlock(row);
+      if (why) { toast(why, true); return Promise.resolve(); }
+    }
+    if (key === 'zones') {
+      var inZone = (cache.booths || []).filter(function (b) { return b.zone_key === row.key; });
+      var affected = inZone.filter(function (b) { return b.is_published && hasSlot(b); }).length;
+      if (affected) {
+        ask = UI.confirm({
+          title: turnOn ? '구역을 공개할까요?' : '구역을 비공개로 바꿀까요?',
+          message: turnOn
+            ? '“' + (row.label || row.key) + '” 구역의 공개 부스 ' + affected + '곳이 관람객 · 운영자 화면에 바로 보입니다.'
+            : '“' + (row.label || row.key) + '” 구역의 공개 부스 ' + affected + '곳이 관람객 · 운영자 화면에서 숨겨집니다. ' +
+              '부스마다의 공개 설정은 그대로 남아, 구역을 다시 공개하면 돌아옵니다.',
+          confirmLabel: turnOn ? '공개' : '비공개로 바꾸기', danger: !turnOn
+        });
+      }
+    }
+    return ask.then(function (ok) {
+      if (!ok) return;
+      return C.update(ent.table, row.id, { is_published: turnOn }).then(function (updated) {
+        var list = cache[key] || [];
+        for (var i = 0; i < list.length; i++) if (list[i].id === row.id) list[i] = updated;
+        renderPanel();
+        toast(updated.is_published ? '공개했습니다.' : '비공개로 바꿨습니다.');
+      }).catch(function (e) {
+        console.error('[admin] 공개 바꾸기 실패', key, e);
+        toast(C.dataMessage(e), true);
+      });
+    });
+  }
+
+  /* 부스 목록을 데이터베이스에서 다시 읽습니다. 구역 코드를 바꾸거나 구역을 지우면
+     데이터베이스가 부스의 구역 · 표시 번호 · 공개를 함께 바꾸므로, 화면이 추측해 고치지 않고
+     새로 읽어 맞춥니다. */
+  function reloadBooths() {
+    var e = ENTITIES.booths;
+    return C.select(e.table, { order: e.order === false ? false : (e.order || [['sort_order', true]]) })
+      .then(function (d) { cache.booths = d; });
   }
 
   /* 행사 기본정보 — 한 줄짜리 표라 목록 대신 읽기 화면을 둡니다. */
@@ -1294,11 +1491,15 @@
   function fieldsFor(ent) {
     return ent.fields.map(function (f) {
       if (f.type === 'zone') {
+        // 비공개 구역은 이름 옆에 적어 둡니다 — 그 구역에서는 부스를 공개할 수 없습니다.
+        var zoneOpts = zoneList().map(function (z) {
+          return [z.key, (z.label || z.key + '구역') + ' (' + z.key + ')' + (z.is_published ? '' : ' · 비공개')];
+        });
         return Object.assign({}, f, {
           type: 'select',
-          options: zoneList().length
-            ? zoneList().map(function (z) { return [z.key, (z.label || z.key + '구역') + ' (' + z.key + ')']; })
-            : [['', '(등록된 구역 없음 — 먼저 “부스 구역”을 만들어 주세요)']]
+          options: f.allowEmpty
+            ? [['', '미배정 (구역 미정)']].concat(zoneOpts)
+            : (zoneOpts.length ? zoneOpts : [['', '(등록된 구역 없음 — 먼저 “부스 구역”을 만들어 주세요)']])
         });
       }
       /* 다른 표의 줄을 고르는 칸. id 를 손으로 적게 하면 반드시
@@ -1453,20 +1654,36 @@
       }
       if (ent.beforeSave) v = ent.beforeSave(v, row);
 
+      /* 저장 뒤 손질(afterSave)은 알림 글(문자열)을 돌려주거나, 다시 읽기처럼 기다릴 일
+         (Promise)을 돌려줄 수 있습니다. 글은 '저장했습니다' 대신 보여 줍니다. */
+      var note = null;
+      function after(updated, before) {
+        if (ent.resort && cache[key]) cache[key].sort(ent.resort);
+        var r = ent.afterSave ? ent.afterSave(updated, before) : null;
+        if (r && typeof r.then === 'function') return r;
+        note = r || null;
+        return null;
+      }
+
       if (isNew) {
         var rows = cache[key] || [];
-        v.sort_order = rows.reduce(function (m, r) { return Math.max(m, r.sort_order || 0); }, 0) + 1;
+        // 표시 순서를 직접 적지 않았으면 맨 뒤로 둡니다.
+        if (v.sort_order == null) {
+          v.sort_order = rows.reduce(function (m, r) { return Math.max(m, r.sort_order || 0); }, 0) + 1;
+        }
         var createdId = null;
         C.insert(ent.table, v).then(function (created) {
           cache[key].push(created);
           createdId = created.id;
-          return syncChildren(ent, created.id, childRows);
+          return Promise.resolve(after(created, null)).then(function () {
+            return syncChildren(ent, created.id, childRows);
+          });
         }).then(function () {
           // 새 담당자는 방금 만든 줄의 id 로 개인 연락처를 잇습니다.
-          return syncPrivate(ent, key, createdId, privVals).catch(privateFailed);
+          return syncPrivate(ent, key, createdId, privVals).catch(privateFailed(ent));
         }).then(function () {
           renderPanel();
-          toast('추가했습니다.');
+          toast(note || '추가했습니다.');
         }).catch(function (e) {
           console.error('[admin] 추가 실패', key, e);
           if (e && e.privateStep) { renderPanel(); toast(e.privateStep, true); return; }
@@ -1477,16 +1694,17 @@
           var i = -1;
           (cache[key] || []).forEach(function (x, idx) { if (x.id === row.id) i = idx; });
           if (i >= 0) cache[key][i] = updated;
-          if (ent.afterSave) ent.afterSave(updated, row);
           // 저장이 끝난 뒤에 지웁니다. 먼저 지웠다가 저장이 실패하면
           // 화면에는 이미지가 있는데 파일은 없는 상태가 됩니다.
           dropReplacedImages(ent, row, updated);
-          return syncChildren(ent, row.id, childRows);
+          return Promise.resolve(after(updated, row)).then(function () {
+            return syncChildren(ent, row.id, childRows);
+          });
         }).then(function () {
-          return syncPrivate(ent, key, row.id, privVals).catch(privateFailed);
+          return syncPrivate(ent, key, row.id, privVals).catch(privateFailed(ent));
         }).then(function () {
           renderPanel();
-          toast('저장했습니다.');
+          toast(note || '저장했습니다.');
         }).catch(function (e) {
           console.error('[admin] 저장 실패', key, e);
           if (e && e.privateStep) { renderPanel(); toast(e.privateStep, true); return; }
@@ -1555,11 +1773,16 @@
      그냥 "저장 실패" 라고 하면 담당자가 안 만들어진 줄 알고 한 번 더
      추가해 같은 사람이 둘이 됩니다. 무엇이 됐고 무엇이 안 됐는지
      나눠 알리고, 목록을 다시 그려 만들어진 담당자가 보이게 합니다. */
-  function privateFailed(e) {
-    var err = new Error(C.dataMessage(e));
-    err.privateStep = '담당자 공개 정보는 저장했지만 관리자 전용 정보(개인 연락처 · 관리자 메모)는 ' +
-      '저장하지 못했습니다. 목록에서 이 담당자를 다시 수정해 저장해 주세요. — ' + C.dataMessage(e);
-    throw err;
+  // ent.private 의 what · privWhat · noun 으로 항목마다 다른 말을 씁니다(없으면 담당자 기준).
+  function privateFailed(ent) {
+    var pv = (ent && ent.private) || {};
+    return function (e) {
+      var err = new Error(C.dataMessage(e));
+      err.privateStep = (pv.noun || '담당자') + ' 공개 정보는 저장했지만 ' +
+        (pv.privWhat || '관리자 전용 정보(개인 연락처 · 관리자 메모)') + '는 저장하지 못했습니다. ' +
+        '목록에서 이 ' + (pv.noun || '담당자') + '를 다시 수정해 저장해 주세요. — ' + C.dataMessage(e);
+      throw err;
+    };
   }
 
   function syncPrivate(ent, key, parentId, vals) {
@@ -1581,18 +1804,12 @@
 
   function confirmDelete(key, row) {
     var ent = ENTITIES[key];
-    /* 구역을 지우면 데이터베이스가 그 구역의 부스까지 지웁니다(on delete
-       cascade). 부스가 남아 있으면 지우지 않고 이유를 알립니다. */
-    if (key === 'zones') {
-      var inZone = (cache.booths || []).filter(function (b) { return b.zone_key === row.key; }).length;
-      if (inZone) {
-        toast('이 구역에 부스 ' + inZone + '개가 있습니다. 부스의 구역을 먼저 옮긴 뒤 지워 주세요.', true);
-        return;
-      }
-    }
+    /* 지울 때 무엇이 함께 바뀌는지는 항목마다 다릅니다(deleteMessage).
+       구역: 부스는 남고 미배정 · 비공개가 됩니다. 부스: 운영자 QR · 기록까지 함께 지워집니다. */
     UI.confirm({
       title: '삭제할까요?',
-      message: '“' + ent.title(row) + '”을(를) 삭제합니다. 되돌릴 수 없습니다.',
+      message: ent.deleteMessage ? ent.deleteMessage(row)
+        : '“' + ent.title(row) + '”을(를) 삭제합니다. 되돌릴 수 없습니다.',
       confirmLabel: '삭제', danger: true
     }).then(function (ok) {
       if (!ok) return;
@@ -1600,12 +1817,14 @@
         cache[key] = cache[key].filter(function (x) { return x.id !== row.id; });
         dropReplacedImages(ent, row, {});   // 딸린 이미지도 함께 정리
         /* 관리자 전용 한 줄은 데이터베이스가 함께 지웁니다
-           (contact_private.contact_id … on delete cascade).
+           (contact_private.contact_id · booth_private.booth_id … on delete cascade).
            화면이 가진 목록에서도 맞춰 뺍니다. */
         var pv = ent.private;
         if (pv && cache[pv.key]) {
           cache[pv.key] = cache[pv.key].filter(function (x) { return x[pv.parent] !== row.id; });
         }
+        return ent.afterDelete ? ent.afterDelete(row) : null;
+      }).then(function () {
         renderPanel();
         toast('삭제했습니다.');
       }).catch(function (e) {
@@ -1756,6 +1975,10 @@
           return;
         }
         if (act.dataset.act === 'edit') openEditor(key, row);
+        else if (act.dataset.act === 'quick' && ENTITIES[key].onQuick) {
+          act.disabled = true;   // 답이 오기 전에 두 번 눌러 켜고 끄기가 엇갈리지 않게
+          Promise.resolve(ENTITIES[key].onQuick(row)).then(function () { act.disabled = false; });
+        }
         else if (act.dataset.act === 'del') confirmDelete(key, row);
         else if (act.dataset.act === 'up') move(key, i, -1);
         else if (act.dataset.act === 'down') move(key, i, 1);

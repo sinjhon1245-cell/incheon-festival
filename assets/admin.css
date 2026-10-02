@@ -215,3 +215,26 @@
   .listsel { flex: 1 1 calc(50% - 3px); }
   .listsel .select--sm { width: 100%; }
 }
+
+/* ── 공개 단추 (부스 · 구역 목록) ───────────────────────────────
+   목록에서 바로 켜고 끕니다. 켜짐은 상태 색(초록) 대신 보라 테두리로 —
+   '운영 중' 같은 운영 상태 배지와 섞여 보이지 않게 합니다. */
+.pubswitch {
+  display: inline-flex; align-items: center; gap: 6px;
+  min-height: 34px; padding: 0 11px;
+  border: 1px solid var(--line); border-radius: 999px; background: #FFFFFF;
+  font: inherit; font-size: 13px; font-weight: 700; color: var(--muted);
+  cursor: pointer; white-space: nowrap;
+}
+.pubswitch:hover { border-color: var(--ink-2); }
+.pubswitch:disabled { opacity: 0.5; cursor: progress; }
+.pubswitch__dot { width: 9px; height: 9px; border-radius: 50%; background: var(--line); flex: none; }
+.pubswitch.is-on { border-color: var(--primary); color: var(--primary); background: var(--primary-t); }
+.pubswitch.is-on .pubswitch__dot { background: var(--primary); }
+
+/* 편집 창의 읽기 전용 한 줄(부스 번호 미리 보기 등) */
+.field__note {
+  margin: 0; padding: 9px 12px; border-radius: 10px;
+  background: var(--bg-sink); font-size: 15px; font-weight: 700; color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
