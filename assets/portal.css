@@ -2560,3 +2560,71 @@ button.boothops__row:hover { border-color: var(--primary); }
 .venuecard__cl { font-size: 12.5px; font-weight: 700; color: var(--muted); }
 .venuecard__contact a { color: var(--primary); font-weight: 600; text-decoration: none; }
 .venuecard__contact a:hover { text-decoration: underline; }
+
+/* ── 부스 대기 현황 (booth_live) ──────────────────────────────────
+   운영자 QR 화면에서 누른 대기 시간을 부스 카드 · 상세에 한 줄로.
+   색은 상태 토큰(--ok · --warn · --danger · --off)을 그대로 써서
+   관람객 화면의 여유 · 보통 · 혼잡과 같은 색으로 읽히게 합니다.
+   네모 하나가 표시의 전부입니다 — 배지 상자를 두르면 카드의 기관 유형
+   표시와 겹쳐 보입니다. '잠시 중단' 은 속이 빈 네모로 '멈춤' 을 나타냅니다.
+   30분 넘게 그대로인 값은 흐린 글자로 낮추고 언제 입력했는지를 붙입니다. */
+.boothlive { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 700; }
+.boothlive__sq { width: 7px; height: 7px; background: currentColor; flex: none; }
+.boothlive--free { color: var(--ok); }
+.boothlive--normal { color: var(--warn); }
+.boothlive--busy { color: var(--danger); }
+.boothlive--pause, .boothlive--closed { color: var(--off); }
+.boothlive--pause .boothlive__sq { background: none; box-shadow: inset 0 0 0 1.5px currentColor; }
+.boothlive.is-stale { color: var(--muted); }
+.boothlive__ago { font-weight: 500; color: var(--muted); }
+/* 카드는 세로 flex 라 그대로 두면 한 줄 전체로 늘어납니다. 글자 폭만 차지하게 합니다. */
+.booth .boothlive { align-self: flex-start; margin-top: 2px; font-variant-numeric: tabular-nums; }
+
+/* 부스 화면 맨 위 입력 현황 띠 — 접힌 한 줄이 기본입니다.
+   펼치면 오래 안 바뀐 부스부터 늘어놓고, 목록이 길어도(80~100부스)
+   부스 카드를 화면 밖으로 밀어내지 않게 띠 안에서만 스크롤합니다. */
+.livestrip { background: #fff; border: 1px solid var(--line); border-radius: var(--r); }
+.livestrip__sum {
+  list-style: none; cursor: pointer; min-height: 44px;
+  display: flex; align-items: center; flex-wrap: wrap; gap: 2px 0;
+  padding: 10px 14px; border-radius: var(--r);
+  font-size: 13.5px; color: var(--muted); font-variant-numeric: tabular-nums;
+}
+.livestrip__sum::-webkit-details-marker { display: none; }
+.livestrip__sum:hover { background: var(--bg-soft); }
+.livestrip__t { font-weight: 700; color: var(--ink); }
+.livestrip__n { white-space: nowrap; }
+.livestrip__n::before { content: '·'; margin: 0 6px; color: var(--muted-2); }
+.livestrip__n b { font-weight: 700; color: var(--ink); }
+.livestrip__n--warn b { color: var(--warn); }
+.livestrip__open { margin-left: auto; padding-left: 12px; font-size: 13px; font-weight: 600; color: var(--primary); }
+.livestrip__open::after { content: '목록 보기'; }
+.livestrip[open] .livestrip__open::after { content: '접기'; }
+.livestrip__body { padding: 0 14px 10px; border-top: 1px solid var(--line-2); }
+.livestrip__hint { margin: 10px 0 4px; font-size: 12.5px; color: var(--muted); }
+.livestrip__list { max-height: min(60vh, 480px); overflow-y: auto; overscroll-behavior: contain; }
+.livestrip__row {
+  display: grid; grid-template-columns: 64px minmax(0, 1fr) auto; align-items: center; gap: 10px;
+  width: 100%; min-height: 48px; padding: 6px 4px;
+  border: 0; border-bottom: 1px solid var(--line-2); border-radius: 0;
+  background: none; text-align: left; cursor: pointer; color: inherit;
+}
+.livestrip li:last-child .livestrip__row { border-bottom: 0; }
+.livestrip__row:hover { background: var(--bg-soft); }
+.livestrip__code {
+  font-size: 13px; font-weight: 700; color: var(--muted); font-variant-numeric: tabular-nums;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.livestrip__main { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; min-width: 0; }
+.livestrip__name {
+  max-width: 100%; font-size: 14px; font-weight: 600; color: var(--ink);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.livestrip__main .boothlive { font-size: 12px; }
+/* 오른쪽 '입력 없음' · 'N분 전' 칸이 이 띠의 본론입니다. 작은 글자라 --muted-2(3.6:1)는
+   밝은 행사장에서 읽기 어려워 --muted(약 5.6:1)를 씁니다. */
+.livestrip__ago { font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+.livestrip__ago.is-stale { font-weight: 700; color: var(--warn); }
+@media (max-width: 560px) {
+  .livestrip__row { grid-template-columns: 52px minmax(0, 1fr) auto; gap: 8px; }
+}

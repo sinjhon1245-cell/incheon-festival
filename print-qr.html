@@ -1,0 +1,2198 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>QR 안내문 인쇄</title>
+  <meta name="robots" content="noindex, nofollow" />
+  <!-- 운영자 카드 QR 에는 부스 열쇠가 들어갑니다. 이 페이지에서 다른 곳으로 나갈 때
+       주소가 따라가지 않게 합니다(열쇠는 # 뒤라 원래 안 가지만, 한 겹 더 막습니다). -->
+  <meta name="referrer" content="no-referrer" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" />
+
+  <style>
+    /* ===================================================================
+       QR 안내문 인쇄 — 운영 포털 전용 (부스 Live 사이트에는 들어가지 않습니다)
+
+       사이트가 둘입니다. 이 화면은 관리자 로그인이 필요해서 운영 포털
+       (index.html · admin.html 이 있는 곳)에 남고, QR 이 여는 화면은 둘 다
+       따로 배포한 '부스 Live 사이트'(live/)에 있습니다 — 관람객 화면은 그
+       사이트의 첫 화면, 부스 운영자 화면은 같은 사이트의 booth-ctrl.html.
+       그래서 config.js 의 staffSiteUrl · visitorSiteUrl 은 같은 주소여도 됩니다.
+
+       종이는 한 번 뿌리면 되돌릴 수 없습니다. 그래서 이 화면은 '예쁘게
+       뽑기' 보다 '잘못된 주소를 종이에 찍지 않기' 를 먼저 챙깁니다.
+         · staffSiteUrl 이 비었거나, 이 컴퓨터(localhost)나 http 주소면 ① 을 막습니다.
+         · visitorSiteUrl 이 비었거나, 이 컴퓨터 · http 주소거나, 운영 포털(Netlify ·
+           GitHub Pages 어느 쪽이든, …/visitor.html 포함)을 가리키면 ② ③ 을 막습니다.
+         · 모든 QR 아래에 가리키는 주소(호스트)를 작게 찍어, 종이만 봐도
+           어디로 가는지 알 수 있게 합니다.
+       ?demo 로 열면 막지 않고 모든 종이에 '시연용 · 인쇄 금지' 를 찍습니다.
+
+       ① 카드마다 화면에만 보이는 관리 단추가 있습니다(인쇄되지 않음).
+         열쇠 끄기 · 대기 값 직접 고치기 · 열쇠 바꾸기. 끄기 · 직접 고치기는
+         후속 DB 설정(supabase/migration-booth-live-admin.sql)이 있어야 합니다.
+
+       화면 크기는 mm 로 잡아 인쇄 미리 보기와 화면이 같은 비율로 보이게 했습니다.
+       =================================================================== */
+    :root {
+      --ink: #16203C; --ink-2: #38456B; --muted: #5C6989; --muted-2: #6B7490;
+      --line: #E3E6EE; --line-2: #F5F6FA; --line-3: #C9CFDD;
+      --bg: #F2F4F9;
+      --accent: #5B45E0; --accent-t: #F0EDFE;
+      /* 운영자 카드 띠. 부스 운영자 화면(전광판) 바탕과 같은 남색이라
+         카드와 화면이 한 짝으로 보입니다. 관람객용 종이에는 쓰지 않습니다. */
+      --navy: #0D1330;
+      /* 관람객 화면(visitor.css)과 같은 상태 색 */
+      --st-free: #0F7A57; --st-normal: #9A6206; --st-busy: #B32B3E;
+      --st-off: #5E6782; --st-off-mark: #8A93AB;
+      --danger: #B32B3E; --danger-t: #FCEAEC;
+      --warn: #9A6206; --warn-t: #FBF0DC;
+      --cut: #A9B1C6;
+    }
+    *, *::before, *::after { box-sizing: border-box; }
+    html { -webkit-text-size-adjust: 100%; }
+    [hidden] { display: none !important; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: 'Pretendard Variable', Pretendard, system-ui, -apple-system,
+                   'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif;
+      letter-spacing: -0.01em;
+      word-break: keep-all;
+      overflow-wrap: break-word;
+      -webkit-font-smoothing: antialiased;
+    }
+    button, input { font: inherit; letter-spacing: inherit; color: inherit; }
+    a { color: var(--accent); }
+    :focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+    .sq { display: inline-block; width: 10px; height: 10px; background: var(--accent); flex: none; }
+
+    /* ── 단추 ── */
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+      min-height: 44px; padding: 0 16px;
+      border: 1px solid var(--line-3); border-radius: 0; background: #FFFFFF;
+      font-size: 14px; font-weight: 600; line-height: 1.2; cursor: pointer; text-align: center;
+    }
+    .btn:hover { border-color: var(--ink-2); }
+    .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+    .btn:disabled:hover { border-color: var(--line-3); }
+    .btn--primary { background: var(--accent); border-color: var(--accent); color: #FFFFFF; }
+    .btn--primary:hover { background: #4634BE; border-color: #4634BE; }
+    .btn--primary:disabled:hover { background: var(--accent); border-color: var(--accent); }
+    .btn--danger { color: var(--danger); border-color: var(--danger); }
+    .btn--danger-solid { background: var(--danger); border-color: var(--danger); color: #FFFFFF; }
+    .btn--danger-solid:hover { background: #962436; border-color: #962436; }
+    .btn--quiet { border-color: transparent; background: transparent; color: var(--danger); text-decoration: underline; text-underline-offset: 3px; padding: 0 8px; }
+    .btn--quiet:hover { border-color: transparent; }
+
+    /* ── 위쪽 조작부 (인쇄되지 않음) ── */
+    .tb { background: #FFFFFF; border-bottom: 1px solid var(--line); }
+    .tb__in { max-width: 1040px; margin: 0 auto; padding: 14px 20px 0; }
+    .tb__row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+    .tb__title { margin: 0; font-size: 20px; font-weight: 800; display: flex; align-items: center; gap: 10px; }
+    .tb__acts { display: flex; gap: 8px; flex-wrap: wrap; }
+    .tb__msg { margin: 10px 0 0; font-size: 14px; font-weight: 600; }
+    .tb__msg:empty { display: none; }
+    .tb__msg.is-ok { color: var(--st-free); }
+    .tb__msg.is-err { color: var(--danger); }
+    .tabs { display: flex; gap: 4px; margin-top: 10px; overflow-x: auto; scrollbar-width: none; }
+    .tabs::-webkit-scrollbar { display: none; }
+    .tab {
+      border: 0; background: none; padding: 0 12px; min-height: 46px; margin-bottom: -1px;
+      font-size: 14.5px; font-weight: 600; color: var(--muted); cursor: pointer; white-space: nowrap;
+      border-bottom: 2px solid transparent;
+    }
+    .tab[aria-selected="true"] { color: var(--ink); font-weight: 700; border-bottom-color: var(--accent); }
+    @media screen and (min-width: 600px) {
+      .tb { position: sticky; top: 0; z-index: 10; }
+    }
+
+    /* 확인 칸. window.confirm 은 쓰지 않습니다 — 휴대폰 브라우저가 연달아 뜨는
+       대화상자를 막아 버리면 단추가 아무 일도 안 하는 것처럼 보입니다. */
+    .confirm { margin: 12px 0 0; padding: 12px 14px; border-left: 3px solid var(--danger); background: var(--danger-t); }
+    .confirm p { margin: 0 0 10px; font-size: 14px; line-height: 1.55; }
+    .confirm__acts { display: flex; gap: 8px; flex-wrap: wrap; }
+    .confirm__err { margin: 10px 0 0 !important; color: var(--danger); font-weight: 600; }
+    .confirm__err:empty { display: none; }
+
+    /* ── 본문 ── */
+    .wrap { max-width: 1040px; margin: 0 auto; padding: 20px 20px 72px; }
+    .demo { margin: 0 0 16px; padding: 4px 0 4px 12px; border-left: 3px solid var(--accent); font-size: 14px; color: var(--ink-2); line-height: 1.55; }
+    .guard { margin: 0 0 16px; padding: 14px 16px; background: var(--danger); color: #FFFFFF; }
+    .guard b { display: block; font-size: 15px; }
+    .guard p { margin: 4px 0 0; font-size: 14px; line-height: 1.55; }
+    .guard .guard__detail { font-size: 13px; opacity: 0.92; overflow-wrap: anywhere; }
+    .lead { margin: 0 0 14px; font-size: 14px; line-height: 1.65; color: var(--ink-2); max-width: 76ch; }
+    .to { display: block; margin-top: 4px; font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
+    .to b { color: var(--ink-2); font-weight: 600; }
+    .to b.to__blocked { color: var(--danger); }
+    .warn { margin: 0 0 14px; padding: 8px 12px; border-left: 3px solid var(--warn); background: var(--warn-t); font-size: 14px; line-height: 1.55; }
+    .ctl { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 18px; }
+    .ctl input[type="search"] {
+      flex: 1 1 220px; max-width: 320px; min-height: 44px; padding: 0 12px;
+      border: 1px solid var(--line-3); border-radius: 0; background: #FFFFFF; font-size: 15px;
+    }
+    .ctl__count { margin-left: auto; font-size: 13.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+    .hint { font-size: 13.5px; color: var(--muted); }
+    .seg { display: inline-flex; }
+    .seg .btn { min-width: 64px; }
+    .seg .btn + .btn { margin-left: -1px; }
+    .seg .btn[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: #FFFFFF; position: relative; }
+    .state { margin: 0 0 16px; padding: 28px 20px; background: #FFFFFF; border: 1px solid var(--line); text-align: center; font-size: 15px; line-height: 1.65; color: var(--ink-2); }
+    .state:empty { display: none; }
+    .state p { margin: 0; }
+    .state .btn { margin-top: 12px; }
+    .state a { font-weight: 700; }
+
+    /* ── 종이 목록 ── */
+    .grid { display: flex; flex-wrap: wrap; gap: 24px 20px; justify-content: center; }
+    .item { position: relative; width: 92mm; max-width: 100%; }
+    .item--sign { width: 136mm; }
+    .item.is-filtered { display: none; }
+    .item.is-off .card, .item.is-off .sign { opacity: 0.4; }
+    .acts { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin-top: 8px; }
+    .pick { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding-right: 6px; font-size: 14px; font-weight: 600; cursor: pointer; }
+    .pick input { width: 20px; height: 20px; margin: 0; accent-color: var(--accent); }
+
+    /* QR. 생성기는 512px 로 그리고 CSS 로 줄입니다. 흐리게 보간하지 않도록
+       pixelated 로 두고, 둘레 4mm 흰 여백(quiet zone)이 있어야 카메라가 칸을 잡습니다. */
+    .qr { padding: 4mm; background: #FFFFFF; width: 100%; max-width: 100%; }
+    .qr img, .qr canvas { width: 100%; height: auto; image-rendering: pixelated; display: block; }
+    .qr__host { margin: 0.5mm 0 0; font-size: 7.5pt; color: var(--muted); text-align: center; overflow-wrap: anywhere; line-height: 1.3; }
+    .qr__fail {
+      display: flex; align-items: center; justify-content: center; aspect-ratio: 1 / 1;
+      padding: 3mm; border: 0.4mm dashed var(--danger); color: var(--danger);
+      font-size: 9pt; font-weight: 700; text-align: center; line-height: 1.4;
+    }
+
+    /* 시연 도장. QR 위에는 얹지 않습니다 — 시연 때 휴대폰으로 찍어 볼 수 있어야 합니다. */
+    .stamp {
+      position: absolute; top: 3mm; right: 4mm; z-index: 2;
+      padding: 1mm 2.5mm; border: 0.6mm solid var(--danger); background: #FFFFFF; color: var(--danger);
+      font-size: 10pt; font-weight: 800; line-height: 1.2; white-space: nowrap;
+      transform: rotate(-4deg); pointer-events: none;
+    }
+
+    /* ── ① 부스 운영자용 카드 (A4 한 장에 4장) ──
+       관람객 안내문과 헷갈리지 않게 위에 남색 띠를 두릅니다. */
+    .card {
+      position: relative; display: flex; flex-direction: column; overflow: hidden;
+      height: 134mm; background: #FFFFFF; border: 0.3mm dashed var(--cut);
+    }
+    .card__band { padding: 2.4mm 5mm; background: var(--navy); color: #FFFFFF; font-size: 10.5pt; font-weight: 700; line-height: 1.3; }
+    .card .stamp { top: 1.6mm; right: 3mm; padding: 0.5mm 2mm; font-size: 8.5pt; transform: none; border-width: 0.4mm; }
+    .card__body { flex: 1; display: flex; flex-direction: column; min-height: 0; padding: 4mm 5mm; }
+    .card__code { font-size: 26pt; font-weight: 800; line-height: 1.1; font-variant-numeric: tabular-nums; }
+    .card__name {
+      margin-top: 1.5mm; font-size: 12.5pt; font-weight: 700; line-height: 1.35;
+      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+    }
+    .card__org { margin-top: 1mm; font-size: 9pt; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .card__mid { display: flex; align-items: flex-start; gap: 4mm; margin-top: 4mm; }
+    .card__qr { flex: none; width: 50mm; margin: 0; } /* 여백 4mm 를 빼면 QR 42mm (35mm 이상) */
+    .steps { list-style: none; margin: 0; padding: 1mm 0 0; font-size: 9pt; line-height: 1.45; }
+    .steps li { display: flex; gap: 1.5mm; margin: 0 0 2.5mm; }
+    .steps b { flex: none; color: var(--accent); font-weight: 800; }
+    .card__hand { margin: auto 0 0; padding-top: 2.5mm; border-top: 0.3mm solid var(--line); font-size: 8.5pt; line-height: 1.5; color: var(--ink-2); }
+    .card__meta { margin: 1mm 0 0; font-size: 8pt; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+    /* 열쇠를 끈 부스. QR 자리를 비우고 왜 비었는지 적습니다. 이 카드는 인쇄되지 않습니다
+       — 꺼진 열쇠는 QR 로 찍어도 열리지 않으니 종이로 나갈 이유가 없습니다. */
+    .item.is-keyoff .card__band { background: var(--st-off); }
+    .card__off {
+      margin-top: 4mm; padding: 3mm 3.5mm; border: 0.4mm solid var(--st-off); background: var(--line-2);
+      font-size: 9.5pt; line-height: 1.5; color: var(--ink-2);
+    }
+    .card__off b { display: block; margin-bottom: 1mm; font-size: 12pt; font-weight: 800; color: var(--ink); }
+    .card__off:focus { outline: 2px solid var(--ink); outline-offset: 2px; }
+    .pick--off { cursor: default; color: var(--muted); }
+
+    /* ── ① 카드 아래 관리 단추 · 직접 고치기 칸 (화면에만) ── */
+    .acts--more { margin-top: 0; }
+    .now { margin: 6px 0 0; font-size: 13.5px; font-weight: 600; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+    .now:empty { display: none; }
+    .now i { display: inline-block; width: 9px; height: 9px; margin-right: 6px; vertical-align: 0; }
+    .note { margin: 6px 0 0; font-size: 13px; line-height: 1.5; color: var(--muted); }
+    .note:empty { display: none; }
+    .note.is-err { color: var(--danger); font-weight: 600; }
+    .fix { margin: 12px 0 0; padding: 12px 14px; border-left: 3px solid var(--accent); background: #FFFFFF; border-top: 1px solid var(--line); border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+    .fix__head { margin: 0; font-size: 14px; font-weight: 700; }
+    .fix__cur { margin: 4px 0 0; font-size: 13.5px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+    .fix__hint { margin: 4px 0 10px; font-size: 13px; line-height: 1.5; color: var(--muted); }
+    .fix__grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+    .fix__grid .btn { min-height: 48px; padding: 4px 6px; flex-direction: column; gap: 1px; font-variant-numeric: tabular-nums; }
+    .fix__grid .btn small { font-size: 11.5px; font-weight: 600; color: var(--muted); }
+    .fix__grid .fix__wide { grid-column: span 2; }
+    /* 지금 값과 같은 단추. 누를 필요가 없다는 것을 한눈에 보이게 합니다. */
+    .fix__grid .btn[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: #FFFFFF; }
+    .fix__grid .btn[aria-pressed="true"] small { color: #D5D9E6; }
+    .fix__msg { margin: 10px 0 0; font-size: 13.5px; font-weight: 600; line-height: 1.5; color: var(--ink-2); }
+    .fix__msg:empty { display: none; }
+    .fix__msg.is-ok { color: var(--st-free); }
+    .fix__msg.is-err { color: var(--danger); }
+    .fix__foot { display: flex; justify-content: flex-end; margin-top: 8px; }
+
+    /* ── ② 부스 앞 안내 (A4 가로 한 장에 2장 = A5 세로) ──
+       운영자 카드와 반대로 밝게 둡니다. 남색을 쓰지 않습니다. */
+    .sign {
+      position: relative; display: flex; flex-direction: column; overflow: hidden;
+      min-height: 186mm; padding: 10mm 11mm 8mm; background: #FFFFFF;
+      border: 0.3mm dashed var(--cut); border-top: 2.5mm solid var(--accent);
+    }
+    .sign__code { font-size: 44pt; font-weight: 800; line-height: 1.05; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+    .sign__name {
+      margin-top: 2.5mm; font-size: 16pt; font-weight: 700; line-height: 1.3;
+      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+    }
+    .sign__head { margin: 5mm 0 0; padding-top: 4mm; border-top: 0.5mm solid var(--ink); font-size: 18pt; font-weight: 800; line-height: 1.25; }
+    .sign__sub { margin: 2mm 0 0; font-size: 12pt; line-height: 1.45; color: var(--ink-2); }
+    .sign__qr { width: 78mm; max-width: 100%; margin: auto auto 0; padding-top: 4mm; }
+    .sign__qr .qr__host { font-size: 9pt; }
+    .sign__foot { display: flex; align-items: center; gap: 2mm; margin: 3mm 0 0; font-size: 8.5pt; color: var(--muted); }
+    .sign__foot .sq { width: 2mm; height: 2mm; }
+
+    /* ── ③ 입구 포스터 (A4, 원하면 A3) ──
+       크기는 모두 --k 배로 잡아 A3 를 고르면 같은 모양으로 √2 배 커집니다. */
+    .poster {
+      --k: 1;
+      position: relative; display: flex; flex-direction: column; align-items: center; text-align: center;
+      width: calc(190mm * var(--k)); max-width: 100%; margin: 0 auto;
+      padding: calc(14mm * var(--k)) calc(12mm * var(--k)) calc(12mm * var(--k));
+      background: #FFFFFF; border: 1px solid var(--line);
+    }
+    .poster.is-a3 { --k: 1.4142; }
+    .poster__top { display: flex; align-items: center; gap: calc(2.5mm * var(--k)); font-size: calc(11pt * var(--k)); font-weight: 700; color: var(--muted); }
+    .poster__top .sq { width: calc(3mm * var(--k)); height: calc(3mm * var(--k)); }
+    .poster__head { margin: calc(6mm * var(--k)) 0 0; font-size: calc(40pt * var(--k)); font-weight: 800; line-height: 1.18; letter-spacing: -0.03em; }
+    .poster__sub { margin: calc(4mm * var(--k)) 0 0; font-size: calc(15pt * var(--k)); line-height: 1.45; color: var(--ink-2); }
+    .poster__qr { width: calc(130mm * var(--k)); max-width: 100%; margin: calc(8mm * var(--k)) 0 0; }
+    .poster__host { margin: calc(1mm * var(--k)) 0 0; font-size: calc(14pt * var(--k)); font-weight: 700; color: var(--ink); overflow-wrap: anywhere; }
+    .legend { display: flex; flex-wrap: wrap; justify-content: center; gap: calc(4mm * var(--k)) calc(7mm * var(--k)); margin: calc(8mm * var(--k)) 0 0; padding: 0; list-style: none; }
+    .legend li { display: flex; align-items: center; gap: calc(2.5mm * var(--k)); font-size: calc(16pt * var(--k)); font-weight: 700; }
+    .legend i { width: calc(8mm * var(--k)); height: calc(8mm * var(--k)); flex: none; }
+    .poster__foot { margin: calc(8mm * var(--k)) 0 0; font-size: calc(10pt * var(--k)); color: var(--muted); }
+    .poster__foot:empty { display: none; }
+    .poster .stamp { top: calc(3mm * var(--k)); right: calc(4mm * var(--k)); }
+
+    /* ── QR 크게 보기 ── */
+    body.ov-open { overflow: hidden; }
+    .ov { position: fixed; inset: 0; z-index: 100; overflow: auto; background: #FFFFFF; }
+    .ov__in { max-width: 560px; margin: 0 auto; padding: 14px 20px 36px; display: flex; flex-direction: column; align-items: center; text-align: center; }
+    .ov__top { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .ov__band { padding: 6px 10px; background: var(--navy); color: #FFFFFF; font-size: 13px; font-weight: 700; }
+    .ov__code { margin: 14px 0 0; font-size: 28px; font-weight: 800; line-height: 1.1; font-variant-numeric: tabular-nums; }
+    .ov__name { margin: 4px 0 0; font-size: 16px; font-weight: 700; line-height: 1.4; }
+    .ov__qr { width: min(86vw, 56vh, 440px); margin-top: 14px; border: 1px solid var(--line); }
+    .ov__host { margin: 6px 0 0; font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
+    .ov__say { margin: 12px 0 0; font-size: 18px; font-weight: 800; line-height: 1.4; }
+    .ov__acts { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 8px 12px; margin-top: 14px; }
+    .ov__copied { font-size: 14px; font-weight: 600; color: var(--st-free); }
+    .ov__copied.is-err { color: var(--danger); }
+    .ov__copied:empty { display: none; }
+    .ov__note { width: 100%; margin: 16px 0 0; padding: 8px 12px; border-left: 3px solid var(--accent); background: var(--accent-t); text-align: left; font-size: 14px; line-height: 1.55; }
+    .ov__note:empty { display: none; }
+    .ov__note.is-warn { border-left-color: var(--warn); background: var(--warn-t); }
+    /* 서버에서 최신 열쇠를 받아 오는 동안 QR 자리. 낡았을지 모르는 QR 을 먼저 띄우지 않습니다. */
+    .ov__wait { display: flex; align-items: center; justify-content: center; aspect-ratio: 1 / 1; margin: 0; font-size: 15px; font-weight: 600; color: var(--muted); }
+    .ov__meta { margin: 12px 0 0; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+    /* ── 좁은 화면: 현장에서 휴대폰으로 열 때 ──
+       운영본부가 행사 중에 '잃어버린 카드' 를 찾는 용도라, ① 은 QR 과 설명을 감추고
+       코드 · 이름 · 단추만 한 줄씩 보여 줍니다. QR 은 '크게 보기' 로 엽니다. */
+    @media screen and (max-width: 599px) {
+      .tb__in { padding: 12px 16px 0; }
+      .tb__title { font-size: 18px; }
+      .wrap { padding: 16px 16px 64px; }
+      .ctl input[type="search"] { flex-basis: 100%; max-width: none; }
+      .ctl__count { margin-left: 0; width: 100%; }
+      .grid { gap: 12px; }
+      .item, .item--sign { width: 100%; }
+      .card { height: auto; }
+      .card__band { font-size: 12px; padding: 6px 12px; }
+      .card .stamp { top: 4px; font-size: 11px; }
+      .card__body { padding: 10px 12px 8px; }
+      .card__code { font-size: 22px; }
+      .card__name { font-size: 15px; }
+      .card__org { font-size: 13px; }
+      .card__meta { font-size: 12px; }
+      .card__mid, .card__hand { display: none; }
+      .card__off { margin-top: 8px; padding: 8px 10px; font-size: 13.5px; }
+      .card__off b { font-size: 15px; }
+      .item--ops .acts { margin-top: 4px; }
+      .fix__grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .sign { min-height: 0; padding: 20px 16px 14px; }
+      .sign__code { font-size: 40px; }
+      .sign__name { font-size: 18px; }
+      .sign__head { font-size: 20px; }
+      .sign__sub { font-size: 15px; }
+      .sign__qr { margin-top: 16px; }
+      .poster { padding: 28px 16px 20px; }
+      .poster__head { font-size: 30px; }
+      .poster__sub { font-size: 16px; }
+      .poster__host { font-size: 16px; }
+      .legend li { font-size: 15px; }
+      .legend i { width: 16px; height: 16px; }
+      .poster__top { font-size: 12px; }
+      .poster__foot { font-size: 12px; }
+    }
+
+    /* ── 인쇄 ──
+       크롬 · 엣지는 기본값으로 배경색을 빼고 인쇄합니다. 그러면 운영자 카드의 남색 띠와
+       포스터의 상태 색 네모가 하얗게 나옵니다. print-color-adjust 로 그대로 찍게 합니다. */
+    @page { size: A4; margin: 10mm; }
+    @media print {
+      * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      body { background: #FFFFFF; }
+      .tb, .no-print, .lead, .ctl, .acts, .confirm, .fix, .now, .note, .ov, .demo, .warn { display: none !important; }
+      .wrap { max-width: none; margin: 0; padding: 0; }
+      .item.is-off, .item.is-filtered, .item.is-keyoff { display: none !important; }
+      .item { width: auto; max-width: none; break-inside: avoid; page-break-inside: avoid; }
+      .grid { display: grid; justify-content: center; }
+      /* 2 × 134mm + 5mm = 273mm. 여백 10mm 를 뺀 A4 높이(277mm)에 두 줄이 들어갑니다. */
+      .grid--ops { grid-template-columns: repeat(2, 92mm); gap: 5mm 6mm; }
+      /* A4 가로(277 × 190mm)를 반으로 나눈 A5 세로 두 장 */
+      .grid--signs { grid-template-columns: repeat(2, 136mm); gap: 0 3mm; }
+      .sign { height: 186mm; min-height: 0; }
+      /* 종이 한 장을 채우고 행사 정보 줄은 맨 아래로. 272mm 는 A4 에서 여백을 뺀 277mm 보다
+         조금 작게 잡은 값이라 두 번째 쪽으로 넘어가지 않습니다(A3 는 --k 배). */
+      .poster { border: 0; padding-top: 6mm; padding-bottom: 2mm; min-height: calc(272mm * var(--k)); }
+      .poster__foot { margin-top: auto; }
+      .state { border: 0; }
+    }
+  </style>
+  <!-- 탭마다 종이 방향 · 크기가 달라서 고른 탭에 맞춰 이 칸을 바꿉니다(② A4 가로, ③ A4 · A3). -->
+  <style id="page-rule"></style>
+</head>
+<body>
+
+  <header class="tb">
+    <div class="tb__in">
+      <div class="tb__row">
+        <h1 class="tb__title"><i class="sq" aria-hidden="true"></i>QR 안내문 인쇄</h1>
+        <div class="tb__acts">
+          <button type="button" class="btn btn--danger" id="reset-btn" hidden>실시간 값 모두 지우기</button>
+          <button type="button" class="btn btn--primary" id="print-btn" disabled>인쇄하기</button>
+        </div>
+      </div>
+      <div class="confirm" id="reset-confirm" hidden>
+        <p>리허설 값과 어제 값이 지워지고 모든 부스가 “정보 없음”이 됩니다. 계속할까요?</p>
+        <div class="confirm__acts">
+          <button type="button" class="btn btn--danger-solid" id="reset-yes">모두 지우기</button>
+          <button type="button" class="btn" id="reset-no">그만두기</button>
+        </div>
+      </div>
+      <p class="tb__msg" id="reset-msg" role="status" aria-live="polite"></p>
+      <div class="tabs" role="tablist" aria-label="인쇄할 종류">
+        <button type="button" class="tab" role="tab" id="tab-ops" data-tab="ops" aria-controls="panel-ops" aria-selected="true">① 부스 운영자용</button>
+        <button type="button" class="tab" role="tab" id="tab-signs" data-tab="signs" aria-controls="panel-signs" aria-selected="false" tabindex="-1">② 부스 앞 안내</button>
+        <button type="button" class="tab" role="tab" id="tab-poster" data-tab="poster" aria-controls="panel-poster" aria-selected="false" tabindex="-1">③ 입구 포스터</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <p class="demo" id="demo-note" hidden>시연 화면 · 실제 부스 정보가 아닙니다. 종이마다 “시연용 · 인쇄 금지”가 함께 찍혀요.</p>
+
+    <!-- ① 부스 운영자용 -->
+    <section class="panel" id="panel-ops" role="tabpanel" aria-labelledby="tab-ops">
+      <div class="guard" id="guard-ops" role="alert" hidden></div>
+      <p class="lead" id="lead-ops">
+        A4 한 장에 4장. 부스 담당 선생님에게만 나눠 주세요 — 이 QR을 찍으면 그 부스의 대기 시간을 바꿀 수 있어요.
+        카드를 잃어버렸거나 휴대폰을 바꿀 때는 새로 뽑지 말고 ‘QR 크게 보기’를 찍게 하세요.
+        ‘열쇠 바꾸기’는 카드 사진이 단체방에 올라가는 등 유출됐을 때만 누르세요.
+        부스가 일찍 철수했거나 누가 값을 엉뚱하게 바꾸면 ‘열쇠 끄기’로 멈추고, 값은 ‘대기 값 직접 고치기’로 바로잡을 수 있어요.
+        <span class="to" id="to-ops"></span>
+      </p>
+      <p class="warn" id="warn-ops" hidden></p>
+      <div class="ctl" id="ctl-ops" hidden>
+        <input type="search" id="q-ops" placeholder="부스 코드 · 이름 찾기" aria-label="부스 코드나 이름으로 찾기" autocomplete="off" />
+        <button type="button" class="btn" data-pick="all" data-list="ops">모두 선택</button>
+        <button type="button" class="btn" data-pick="none" data-list="ops">모두 해제</button>
+        <span class="ctl__count" id="count-ops" aria-live="polite"></span>
+      </div>
+      <div class="state" id="state-ops"></div>
+      <div class="grid grid--ops" id="grid-ops"></div>
+    </section>
+
+    <!-- ② 부스 앞 안내 -->
+    <section class="panel" id="panel-signs" role="tabpanel" aria-labelledby="tab-signs" hidden>
+      <div class="guard" id="guard-signs" role="alert" hidden></div>
+      <p class="lead">
+        A4 가로 한 장에 2장(A5 세로)이 나와요. 반으로 잘라 부스 앞 눈높이에 붙여 주세요.
+        찍으면 부스 Live 사이트에서 이 부스의 대기 시간과 근처 여유 부스가 보여요.
+        <span class="to" id="to-signs"></span>
+      </p>
+      <p class="warn" id="warn-signs" hidden></p>
+      <div class="ctl" id="ctl-signs" hidden>
+        <input type="search" id="q-signs" placeholder="부스 코드 · 이름 찾기" aria-label="부스 코드나 이름으로 찾기" autocomplete="off" />
+        <button type="button" class="btn" data-pick="all" data-list="signs">모두 선택</button>
+        <button type="button" class="btn" data-pick="none" data-list="signs">모두 해제</button>
+        <span class="ctl__count" id="count-signs" aria-live="polite"></span>
+      </div>
+      <div class="state" id="state-signs"></div>
+      <div class="grid grid--signs" id="grid-signs"></div>
+    </section>
+
+    <!-- ③ 입구 포스터 -->
+    <section class="panel" id="panel-poster" role="tabpanel" aria-labelledby="tab-poster" hidden>
+      <div class="guard" id="guard-poster" role="alert" hidden></div>
+      <p class="lead">
+        행사장 입구 · 안내데스크에 붙여 주세요.
+        <span class="to" id="to-poster"></span>
+      </p>
+      <p class="warn" id="warn-poster" hidden></p>
+      <div class="ctl" id="ctl-poster" hidden>
+        <div class="seg" role="group" aria-label="포스터 종이 크기">
+          <button type="button" class="btn" data-paper="A4" aria-pressed="true">A4</button>
+          <button type="button" class="btn" data-paper="A3" aria-pressed="false">A3</button>
+        </div>
+        <span class="hint">A3로 인쇄하면 더 멀리서도 찍혀요</span>
+      </div>
+      <article class="poster" id="poster" hidden>
+        <div class="poster__top" id="poster-top"><i class="sq" aria-hidden="true"></i><span>부스 대기 현황</span></div>
+        <h2 class="poster__head">어느 부스가<br />지금 한가할까요?</h2>
+        <p class="poster__sub">휴대폰 카메라로 찍으면<br />부스마다 지금 몇 분 기다리는지 바로 보여요</p>
+        <figure class="poster__qr">
+          <div class="qr" id="poster-qr"></div>
+          <figcaption class="poster__host" id="poster-host"></figcaption>
+        </figure>
+        <ul class="legend" aria-label="색이 뜻하는 것">
+          <li><i style="background:var(--st-free)"></i>여유</li>
+          <li><i style="background:var(--st-normal)"></i>보통</li>
+          <li><i style="background:var(--st-busy)"></i>혼잡</li>
+          <li><i style="background:var(--st-off-mark)"></i>중단·마감</li>
+        </ul>
+        <p class="poster__foot" id="poster-foot"></p>
+      </article>
+    </section>
+  </main>
+
+  <!-- QR 크게 보기: 카드를 잃어버렸거나 휴대폰을 바꿀 때, 열쇠는 그대로 두고 이 화면을 찍게 합니다 -->
+  <div class="ov" id="ov" role="dialog" aria-modal="true" aria-labelledby="ov-code" hidden>
+    <div class="ov__in">
+      <div class="ov__top">
+        <span class="ov__band">부스 운영자용 · 관람객용 아님</span>
+        <button type="button" class="btn" id="ov-close">닫기</button>
+      </div>
+      <p class="ov__code" id="ov-code"></p>
+      <p class="ov__name" id="ov-name"></p>
+      <div class="qr ov__qr" id="ov-qr"></div>
+      <p class="ov__host" id="ov-host"></p>
+      <p class="ov__say">운영자 휴대폰 카메라로 이 화면을 찍으세요</p>
+      <div class="ov__acts">
+        <button type="button" class="btn" id="ov-copy">링크 복사</button>
+        <span class="ov__copied" id="ov-copied" role="status" aria-live="polite"></span>
+      </div>
+      <p class="ov__note" id="ov-note"></p>
+      <p class="ov__meta" id="ov-meta"></p>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+  <script src="assets/config.js"></script>
+  <script src="assets/core.js"></script>
+  <script src="assets/booth-core.js"></script>
+  <script src="assets/mock-data.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+
+  <script>
+  /* ===================================================================
+     QR 안내문 인쇄
+
+     공개 데이터(부스 · 구역 · 기본정보)는 BoothCore.load() 로 읽고,
+     열쇠가 필요한 일(운영자 카드 · 열쇠 바꾸기 · 실시간 값 지우기)만
+     Core.db() 로 부릅니다. Core.db() 는 관리자 화면과 같은 저장소의
+     로그인을 쓰므로, 관리자 화면에서 로그인해 두면 여기서도 관리자입니다.
+     권한은 화면이 아니라 DB 함수(is_admin)가 막습니다.
+     =================================================================== */
+  (function () {
+    'use strict';
+
+    var BC = window.BoothCore;
+    var Core = window.Core;
+    var cfg = window.FESTIVAL_CONFIG || {};
+    var isMock = !!BC.isMock;
+    var esc = BC.esc;
+    var pad2 = BC.pad2;
+    var helpLine = cfg.boothHelpLine || '운영본부에 문의해 주세요';
+    function $(id) { return document.getElementById(id); }
+
+    var MSG = {
+      LOGIN: '관리자 계정으로 로그인해야 볼 수 있어요. <a href="admin.html">관리자 화면(admin.html)</a>에서 로그인한 뒤 이 페이지를 새로 고침하세요.',
+      DB: 'DB 설정(supabase/migration-booth-live.sql)을 먼저 적용하세요.',
+      EMPTY: '등록된 부스가 없어요. 관리자 → 부스에서 먼저 등록하세요.',
+      OP_EMPTY: 'config.js 의 staffSiteUrl 에 부스 Live 사이트 주소를 넣어 주세요. 운영자 화면(booth-ctrl.html)은 부스 Live 사이트에 있어요.',
+      OP_BLOCK: '이 주소로 만든 QR은 현장 휴대폰에서 열리지 않습니다. config.js 의 staffSiteUrl 에 부스 Live 사이트 주소(https)를 넣어 주세요.',
+      OP_HINT: 'config.js 의 staffSiteUrl 에 부스 Live 사이트 주소를 넣고 새로 고침하면 카드가 나와요.',
+      VIS_BLOCK: 'config.js 의 visitorSiteUrl 에 부스 Live 사이트 첫 화면 주소(https)를 넣어 주세요 — 운영 포털 주소가 종이에 찍히면 관람객이 운영 포털을 알게 되고, 거둬들일 방법도 없어요.',
+      OP_MISSING: '이 주소에는 운영자 화면(booth-ctrl.html)이 없어요. config.js 의 staffSiteUrl 에 부스 Live 사이트 주소를 넣었는지 확인하세요.',
+      STALE: '최신 열쇠를 확인하지 못했어요 — 이 QR이 안 열리면 새로 고침해 주세요.',
+      GONE: '이 부스의 열쇠를 찾지 못했어요. 부스가 지워졌거나 다시 등록됐을 수 있어요. 새로 고침한 뒤 다시 찾아 주세요.',
+      ROTATED_ELSEWHERE: '다른 기기에서 이 부스의 열쇠를 바꿔서 새 QR로 다시 그렸어요.',
+      ROTATED_LATE: '응답이 늦게 왔을 뿐 열쇠는 이미 바뀌어 있었어요.',
+      SIGNED_OUT: '로그아웃되어 운영자 카드를 모두 숨겼어요.',
+      AUTH_LOST: '서버에서 관리자 권한을 확인하지 못해 운영자 카드를 숨겼어요. 먼저 새로 고침해 보세요.',
+      AUTH_RETRY: '로그인을 잠깐 확인하지 못했어요. 잠시 뒤 다시 눌러 주세요. 계속 안 되면 새로 고침해 주세요.',
+      QR_FAIL: '이 카드의 QR을 만들지 못했어요',
+      NO_KEY: '이 부스의 열쇠가 아직 없어요. 새로 고침해 주세요.',
+      KEY_OFF: "이 부스의 운영자 QR은 꺼져 있어요. 다시 쓰려면 '열쇠 바꾸기'로 새 열쇠를 받으세요.",
+      OFF_ELSEWHERE: '다른 기기에서 이 부스의 열쇠를 껐어요.',
+      OFF_LATE: '응답이 늦게 왔을 뿐 열쇠는 이미 꺼져 있었어요.',
+      OFF_NOKEY: '이 부스에는 아직 열쇠가 없어요. 새로 고침한 뒤 다시 해 주세요.',
+      BUSY: '이 부스의 앞 요청(열쇠 바꾸기 · 끄기)이 아직 끝나지 않았어요. 끝나면 누를 수 있어요(길어야 10초).',
+      DB_ADMIN: 'DB 설정(supabase/migration-booth-live.sql 최신판)을 먼저 적용하세요.',
+      NO_BOOTH: '해당 부스를 찾을 수 없어요. 새로 고침해 주세요.',
+      BAD_VALUE: '허용되지 않는 값이에요.',
+      LOAD_FAIL: '부스 정보를 불러오지 못했어요. 인터넷 연결을 확인한 뒤 다시 불러와 주세요.',
+      NET: '연결이 불안정해요. 잠시 뒤 다시 눌러 주세요.',
+      OTHER: '처리하지 못했어요. 잠시 뒤 다시 시도해 주세요.',
+      STAMP: '시연용 · 인쇄 금지'
+    };
+
+    /* ── QR 이 가리킬 주소 ─────────────────────────────────────────── */
+    // 호스트 이름 끝의 점을 뗍니다. 'incheon-aisw-festival.netlify.app.' 처럼 끝에 점을 붙인
+    // 이름(FQDN)도 같은 사이트로 열리는데, 그대로 견주면 운영 포털 · 내부 주소 검사를 빠져나갑니다.
+    function hostKey(h) { return String(h || '').toLowerCase().replace(/\.+$/, ''); }
+
+    // 주소를 읽으면서 호스트 끝의 점을 떼어 둡니다. 검사(origin · host)와 종이에 찍히는 주소가
+    // 같은 모양이 되어, 점 하나로 검사만 빠져나가고 종이에는 점 붙은 주소가 찍히는 일이 없습니다.
+    function readUrl(raw) {
+      var u = new URL(raw);
+      var h = hostKey(u.hostname);
+      if (h && h !== u.hostname) u.hostname = h;
+      return u;
+    }
+
+    /* 현장 휴대폰(데이터망)에서는 열리지 않는 주소. 이 컴퓨터(localhost · 127.x), 사설망
+       (10.x · 172.16~31.x · 192.168.x), 링크 로컬(169.254.x · fe80::), 통신사 내부망(100.64~127.x),
+       IPv6 사설(fc00::/7), 점 없는 이름(nas 같은 사내 이름), 사내용 끝말(.local · .lan …).
+       운영본부 노트북에서는 열려도 관람객 · 운영자 휴대폰에서는 열리지 않아 종이가 통째로 헛것이 됩니다.
+       IPv4 는 브라우저가 이미 점 넷 모양으로 고쳐 줍니다(0x7f.1 → 127.0.0.1, 3232235530 → 192.168.0.10). */
+    function isLocalHost(h) {
+      h = hostKey(h);
+      if (!h) return true;
+      if (h.charAt(0) === '[') return isLocalV6(h.slice(1, -1));
+      var m = /^(\d+)\.(\d+)\.(\d+)\.(\d+)$/.exec(h);
+      if (m) return isLocalV4(Number(m[1]), Number(m[2]));
+      if (h.indexOf('.') < 0) return true;
+      return /\.(localhost|local|lan|internal|home\.arpa)$/.test(h);
+    }
+    function isLocalV4(a, b) {
+      return a === 0 || a === 10 || a === 127 || (a === 169 && b === 254) ||
+        (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 100 && b >= 64 && b <= 127);
+    }
+    // h: 대괄호를 뗀 IPv6. 브라우저가 소문자 · 줄임꼴(::)로 고쳐 둔 모양입니다.
+    function isLocalV6(h) {
+      if (h === '::' || h === '::1') return true;
+      // IPv4 를 담은 IPv6(::ffff:c0a8:a)는 담긴 IPv4 로 봅니다.
+      var m = /^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/.exec(h);
+      if (m) { var hi = parseInt(m[1], 16); return isLocalV4(hi >> 8, hi & 255); }
+      // 첫 묶음을 숫자로 견줍니다. 'fc::1' 은 00fc 라 사설이 아닙니다.
+      var first = parseInt(h.split(':')[0] || '0', 16) || 0;
+      return (first & 0xfe00) === 0xfc00 || (first & 0xffc0) === 0xfe80;
+    }
+
+    // 운영 포털로 알려진 호스트. 운영 포털은 Netlify 와 GitHub Pages 두 곳에서 열리는데,
+    // 인쇄하는 페이지 주소만 비교하면 그중 한 곳밖에 모릅니다. 그래서 둘 다 적어 둡니다.
+    // (이 파일은 부스 Live 사이트 배포본 live/dist 에 들어가지 않아 주소를 적어도 됩니다.)
+    // 호스트마다 포털 첫 화면이 있는 폴더도 함께 적습니다. GitHub Pages 는 저장소 이름
+    // 폴더(/incheon-festival/) 아래에 있어서, 호스트만 맞고 폴더가 틀린 주소(사이트 뿌리 등)에는
+    // 아무 화면도 없습니다.
+    var STAFF_PATHS = {
+      'incheon-aisw-festival.netlify.app': '/',
+      'sinjhon1245-cell.github.io': '/incheon-festival/'
+    };
+    // 알려진 운영 포털이면 그 첫 화면 폴더를, 아니면 null 을 돌려줍니다.
+    function staffPath(h) {
+      h = hostKey(h);
+      if (Object.prototype.hasOwnProperty.call(STAFF_PATHS, h)) return STAFF_PATHS[h];
+      // Netlify 의 미리 보기 · 브랜치 배포(…--incheon-aisw-festival.netlify.app)도 운영 포털 사본입니다.
+      return /--incheon-aisw-festival\.netlify\.app$/.test(h) ? '/' : null;
+    }
+    function isStaffHost(h) { return staffPath(h) !== null; }
+
+    // 폴더 주소로 맞춥니다. 'https://…/live-site' 처럼 끝의 / 를 빼먹으면
+    // booth-ctrl.html 이 한 단계 위(사이트 뿌리)에 붙어 없는 주소가 됩니다.
+    // 다만 주소창에서 복사한 화면 주소(…/booth-ctrl, …/admin — Netlify 가 .html 없이
+    // 내주는 주소)는 폴더가 아니라 페이지입니다. 거기에 / 를 붙이면
+    // …/booth-ctrl/booth-ctrl.html 처럼 없는 주소가 되므로 이름을 떼어 냅니다.
+    var PAGE_NAMES = /^(admin|print-qr|booth-ctrl|index|visitor)$/i;
+    function asFolder(u) {
+      var last = u.pathname.split('/').pop();
+      if (last && PAGE_NAMES.test(last)) u.pathname = u.pathname.replace(/[^\/]*$/, '');
+      else if (last && last.indexOf('.') < 0) u.pathname += '/';
+      return new URL('.', u.href);
+    }
+
+    // 이 인쇄 화면의 사이트. 설정 주소와 같은 모양으로 견주려고 끝의 점을 뗀 모양으로 둡니다.
+    var here = (function () {
+      try { return readUrl(window.location.href).origin; } catch (e) { return window.location.origin; }
+    })();
+
+    /* 운영자 QR: staffSiteUrl(부스 Live 사이트) 의 booth-ctrl.html.
+       예전에는 비어 있으면 이 페이지가 있는 사이트를 썼지만, 운영자 화면은 이제 부스 Live
+       사이트에 있습니다. 운영 포털을 짐작해 찍으면 카드 한 벌이 엉뚱한 곳을 가리키므로
+       비어 있으면 막습니다. visitorSiteUrl 과 같은 주소여도 됩니다(한 사이트에 두 화면). */
+    var op = (function () {
+      var raw = String(cfg.staffSiteUrl || '').trim();
+      var base = null, why = '', msg = MSG.OP_BLOCK;
+      if (raw) { try { base = asFolder(readUrl(raw)); } catch (e) { base = null; } }
+      var expect = base ? staffPath(base.hostname) : null;
+      if (!raw) { why = '지금 값: 비어 있음'; msg = MSG.OP_EMPTY; }
+      else if (!base) why = '지금 값을 주소로 읽지 못했어요: ' + raw;
+      else if (base.protocol !== 'https:') why = 'https 주소가 아니에요.';
+      else if (isLocalHost(base.hostname)) why = '이 컴퓨터나 내부망(사설 IP · 사내 이름)에서만 열리는 주소예요. 현장 휴대폰에서는 열리지 않아요.';
+      // 알려진 운영 포털인데 폴더까지 틀리면 그 주소에는 아무 화면도 없습니다. 다른 사이트라
+      // checkOpPage 로 물어볼 수 없으니(CORS) 여기서 막습니다. 같은 사이트면 checkOpPage 의 답을 따릅니다.
+      else if (expect && base.origin !== here && base.pathname !== expect) {
+        why = '운영 포털 ' + base.host + ' 의 첫 화면 폴더(' + expect + ')도 아니어서 운영자 화면이 없는 주소예요.';
+      }
+      var ok = !why;
+      // 막혔을 때 안내에 보일 주소(시연용으로 바꾸기 전). 주소로 읽지 못했으면 빈 값입니다.
+      var shown = base ? new URL('booth-ctrl.html', base.href).href : '';
+      // 시연은 부스 Live 사이트가 없어도 돌아가야 하므로 이 저장소에 함께 있는 booth-ctrl.html 로 갑니다.
+      // 실제 모드에서 막혔을 때도 null 대신 이 값을 둡니다 — 막힌 채로는 카드를 그리지 않아 쓰이지 않습니다.
+      if (!ok || !base) base = new URL('.', window.location.href);
+      return { base: base, ok: ok, why: why, shown: shown, blocked: !ok && !isMock, msg: msg, hint: MSG.OP_HINT };
+    })();
+
+    // 관람객 QR: visitorSiteUrl(부스 Live 사이트 첫 화면) 만 씁니다. 운영 포털 주소로 대신하지
+    // 않습니다 — 종이에 운영 포털 주소가 찍히면 거둬들일 방법이 없습니다.
+    // staffSiteUrl 과 같은 곳이어도 막지 않습니다. 부스 Live 사이트 한 곳에 관람객 화면(첫 화면)과
+    // 운영자 화면(booth-ctrl.html)이 함께 있는 것이 정상입니다.
+    var vis = (function () {
+      var raw = String(cfg.visitorSiteUrl || '').trim();
+      var u = null, why = '';
+      if (raw) { try { u = readUrl(raw); } catch (e) { u = null; } }
+      if (!raw) why = '지금 값: 비어 있음';
+      else if (!u) why = '지금 값을 주소로 읽지 못했어요: ' + raw;
+      else if (u.protocol !== 'https:') why = 'https 주소가 아니에요: ' + raw;
+      else if (isLocalHost(u.hostname)) why = '이 컴퓨터나 내부망(사설 IP · 사내 이름)에서만 열리는 주소예요. 현장 휴대폰에서는 열리지 않아요: ' + raw;
+      else if (isStaffHost(u.hostname)) why = '운영 포털(Netlify · GitHub Pages) 주소예요: ' + raw;
+      else if (u.origin === here) why = '지금 이 인쇄 화면이 열린 사이트(운영 포털)와 같은 주소예요: ' + raw;
+      // 부스 Live 사이트의 관람객 화면은 live/build.sh 가 첫 화면(index.html)으로 둡니다.
+      // 뒤에 visitor.html 이나 live/ 가 붙은 주소는 운영 포털에 딸린 사본이거나 없는 주소일 수
+      // 있습니다. 첫 화면 주소로 고치기만 하면 되니 확실하지 않아도 막습니다.
+      else if (/\/visitor\.html$/i.test(u.pathname)) {
+        why = '운영 포털에 딸린 관람객 화면(…/visitor.html) 주소일 수 있어요. 부스 Live 사이트의 첫 화면 주소(뒤에 visitor.html 없이)를 넣어 주세요: ' + raw;
+      } else if (/\/live(\/|$)/i.test(u.pathname)) {
+        why = '운영 포털 안의 live 폴더 주소예요. live/ 를 따로 배포해 생긴 부스 Live 사이트의 첫 화면 주소를 넣어 주세요: ' + raw;
+      }
+      var ok = !why;
+      // 시연은 부스 Live 사이트가 없어도 돌아가야 하므로 이 저장소의 visitor.html 로 갑니다.
+      if (!ok && isMock) u = new URL('visitor.html', window.location.href);
+      if (u) { u.search = ''; u.hash = ''; }
+      return { base: u, ok: ok, why: why, blocked: !ok && !isMock, msg: MSG.VIS_BLOCK };
+    })();
+
+    function opPage() { return new URL('booth-ctrl.html', op.base.href).href; }
+    function opLink(token) { return opPage() + (isMock ? '?demo' : '') + '#k=' + token; }
+    // 부스 앞 안내는 부스 id(uuid)로 잇습니다. 부스 코드는 배치가 바뀌면 다시 매겨지지만
+    // id 는 그대로라, 이미 붙인 종이가 엉뚱한 부스를 가리키지 않습니다.
+    function visLink(boothId) {
+      var u = new URL(vis.base.href);
+      u.search = (isMock ? '?demo&b=' : '?b=') + encodeURIComponent(boothId);
+      return u.href;
+    }
+    function visRoot() {
+      var u = new URL(vis.base.href);
+      u.search = isMock ? '?demo' : '';
+      return u.href;
+    }
+
+    /* 운영자 카드가 가리킬 booth-ctrl.html 이 정말 있는지, staffSiteUrl 이 이 페이지와 같은
+       사이트일 때만 한 번 물어봅니다. 정상(부스 Live 사이트)이면 다른 사이트라 브라우저(CORS)가
+       답을 보여 주지 않아 확인할 수 없고, 대신 showOpGuard 가 '한 장 먼저 시험 인쇄' 를 알립니다.
+       '없다(404)' 고 분명히 답할 때만 막습니다 — 행사장 와이파이가 흔들려 못 물어본 것까지
+       막으면 정작 인쇄해야 할 때 인쇄를 못 합니다. */
+    function checkOpPage() {
+      if (isMock || op.blocked || op.base.origin !== here || !window.fetch) {
+        return Promise.resolve();
+      }
+      var ask = window.fetch(opPage(), { method: 'HEAD', cache: 'no-store', credentials: 'same-origin' })
+        .then(function (res) {
+          if (res.status !== 404) return;
+          op.ok = false;
+          op.blocked = true;
+          op.why = '이 주소가 없다(404)고 나와요.';
+          op.msg = MSG.OP_MISSING;
+          showOpGuard();
+          // 5초를 넘겨 답이 왔으면 카드가 이미 그려졌을 수 있습니다. 거둬들입니다.
+          // 크게 보기도 닫습니다. 열려 있으면 없는 주소의 QR 과 '링크 복사' 가 그대로 남습니다.
+          if (S.ops.state === 'ready') { S.ops.access = {}; S.ops.state = 'blocked'; closeBig(); renderOps(); }
+          else updatePrintBtn();
+        }, function (err) {
+          if (window.console) console.warn('[print-qr] 운영자 화면 주소를 확인하지 못했습니다(인쇄는 막지 않음)', err);
+        });
+      // 답이 오래 안 오면 기다리지 않고 넘어갑니다.
+      return Promise.race([ask, sleep(5000)]);
+    }
+
+    /* ── 상태 ──────────────────────────────────────────────────────── */
+    var S = {
+      tab: 'ops',
+      paper: 'A4',
+      settings: {},
+      booths: null,        // BoothCore 가 정리한 부스 목록 (구역 순 → 코드 순)
+      byId: {},
+      liveReady: null,
+      loadError: null,
+      // access: booth_id → {token, issued_at, rotated, disabled, disabled_at}. 열쇠를 끈 부스는
+      // token 이 null 이고 disabled 가 true 입니다(후속 DB 설정 전에는 disabled 칸이 없어 늘 false).
+      // checkedAt: 서버에서 열쇠를 마지막으로 받은 시각.
+      // lockedOut: 다른 탭에서 로그아웃해 카드를 거둔 상태. lockMsg: 그때 보여 줄 까닭.
+      // ver: 열쇠를 서버에 묻거나 바꿀 때마다 하나씩 올리는 차례 번호. 답은 보낸 순서대로 오지
+      // 않으므로(크게 보기 · 탭 복귀 · 바꾸기 실패 뒤 확인이 겹칠 수 있음) 이 번호로 순서를 맞춥니다.
+      // appliedVer: 마지막으로 적용한 refreshAccess 의 번호. localVer: 부스별로 이 화면이
+      // '열쇠 바꾸기' 답에서 열쇠를 적은 번호.
+      // now: booth_id → {congestion, wait_minutes, updated_at(ms), admin} — 카드 아래 '지금:' 줄.
+      // 이 화면이 직접 고쳤거나 직접 고치기 칸을 열 때 읽은 값 가운데 더 새것만 남깁니다.
+      // demoOff: 시연에서 '열쇠 끄기' 를 누른 부스. 시연 열쇠는 운영자 화면이 'demo-' + id 로만
+      // 알아보므로 정말 끌 수는 없고, 이 화면에서만 꺼진 것처럼 그립니다(새로 고침하면 처음으로).
+      // busy: booth_id → 번호. 그 부스에서 '열쇠 바꾸기' 나 '열쇠 끄기' 가 아직 끝나지 않았음(takeBusy 참고).
+      // liveSeq: 지금 값(BC.refreshLive)을 읽으러 보낼 때마다 하나씩 올리는 번호(putNow 참고).
+      ops: { state: 'loading', msg: '', access: {}, checkedAt: 0, lockedOut: false, lockMsg: '',
+             ver: 0, appliedVer: 0, localVer: {}, now: {}, demoOff: {}, busy: {}, liveSeq: 0 },
+      isAdmin: false,
+      // 로그아웃할 때마다 하나씩 올립니다. 그 전에 보낸 요청의 답(열쇠)이 늦게 와도
+      // 번호가 다르면 버려서, 로그아웃한 화면에 열쇠가 다시 그려지지 않게 합니다.
+      gen: 0,
+      lists: { ops: { q: '', off: {} }, signs: { q: '', off: {} } },
+      posterOk: false,
+      // seq: 크게 보기를 열거나 닫을 때마다 올립니다. 늦게 온 열쇠 확인 결과가
+      // 이미 닫았거나 다른 부스로 바뀐 창에 그려지지 않게 합니다.
+      ov: { id: null, link: '', back: null, seq: 0 }
+    };
+
+    var LISTS = {
+      ops: { grid: 'grid-ops', count: 'count-ops', unit: '카드', perPage: 4 },
+      signs: { grid: 'grid-signs', count: 'count-signs', unit: '안내문', perPage: 2 }
+    };
+
+    /* ── 잔손질 ────────────────────────────────────────────────────── */
+    function fmtIssued(t) {
+      var p = BC.kstParts(t);
+      return p ? pad2(p.m) + '.' + pad2(p.d) + ' ' + pad2(p.hh) + ':' + pad2(p.mi) : '';
+    }
+    function tailOf(a) { return a && a.token ? String(a.token).slice(-4) : ''; }
+    function isOff(a) { return !!(a && a.disabled); }
+    function issuedLine(a) {
+      if (!a) return '';
+      if (isOff(a)) {
+        var at = fmtIssued(a.disabled_at);
+        return '열쇠 꺼짐' + (at ? ' · ' + at : '');
+      }
+      var when = fmtIssued(a.issued_at);
+      return (when ? '발급 ' + when + ' · ' : '') + '끝자리 ' + tailOf(a);
+    }
+    // 열쇠가 바뀌었는지 견줄 때 쓰는 표시. 끈 부스는 token 이 null 이라 token 만 견주면
+    // '없음 → 꺼짐' 을 놓칠 수 있어 꺼짐 여부를 함께 봅니다.
+    function keySig(a) { return a ? (a.disabled ? 'off' : 'on:' + (a.token || '')) : ''; }
+
+    // '보통 15분' · '잠시 중단' · '오늘 마감' · '정보 없음' — 부스 운영자 화면과 같은 말.
+    function valueLabel(c, w) {
+      if (!c) return '정보 없음';
+      if (c === '중단') return '잠시 중단';
+      if (c === '마감') return '오늘 마감';
+      return c + ' ' + (Number(w) || 0) + '분';
+    }
+    var NOW_COLOR = { '여유': 'var(--st-free)', '보통': 'var(--st-normal)', '혼잡': 'var(--st-busy)', '중단': 'var(--st-off-mark)', '마감': 'var(--st-off-mark)' };
+    // 서버 시각(…T05:12:33.123456+00:00)을 ms 로. 소수점 세 자리를 넘으면 못 읽는 옛 사파리가 있어
+    // booth-core 와 같이 잘라 냅니다. 읽지 못하면 0(가장 낡은 값)입니다.
+    function msOf(v) {
+      if (!v) return 0;
+      var t = Date.parse(String(v).replace(' ', 'T').replace(/(\.\d{3})\d+/, '$1'));
+      return isNaN(t) ? 0 : t;
+    }
+    function nowText(n) {
+      if (!n) return '';
+      // 지운 값은 서버가 시각을 주지 않아 이 화면에서 지운 시각(shownAt)을 보여 주기만 합니다.
+      // 이 시각은 보여 주기용이고, 어느 값이 새것인지 견주는 데는 쓰지 않습니다(putNow 참고).
+      var at = n.cleared ? n.shownAt : n.updated_at;
+      var clock = at ? BC.formatClock(at) : '';
+      return '지금: ' + valueLabel(n.congestion, n.wait_minutes) +
+        (clock ? ' · ' + clock + (n.admin ? ' 관리자 수정' : ' 입력') : '');
+    }
+    function nowHtml(id) {
+      var n = S.ops.now[id];
+      if (!n) return '';
+      var color = NOW_COLOR[n.congestion] || 'var(--line-3)';
+      return '<i style="background:' + color + '" aria-hidden="true"></i>' + esc(nowText(n));
+    }
+    /* 지금 값 읽기(BC.refreshLive)의 결과를 받을지 정합니다. sent: 그 읽기를 보낼 때의 S.ops.liveSeq.
+       - 이 화면에서 값을 지운 뒤(cleared): 서버는 지우기에 시각을 주지 않습니다(줄을 지움). 이 컴퓨터
+         시계로 시각을 적어 견주면, 노트북 시계가 서버보다 빠를 때 지운 직후 운영자가 넣은 값이 '더 낡은
+         값' 으로 버려집니다. 그래서 시각 대신 차례로 봅니다 — 지우기 답을 받은 뒤에 보낸 읽기는 서버의
+         지운 뒤 상태를 담고 있으니(지운 뒤에 생긴 값만 있음) 값이 있으면 받고, 그 전에 보낸 읽기는
+         지우기 전 값일 수 있어 버립니다.
+       - 시연에서 지운 값(sticky): 시연 저장소에는 지우는 길이 없어 다시 읽으면 예전 값이 그대로 옵니다.
+         이 화면에서 다시 고치거나 다른 탭(운영자 시연 화면)이 그 부스 값을 바꿀 때까지 지운 채로 둡니다.
+       - 그 밖에는 서버 시각끼리 견주어 더 새 값만 받습니다. 직접 고친 뒤 칸을 다시 열었을 때 그보다
+         낡은 읽기가 덮지 않게 합니다. 값이 없는 읽기는 이 화면이 아는 값이 없을 때만 받습니다
+         (값이 없으면 시각도 없어 견줄 수 없습니다). */
+    function putNow(id, n, sent) {
+      var old = S.ops.now[id];
+      if (old && old.cleared) {
+        if (old.sticky || sent <= old.seq || !n.congestion) return false;
+      } else if (old && (!n.congestion || old.updated_at >= n.updated_at)) {
+        // 시각이 같으면 같은 저장입니다. 이 화면이 고친 값이면 '관리자 수정' 표시를 지키려고 앞의 것을 둡니다.
+        return false;
+      }
+      S.ops.now[id] = n;
+      return true;
+    }
+    function orgZone(b) { return [b.org, b.zone_name].filter(Boolean).join(' · '); }
+    function norm(s) {
+      s = String(s == null ? '' : s);
+      if (s.normalize) s = s.normalize('NFC');
+      return s.trim().toLowerCase();
+    }
+    function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+
+    /* supabase-js 오류를 갈래로 나눕니다. 네트워크가 끊기면 code 가 빈 채로
+       'Failed to fetch' 가 오므로, 그것을 '권한 없음' 으로 잘못 안내하지 않게 합니다. */
+    function errKind(err) {
+      var code = String((err && err.code) || '');
+      var m = String((err && err.message) || '');
+      if (code === '42501' || code === 'PGRST301' || code === 'PGRST302' || /JWT|expired/i.test(m)) return 'login';
+      if (code === 'PGRST202' || code === 'PGRST205' || code === '42883' || code === '42P01') return 'db';
+      if (code === 'P0002') return 'missing';
+      if (/Failed to fetch|NetworkError|Load failed|network/i.test(m) || !code) return 'net';
+      return 'other';
+    }
+    function errHtml(err) {
+      var k = errKind(err);
+      if (k === 'login') return MSG.LOGIN;
+      if (k === 'db') return esc(MSG.DB);
+      if (k === 'missing') return '해당 부스를 찾을 수 없어요. 새로 고침해 주세요.';
+      if (k === 'net') return esc(MSG.NET);
+      return esc(MSG.OTHER);
+    }
+    /* 열쇠 끄기 · 직접 고치기 오류. 두 함수는 후속 DB 설정에만 있어서, 설정 전에는
+       PGRST202(함수 없음)가 옵니다 — 기본 설정 안내(MSG.DB)가 아니라 후속 설정을 가리킵니다.
+       '로그인 필요' 는 열쇠 바꾸기와 같이 다시 눌러 보라고만 합니다. 토큰 갱신이 잠깐 실패한
+       것일 수 있고, 로그인이 정말 없으면 뒤따르는 확인(refreshAccess)이 카드를 거둡니다. */
+    function adminErrHtml(err, what) {
+      var k = errKind(err);
+      if (k === 'login') return esc(MSG.AUTH_RETRY);
+      if (k === 'db') return esc(MSG.DB_ADMIN);
+      if (k === 'missing') return esc(what === 'off' ? MSG.OFF_NOKEY : MSG.NO_BOOTH);
+      if (String((err && err.code) || '') === '22023') return esc((err && err.message) || MSG.BAD_VALUE);
+      if (k === 'net') return esc(MSG.NET);
+      return esc(MSG.OTHER);
+    }
+
+    /* QR 하나 그리기. 한 장이 실패해도 나머지 카드는 그려야 하므로 카드마다 감쌉니다. */
+    function makeQr(el, text) {
+      el.innerHTML = '';
+      try {
+        if (!window.QRCode) throw new Error('QR 생성기를 불러오지 못했습니다');
+        new window.QRCode(el, { text: text, width: 512, height: 512, correctLevel: window.QRCode.CorrectLevel.M });
+        // 생성기가 요소의 title 에 주소(운영자 카드는 열쇠 포함)를 넣고 그림에 영어 대체 글을
+        // 붙입니다. 마우스만 올려도 열쇠가 보이지 않게 지우고 대체 글은 우리말로 바꿉니다.
+        el.removeAttribute('title');
+        var img = el.querySelector('img');
+        if (img) img.alt = 'QR 코드';
+        return true;
+      } catch (e) {
+        if (window.console) console.warn('[print-qr] QR 생성 실패', e);
+        el.innerHTML = '<p class="qr__fail">' + esc(MSG.QR_FAIL) + '</p>';
+        return false;
+      }
+    }
+
+    /* ── 위쪽 안내 · 막기 ───────────────────────────────────────────── */
+    function guardHtml(title, msg, detail) {
+      return '<b>' + esc(title) + '</b><p>' + esc(msg) + '</p>' +
+        (detail ? '<p class="guard__detail">' + esc(detail) + '</p>' : '');
+    }
+
+    /* 위쪽 'QR이 여는 곳' 줄. 막혔으면 그 주소로 QR 을 만들지 않으므로 '여는 곳' 으로 적지 않고
+       막힌 주소라고 적습니다 — 그대로 두면 빨간 안내 바로 위에 그 주소가 QR 행선지처럼 보입니다.
+       href: 막히지 않았으면 QR 이 여는 주소, 막혔으면 설정에서 읽은 주소(읽지 못했으면 빈 값).
+       empty: 막혔는데 읽은 주소도 없을 때 대신 적을 말. */
+    function toHtml(blocked, href, empty) {
+      if (!blocked) return 'QR이 여는 곳: <b>' + esc(href) + '</b>';
+      return '<b class="to__blocked">QR을 만들지 않았어요 (막힘)</b> · ' + (href ? '막힌 주소: ' + esc(href) : esc(empty));
+    }
+
+    function setupHeads() {
+      $('demo-note').hidden = !isMock;
+      var visEmpty = 'config.js 의 visitorSiteUrl 이 비어 있거나 주소로 읽히지 않아요';
+      var visHref = vis.base ? vis.base.href : '';
+      $('to-signs').innerHTML = toHtml(vis.blocked, visHref, visEmpty) +
+        (vis.blocked ? '' : ' (부스마다 뒤에 ?b= 부스 고유 id가 붙어요)');
+      $('to-poster').innerHTML = toHtml(vis.blocked, vis.blocked ? visHref : visRoot(), visEmpty);
+      showOpGuard();
+      if (vis.blocked) {
+        ['signs', 'poster'].forEach(function (k) {
+          $('guard-' + k).innerHTML = guardHtml('관람객용 QR을 만들지 않았어요', vis.msg, vis.why);
+          $('guard-' + k).hidden = false;
+        });
+      }
+    }
+
+    function showOpGuard() {
+      var warn = $('warn-ops');
+      // 막혔으면 대신 쓰는 자리 채움 주소(이 페이지 폴더)를 보여 주지 않습니다. 그 주소로 찍히는 줄 압니다.
+      // 관람객 탭(②③)과 같이, 막힌 주소는 '여는 곳' 이 아니라 막힌 주소로 적습니다.
+      $('to-ops').innerHTML = toHtml(op.blocked, op.blocked ? op.shown : opPage(),
+        'config.js 의 staffSiteUrl 이 비어 있거나 주소로 읽히지 않아요');
+      if (op.blocked) {
+        $('guard-ops').innerHTML = guardHtml('운영자 카드를 만들지 않았어요', op.msg,
+          op.shown ? '지금 QR이 가리킬 곳: ' + op.shown + ' — ' + op.why : 'config.js 의 staffSiteUrl — ' + op.why);
+        $('guard-ops').hidden = false;
+        warn.hidden = true;
+        return;
+      }
+      var text = '';
+      if (!isMock && (isStaffHost(op.base.hostname) || op.base.origin === here)) {
+        // 운영 포털에도 예전 운영자 화면이 남아 있을 수 있어 막지는 않습니다. 다만 운영자 화면은
+        // 부스 Live 사이트에서 열기로 했으니, 그 주소로 바꾸라고 알립니다.
+        text = '운영자 QR이 운영 포털(' + op.base.host + ')을 가리켜요. 운영자 화면은 부스 Live 사이트에서 열려야 해요 — ' +
+          'config.js 의 staffSiteUrl 에 부스 Live 사이트 주소를 넣어 주세요. 이대로 인쇄하려면 한 장만 먼저 인쇄해 휴대폰으로 찍어 보세요.';
+      } else if (!isMock && op.base.origin !== here) {
+        // 정상(부스 Live 사이트)입니다. 다른 사이트라 booth-ctrl.html 이 있는지 이 페이지에서는
+        // 확인할 수 없으니(checkOpPage 참고) 막지 않고 한 장 먼저 찍어 보라고만 알립니다.
+        text = '운영자 QR이 부스 Live 사이트(' + op.base.host + ')의 운영자 화면을 가리켜요. 이 페이지에서는 그곳에 ' +
+          '운영자 화면이 있는지 확인할 수 없어요. 한 장만 먼저 인쇄해 휴대폰으로 찍어 본 뒤 나머지를 인쇄하세요.';
+      }
+      warn.hidden = !text;
+      warn.textContent = text;
+    }
+
+    /* ── 탭 ─────────────────────────────────────────────────────────── */
+    var TABS = ['ops', 'signs', 'poster'];
+
+    function setPageRule() {
+      var size = S.tab === 'signs' ? 'A4 landscape' : (S.tab === 'poster' ? S.paper : 'A4');
+      $('page-rule').textContent = '@page { size: ' + size + '; margin: 10mm; }';
+    }
+
+    function showTab(name, focus) {
+      S.tab = name;
+      TABS.forEach(function (t) {
+        var on = t === name;
+        var tab = $('tab-' + t);
+        tab.setAttribute('aria-selected', on ? 'true' : 'false');
+        tab.tabIndex = on ? 0 : -1;
+        if (on && focus) tab.focus();
+        $('panel-' + t).hidden = !on;
+      });
+      setPageRule();
+      updatePrintBtn();
+    }
+
+    /* ── 목록 (① ② 공통): 찾기 · 인쇄에 포함 ─────────────────────────── */
+    function items(kind) {
+      return [].slice.call($(LISTS[kind].grid).querySelectorAll('.item'));
+    }
+    function findItem(kind, id) {
+      var all = items(kind);
+      for (var i = 0; i < all.length; i++) if (all[i].getAttribute('data-id') === id) return all[i];
+      return null;
+    }
+    function matches(b, q) {
+      if (!q) return true;
+      var code = norm(b.code);
+      var hay = code + ' ' + code.replace(/-/g, '') + ' ' + norm(b.name);
+      return hay.indexOf(q) >= 0 || hay.replace(/\s+/g, '').indexOf(q.replace(/\s+/g, '')) >= 0;
+    }
+    function applyFilter(kind) {
+      var q = norm(S.lists[kind].q);
+      items(kind).forEach(function (el) {
+        var b = S.byId[el.getAttribute('data-id')];
+        el.classList.toggle('is-filtered', !!b && !matches(b, q));
+      });
+      updateCount(kind);
+    }
+    function shownItems(kind) {
+      return items(kind).filter(function (el) { return !el.classList.contains('is-filtered'); });
+    }
+    // 열쇠를 끈 카드(is-keyoff)는 고를 수도 인쇄할 수도 없습니다.
+    function printableCount(kind) {
+      return shownItems(kind).filter(function (el) {
+        return !el.classList.contains('is-off') && !el.classList.contains('is-keyoff');
+      }).length;
+    }
+    // 찾기로 가려진 카드는 인쇄하지 않습니다. 화면에 체크된 채 보이는 것만 종이로 나갑니다.
+    function updateCount(kind) {
+      var L = LISTS[kind];
+      var all = items(kind).length, shown = shownItems(kind).length, n = printableCount(kind);
+      var off = kind === 'ops' ? $(L.grid).querySelectorAll('.item.is-keyoff').length : 0;
+      var text = '인쇄할 ' + L.unit + ' ' + n + '장 · A4 ' + Math.ceil(n / L.perPage) + '쪽';
+      text += S.lists[kind].q ? ' · 찾은 부스 ' + shown + '곳 / 전체 ' + all + '곳' : ' · 전체 ' + all + '곳';
+      if (off) text += ' · 열쇠 꺼짐 ' + off + '곳(인쇄 안 함)';
+      $(L.count).textContent = text;
+      updatePrintBtn();
+    }
+    function setPicked(kind, el, on) {
+      if (el.classList.contains('is-keyoff')) return;
+      var id = el.getAttribute('data-id');
+      S.lists[kind].off[id] = !on;
+      el.classList.toggle('is-off', !on);
+      var box = el.querySelector('input[data-act="pick"]');
+      if (box) box.checked = on;
+    }
+    function pickHtml(kind, id) {
+      return '<label class="pick"><input type="checkbox" data-act="pick"' +
+        (S.lists[kind].off[id] ? '' : ' checked') + ' /> 인쇄에 포함</label>';
+    }
+
+    /* ── 인쇄 단추 ─────────────────────────────────────────────────── */
+    function canPrint() {
+      if (S.tab === 'ops') {
+        return !op.blocked && S.ops.state === 'ready' && !!S.booths && printableCount('ops') > 0;
+      }
+      if (S.tab === 'signs') return !vis.blocked && !!S.booths && printableCount('signs') > 0;
+      return !vis.blocked && S.posterOk;
+    }
+    function updatePrintBtn() {
+      var btn = $('print-btn');
+      btn.disabled = !canPrint();
+      if (S.tab === 'poster' || btn.disabled) { btn.textContent = '인쇄하기'; return; }
+      btn.textContent = '인쇄하기 (' + printableCount(S.tab) + '장)';
+    }
+
+    /* ── ① 부스 운영자용 카드 ──────────────────────────────────────── */
+    /* 카드 하나. 카드(article)는 종이로 나가고, 그 아래 단추 · 확인 칸 · 직접 고치기 칸은
+       화면에만 보입니다(인쇄 CSS 가 숨김). 열쇠를 끈 부스는 QR 자리에 까닭을 적고,
+       고르기 상자 대신 '인쇄 안 함' 을 보여 줍니다 — 꺼진 열쇠는 찍어도 열리지 않습니다. */
+    function opsItemHtml(b) {
+      var a = S.ops.access[b.id];
+      var off = isOff(a);
+      var hasKey = !!(a && a.token);
+      // 바꾸기 · 끄기가 아직 도는 중에 카드가 다시 그려져도 두 '예' 단추는 계속 잠가 둡니다.
+      var busyAttr = S.ops.busy[b.id] ? ' disabled' : '';
+      return '<div class="item item--ops' + (off ? ' is-keyoff' : (S.lists.ops.off[b.id] ? ' is-off' : '')) + '" data-id="' + esc(b.id) + '">' +
+        '<article class="card" aria-label="' + esc(b.code + (off ? ' 운영자 카드 (열쇠 꺼짐)' : ' 운영자 카드')) + '">' +
+          '<div class="card__band">' + (off ? '부스 운영자용 · 열쇠 꺼짐' : '부스 운영자용 · 관람객용 아님') + '</div>' +
+          (isMock ? '<span class="stamp">' + esc(MSG.STAMP) + '</span>' : '') +
+          '<div class="card__body">' +
+            '<div class="card__code">' + esc(b.code) + '</div>' +
+            '<div class="card__name">' + esc(b.name) + '</div>' +
+            '<div class="card__org">' + esc(orgZone(b)) + '</div>' +
+            (off
+              ? '<div class="card__off" tabindex="-1" data-offnote><b>열쇠 꺼짐</b>' + esc(MSG.KEY_OFF) + '</div>'
+              : '<div class="card__mid">' +
+                  '<figure class="card__qr"><div class="qr" data-qr></div>' +
+                    '<figcaption class="qr__host">' + esc(op.base.host) + '</figcaption></figure>' +
+                  '<ol class="steps">' +
+                    '<li><b>①</b><span>휴대폰 카메라로 QR을 찍어요</span></li>' +
+                    '<li><b>②</b><span>줄이 바뀔 때마다 대기 시간을 눌러요</span></li>' +
+                    '<li><b>③</b><span>쉬는 동안 “잠시 중단”, 끝나면 “오늘 마감”</span></li>' +
+                  '</ol>' +
+                '</div>' +
+                '<p class="card__hand">교대할 때 이 카드를 다음 담당자에게 넘겨 주세요 · 잃어버리면 ' + esc(helpLine) + '</p>') +
+            '<p class="card__meta">' + esc(issuedLine(a)) + '</p>' +
+          '</div>' +
+        '</article>' +
+        '<div class="acts">' +
+          (off ? '<span class="pick pick--off">인쇄 안 함 (열쇠 꺼짐)</span>' : pickHtml('ops', b.id)) +
+          (off ? '' : '<button type="button" class="btn" data-act="big"' + (hasKey ? '' : ' disabled') + '>QR 크게 보기</button>') +
+          '<button type="button" class="btn" data-act="fix" aria-expanded="false">대기 값 직접 고치기</button>' +
+        '</div>' +
+        '<p class="now" data-now>' + nowHtml(b.id) + '</p>' +
+        '<div class="acts acts--more">' +
+          // 열쇠가 없는 부스(목록을 받은 뒤 새로 등록)는 끌 열쇠도 없습니다. 새로 고침하면 생깁니다.
+          (hasKey ? '<button type="button" class="btn btn--quiet" data-act="off" aria-expanded="false">열쇠 끄기</button>' : '') +
+          '<button type="button" class="btn btn--quiet" data-act="rotate" aria-expanded="false">' +
+            (off ? '열쇠 바꾸기 (새 열쇠로 다시 켜기)' : '열쇠 바꾸기 (유출됐을 때만)') + '</button>' +
+        '</div>' +
+        '<p class="note" data-note role="status" aria-live="polite"></p>' +
+        // 직접 고치기 칸은 처음 열 때 채웁니다. 부스마다 단추 11개를 미리 만들어 둘 까닭이 없습니다.
+        '<div class="fix" data-fix hidden></div>' +
+        '<div class="confirm" data-confirm="off" hidden>' +
+          '<p>이 부스의 운영자 QR과 열려 있는 운영자 화면이 바로 멈춥니다. 새 열쇠는 나오지 않아요. 계속할까요?</p>' +
+          '<div class="confirm__acts">' +
+            '<button type="button" class="btn btn--danger-solid" data-act="off-yes"' + busyAttr + '>열쇠 끄기</button>' +
+            '<button type="button" class="btn" data-act="off-no">그만두기</button>' +
+          '</div>' +
+          '<p class="confirm__err" data-err role="alert"></p>' +
+        '</div>' +
+        '<div class="confirm" data-confirm="rotate" hidden>' +
+          '<p>' + (off
+            ? '새 열쇠를 만들어 이 부스의 운영자 QR을 다시 켭니다. 꺼지기 전 카드와 링크는 다시 살아나지 않아요 — 바로 새 QR을 찍어야 합니다. 계속할까요?'
+            : '이 부스의 예전 QR과 지금 열려 있는 운영자 화면이 모두 멈춥니다. 바로 새 QR을 찍어야 합니다. 계속할까요?') + '</p>' +
+          '<div class="confirm__acts">' +
+            '<button type="button" class="btn btn--danger-solid" data-act="rotate-yes"' + busyAttr + '>' + (off ? '새 열쇠로 다시 켜기' : '열쇠 바꾸기') + '</button>' +
+            '<button type="button" class="btn" data-act="rotate-no">그만두기</button>' +
+          '</div>' +
+          '<p class="confirm__err" data-err role="alert"></p>' +
+        '</div>' +
+      '</div>';
+    }
+
+    // 직접 고치기 칸의 단추. 부스 운영자 화면(booth-ctrl.html)의 단추판과 같은 값에
+    // '값 지우기' 하나를 더합니다. 아래 작은 글씨는 서버와 같은 규칙(congestionFor)의 상태입니다.
+    var FIX_WAITS = [0, 5, 10, 15, 20, 30, 45, 60];
+    function fixPanelHtml() {
+      var btns = FIX_WAITS.map(function (w) {
+        var big = w === 0 ? '바로' : w + '분';
+        var sub = (w === 0 ? '0분 · ' : (w === 60 ? '이상 · ' : '')) + BC.congestionFor(w);
+        return '<button type="button" class="btn" data-act="set" data-mode="open" data-wait="' + w + '">' +
+          esc(big) + '<small>' + esc(sub) + '</small></button>';
+      }).join('') +
+        '<button type="button" class="btn" data-act="set" data-mode="pause">잠시 중단</button>' +
+        '<button type="button" class="btn" data-act="set" data-mode="closed">오늘 마감</button>' +
+        '<button type="button" class="btn btn--danger fix__wide" data-act="set" data-mode="clear">값 지우기<small>정보 없음</small></button>';
+      return '<p class="fix__head">대기 값 직접 고치기</p>' +
+        '<p class="fix__cur" data-fix-cur></p>' +
+        '<p class="fix__hint">누르면 바로 저장돼 관람객 화면에 20초 안팎으로 보여요. 부스 운영자가 나중에 다시 누르면 그 값으로 바뀌어요.</p>' +
+        '<div class="fix__grid" role="group" aria-label="고칠 값">' + btns + '</div>' +
+        '<p class="fix__msg" data-fix-msg role="status" aria-live="polite"></p>' +
+        '<div class="fix__foot"><button type="button" class="btn" data-act="fix-close">닫기</button></div>';
+    }
+
+    function drawOpsQr(el) {
+      var a = S.ops.access[el.getAttribute('data-id')];
+      var box = el.querySelector('[data-qr]');
+      if (!box) return; // 열쇠를 끈 카드에는 QR 자리가 없습니다
+      if (!a || !a.token) { box.innerHTML = '<p class="qr__fail">' + esc(MSG.NO_KEY) + '</p>'; return; }
+      makeQr(box, opLink(a.token));
+    }
+
+    function loginHtml() { return '<p>' + MSG.LOGIN + '</p>'; }
+    function retryHtml(msgHtml) {
+      return '<p>' + msgHtml + '</p><button type="button" class="btn" data-act="reload">다시 불러오기</button>';
+    }
+
+    function renderOps() {
+      var state = $('state-ops'), grid = $('grid-ops');
+      grid.innerHTML = '';
+      $('ctl-ops').hidden = true;
+      var st = S.ops.state;
+
+      if (st === 'loading' || (st === 'ready' && S.booths === null && !S.loadError)) {
+        state.innerHTML = '<p>카드를 준비하는 중이에요</p>';
+      } else if (st === 'login') {
+        state.innerHTML = (S.ops.lockedOut ? '<p><b>' + esc(S.ops.lockMsg || MSG.SIGNED_OUT) + '</b></p>' : '') + loginHtml();
+      } else if (st === 'blocked') {
+        // 막혔어도 로그인은 확인해 둡니다. config.js 를 고치고 새로 고침하면 바로 카드가 나오게.
+        state.innerHTML = '<p>' + esc(op.hint) + '</p>';
+      } else if (st === 'db') {
+        state.innerHTML = '<p>' + esc(MSG.DB) + '</p>';
+      } else if (st === 'error') {
+        state.innerHTML = retryHtml(S.ops.msg);
+      } else if (S.loadError) {
+        state.innerHTML = retryHtml(esc(MSG.LOAD_FAIL));
+      } else if (!S.booths.length) {
+        state.innerHTML = '<p>' + esc(MSG.EMPTY) + '</p>';
+      } else {
+        state.innerHTML = '';
+        grid.innerHTML = S.booths.map(opsItemHtml).join('');
+        items('ops').forEach(drawOpsQr);
+        $('ctl-ops').hidden = false;
+        applyFilter('ops');
+      }
+      updatePrintBtn();
+    }
+
+    function rerenderOpsItem(id) {
+      var old = findItem('ops', id), b = S.byId[id];
+      if (!old || !b) return null;
+      var holder = document.createElement('div');
+      holder.innerHTML = opsItemHtml(b);
+      var el = holder.firstChild;
+      if (old.classList.contains('is-filtered')) el.classList.add('is-filtered');
+      old.parentNode.replaceChild(el, old);
+      drawOpsQr(el);
+      updateCount('ops');
+      return el;
+    }
+
+    /* ── ② 부스 앞 안내 ────────────────────────────────────────────── */
+    function signItemHtml(b) {
+      var title = S.settings.event_title || '';
+      return '<div class="item item--sign' + (S.lists.signs.off[b.id] ? ' is-off' : '') + '" data-id="' + esc(b.id) + '">' +
+        '<article class="sign" aria-label="' + esc(b.code + ' 부스 앞 안내') + '">' +
+          (isMock ? '<span class="stamp">' + esc(MSG.STAMP) + '</span>' : '') +
+          '<div class="sign__code">' + esc(b.code) + '</div>' +
+          '<div class="sign__name">' + esc(b.name) + '</div>' +
+          '<h2 class="sign__head">줄이 길면? 지금 한가한 부스 찾기</h2>' +
+          '<p class="sign__sub">카메라로 찍으면 이 부스 대기 시간과 근처 여유 부스가 보여요</p>' +
+          '<figure class="sign__qr"><div class="qr" data-qr></div>' +
+            '<figcaption class="qr__host">' + esc(vis.base.host) + '</figcaption></figure>' +
+          '<p class="sign__foot"><i class="sq" aria-hidden="true"></i>' + esc(title || '부스 대기 현황') + '</p>' +
+        '</article>' +
+        '<div class="acts">' + pickHtml('signs', b.id) + '</div>' +
+      '</div>';
+    }
+
+    function renderSigns() {
+      var state = $('state-signs'), grid = $('grid-signs');
+      grid.innerHTML = '';
+      $('ctl-signs').hidden = true;
+      if (vis.blocked) {
+        state.innerHTML = '';
+      } else if (S.loadError) {
+        state.innerHTML = retryHtml(esc(MSG.LOAD_FAIL));
+      } else if (S.booths === null) {
+        state.innerHTML = '<p>부스 정보를 불러오는 중이에요</p>';
+      } else if (!S.booths.length) {
+        state.innerHTML = '<p>' + esc(MSG.EMPTY) + '</p>';
+      } else {
+        state.innerHTML = '';
+        grid.innerHTML = S.booths.map(signItemHtml).join('');
+        items('signs').forEach(function (el) {
+          makeQr(el.querySelector('[data-qr]'), visLink(el.getAttribute('data-id')));
+        });
+        $('ctl-signs').hidden = false;
+        applyFilter('signs');
+      }
+      updatePrintBtn();
+    }
+
+    /* ── ③ 입구 포스터 ─────────────────────────────────────────────── */
+    function renderPoster() {
+      if (vis.blocked) { $('poster').hidden = true; S.posterOk = false; updatePrintBtn(); return; }
+      $('poster').hidden = false;
+      $('ctl-poster').hidden = false;
+      if (isMock && !$('poster').querySelector('.stamp')) {
+        var st = document.createElement('span');
+        st.className = 'stamp';
+        st.textContent = MSG.STAMP;
+        $('poster').appendChild(st);
+      }
+      S.posterOk = makeQr($('poster-qr'), visRoot());
+      $('poster-host').textContent = vis.base.host;
+      updatePrintBtn();
+    }
+    function fillPosterText() {
+      var s = S.settings || {};
+      if (s.event_title) $('poster-top').lastChild.textContent = s.event_title;
+      $('poster-foot').textContent = [s.venue, s.date_label, s.time_label].filter(Boolean).join(' · ');
+    }
+    function setPaper(p) {
+      S.paper = p === 'A3' ? 'A3' : 'A4';
+      $('poster').classList.toggle('is-a3', S.paper === 'A3');
+      [].slice.call(document.querySelectorAll('[data-paper]')).forEach(function (b) {
+        b.setAttribute('aria-pressed', b.getAttribute('data-paper') === S.paper ? 'true' : 'false');
+      });
+      setPageRule();
+    }
+
+    /* 기능이 아직 꺼져 있어도(표가 없음) 안내문은 뽑을 수 있습니다. 부스 id 로 이어서
+       나중에 켜도 종이가 그대로 맞습니다. 막지 않고 알리기만 합니다. */
+    function showLiveNote() {
+      var off = !isMock && S.liveReady === false;
+      ['signs', 'poster'].forEach(function (k) {
+        var el = $('warn-' + k);
+        el.hidden = !off || vis.blocked;
+        el.textContent = off ? MSG.DB + ' 그 전에는 관람객 화면에 대기 시간이 나오지 않아요.' : '';
+      });
+    }
+
+    /* ── 데이터 ────────────────────────────────────────────────────── */
+    function loadBooths() {
+      return BC.load().then(function (p) {
+        S.settings = p.settings || {};
+        S.booths = p.booths || [];
+        S.liveReady = p.liveReady;
+        S.byId = {};
+        S.booths.forEach(function (b) { S.byId[b.id] = b; });
+      }, function (err) {
+        S.loadError = err || true;
+        if (window.console) console.warn('[print-qr] 부스 목록을 읽지 못했습니다', err);
+      });
+    }
+
+    function setAdmin(on) {
+      S.isAdmin = !!on;
+      $('reset-btn').hidden = !S.isAdmin;
+    }
+
+    // 시연: 열쇠는 'demo-' + id 로 정해져 있습니다. 발급 시각과 끝자리는 운영자 화면
+    // 아래쪽에 보이는 것과 맞추려고 같은 엔진(ctrlGet)에서 받아 옵니다.
+    function demoAccess() {
+      var list = S.booths || [];
+      return Promise.all(list.map(function (b) {
+        var token = BC.demoToken(b.id);
+        return BC.ctrlGet(token).then(function (c) {
+          return { id: b.id, token: token, issued_at: (c && c.issued_at) || new Date().toISOString() };
+        }, function () {
+          return { id: b.id, token: token, issued_at: new Date().toISOString() };
+        });
+      })).then(function (rows) {
+        S.ops.access = {};
+        rows.forEach(function (r) {
+          var off = !!S.ops.demoOff[r.id];
+          S.ops.access[r.id] = { token: off ? null : r.token, issued_at: r.issued_at, rotated: false, disabled: off };
+        });
+        S.ops.state = 'ready';
+        setAdmin(true);
+      });
+    }
+
+    function checkAdmin(session) {
+      var uid = session && session.user && session.user.id;
+      if (!uid) return;
+      var gen = S.gen;
+      Core.fetchProfile(uid).then(function () { if (gen === S.gen && Core.isAdmin()) setAdmin(true); });
+    }
+
+    function realAccess() {
+      if (!Core || !Core.isConfigured()) {
+        S.ops.state = 'error';
+        S.ops.msg = esc('연결 설정을 불러오지 못했어요. 새로 고침해 주세요.');
+        return Promise.resolve();
+      }
+      if (!window.supabase) {
+        S.ops.state = 'error';
+        S.ops.msg = esc('로그인 기능을 불러오지 못했어요. 인터넷 연결을 확인한 뒤 새로 고침해 주세요.');
+        return Promise.resolve();
+      }
+      var gen = S.gen;
+      return Core.session().then(function (session) {
+        if (gen !== S.gen) return;
+        if (!session) { S.ops.state = 'login'; return; }
+        checkAdmin(session);
+        // 막힌 상태에서는 열쇠를 만들지 않습니다. admin_booth_access 는 열쇠가 없는
+        // 부스에 새로 만들어 주는 함수라, 쓰지도 않을 열쇠를 남기게 됩니다.
+        if (op.blocked) { S.ops.state = 'blocked'; return; }
+        return Core.rpc('admin_booth_access').then(function (rows) {
+          if (gen !== S.gen) return; // 기다리는 사이 로그아웃했으면 열쇠를 버립니다
+          if (op.blocked) { S.ops.state = 'blocked'; return; } // 그 사이 주소 확인이 막았으면
+          S.ops.access = accessMap(rows);
+          S.ops.checkedAt = Date.now();
+          S.ops.state = 'ready';
+          setAdmin(true);
+        }, function (err) {
+          if (gen !== S.gen) return;
+          var k = errKind(err);
+          S.ops.state = k === 'login' ? 'login' : (k === 'db' ? 'db' : 'error');
+          S.ops.msg = errHtml(err);
+          if (window.console) console.warn('[print-qr] 운영자 열쇠를 읽지 못했습니다', err);
+        });
+      });
+    }
+
+    /* admin_booth_access 의 답을 부스별로 정리합니다. 후속 DB 설정 뒤에는 disabled 칸이 있고,
+       꺼진 부스는 token 이 null 로 옵니다. 설정 전(칸 없음)에는 모두 켜진 것으로 봅니다.
+       혹시 disabled 인데 token 이 따라와도 쓰지 않습니다 — 꺼진 열쇠를 QR 로 찍으면 안 됩니다. */
+    function accessMap(rows) {
+      var m = {};
+      (rows || []).forEach(function (r) {
+        var off = r.disabled === true;
+        m[r.booth_id] = { token: off ? null : (r.token || null), issued_at: r.issued_at, rotated: !!r.rotated, disabled: off };
+      });
+      return m;
+    }
+
+    // 로그아웃 등으로 버린 요청임을 알리는 오류. 부르는 쪽은 이것을 받으면 아무것도 그리지 않습니다.
+    function lockedErr() {
+      var e = new Error('로그아웃되어 결과를 버립니다');
+      e.locked = true;
+      return e;
+    }
+
+    /* 열쇠를 서버에서 다시 받습니다. 이 화면은 운영본부 노트북 · 휴대폰에서 하루 종일
+       열어 두는데, 그 사이 다른 기기에서 '열쇠 바꾸기' 를 누르면 이 화면이 가진 열쇠는
+       이미 죽은 열쇠가 됩니다. admin_booth_access 는 열쇠가 없는 부스에만 새로 만들고
+       있는 열쇠는 그대로 돌려주므로 여러 번 불러도 됩니다.
+       바뀐 부스의 카드만 다시 그리고, 바뀐 부스 id 목록을 돌려줍니다. */
+    function refreshAccess() {
+      var gen = S.gen;
+      var sent = ++S.ops.ver;
+      return askAccess(gen, true).then(function (rows) {
+        if (gen !== S.gen) throw lockedErr();
+        // 나중에 보낸 확인의 답이 이미 적용됐으면 이 답은 그보다 낡은 열쇠를 들고 있을 수 있습니다.
+        // 통째로 버립니다. 화면에는 이미 더 새 답이 그려져 있습니다.
+        if (sent < S.ops.appliedVer) return [];
+        S.ops.appliedVer = sent;
+        var prev = S.ops.access, next = accessMap(rows), changed = [];
+        // 이 확인을 보낸 뒤에 이 화면에서 '열쇠 바꾸기' 로 받은 열쇠는 이 답보다 새것입니다.
+        // 이 답은 바꾸기 전에 읽혔을 수 있어서, 그대로 덮으면 서버가 이미 죽인 열쇠가 다시 그려집니다.
+        Object.keys(S.ops.localVer).forEach(function (id) {
+          if (S.ops.localVer[id] > sent && prev[id]) next[id] = prev[id];
+        });
+        Object.keys(S.byId).forEach(function (id) {
+          var p = prev[id], n = next[id];
+          if (keySig(p) !== keySig(n)) changed.push(id);
+          // 서버는 끈 시각을 돌려주지 않습니다. 이 화면이 끄면서 받아 둔 시각은 남깁니다.
+          else if (isOff(p) && isOff(n) && p.disabled_at && !n.disabled_at) n.disabled_at = p.disabled_at;
+        });
+        S.ops.access = next;
+        S.ops.checkedAt = Date.now();
+        if (S.ops.state === 'ready') changed.forEach(function (id) { rerenderOpsItem(id); });
+        // 크게 보기에 QR 이 떠 있는 부스가 바뀌었으면 그 자리에서 새 QR 로 바꿉니다.
+        // 다른 기기에서 열쇠를 껐으면 QR 을 걷고 꺼졌다고 적습니다.
+        if (!$('ov').hidden && S.ov.link && changed.indexOf(S.ov.id) >= 0) {
+          drawBig(S.ov.id, isOff(next[S.ov.id]) ? MSG.OFF_ELSEWHERE : MSG.ROTATED_ELSEWHERE);
+        } else if (!$('ov').hidden && S.ov.link && $('ov-note').classList.contains('is-warn')) {
+          // 늦게 온 답으로 지금 띄운 열쇠가 최신임이 확인됐으니 '확인하지 못했어요' 경고를 거둡니다.
+          setOvNote('', false);
+        }
+        return changed;
+      }, function (err) {
+        if (gen !== S.gen) throw lockedErr();
+        throw err;
+      });
+    }
+
+    /* admin_booth_access 를 부릅니다. 서버가 '로그인 필요 · 권한 없음' 으로 답해도 곧바로
+       로그아웃으로 단정하지 않습니다. 노트북이 깨어난 직후나 인증 서버가 잠깐 502 를 낼 때
+       supabase-js 는 토큰을 새로 받지 못하면 로그인 없이(공개 키로) 보내고, 그러면 같은
+       오류가 옵니다. 로그인이 아직 남아 있으면 잠시 뒤 한 번 더 물어봅니다.
+       - 로그인이 없으면: 진짜 로그아웃이므로 카드를 거둡니다(SIGNED_OUT).
+       - 로그인은 있는데 두 번 모두 거절: 권한이 바뀌었을 수 있어 열쇠를 계속 보여 주지 않되,
+         '로그아웃' 이라고 잘못 말하지 않고 새로 고침을 안내합니다. */
+    function askAccess(gen, again) {
+      return Core.rpc('admin_booth_access').then(null, function (err) {
+        if (gen !== S.gen) throw lockedErr();
+        if (errKind(err) !== 'login') throw err;
+        return stillSignedIn().then(function (signed) {
+          if (gen !== S.gen) throw lockedErr();
+          if (!signed) { lockOut(); throw lockedErr(); }
+          if (!again) { lockOut(MSG.AUTH_LOST); throw lockedErr(); }
+          return sleep(1500).then(function () {
+            if (gen !== S.gen) throw lockedErr();
+            return askAccess(gen, false);
+          });
+        });
+      });
+    }
+
+    // 로그인이 남아 있는지. getSession 이 토큰 갱신에 잠깐 실패하면 세션을 null 로 주지만
+    // 저장소의 토큰은 지우지 않습니다. 그래서 저장소에 토큰이 남아 있는 것도 '로그인 중' 으로 봅니다.
+    // (진짜 로그아웃이면 supabase-js 가 저장소의 토큰을 지웁니다.)
+    function stillSignedIn() {
+      return Core.session().then(function (s) { return !!s || hasStoredToken(); },
+        function () { return hasStoredToken(); });
+    }
+
+    /* 다른 탭(관리자 화면)에서 로그아웃하면 이 탭도 따라갑니다. 관리자 화면은 인쇄 화면을
+       새 탭으로 엽니다. 관리자가 관리자 탭에서만 로그아웃하고 자리를 뜨면, 이 탭에는 모든
+       부스의 운영자 QR 과 '링크 복사' 가 그대로 남아 누구든 아무 부스나 조작할 수 있습니다. */
+    // msg: 카드를 거둔 까닭. 비우면 '로그아웃되어…' 입니다(SIGNED_OUT 알림 · 저장소의 토큰 삭제).
+    function lockOut(msg) {
+      S.gen++;
+      S.ops.access = {};
+      S.ops.busy = {}; // 기다리던 바꾸기 · 끄기의 답은 gen 이 달라 버려집니다
+      S.ops.state = 'login';
+      S.ops.lockedOut = true;
+      S.ops.lockMsg = msg || MSG.SIGNED_OUT;
+      setAdmin(false);
+      $('reset-confirm').hidden = true;
+      closeBig();
+      renderOps();
+    }
+
+    function watchAuth() {
+      var client = Core && Core.db ? Core.db() : null;
+      if (client && client.auth && client.auth.onAuthStateChange) {
+        // supabase-js 는 같은 브라우저의 다른 탭에서 로그아웃한 것도 이 알림으로 알려 줍니다.
+        // 토큰을 새로 받지 못해 세션이 끝났을 때도 SIGNED_OUT 이 옵니다.
+        client.auth.onAuthStateChange(function (event) {
+          if (event === 'SIGNED_OUT') lockOut();
+        });
+      }
+      // Core.signOut() 은 서버 로그아웃이 실패하면 저장된 토큰을 직접 지웁니다. 그 길로는
+      // 위 알림이 오지 않으므로, 저장소에서 토큰이 사라지는 것도 따로 지켜봅니다.
+      // (key 가 null 이면 다른 탭이 저장소를 통째로 비운 것입니다.)
+      window.addEventListener('storage', function (e) {
+        if (e.key === null ? !hasStoredToken() : (/^sb-.+-auth-token$/.test(e.key) && e.newValue == null)) {
+          lockOut();
+        }
+      });
+      // GitHub Pages 는 netlify.toml 의 no-store 를 따르지 않아, 뒤로가기로 돌아오면 열쇠가 그려진
+      // 화면이 캐시(bfcache)에서 그대로 살아납니다. 그때는 새로 열어 로그인부터 다시 확인합니다.
+      window.addEventListener('pageshow', function (e) {
+        if (e.persisted) window.location.reload();
+      });
+      // 다른 기기에서 바꾼 열쇠를 따라잡습니다. 탭으로 돌아올 때마다 부르면 잦으니 30초에 한 번까지만.
+      document.addEventListener('visibilitychange', function () {
+        if (document.hidden || S.ops.state !== 'ready' || Date.now() - S.ops.checkedAt < 30000) return;
+        refreshAccess().then(null, function (err) {
+          if (!err.locked && window.console) console.warn('[print-qr] 열쇠를 다시 확인하지 못했습니다', err);
+        });
+      });
+    }
+
+    /* 시연: 다른 탭(운영자 시연 화면 · 다른 인쇄 화면)이 시연 값을 바꾸면, 이 화면에서 지워 둔
+       그 부스 값(sticky)을 풀어 다음 읽기를 받습니다. 이 탭이 쓴 값은 BoothCore 가 이 탭에 알리지
+       않으므로 여기 오는 알림은 모두 다른 탭의 것입니다. id 가 없으면(모두 되돌리기 · storage 알림)
+       어느 부스가 바뀌었는지 몰라 모두 풉니다. 풀 때의 읽기 차례를 적어, 그 전에 보낸 읽기는 계속 버립니다. */
+    function watchDemo() {
+      if (!BC.onDemoChange) return;
+      BC.onDemoChange(function (msg) {
+        var only = msg && msg.id;
+        Object.keys(S.ops.now).forEach(function (id) {
+          var n = S.ops.now[id];
+          if (!n || !n.cleared || !n.sticky || (only && only !== id)) return;
+          n.sticky = false;
+          n.seq = S.ops.liveSeq;
+        });
+      });
+    }
+
+    function hasStoredToken() {
+      try {
+        for (var i = 0; i < window.localStorage.length; i++) {
+          if (/^sb-.+-auth-token$/.test(window.localStorage.key(i) || '')) return true;
+        }
+      } catch (e) { /* 저장소를 못 읽으면 판단하지 않습니다 */ return true; }
+      return false;
+    }
+
+    /* ── 열쇠 바꾸기 (유출됐을 때만) ───────────────────────────────── */
+    function rotate(el) {
+      var id = el.getAttribute('data-id');
+      var box = el.querySelector('[data-confirm="rotate"]');
+      var errEl = box.querySelector('[data-err]');
+      var gen = S.gen;
+      // 이 부스의 끄기(또는 앞의 바꾸기)가 아직 끝나지 않았으면 보내지 않습니다(takeBusy 참고).
+      var no = takeBusy(id);
+      if (!no) { errEl.innerHTML = busyHtml(); return; }
+      // 꺼진 부스는 token 이 null 입니다. 아래 '응답만 늦게 왔는지' 확인은 새 열쇠가 생겼는지로 봅니다.
+      var before = (S.ops.access[id] || {}).token || null;
+      var wasOff = isOff(S.ops.access[id]);
+      var done = (wasOff ? '새 열쇠로 다시 켰어요. 꺼지기 전 카드와 링크는 계속 열리지 않아요. '
+                         : '새 열쇠로 바꿨어요. 예전 카드와 열려 있던 운영자 화면은 이제 열리지 않아요. ') +
+        '운영자 휴대폰으로 지금 이 QR을 찍게 한 뒤, 이 부스 카드만 골라 다시 인쇄해 주세요.';
+      errEl.innerHTML = '';
+
+      var job;
+      if (isMock) {
+        // 시연 열쇠는 운영자 화면이 'demo-' + id 로만 알아봅니다. 바꾸는 흉내만 냅니다.
+        // 꺼 두었던 시연 부스는 다시 켭니다(실제로도 바꾸기가 꺼짐을 풉니다).
+        job = sleep(150).then(function () {
+          delete S.ops.demoOff[id];
+          putKey(id, { token: BC.demoToken(id), issued_at: new Date().toISOString(), rotated: true, disabled: false });
+          return '시연이라 열쇠는 그대로예요. 실제로는 새 열쇠가 만들어지고 예전 카드와 열려 있던 운영자 화면이 멈춰요.';
+        });
+      } else {
+        job = Core.rpc('admin_rotate_booth_token', { p_booth_id: id }).then(function (rows) {
+          if (gen !== S.gen) throw lockedErr();
+          var r = Object.prototype.toString.call(rows) === '[object Array]' ? rows[0] : rows;
+          if (!r || !r.token) {
+            var none = new Error('해당 부스를 찾을 수 없어요');
+            none.code = 'P0002';
+            throw none;
+          }
+          putKey(id, { token: r.token, issued_at: r.issued_at, rotated: true, disabled: false });
+          return done;
+        }, function (err) {
+          if (gen !== S.gen) throw lockedErr();
+          throw err;
+        });
+      }
+
+      job.then(function (note) {
+        dropBusy(id, no);
+        rerenderOpsItem(id);
+        openBig(id, note, true); // 방금 서버에서 받은 열쇠라 다시 확인하지 않습니다
+      }, function (err) {
+        if (err && err.locked) { dropBusy(id, no); return; }
+        if (window.console) console.warn('[print-qr] 열쇠를 바꾸지 못했습니다', err);
+        if (isMock) { dropBusy(id, no); reportKeyErr(id, 'rotate', errHtml(err)); return; }
+        // '로그인 필요' 오류여도 여기서 바로 카드를 거두지 않습니다. 토큰 갱신이 잠깐 실패한 것일 수
+        // 있습니다. 아래 확인(refreshAccess → askAccess)이 로그인이 정말 없을 때만 거둡니다.
+        reportKeyErr(id, 'rotate', errKind(err) === 'login' ? esc(MSG.AUTH_RETRY) : errHtml(err));
+        // 서버는 바꿨는데 답만 잃어버렸을 수 있습니다. 그러면 이 카드에는 이미 죽은 열쇠가
+        // 남습니다. 서버에 지금 열쇠를 물어 바뀌어 있으면 새 QR 을 바로 띄웁니다.
+        // 확인이 끝날 때까지 이 부스의 바꾸기 · 끄기를 다시 누르지 못하게 둡니다. 그 사이 또 보내면
+        // 답이 엇갈립니다. 다만 연결이 아주 나쁘면 확인이 한없이 길어질 수 있어 10초 뒤에는 풀어 줍니다
+        // (그 뒤 다시 바꾸거나 끄면 localVer 가 늦게 온 확인의 낡은 열쇠를 막습니다).
+        var lv = S.ops.localVer[id] || 0;
+        var timer = setTimeout(function () { dropBusy(id, no); }, 10000);
+        function settle() { clearTimeout(timer); dropBusy(id, no); }
+        refreshAccess().then(function () {
+          settle();
+          // 그 사이 이 화면에서 다시 바꿔 새 열쇠를 받았으면 그쪽 결과가 이미 떠 있습니다.
+          if ((S.ops.localVer[id] || 0) !== lv) return;
+          var a = S.ops.access[id];
+          if (a && a.token && a.token !== before) openBig(id, MSG.ROTATED_LATE + ' ' + done, true);
+        }, function () { settle(); /* 위에 띄운 오류 안내로 충분합니다 */ });
+      });
+    }
+
+    // '열쇠 바꾸기' 의 답으로 받은 열쇠를 적습니다. 차례 번호를 함께 남겨, 이보다 먼저 보낸
+    // refreshAccess 의 답이 늦게 와도 이 열쇠를 덮지 못하게 합니다.
+    function putKey(id, a) {
+      S.ops.access[id] = a;
+      S.ops.localVer[id] = ++S.ops.ver;
+    }
+
+    /* ── 한 부스에 열쇠 일 하나씩 ─────────────────────────────────────
+       한 부스에서 '열쇠 바꾸기' 와 '열쇠 끄기' 를 함께 보내지 않습니다. 두 답이 서버가 처리한
+       순서와 다르게 오면 카드가 서버와 어긋납니다 — 서버에서는 끄기가 나중인데 바꾸기 답이 늦게
+       오면, 실제로는 꺼진 부스에 새 QR 과 '링크 복사' 가 남습니다. 카드는 기다리는 사이 다시
+       그려질 수 있어 표시는 카드가 아니라 S.ops.busy 에 둡니다. 번호를 함께 두는 까닭: 10초 뒤
+       풀어 준 다음 새로 시작한 일의 표시를, 앞의 일이 늦게 끝나면서 지우지 않게 합니다. */
+    var busyNo = 0;
+    function takeBusy(id) {
+      if (S.ops.busy[id]) return 0;
+      S.ops.busy[id] = ++busyNo;
+      paintBusy(id);
+      return busyNo;
+    }
+    function dropBusy(id, no) {
+      if (!no || S.ops.busy[id] !== no) return;
+      delete S.ops.busy[id];
+      paintBusy(id);
+    }
+    // 지금 카드의 두 '예' 단추를 잠그거나 풉니다. 풀 때는 '앞 요청이 끝나지 않았어요' 안내도 걷습니다.
+    function paintBusy(id) {
+      var el = findItem('ops', id);
+      if (!el) return;
+      var on = !!S.ops.busy[id];
+      [].slice.call(el.querySelectorAll('[data-act="off-yes"], [data-act="rotate-yes"]')).forEach(function (b) {
+        b.disabled = on;
+      });
+      if (!on) {
+        [].slice.call(el.querySelectorAll('[data-busy-msg]')).forEach(function (m) { m.parentNode.removeChild(m); });
+      }
+    }
+    // 잠긴 동안 확인 칸을 열면 '예' 가 왜 눌리지 않는지 적습니다. 풀리면 paintBusy 가 걷습니다.
+    function busyHtml() { return '<span data-busy-msg>' + esc(MSG.BUSY) + '</span>'; }
+
+    /* 바꾸기 · 끄기 실패를 지금 카드에 알립니다. 한 카드에 한 칸만 연다는 약속(showBlock)을
+       지키려고, 실패했다고 확인 칸을 다시 열지는 않습니다.
+       - 그 확인 칸이 아직 열려 있으면 그 칸에 적습니다.
+       - 기다리는 사이 관리자가 그만두기로 닫았거나 다른 칸(직접 고치기 등)을 열었거나, 카드가
+         다시 그려져 칸이 닫혔으면 카드 아래 알림 줄에 적습니다. 열린 다른 칸은 그대로 둡니다.
+       which: 'off' | 'rotate'. html: 이미 esc 한 안내. */
+    function reportKeyErr(id, which, html) {
+      var cur = findItem('ops', id);
+      if (!cur) return;
+      var box = cur.querySelector(BLOCKS[which]);
+      if (box && !box.hidden) {
+        box.querySelector('[data-err]').innerHTML = html;
+        setNote(cur, '');
+        return;
+      }
+      setNoteErr(cur, esc(which === 'off' ? '열쇠를 끄지 못했어요. ' : '열쇠를 바꾸지 못했어요. ') + html);
+    }
+
+    /* ── 카드 아래 칸 여닫기 (열쇠 끄기 확인 · 열쇠 바꾸기 확인 · 직접 고치기) ──
+       한 카드에 한 칸만 엽니다. 확인 칸 두 개가 함께 열려 있으면 어느 '예' 를 누르는지
+       헷갈립니다. which 가 null 이면 모두 닫습니다. */
+    var BLOCKS = { off: '[data-confirm="off"]', rotate: '[data-confirm="rotate"]', fix: '[data-fix]' };
+    function showBlock(el, which) {
+      Object.keys(BLOCKS).forEach(function (k) {
+        var box = el.querySelector(BLOCKS[k]);
+        var btn = el.querySelector('[data-act="' + k + '"]');
+        if (!box) return;
+        box.hidden = k !== which;
+        if (btn) btn.setAttribute('aria-expanded', k === which ? 'true' : 'false');
+        if (k !== 'fix') { var e = box.querySelector('[data-err]'); if (e) e.innerHTML = ''; }
+      });
+    }
+
+    /* ── 열쇠 끄기 ─────────────────────────────────────────────────────
+       새 열쇠 없이 멈춥니다. 부스가 일찍 철수했거나, 누가 그 부스 값을 엉뚱하게 바꾸는데
+       담당 선생님과 아직 연락이 안 될 때. 다시 켜는 길은 '열쇠 바꾸기'(새 열쇠) 하나뿐입니다. */
+    function disableKey(el) {
+      var id = el.getAttribute('data-id');
+      var box = el.querySelector('[data-confirm="off"]');
+      var errEl = box.querySelector('[data-err]');
+      var gen = S.gen;
+      // 이 부스의 바꾸기(또는 앞의 끄기)가 아직 끝나지 않았으면 보내지 않습니다(takeBusy 참고).
+      var no = takeBusy(id);
+      if (!no) { errEl.innerHTML = busyHtml(); return; }
+      errEl.innerHTML = '';
+
+      var job;
+      if (isMock) {
+        // 시연 열쇠는 정말 끌 수 없습니다(운영자 시연 화면은 'demo-' + id 를 늘 받아 줍니다).
+        // 이 화면에서만 꺼진 것으로 그립니다.
+        job = sleep(150).then(function () {
+          S.ops.demoOff[id] = true;
+          return new Date().toISOString();
+        });
+      } else {
+        job = Core.rpc('admin_disable_booth_token', { p_booth_id: id }).then(function (at) {
+          if (gen !== S.gen) throw lockedErr();
+          // 돌려주는 값은 끈 시각(timestamptz) 하나입니다. 모양이 달라도 끄기는 끝났으니 시각만 비웁니다.
+          return typeof at === 'string' ? at : null;
+        }, function (err) {
+          if (gen !== S.gen) throw lockedErr();
+          throw err;
+        });
+      }
+
+      job.then(function (at) {
+        dropBusy(id, no);
+        markOff(id, at);
+        // 열린 운영자 화면이 멈추는 것처럼 이 화면의 크게 보기도 닫습니다. 꺼진 열쇠의 QR 과
+        // '링크 복사' 가 남아 있으면 안 됩니다.
+        if (!$('ov').hidden && S.ov.id === id) closeBig();
+        var cur = rerenderOpsItem(id);
+        if (cur) {
+          setNote(cur, isMock
+            ? '시연이라 이 화면에서만 껐어요. 실제로는 이 부스의 운영자 QR과 열려 있던 운영자 화면이 바로 멈춰요.'
+            : '열쇠를 껐어요. 이 부스 값은 운영본부가 ‘대기 값 직접 고치기’로만 바꿀 수 있어요.');
+          var n = cur.querySelector('[data-offnote]');
+          if (n) n.focus();
+        }
+      }, function (err) {
+        if (err && err.locked) { dropBusy(id, no); return; }
+        if (window.console) console.warn('[print-qr] 열쇠를 끄지 못했습니다', err);
+        // 그 사이 카드가 다시 그려졌거나 관리자가 다른 칸을 열었을 수 있어, 지금 카드에서
+        // 확인 칸이 열려 있을 때만 그 칸에 적고 아니면 알림 줄에 적습니다(reportKeyErr).
+        reportKeyErr(id, 'off', adminErrHtml(err, 'off'));
+        var k = errKind(err);
+        // 시연이거나 서버가 분명히 거절했으면(후속 설정 전 · 열쇠 없음) 다시 물어볼 것이 없습니다.
+        if (isMock || k === 'db' || k === 'missing') { dropBusy(id, no); return; }
+        // 서버는 껐는데 답만 잃어버렸을 수 있습니다. 서버에 지금 열쇠를 물어 꺼져 있으면
+        // refreshAccess 가 카드를 꺼진 모양으로 다시 그립니다. 로그인이 정말 없으면 카드를 거둡니다.
+        // 그 확인이 끝날 때까지(길어야 10초) 이 부스의 바꾸기 · 끄기는 잠가 둡니다 — 열쇠 바꾸기와 같은 까닭.
+        var timer = setTimeout(function () { dropBusy(id, no); }, 10000);
+        function settle() { clearTimeout(timer); dropBusy(id, no); }
+        refreshAccess().then(function () {
+          settle();
+          var a = S.ops.access[id];
+          if (!isOff(a)) return;
+          if (!$('ov').hidden && S.ov.id === id) closeBig();
+          var now = findItem('ops', id);
+          if (now) setNote(now, MSG.OFF_LATE);
+        }, function () { settle(); /* 위에 띄운 오류 안내로 충분합니다 */ });
+      });
+    }
+
+    // 끈 열쇠를 적습니다. putKey 로 차례 번호를 남겨, 끄기 전에 보낸 확인의 답(아직 켜진 열쇠)이
+    // 늦게 와도 카드에 QR 이 되살아나지 않게 합니다.
+    function markOff(id, at) {
+      var prev = S.ops.access[id] || {};
+      putKey(id, { token: null, issued_at: prev.issued_at, rotated: !!prev.rotated, disabled: true,
+                   disabled_at: at || new Date().toISOString() });
+    }
+
+    function setNote(el, text) {
+      var n = el.querySelector('[data-note]');
+      if (!n) return;
+      n.className = 'note';
+      n.textContent = text || '';
+    }
+    // 실패 안내(html 은 이미 esc 한 것). 확인 칸이 닫혀 있을 때 reportKeyErr 가 씁니다.
+    function setNoteErr(el, html) {
+      var n = el.querySelector('[data-note]');
+      if (!n) return;
+      n.className = 'note is-err';
+      n.innerHTML = html;
+    }
+
+    /* ── 대기 값 직접 고치기 ───────────────────────────────────────────
+       운영본부가 열쇠 없이 한 부스의 값을 고칩니다(선생님 휴대폰이 꺼졌거나, 열쇠를 끈
+       부스의 값이 틀려 있을 때). 규칙은 운영자 입력과 같고 기록에는 'admin' 으로 남습니다. */
+    function openFix(el) {
+      var id = el.getAttribute('data-id');
+      var box = el.querySelector('[data-fix]');
+      if (!box.firstChild) box.innerHTML = fixPanelHtml();
+      showBlock(el, 'fix');
+      box.querySelector('[data-fix-msg]').textContent = '';
+      box.querySelector('[data-fix-msg]').className = 'fix__msg';
+      paintFixCur(id, true);
+      // 페이지를 연 뒤 운영자가 바꿨을 수 있으니 지금 값을 다시 읽습니다(로그인 없이 읽는 공개 값).
+      // 보낸 차례를 함께 넘겨, 값 지우기보다 먼저 보낸 읽기가 지운 값을 되살리지 않게 합니다(putNow).
+      var sent = ++S.ops.liveSeq;
+      BC.refreshLive().then(function (booths) {
+        (booths || []).forEach(function (b) {
+          if (b.id !== id) return;
+          putNow(id, { congestion: b.congestion, wait_minutes: b.wait_minutes,
+                       updated_at: msOf(b.congestion_updated_at), admin: false }, sent);
+        });
+        paintNow(id);
+      }, function (err) {
+        if (window.console) console.warn('[print-qr] 지금 값을 읽지 못했습니다', err);
+        paintFixCur(id, false);
+      });
+    }
+
+    // 직접 고치기 칸의 '지금 값' 줄과, 지금 값과 같은 단추 표시. loading 이면 읽는 중이라고 적습니다.
+    function paintFixCur(id, loading) {
+      var el = findItem('ops', id);
+      var box = el ? el.querySelector('[data-fix]') : null;
+      if (!box || !box.firstChild) return;
+      var n = S.ops.now[id];
+      var cur = box.querySelector('[data-fix-cur]');
+      if (n) cur.textContent = nowText(n);
+      else cur.textContent = loading ? '지금 값을 읽는 중이에요' : '지금 값을 읽지 못했어요. 그래도 고칠 수는 있어요.';
+      [].slice.call(box.querySelectorAll('[data-act="set"]')).forEach(function (b) {
+        var mode = b.getAttribute('data-mode'), on = false;
+        if (n) {
+          if (mode === 'open') on = (n.congestion === '여유' || n.congestion === '보통' || n.congestion === '혼잡') &&
+            Number(b.getAttribute('data-wait')) === Number(n.wait_minutes);
+          else if (mode === 'pause') on = n.congestion === '중단';
+          else if (mode === 'closed') on = n.congestion === '마감';
+          else on = !n.congestion;
+        }
+        b.setAttribute('aria-pressed', on ? 'true' : 'false');
+      });
+    }
+
+    // 카드 아래 '지금:' 줄과 열려 있는 직접 고치기 칸을 함께 고칩니다.
+    function paintNow(id) {
+      var el = findItem('ops', id);
+      if (!el) return;
+      el.querySelector('[data-now]').innerHTML = nowHtml(id);
+      paintFixCur(id, false);
+    }
+
+    function adminSet(el, btn) {
+      var id = el.getAttribute('data-id');
+      var box = el.querySelector('[data-fix]');
+      var mode = btn.getAttribute('data-mode');
+      var wait = mode === 'open' ? Number(btn.getAttribute('data-wait')) : null;
+      var msg = box.querySelector('[data-fix-msg]');
+      var gen = S.gen;
+      if (box.getAttribute('data-busy')) return; // 앞의 저장이 끝나기 전에는 받지 않습니다
+      box.setAttribute('data-busy', '1');
+      setFixBusy(box, true);
+      msg.className = 'fix__msg';
+      msg.textContent = '저장하는 중이에요';
+
+      var job;
+      if (isMock) {
+        if (mode === 'clear') {
+          // 시연 저장소(BoothCore)에는 값을 지우는 길이 없어 이 화면에만 지운 것으로 보입니다.
+          // 관람객 · 운영자 시연 화면에는 예전 값이 남습니다. 이 화면에서도 다시 읽을 때 예전 값이
+          // 되살아나지 않게 지운 표시를 붙들어 둡니다(아래 sticky, putNow 참고).
+          job = sleep(150).then(function () {
+            return { congestion: null, wait_minutes: null, updated_at: null,
+                     demoNote: '시연이라 값 지우기는 이 화면에만 보여요. 관람객 · 운영자 시연 화면에는 예전 값이 그대로 남아요.' };
+          });
+        } else {
+          // 시연 값은 BoothCore 의 시연 저장소(이 브라우저)에 씁니다. 관람객 시연 화면에도 보입니다.
+          job = BC.ctrlSet(BC.demoToken(id), mode, wait).then(function (c) {
+            return { congestion: c.congestion, wait_minutes: c.wait_minutes, updated_at: c.congestion_updated_at };
+          });
+        }
+      } else {
+        job = Core.rpc('admin_set_booth_live', { p_booth_id: id, p_mode: mode, p_wait_minutes: wait }).then(function (rows) {
+          if (gen !== S.gen) throw lockedErr();
+          var r = Object.prototype.toString.call(rows) === '[object Array]' ? rows[0] : rows;
+          if (!r) {
+            var none = new Error('해당 부스를 찾을 수 없어요');
+            none.code = 'P0002';
+            throw none;
+          }
+          return r;
+        }, function (err) {
+          if (gen !== S.gen) throw lockedErr();
+          throw err;
+        });
+      }
+
+      job.then(function (r) {
+        if (mode === 'clear') {
+          // 지우기는 서버가 시각 없이 돌려줍니다(줄을 지움). 이 컴퓨터 시계로 시각을 적어 견주지 않고,
+          // '지웠음' 과 이때까지 보낸 읽기 차례(seq)를 적어 둡니다 — 이보다 뒤에 보낸 읽기만 지운 값을
+          // 바꿀 수 있습니다(putNow). shownAt 은 '지금:' 줄에 보여 주기만 하는 시각입니다.
+          S.ops.now[id] = { congestion: null, wait_minutes: null, updated_at: 0, admin: true,
+                            cleared: true, seq: S.ops.liveSeq, sticky: isMock, shownAt: Date.now() };
+        } else {
+          // 서버가 저장한 시각(now())입니다. 혹시 비어 오면 0(가장 낡은 값)으로 두어 다음 읽기가 바로잡게 합니다.
+          S.ops.now[id] = { congestion: r.congestion || null, wait_minutes: r.wait_minutes,
+                            updated_at: msOf(r.updated_at), admin: true };
+        }
+        doneFix(id, 'is-ok', '고쳤어요. ' + (r.demoNote || '관람객 화면에는 20초 안팎으로 보여요.'));
+        paintNow(id);
+      }, function (err) {
+        if (err && err.locked) return;
+        if (window.console) console.warn('[print-qr] 대기 값을 고치지 못했습니다', err);
+        doneFix(id, 'is-err', null, adminErrHtml(err, 'set'));
+        // 로그인이 정말 없으면 카드를 거둡니다(열쇠 바꾸기와 같은 확인).
+        if (!isMock && errKind(err) === 'login') refreshAccess().then(null, function () {});
+      });
+    }
+
+    // 저장이 끝나면 그 사이 카드가 다시 그려졌어도 지금 카드의 칸에 결과를 적습니다.
+    function doneFix(id, cls, text, html) {
+      var el = findItem('ops', id);
+      var box = el ? el.querySelector('[data-fix]') : null;
+      if (!box) return;
+      box.removeAttribute('data-busy');
+      setFixBusy(box, false);
+      var msg = box.querySelector('[data-fix-msg]');
+      if (!msg) return;
+      msg.className = 'fix__msg ' + cls;
+      if (html != null) msg.innerHTML = html; else msg.textContent = text;
+    }
+
+    function setFixBusy(box, on) {
+      [].slice.call(box.querySelectorAll('[data-act="set"]')).forEach(function (b) { b.disabled = on; });
+    }
+
+    /* ── QR 크게 보기 ──────────────────────────────────────────────── */
+    // fresh: 방금 서버에서 받은 열쇠라 다시 확인할 필요가 없을 때(열쇠 바꾸기 직후).
+    function openBig(id, note, fresh) {
+      var b = S.byId[id];
+      if (!b) return;
+      var seq = ++S.ov.seq;
+      S.ov.id = id;
+      if (!S.ov.back) S.ov.back = document.activeElement;
+      $('ov-code').textContent = b.code;
+      $('ov-name').textContent = b.name;
+      $('ov-host').textContent = op.base.host;
+      $('ov-copied').textContent = '';
+      $('ov-copied').classList.remove('is-err');
+      $('ov').hidden = false;
+      document.body.classList.add('ov-open');
+      $('ov-close').focus();
+      if (isMock || fresh) { drawBig(id, note); return; }
+
+      // 확인하는 동안에는 이 화면이 가진(낡았을 수 있는) QR 을 띄우지 않습니다.
+      // 그 사이 운영자가 찍으면 '이 QR은 이제 쓸 수 없어요' 로 헛걸음합니다.
+      S.ov.link = '';
+      $('ov-qr').innerHTML = '<p class="ov__wait">최신 열쇠 확인 중…</p>';
+      $('ov-copy').disabled = true;
+      setOvNote('', false);
+      $('ov-meta').textContent = '';
+      // 연결이 느리면 한없이 기다리지 않고 6초 뒤 가진 열쇠로 그립니다(아래 경고와 함께).
+      // 답이 나중에 와서 열쇠가 바뀌었으면 refreshAccess 가 이 창을 새 QR 로 다시 그립니다.
+      var slow = sleep(6000).then(function () { throw new Error('열쇠 확인이 늦어집니다'); });
+      Promise.race([refreshAccess(), slow]).then(function () {
+        if (seq === S.ov.seq) drawBig(id, note);
+      }, function (err) {
+        if (err && err.locked) return; // lockOut 이 창을 닫았습니다
+        if (window.console) console.warn('[print-qr] 최신 열쇠를 확인하지 못했습니다', err);
+        // 확인을 못 했다고 숨기지 않습니다. 가진 열쇠로 그리되 낡았을 수 있다고 분명히 적습니다.
+        if (seq === S.ov.seq) drawBig(id, note ? note + ' ' + MSG.STALE : MSG.STALE, true);
+      });
+    }
+
+    function setOvNote(text, warn) {
+      $('ov-note').textContent = text || '';
+      $('ov-note').classList.toggle('is-warn', !!warn);
+    }
+
+    function drawBig(id, note, warn) {
+      var a = S.ops.access[id];
+      if (isOff(a)) {
+        // 열쇠가 꺼졌습니다(다른 기기에서 껐거나, 확인하는 사이 꺼짐). 꺼진 열쇠는 QR 로 띄우지 않습니다.
+        S.ov.link = '';
+        $('ov-qr').innerHTML = '<p class="qr__fail">' + esc(MSG.KEY_OFF) + '</p>';
+        $('ov-copy').disabled = true;
+        setOvNote(note, false);
+        $('ov-meta').textContent = issuedLine(a);
+        return;
+      }
+      if (!a || !a.token) {
+        // 다시 받은 목록에 이 부스가 없습니다. 페이지를 연 뒤 부스를 지우고 다시 등록한 경우입니다.
+        S.ov.link = '';
+        $('ov-qr').innerHTML = '<p class="qr__fail">' + esc(MSG.GONE) + '</p>';
+        $('ov-copy').disabled = true;
+        setOvNote('', false);
+        $('ov-meta').textContent = '';
+        return;
+      }
+      S.ov.link = opLink(a.token);
+      makeQr($('ov-qr'), S.ov.link);
+      $('ov-copy').disabled = false;
+      setOvNote(note, warn);
+      $('ov-meta').textContent = issuedLine(a);
+    }
+
+    function closeBig() {
+      S.ov.seq++;
+      if ($('ov').hidden) return;
+      $('ov').hidden = true;
+      document.body.classList.remove('ov-open');
+      $('ov-qr').innerHTML = '';
+      S.ov.link = '';
+      // 열쇠를 바꾼 뒤에는 누른 단추가 카드째 새로 그려져 사라지므로 그 카드의 '크게 보기' 로 돌아갑니다.
+      var back = S.ov.back;
+      if (!back || back === document.body || !document.body.contains(back)) {
+        var el = S.ov.id ? findItem('ops', S.ov.id) : null;
+        back = el ? el.querySelector('[data-act="big"]') : null;
+      }
+      S.ov.back = null;
+      if (back && back.focus) back.focus();
+    }
+
+    function copyText(text) {
+      if (navigator.clipboard && window.isSecureContext) return navigator.clipboard.writeText(text);
+      return new Promise(function (resolve, reject) {
+        var ta = document.createElement('textarea');
+        ta.value = text;
+        ta.setAttribute('readonly', '');
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        var ok = false;
+        try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+        document.body.removeChild(ta);
+        if (ok) resolve(); else reject(new Error('copy failed'));
+      });
+    }
+
+    /* ── 실시간 값 모두 지우기 ─────────────────────────────────────── */
+    function resetLive() {
+      var yes = $('reset-yes'), msg = $('reset-msg');
+      yes.disabled = true;
+      msg.className = 'tb__msg';
+      msg.textContent = '지우는 중이에요';
+      var job = isMock
+        ? sleep(150).then(function () { BC.resetDemo(); return null; })
+        : Core.rpc('admin_reset_booth_live');
+      job.then(function (n) {
+        yes.disabled = false;
+        $('reset-confirm').hidden = true;
+        // 카드 아래 '지금:' 줄도 모두 '정보 없음' 이 됐으니 걷어 냅니다.
+        S.ops.now = {};
+        Object.keys(S.byId).forEach(paintNow);
+        msg.className = 'tb__msg is-ok';
+        msg.textContent = isMock ? '시연 값을 처음 상태로 되돌렸어요' : '지웠어요 (' + (Number(n) || 0) + '곳)';
+      }, function (err) {
+        yes.disabled = false;
+        msg.className = 'tb__msg is-err';
+        msg.innerHTML = errHtml(err);
+        if (window.console) console.warn('[print-qr] 실시간 값을 지우지 못했습니다', err);
+      });
+    }
+
+    /* ── 이벤트 ────────────────────────────────────────────────────── */
+    function bind() {
+      TABS.forEach(function (t) {
+        $('tab-' + t).addEventListener('click', function () { showTab(t); });
+      });
+      // 탭 목록 안에서는 좌우 화살표로 옮깁니다(탭 키는 패널로 넘어갑니다).
+      document.querySelector('.tabs').addEventListener('keydown', function (e) {
+        var i = TABS.indexOf(S.tab);
+        if (e.key === 'ArrowRight') i = (i + 1) % TABS.length;
+        else if (e.key === 'ArrowLeft') i = (i + TABS.length - 1) % TABS.length;
+        else if (e.key === 'Home') i = 0;
+        else if (e.key === 'End') i = TABS.length - 1;
+        else return;
+        e.preventDefault();
+        showTab(TABS[i], true);
+      });
+
+      $('print-btn').addEventListener('click', function () { if (canPrint()) window.print(); });
+
+      $('reset-btn').addEventListener('click', function () {
+        var c = $('reset-confirm');
+        c.hidden = !c.hidden;
+        $('reset-msg').textContent = '';
+        if (!c.hidden) $('reset-no').focus();
+      });
+      $('reset-no').addEventListener('click', function () {
+        $('reset-confirm').hidden = true;
+        $('reset-btn').focus();
+      });
+      $('reset-yes').addEventListener('click', resetLive);
+
+      ['ops', 'signs'].forEach(function (kind) {
+        $('q-' + kind).addEventListener('input', function () {
+          S.lists[kind].q = this.value;
+          applyFilter(kind);
+        });
+        $(LISTS[kind].grid).addEventListener('change', function (e) {
+          var t = e.target;
+          if (!t || t.getAttribute('data-act') !== 'pick') return;
+          var el = t.closest('.item');
+          if (el) { setPicked(kind, el, t.checked); updateCount(kind); }
+        });
+      });
+      // 모두 선택 · 모두 해제는 지금 찾기로 보이는 카드에만 적용합니다.
+      [].slice.call(document.querySelectorAll('[data-pick]')).forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          var kind = btn.getAttribute('data-list'), on = btn.getAttribute('data-pick') === 'all';
+          shownItems(kind).forEach(function (el) { setPicked(kind, el, on); }); // 꺼진 열쇠 카드는 setPicked 가 건너뜁니다
+          updateCount(kind);
+        });
+      });
+
+      $('grid-ops').addEventListener('click', function (e) {
+        var t = e.target.closest ? e.target.closest('[data-act]') : null;
+        if (!t) return;
+        var el = t.closest('.item');
+        var act = t.getAttribute('data-act');
+        if (!el) return;
+        if (act === 'big') {
+          S.ov.back = t;
+          openBig(el.getAttribute('data-id'), '');
+        } else if (act === 'rotate' || act === 'off') {
+          var open = el.querySelector(BLOCKS[act]).hidden;
+          showBlock(el, open ? act : null);
+          setNote(el, '');
+          // 이 부스의 다른 열쇠 일이 아직 도는 중이면 '예' 가 잠긴 까닭을 적어 둡니다(풀리면 걷힘).
+          if (open && S.ops.busy[el.getAttribute('data-id')]) {
+            el.querySelector(BLOCKS[act] + ' [data-err]').innerHTML = busyHtml();
+          }
+          if (open) el.querySelector('[data-act="' + act + '-no"]').focus();
+        } else if (act === 'rotate-no' || act === 'off-no') {
+          var from = act === 'off-no' ? 'off' : 'rotate';
+          showBlock(el, null);
+          var back = el.querySelector('[data-act="' + from + '"]');
+          if (back) back.focus();
+        } else if (act === 'rotate-yes') {
+          rotate(el);
+        } else if (act === 'off-yes') {
+          disableKey(el);
+        } else if (act === 'fix') {
+          if (el.querySelector('[data-fix]').hidden) openFix(el);
+          else showBlock(el, null);
+        } else if (act === 'fix-close') {
+          showBlock(el, null);
+          el.querySelector('[data-act="fix"]').focus();
+        } else if (act === 'set') {
+          adminSet(el, t);
+        }
+      });
+
+      document.addEventListener('click', function (e) {
+        var t = e.target.closest ? e.target.closest('[data-act="reload"]') : null;
+        if (t) window.location.reload();
+      });
+
+      [].slice.call(document.querySelectorAll('[data-paper]')).forEach(function (b) {
+        b.addEventListener('click', function () { setPaper(b.getAttribute('data-paper')); });
+      });
+
+      $('ov-close').addEventListener('click', closeBig);
+      $('ov-copy').addEventListener('click', function () {
+        var out = $('ov-copied');
+        if (!S.ov.link) return;
+        copyText(S.ov.link).then(function () {
+          out.classList.remove('is-err');
+          out.textContent = '복사했어요. 그 부스 운영자 본인에게만 보내 주세요.';
+        }, function () {
+          out.classList.add('is-err');
+          out.textContent = '복사하지 못했어요. 이 화면의 QR을 찍게 해 주세요.';
+        });
+      });
+      document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && !$('ov').hidden) { e.preventDefault(); closeBig(); }
+      });
+    }
+
+    /* ── 시작 ──────────────────────────────────────────────────────── */
+    function init() {
+      setupHeads();
+      bind();
+      setPaper('A4');
+      showTab('ops');
+      renderPoster();
+      renderOps();
+      renderSigns();
+
+      var pBooths = loadBooths();
+      if (!isMock) watchAuth();
+      else watchDemo();
+      // booth-ctrl.html 이 없다고 나오면 열쇠를 받지 않도록 확인을 먼저 합니다(같은 사이트일 때만, 길어야 5초).
+      var pAccess = isMock ? pBooths.then(demoAccess) : checkOpPage().then(realAccess);
+
+      pBooths.then(function () {
+        fillPosterText();
+        showLiveNote();
+        renderSigns();
+      });
+      Promise.all([pBooths, pAccess]).then(renderOps, function (err) {
+        S.ops.state = 'error';
+        S.ops.msg = errHtml(err);
+        renderOps();
+      });
+    }
+
+    init();
+  })();
+  </script>
+</body>
+</html>

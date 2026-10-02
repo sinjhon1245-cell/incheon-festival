@@ -376,6 +376,9 @@
        검색과 구역 · 기관 유형 · 상태 · 운영 필요사항 걸러 보기를 둡니다. */
     booths: {
       label: '부스', table: 'booths', addLabel: '+ 부스 추가',
+      // 부스 QR(운영자 카드 · 부스 앞 안내 · 입구 포스터)은 부스를 등록한 뒤
+      // 여기서 바로 뽑습니다. 새 탭으로 열어 관리 화면의 입력을 잃지 않게 합니다.
+      headLink: ['print-qr.html', '부스 QR 인쇄'],
       desc: '부스 정보와 운영기관을 관리합니다. 부스 번호는 배치가 확정되기 전까지 임시 번호로 적어도 됩니다.',
       blank: function () {
         return { code: '', zone_key: (zoneList()[0] || {}).key || '', name: '', org: '', status: '준비 전' };
@@ -1128,7 +1131,10 @@
 
     var head = '<div class="page__head"><div><h1 class="page__title">' + esc(ent.label) + '</h1>' +
       '<p class="page__desc">' + esc(ent.desc || listEnt.desc || '') + '</p></div>' +
-      (ent.single ? '' : '<div class="page__actions"><button class="btn btn--primary btn--sm" type="button" data-add>' +
+      (ent.single ? '' : '<div class="page__actions">' +
+        (listEnt.headLink ? '<a class="btn btn--ghost btn--sm" href="' + esc(listEnt.headLink[0]) +
+          '" target="_blank" rel="noopener">' + esc(listEnt.headLink[1]) + '</a>' : '') +
+        '<button class="btn btn--primary btn--sm" type="button" data-add>' +
         esc(listEnt.addLabel || '+ 새로 추가') + '</button></div>') + '</div>';
 
     if (ent.single) { renderSingle(ent, head, host); return; }

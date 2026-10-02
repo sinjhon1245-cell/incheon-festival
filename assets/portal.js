@@ -109,6 +109,10 @@
     settings: null, schedule: [], booths: [], zones: [], notices: [],
     requests: [], resources: [], contacts: [], places: [], faqs: [],
     tasks: [], assigns: [], supplyItems: [], supplyTargets: [], supplyAllocs: [],
+    /* 부스 대기 현황(booth_live). 부스 id → 오늘 들어온 값 한 줄.
+       boothLiveOk 는 표를 한 번이라도 제대로 읽었는가 — 표가 아직 없거나
+       읽기에 실패했으면 부스 화면의 입력 현황 띠를 그리지 않습니다. */
+    boothLive: {}, boothLiveOk: false,
     staff: null,   // 이 브라우저에 로그인한 운영진(staff_profiles 줄). 없으면 null
     error: null, loading: false
   };
@@ -127,7 +131,7 @@
       '<a class="linkbtn" href="admin.html">로그인 →</a></p>';
   }
   var view = 'dashboard';
-  var ui = { boothQ: '', boothZone: '전체', boothType: '전체',
+  var ui = { boothQ: '', boothZone: '전체', boothType: '전체', boothLiveOpen: false,
              schedCat: '전체', schedQ: '', schedHalf: '전체', schedKey: false, schedDay: '',
              taskMode: '업무별', taskArea: '전체', taskQ: '', taskPerson: '',
              supplyQ: '', supplyState: '전체', resourceQ: '',
@@ -298,6 +302,7 @@
 
   function loadAll() {
     S.loading = true; S.error = null;
+    liveAt = Date.now();   // 방금 받았으니 부스 화면의 1분 갱신은 다음 분부터
     return Promise.all([
       C.select('settings', { order: [['id', true]] }),
       C.select('schedule_items'),
@@ -316,7 +321,10 @@
       C.selectSoft('task_assignments'),
       C.selectSoft('supply_items'),
       C.selectSoft('supply_targets'),
-      C.selectSoft('supply_allocations')
+      C.selectSoft('supply_allocations'),
+      // 부스 대기 현황은 맨 뒤에 둡니다. migration-booth-live.sql 전에는 표가
+      // 없고, 읽다 실패해도 포털의 다른 화면을 막지 않습니다(selectBoothLive).
+      selectBoothLive()
     ]).then(function (r) {
       S.settings = r[0][0] || {};
       S.schedule = r[1]; S.zones = r[2]; S.booths = r[3]; S.notices = r[4];
@@ -324,6 +332,7 @@
       S.places = r[8]; S.faqs = r[9];
       S.tasks = r[10]; S.assigns = r[11];
       S.supplyItems = r[12]; S.supplyTargets = r[13]; S.supplyAllocs = r[14];
+      applyBoothLive(r[15]);
       S.loading = false;
     }).catch(function (e) {
       S.loading = false;
@@ -1792,6 +1801,274 @@
     return keys.filter(function (k) { return items.some(function (b) { return b.zone === k; }); });
   }
 
+  /* ── 부스 대기 현황 (booth_live) ─────────────────────────────────
+     각 부스 선생님이 운영자 QR 화면에서 누른 대기 시간입니다. 관람객
+     화면과 같은 표를 읽고, 포털은 그 값을 부스 카드 · 상세에 한 줄로
+     붙이고 '누가 오래 안 눌렀나' 를 운영진에게 보여 주기만 합니다.
+     값을 바꾸는 길은 포털에 없습니다(운영자 QR 화면만 바꿉니다).
+
+     하루 규칙 — 오늘(한국 시각) 들어온 값만 씁니다. 첫날 오후 5시의
+     '혼잡 30분' 이 둘째 날 아침까지 남아 있으면 실제 상황처럼 읽힙니다.
+     한국은 서머타임이 없어 9시간을 더한 UTC 날짜가 곧 한국 날짜입니다. */
+  var CONGEST = { '여유': 'free', '보통': 'normal', '혼잡': 'busy', '중단': 'pause', '마감': 'closed' };
+  var liveAt = 0, liveSeq = 0;   // 마지막으로 읽기 시작한 때 · 늦게 온 옛 응답을 버리는 번호
+
+  function kstDay(ms) { return new Date(ms + 9 * 3600000).toISOString().slice(0, 10); }
+
+  // 이 시간(분)보다 오래 그대로인 값은 흐리게 보여 줍니다. 관람객 화면과 같은 설정을 씁니다.
+  function staleMinutes() {
+    return Number((window.FESTIVAL_CONFIG || {}).freshnessThresholdMinutes) || 30;
+  }
+
+  /* 표가 아직 없으면(migration-booth-live.sql 전) selectSoft 가 빈 배열을 줍니다.
+     권한 · 네트워크 실패는 콘솔에만 남기고 null 을 줍니다 — 부스 대기
+     현황 하나 때문에 포털 전체가 오류 화면이 되면 안 됩니다. */
+  function selectBoothLive() {
+    return C.selectSoft('booth_live', { columns: 'booth_id,congestion,wait_minutes,updated_at', order: false })
+      .catch(function (e) { console.warn('[portal] 부스 대기 현황 조회 실패', e); return null; });
+  }
+
+  /* 읽기에 실패했으면(null) 받아 둔 값을 그대로 둡니다. 한 번 놓쳤다고 모든
+     부스를 '입력 없음' 으로 바꾸면 현장에 거꾸로 알리게 됩니다. 시각은
+     값마다 따로 있어서, 오래 못 받으면 '30분 넘게 그대로' 로 저절로 넘어갑니다.
+     비어 있는 표(아직 아무도 누르지 않음)와 없는 표는 isTableMissing 으로 가릅니다. */
+  function applyBoothLive(rows) {
+    if (!rows) return;
+    S.boothLive = liveMap(rows);
+    S.boothLiveOk = rows.length > 0 || !C.isTableMissing('booth_live');
+  }
+
+  function liveMap(rows) {
+    var map = {}, today = kstDay(Date.now());
+    (rows || []).forEach(function (r) {
+      var t = Date.parse(r.updated_at);
+      if (!r.booth_id || !CONGEST[r.congestion] || isNaN(t) || kstDay(t) !== today) return;
+      map[r.booth_id] = { congestion: r.congestion, wait: Number(r.wait_minutes) || 0, at: t };
+    });
+    return map;
+  }
+
+  /* 행사일 오늘, 문을 연 시각(ms). 관람객 화면(booth-core applyOpenRule)은
+     문을 연 뒤에는 그보다 이른 입력(아침 준비 · 리허설 값)을 '정보 없음' 으로
+     돌립니다. 포털이 그 값을 '입력 중' 으로 세면, 관람객에게 빈칸인 부스를
+     운영진이 멀쩡하다고 읽고 찾아가지 않습니다 — 그래서 같은 선을 긋습니다.
+     행사일이 아니거나(사전 리허설 날 등) 아직 문을 열기 전이면 null 입니다.
+     리허설 날 넣은 값은 포털에서 보여야 '제대로 들어갔나' 를 확인할 수 있습니다.
+     여는 시각은 event_start 의 한국 시각입니다(booth-core 와 같은 읽기). */
+  function openCutoffMs(now) {
+    var s = S.settings || {};
+    var a = Date.parse(s.event_start), b = Date.parse(s.event_end);
+    if (isNaN(a) || isNaN(b)) return null;
+    var K = 9 * 3600000, D = 86400000;
+    var day = Math.floor((now + K) / D);
+    if (day < Math.floor((a + K) / D) || day > Math.floor((b + K) / D)) return null;
+    var openMin = Math.floor(((a + K) % D) / 60000);
+    var cut = day * D - K + openMin * 60000;
+    return now >= cut ? cut : null;
+  }
+
+  /* 부스 하나의 현재 값. 없으면 null — 예시 부스('sample-…')도 여기서 걸러집니다.
+     자정을 넘긴 화면에서도 어제 값이 남지 않게 하루 규칙을 한 번 더 봅니다.
+     문을 연 뒤에는 그 전에 넣은 값도 null 입니다(openCutoffMs).
+     '마감' 은 그날 다시 열지 않으므로 오래돼도 흐리게 하지 않습니다. */
+  function boothLiveInfo(id) {
+    var v = S.boothLive[id], now = Date.now();
+    if (!v || kstDay(v.at) !== kstDay(now)) return null;
+    var cut = openCutoffMs(now);
+    if (cut !== null && v.at < cut) return null;
+    var cls = CONGEST[v.congestion];
+    var mins = Math.max(0, Math.floor((now - v.at) / 60000));
+    var wait = cls === 'pause' ? '잠시 중단'
+      : cls === 'closed' ? '오늘 마감'
+      : v.wait === 0 ? '바로' : '약 ' + v.wait + '분';
+    return { label: v.congestion, cls: cls, wait: wait, at: v.at,
+      ago: mins < 1 ? '방금' : C.minLabel(mins) + ' 전',
+      stale: cls !== 'closed' && mins > staleMinutes() };
+  }
+
+  /* 오늘 값은 있지만 문 열기 전에 넣어서 관람객에게 '정보 없음' 으로 보이는가.
+     입력 현황 띠에서 '입력 없음' 과 갈라 적습니다 — 선생님은 눌렀다고
+     알고 있으니, 운영진이 '한 번 더 눌러 주세요' 라고 말할 수 있어야 합니다. */
+  function livePreOpen(id) {
+    var v = S.boothLive[id], now = Date.now();
+    if (!v || kstDay(v.at) !== kstDay(now)) return false;
+    var cut = openCutoffMs(now);
+    return cut !== null && v.at < cut;
+  }
+
+  /* 화면에 적는 한 줄. '중단 · 잠시 중단', '마감 · 오늘 마감' 처럼 같은 말이
+     두 번 나오지 않게, 멈춘 부스는 뒤쪽 말만 씁니다. */
+  function liveText(i) {
+    return i.cls === 'pause' || i.cls === 'closed' ? i.wait : i.label + ' · ' + i.wait;
+  }
+
+  // 색 네모 + 글자. 색만으로 뜻을 전하지 않도록 상태 말은 늘 함께 적습니다.
+  function liveTagHtml(i, withAgo) {
+    return '<span class="boothlive boothlive--' + i.cls + (i.stale ? ' is-stale' : '') + '">' +
+      '<i class="boothlive__sq" aria-hidden="true"></i>' + esc(liveText(i)) +
+      (withAgo && i.stale ? '<span class="boothlive__ago">' + esc(i.ago) + '</span>' : '') + '</span>';
+  }
+  function boothLiveTag(id) {
+    var i = boothLiveInfo(id);
+    return i ? liveTagHtml(i, true) : '';
+  }
+
+  /* 부스 화면 맨 위의 입력 현황 띠. 현장 운영진이 '대기 시간을 안 누르는
+     부스' 를 찾아가 볼 수 있게 합니다. 접어 두고, 펼치면 오래 안 바뀐
+     부스부터 늘어놓습니다(아직 한 번도 안 누른 부스가 맨 앞). 줄을 누르면
+     부스 상세가 열립니다 — 그 자리에서 운영 요청을 남길 수 있습니다.
+     요약 글자(sum)와 목록 안쪽(list)을 따로 돌려줍니다. 1분 갱신은 이 둘만
+     갈아 끼워, 펼친 목록 상자 자체와 그 스크롤 자리를 그대로 둡니다. */
+  function liveStripParts(items) {
+    var lim = staleMinutes();
+    var rows = items.map(function (b) { return { b: b, i: boothLiveInfo(b.id), pre: false }; });
+    var on = 0, stale = 0, none = 0;
+    rows.forEach(function (x) {
+      if (!x.i) { none++; x.pre = livePreOpen(x.b.id); }
+      else if (x.i.stale) stale++; else on++;
+    });
+    rows.sort(function (a, b) {
+      var ta = a.i ? a.i.at : 0, tb = b.i ? b.i.at : 0;
+      if (ta !== tb) return ta - tb;
+      return String(a.b.code).localeCompare(String(b.b.code), 'ko', { numeric: true });
+    });
+    return {
+      sum: '<span class="livestrip__t">부스 대기 입력</span>' +
+        // 칸 사이 '·' 는 CSS(::before)가 그립니다. 줄이 접힐 때 '·' 만 줄 끝에 남지 않게 합니다.
+        '<span class="livestrip__n">입력 중 <b>' + on + '</b></span>' +
+        '<span class="livestrip__n' + (stale ? ' livestrip__n--warn' : '') + '">' + lim +
+          '분 넘게 그대로 <b>' + stale + '</b></span>' +
+        '<span class="livestrip__n">아직 없음 <b>' + none + '</b></span>' +
+        '<span class="livestrip__open" aria-hidden="true"></span>',
+      list: rows.map(function (x) {
+        return '<li><button class="livestrip__row" type="button" data-booth="' + esc(x.b.id) + '">' +
+          '<span class="livestrip__code">' + esc(x.b.code) + '</span>' +
+          '<span class="livestrip__main"><span class="livestrip__name">' + esc(x.b.name) + '</span>' +
+            (x.i ? liveTagHtml(x.i, false) : '') + '</span>' +
+          '<span class="livestrip__ago' + (x.i && x.i.stale ? ' is-stale' : '') + '">' +
+            // 문 열기 전에 넣은 값은 관람객에게 '정보 없음' 입니다. 세기는 '아직 없음' 으로 셉니다.
+            (x.i ? esc(x.i.ago) : x.pre ? '문 열기 전 입력' : '입력 없음') + '</span>' +
+          '</button></li>';
+      }).join('')
+    };
+  }
+  function boothLiveStrip(items) {
+    var p = liveStripParts(items);
+    return '<details class="livestrip" id="booth-livestrip"' + (ui.boothLiveOpen ? ' open' : '') + '>' +
+      '<summary class="livestrip__sum">' + p.sum + '</summary>' +
+      '<div class="livestrip__body">' +
+        '<p class="livestrip__hint">오래 바뀌지 않은 부스부터 보여 줍니다. 누르면 부스 정보가 열립니다.</p>' +
+        '<ul class="livestrip__list">' + p.list + '</ul>' +
+      '</div></details>';
+  }
+
+  /* 부스 화면에 있는 동안 1분마다 대기 현황만 다시 읽습니다(시계 tick 이 부릅니다).
+     부스 이름 · 구역까지 다시 받지는 않습니다 — 바뀌는 것은 대기 값뿐입니다.
+     검색칸에 커서가 있어도, 드로어가 열려 있어도, 탭이 가려졌어도 받은 값은
+     바로 그 자리에 고쳐 둡니다(patchBoothLive). 검색칸 · 칩 · 메뉴는 건드리지
+     않으므로 입력과 초점이 끊기지 않고, 돌아왔을 때 옛 값이 남아 있지 않습니다. */
+  function refreshBoothLive() {
+    if (!S.booths.length || Date.now() - liveAt < 60000) return;
+    liveAt = Date.now();
+    var seq = ++liveSeq;
+    selectBoothLive().then(function (rows) {
+      if (seq !== liveSeq) return;
+      applyBoothLive(rows);
+      patchBoothLive();
+    });
+  }
+
+  // data-booth 값으로 찾습니다. id 를 선택자에 넣지 않아 따옴표 · 특수문자 걱정이 없습니다.
+  function boothNodeIn(root, id) {
+    var list = root.querySelectorAll('[data-booth]');
+    for (var i = 0; i < list.length; i++) if (list[i].getAttribute('data-booth') === id) return list[i];
+    return null;
+  }
+
+  /* 1분 갱신은 화면을 통째로 다시 그리지 않고, 대기 값이 들어간 자리만
+     고칩니다. render 로 #view 를 갈아 끼우면
+       - 펼친 띠 목록(따로 스크롤되는 상자)이 맨 위로 튀어 보던 줄을 잃고,
+       - 검색칸 · 구역 칩 · 배치도 · 메뉴에 있던 키보드 초점이 <body> 로 떨어지고,
+       - 한글을 조합 중인 검색칸이 새로 만들어져 글자가 끊깁니다.
+     그래서 부스 카드는 그대로 두고 카드 안의 대기 한 줄만, 띠는 요약 글자와
+     목록 안쪽만 바꿉니다. 목록 상자(ul)는 남겨 스크롤 자리를 지키고, 초점이
+     목록 줄에 있었으면 같은 부스 줄로 돌려놓습니다. */
+  function patchBoothLive() {
+    var host = $('#view');
+    if (view !== 'booths' || S.loading || S.error || !host) return;
+    // 예시 부스 화면에는 대기 값이 없습니다(예시 id 는 표와 맞지 않습니다).
+    if (sampleShown('booths')) return;
+
+    Array.prototype.forEach.call(host.querySelectorAll('.booth[data-booth]'), function (card) {
+      var html = boothLiveTag(card.getAttribute('data-booth'));
+      var old = card.querySelector('.boothlive');
+      if ((old ? old.outerHTML : '') === html) return;
+      if (old) old.parentNode.removeChild(old);
+      var org = card.querySelector('.booth__org');
+      if (html && org) org.insertAdjacentHTML('afterend', html);
+    });
+
+    // 띠는 실제 부스가 있고 표를 제대로 읽었을 때만 둡니다(boothsBody 와 같은 조건).
+    var strip = $('#booth-livestrip', host);
+    if (!S.boothLiveOk) { if (strip) strip.parentNode.removeChild(strip); return; }
+    if (!strip) {
+      // 표가 갱신 사이에 새로 생긴 경우입니다. 머리 바로 아래, 처음 그릴 때와 같은 자리에 끼웁니다.
+      var head = $('.page > .page__head', host);
+      if (head) head.insertAdjacentHTML('afterend', boothLiveStrip(boothItems()));
+      return;
+    }
+    var p = liveStripParts(boothItems());
+    var sum = $('.livestrip__sum', strip), ul = $('.livestrip__list', strip);
+    // summary 요소는 그대로 두고 안쪽 글자만 바꿉니다 — 초점이 있어도 떨어지지 않습니다.
+    if (sum && sum.innerHTML !== p.sum) sum.innerHTML = p.sum;
+    if (!ul || ul.innerHTML === p.list) return;
+
+    var f = document.activeElement;
+    var fid = f && ul.contains(f) ? f.getAttribute('data-booth') : null;
+    // 드로어를 목록 줄에서 열었다면, 닫을 때 돌아갈 자리(lastFocus)도 새 줄로 옮깁니다.
+    var lid = lastFocus && ul.contains(lastFocus) ? lastFocus.getAttribute('data-booth') : null;
+    var top = ul.scrollTop;
+    // 초점 줄이 목록 상자 안에 보이고 있었다면, 상자 위쪽에서 몇 px 아래에 있었는지 적어 둡니다.
+    // 목록은 1분마다 '오래된 순' 으로 다시 정렬되고(방금 값이 들어온 부스는 맨 끝으로 갑니다)
+    // 대기 표시가 붙은 줄은 더 높아서, 같은 scrollTop 으로 돌려놓기만 하면 초점 줄이
+    // 상자 밖(보이지 않는 곳)으로 밀려날 수 있습니다. 그러면 키보드 사용자가 Enter 로
+    // 보이지 않는 부스를 엽니다. 처음부터 안 보이던 줄(마우스로 다른 곳을 보는 중)은 쫓아가지 않습니다.
+    var fOff = fid ? rowOffsetInList(ul, f) : null;
+    ul.innerHTML = p.list;
+    // 먼저 보던 높이로 돌려놓습니다(초점이 목록 밖이면 이것으로 끝입니다).
+    ul.scrollTop = top;
+    if (fid) {
+      var again = boothNodeIn(ul, fid);
+      if (again) {
+        if (fOff !== null) keepRowInList(ul, again, fOff);
+        // 목록 상자 안에서만 맞췄으므로 페이지는 움직이지 않게 preventScroll 로 초점만 돌려놓습니다.
+        again.focus({ preventScroll: true });
+      }
+    }
+    if (lid) lastFocus = boothNodeIn(ul, lid) || lastFocus;
+  }
+
+  // 목록 상자(ul)에서 보이는 부분의 위쪽 끝(화면 좌표). 테두리 두께를 뺍니다.
+  function listViewTop(ul) { return ul.getBoundingClientRect().top + ul.clientTop; }
+
+  // row 가 목록 상자에서 보이는 부분과 겹치면 위쪽 끝에서의 거리(px), 아니면 null.
+  function rowOffsetInList(ul, row) {
+    var vt = listViewTop(ul), r = row.getBoundingClientRect();
+    if (!ul.clientHeight || r.bottom <= vt || r.top >= vt + ul.clientHeight) return null;
+    return r.top - vt;
+  }
+
+  /* row 를 목록 상자 안에서 off 만큼 아래 자리로 옮깁니다. ul.scrollTop 만 바꾸므로 페이지
+     스크롤은 그대로입니다. 목록 끝에 닿아 덜 움직였거나 줄 높이가 바뀌어 일부가 잘리면,
+     상자 안에 다 들어오도록 가장 적게 더 움직입니다(상자보다 큰 줄은 위쪽을 맞춥니다). */
+  function keepRowInList(ul, row, off) {
+    ul.scrollTop += (row.getBoundingClientRect().top - listViewTop(ul)) - off;
+    var vt = listViewTop(ul), r = row.getBoundingClientRect();
+    if (r.bottom > vt + ul.clientHeight) ul.scrollTop += r.bottom - (vt + ul.clientHeight);
+    r = row.getBoundingClientRect();
+    if (r.top < vt) ul.scrollTop -= vt - r.top;
+  }
+
   function viewBooths() {
     // 등록된 부스가 없고 예시를 켜 두었으면 예시 부스로 같은 화면을 그립니다.
     if (sampleShown('booths')) {
@@ -1870,13 +2147,17 @@
           orgBadge(b.type) + (b.sample ? SAMPLE_END : '') + '</span>' +
           '<span class="booth__name">' + esc(b.name) + '</span>' +
           '<span class="booth__org">' + esc(b.org) + '</span>' +
+          boothLiveTag(b.id) +
           (b.foot ? '<span class="booth__foot">' + esc(b.foot) + '</span>' : '') +
           '</button>';
       }).join('') + '</div>'
       : noMatchBox('조건에 맞는 부스가 없습니다.');
 
+    // 입력 현황 띠는 실제 부스에만. 예시 부스에는 대기 값이 없고, 숫자가 예시와 섞이면 안 됩니다.
+    var live = !sample && S.boothLiveOk ? boothLiveStrip(items) : '';
+
     return '<div class="page">' +
-      pageHead('부스 현황') + bar +
+      pageHead('부스 현황') + bar + live +
       map +
       '<p class="countline">' + (sample ? '예시 부스' : '전체 부스') + ' <b>' + items.length + '</b>개</p>' +
       zoneHtml +
@@ -1895,9 +2176,12 @@
     }
     var b = S.booths.filter(function (x) { return x.id === id; })[0];
     if (!b) return;
+    // 지금 대기 값은 이 부스를 여는 이유인 경우가 많아 위쪽에 둡니다. 값이 없으면 줄째 빠집니다.
+    var live = boothLiveInfo(b.id);
     var rows = [
       ['부스 번호', b.code || (b.zone_key + '-' + b.no)],
       ['부스명', b.name],
+      ['현재 대기', live ? liveText(live) + ' (' + live.ago + ' 입력)' : ''],
       ['운영기관', b.org],
       ['운영기관 유형', orgType(b)],
       ['구역', zoneName(b.zone_key)],
@@ -3378,6 +3662,13 @@
       if (e.target.id === 'reqform') { e.preventDefault(); submitRequest(); }
     });
 
+    /* 부스 입력 현황 띠를 펼친 채로 두면, 1분마다 다시 그리거나 필터를
+       눌러도 펼친 채로 남아야 합니다. toggle 은 거품이 일지 않아
+       잡기 단계(true)에서 받습니다. */
+    document.addEventListener('toggle', function (e) {
+      if (e.target && e.target.id === 'booth-livestrip') ui.boothLiveOpen = e.target.open;
+    }, true);
+
     document.addEventListener('keydown', trapInDrawer);
 
     document.addEventListener('keydown', function (e) {
@@ -3567,6 +3858,11 @@
       $('#topbar-clock').textContent = C.pad2(d.getHours()) + ':' + C.pad2(d.getMinutes());
       // 검색어를 입력하는 중에 다시 그리면 글자가 끊깁니다.
       var typing = document.activeElement && document.activeElement.tagName === 'INPUT';
+      // 부스 화면은 대기 현황만 1분마다 다시 읽습니다(refreshBoothLive 가 간격을 지킵니다).
+      // 검색칸에 커서가 있어도 읽습니다. 대기 한 줄만 고치고 검색칸은 다시 만들지 않아
+      // 입력이 끊기지 않습니다 — 막아 두면 필터를 건 채 지켜보는 동안 값이 말없이 멈춥니다.
+      // 탭이 가려져 있으면 아무도 안 보므로 읽지 않고, 돌아오면 다음 tick 에서 곧바로 읽습니다.
+      if (view === 'booths' && !document.hidden) refreshBoothLive();
       // 일정 화면은 시계·요약·목록만 부분 갱신합니다(1초마다 전체를 다시 그리지 않음).
       if (view === 'schedule') { tickSchedule(d); return; }
       if (d.getSeconds() % 30 !== 0 || typing) return;

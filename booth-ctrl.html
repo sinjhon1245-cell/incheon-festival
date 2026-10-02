@@ -1,0 +1,1434 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>부스 대기 시간 입력</title>
+  <meta name="robots" content="noindex, nofollow" />
+  <!-- 열쇠는 주소의 # 뒤에 있어 Referer 로는 원래 나가지 않지만, 이 화면에서 누른 링크가
+       운영 사이트 주소를 다른 곳에 알리지 않도록 아예 보내지 않습니다. -->
+  <meta name="referrer" content="no-referrer" />
+  <meta name="theme-color" content="#0D1330" />
+  <meta name="color-scheme" content="dark" />
+  <meta name="format-detection" content="telephone=no" />
+
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" />
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <!-- 첫 저장 요청이 기다리지 않게 Supabase 서버와 미리 연결해 둡니다(주소는 config.js 와 같은 값). -->
+  <link rel="preconnect" href="https://ynixjjqozkbzxjmishbe.supabase.co" crossorigin />
+
+  <!-- 글꼴은 화면을 막지 않게 늦게 붙입니다. 현장 와이파이에서 글꼴을 못 받아도 단추는 바로 보여야 합니다.
+       JetBrains Mono 는 숫자 · 쌍점 · 붙임표 · 더하기 · 가운뎃점만 받습니다(전광판 숫자용). 한글에는 쓰지 않습니다. -->
+  <link rel="preload" as="style" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" onload="this.onload=null;this.rel='stylesheet'" />
+  <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@700&amp;text=0123456789:-%2B%C2%B7&amp;display=swap" onload="this.onload=null;this.rel='stylesheet'" />
+  <noscript>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@700&amp;text=0123456789:-%2B%C2%B7&amp;display=swap" />
+  </noscript>
+  <link rel="stylesheet" href="assets/booth-ctrl.css" />
+</head>
+<body>
+  <div class="app" id="app">
+
+    <!-- 불러오는 중 (이 기기에서 처음 여는 부스) -->
+    <section class="screen" id="v-loading" aria-busy="true">
+      <p class="screen__label">부스 운영자</p>
+      <p class="screen__title">불러오는 중…</p>
+      <noscript><p class="screen__text">이 화면은 자바스크립트가 켜져 있어야 움직여요.</p></noscript>
+    </section>
+
+    <!-- 안내 화면: QR 없음 · 쓸 수 없는 QR · DB 설정 전 · 연결 설정 없음 -->
+    <section class="screen" id="v-msg" hidden>
+      <p class="screen__label">부스 운영자</p>
+      <h1 class="screen__title" id="msg-title"></h1>
+      <p class="screen__text" id="msg-text"></p>
+      <div class="screen__actions" id="msg-extra"></div>
+      <p class="help" id="msg-help"></p>
+    </section>
+
+    <!-- 이 기기에서 이 부스를 처음 열 때: 카드가 바뀌었거나 관람객이 찍은 경우를 거릅니다 -->
+    <section class="screen" id="v-confirm" hidden>
+      <p class="screen__label">부스 운영자</p>
+      <div class="who">
+        <p class="who__code" id="cf-code"></p>
+        <p class="who__name" id="cf-name"></p>
+        <p class="who__org" id="cf-org"></p>
+      </div>
+      <div id="cf-ask">
+        <h1 class="screen__title">이 부스를 운영하시나요?</h1>
+        <div class="screen__actions">
+          <button type="button" class="btn btn--primary" id="cf-yes">네, 시작할게요</button>
+          <button type="button" class="btn" id="cf-visitor">관람객이에요</button>
+          <button type="button" class="btn" id="cf-other">다른 부스예요</button>
+        </div>
+      </div>
+      <div id="cf-wrong" hidden>
+        <h1 class="screen__title">운영본부에서 카드를 바꿔 받으세요</h1>
+        <p class="screen__text">다른 부스의 카드로 입력하면 그 부스의 대기 시간이 바뀌어요.</p>
+        <p class="help" id="cf-help"></p>
+        <div class="screen__actions">
+          <button type="button" class="btn" id="cf-back">돌아가기</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 운영 화면 -->
+    <div class="ctrl" id="v-main" hidden>
+
+      <div class="bars" id="bars">
+        <div class="bar bar--conn" id="bar-conn" hidden>
+          <p class="bar__text">연결이 느려요. 자동으로 다시 연결하는 중…</p>
+          <button type="button" class="bar__btn" data-act="retry">다시 시도</button>
+        </div>
+        <div class="bar bar--pending" id="bar-pending" hidden>
+          <p class="bar__text">저장 대기 중 — 연결되면 자동 저장</p>
+          <button type="button" class="bar__btn" data-act="retry">다시 시도</button>
+        </div>
+        <div class="bar bar--old" id="bar-old" hidden>
+          <p class="bar__text" id="old-text"></p>
+          <div class="bar__row">
+            <button type="button" class="bar__btn bar__btn--solid" data-act="old-yes">맞아요, 저장</button>
+            <button type="button" class="bar__btn" data-act="old-no">다시 고를게요</button>
+          </div>
+        </div>
+        <!-- 못 보낸 누름이 있는 사이 다른 기기(다른 탭)에서 값을 바꿨을 때: 옛 누름으로 덮기 전에 묻습니다 -->
+        <div class="bar bar--conflict" id="bar-conflict" hidden>
+          <p class="bar__text" id="conflict-text"></p>
+          <div class="bar__row">
+            <button type="button" class="bar__btn bar__btn--solid" data-act="conflict-yes">바꾸기</button>
+            <button type="button" class="bar__btn" data-act="conflict-no">그대로 두기</button>
+          </div>
+        </div>
+      </div>
+
+      <header class="head">
+        <div class="head__id">
+          <p class="head__label"><span>부스 운영자</span><span class="head__code" id="h-code"></span></p>
+          <h1 class="head__name" id="h-name">부스 정보를 불러오는 중</h1>
+          <p class="head__org" id="h-org"></p>
+        </div>
+        <!-- 관람객 사이트로만 갑니다. 운영 포털 · 관리자 화면으로 가는 링크는 두지 않습니다. -->
+        <a class="head__link" id="visitor-link" href="visitor.html" target="_blank" rel="noopener noreferrer">관람객 화면 &#x2197;&#xFE0E;</a>
+      </header>
+
+      <p class="note" id="demo-note" hidden>시연 화면 · 여기서 누른 값은 이 브라우저에만 남아요</p>
+      <div class="tip" id="tip" hidden>
+        <p class="tip__text">홈 화면에 추가해 두면 다음에 바로 열 수 있어요</p>
+        <button type="button" class="tip__x" data-act="tip-close">닫기</button>
+      </div>
+
+      <div class="main">
+        <div class="col">
+          <section class="now now--none" id="now" aria-labelledby="now-cap">
+            <p class="now__cap" id="now-cap">관람객 화면에 보이는 지금 상태</p>
+            <div class="now__main">
+              <span class="now__state" id="now-state">불러오는 중</span>
+              <span class="now__wait" id="now-wait" hidden><b class="now__num" id="now-num"></b><span class="now__unit">분</span></span>
+            </div>
+            <p class="now__when" id="now-when"></p>
+            <p class="now__note" id="now-note" hidden></p>
+          </section>
+
+          <div class="nudge" id="nudge" hidden>
+            <p class="nudge__text" id="nudge-text"></p>
+            <button type="button" class="nudge__btn" id="nudge-btn" data-act="touch">맞아요</button>
+          </div>
+          <button type="button" class="still" id="still" data-act="touch" hidden>변동 없음 · 지금 확인</button>
+        </div>
+
+        <div class="col">
+          <section class="pad" aria-labelledby="pad-title">
+            <div class="pad__head">
+              <h2 class="pad__title" id="pad-title">지금 줄을 서면 몇 분 기다리나요?</h2>
+              <span class="pad__hint">누르면 바로 저장돼요</span>
+            </div>
+            <div class="waits" id="waits"></div>
+
+            <div class="divider" role="presentation"></div>
+
+            <div class="offs">
+              <button type="button" class="off" id="btn-pause" data-mode="pause" aria-pressed="false">
+                <span class="off__t">잠시 중단</span>
+                <span class="off__s">점심·재료 준비·회차 사이</span>
+              </button>
+              <button type="button" class="off" id="btn-closed" data-mode="closed" aria-pressed="false">
+                <span class="off__t">오늘 마감</span>
+                <span class="off__s">재료 소진·운영 끝</span>
+              </button>
+            </div>
+
+            <div class="ask" id="ask-close" hidden>
+              <p class="ask__text">오늘 체험을 끝낼까요? 관람객 화면에 “마감”으로 보여요.</p>
+              <div class="ask__row">
+                <button type="button" class="btn btn--solid" data-act="close-yes">네, 마감할게요</button>
+                <button type="button" class="btn" data-act="close-no">아니요</button>
+              </div>
+            </div>
+          </section>
+        </div>
+      </div>
+
+      <footer class="foot">
+        <p>이 화면은 우리 부스 운영자만 써요. 주소나 QR 사진을 단체방에 올리지 마세요.</p>
+        <p id="foot-key" hidden></p>
+        <p id="foot-help"></p>
+      </footer>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true"></div>
+
+  <script src="assets/config.js"></script>
+  <script src="assets/booth-core.js"></script>
+  <script src="assets/mock-data.js"></script>
+
+  <script>
+  /* ===================================================================
+     부스 운영자 화면
+
+     부스마다 나눠 준 카드의 QR(booth-ctrl.html#k=열쇠)로 엽니다. 로그인은
+     없고, 열쇠 하나가 그 부스 하나의 대기 시간만 바꿀 수 있습니다.
+     선생님이 줄을 보며 한 손으로 누르는 화면이라, 단추를 누르면 그 자리에서
+     바뀐 것처럼 보이게 하고(저장은 뒤에서), 연결이 끊겨도 단추를 막지 않습니다.
+
+     저장 흐름
+       누름 → 대기 칸(pending) 하나에 담고 이 기기에 적어 둠 → 서버로 보냄
+       새로 누르면 칸을 덮어씁니다. 서버에는 한 번에 하나씩만 보내고, 끝나면
+       그사이 새로 누른 값을 이어서 보냅니다. 그래야 늦게 도착한 옛 요청이
+       마지막 값을 덮지 않습니다.
+       연결이 안 되면 10초마다 · 인터넷이 돌아오면 다시 보냅니다. 누른 지
+       10분이 지나면 저절로 보내지 않고 물어봅니다 — 40분 전 줄 길이가
+       '방금 입력' 으로 보이면 안 되기 때문입니다.
+       한 번 실패한 누름은 그냥 다시 보내지 않고, 먼저 서버를 읽어 견줘 봅니다
+       (reconcile). 그사이 다른 휴대폰 · 다른 탭에서 바꾼 새 값을 옛 누름으로
+       덮으면 안 되기 때문입니다. 이미 들어가 있으면 비우고, 다른 기기의 값이면
+       묻습니다.
+     =================================================================== */
+  (function () {
+    'use strict';
+
+    var core = window.BoothCore;
+    var $ = function (id) { return document.getElementById(id); };
+    var VIEWS = ['loading', 'msg', 'confirm', 'main'];
+
+    // 다시 열 때 지난번 스크롤 자리로 돌아가면 부스 이름과 지금 상태가 위로 밀려 안 보입니다.
+    try { if ('scrollRestoration' in window.history) window.history.scrollRestoration = 'manual'; } catch (e) { /* 무시 */ }
+    var view = 'loading';
+
+    function show(name) {
+      view = name;
+      VIEWS.forEach(function (v) { $('v-' + v).hidden = v !== name; });
+      document.body.setAttribute('data-view', name);
+      try { window.scrollTo(0, 0); } catch (e) { /* 무시 */ }
+    }
+
+    // booth-core.js 를 받지 못했으면(현장 와이파이에서 스크립트가 끊겼을 때) 할 수 있는 게 없습니다.
+    // 엉뚱한 오류 대신 새로 고침을 권합니다.
+    if (!core) {
+      $('msg-title').textContent = '화면을 다 불러오지 못했어요';
+      $('msg-text').textContent = '인터넷 연결을 확인하고 새로 고침해 주세요.';
+      $('msg-extra').innerHTML = '<button type="button" class="btn btn--primary" onclick="location.reload()">새로 고침</button>';
+      $('msg-help').hidden = true;
+      show('msg');
+      return;
+    }
+
+    var cfg = core.cfg || {};
+    var isMock = core.isMock;
+    var esc = core.esc;
+    var pad2 = core.pad2;
+    var HELP = cfg.boothHelpLine || '운영본부에 문의해 주세요';
+
+    // 단추 판. 상태 힌트(여유/보통/혼잡)는 서버와 같은 규칙(BoothCore.congestionFor)으로 만듭니다.
+    var WAITS = [
+      { w: 0,  big: '바로', unit: '',  sub: '0분' },
+      { w: 5,  big: '5',   unit: '분', sub: '' },
+      { w: 10, big: '10',  unit: '분', sub: '' },
+      { w: 15, big: '15',  unit: '분', sub: '' },
+      { w: 20, big: '20',  unit: '분', sub: '' },
+      { w: 30, big: '30',  unit: '분', sub: '' },
+      { w: 45, big: '45',  unit: '분', sub: '' },
+      { w: 60, big: '60',  unit: '분', sub: '이상' }
+    ];
+
+    var RETRY_MS = 10000;            // 연결이 안 될 때 다시 해 보는 간격
+    var REFRESH_MS = 60000;          // 다른 기기에서 바꾼 값을 읽어 오는 간격
+    var PENDING_FRESH_MS = 10 * 60000; // 이보다 오래된 미저장 값은 묻고 보냅니다
+    var NUDGE_MIN = 20;              // 관람객 화면은 30분이면 흐려집니다. 그 전에 한 번 묻습니다
+    var SKEW_MS = 60000;             // 기기 시계와 서버 시계가 이만큼은 어긋날 수 있다고 봅니다
+    // 다른 탭이 저장을 보내는 중이라는 표시를 믿는 시간. booth-core 의 요청 제한 시간(8초)보다 조금 길게 둡니다.
+    // 그 탭이 닫히거나 멈춰 표시를 못 지워도 이 시간이 지나면 이 탭이 이어서 보냅니다.
+    var LEASE_MS = 10000;
+    var OWN_MAX = 5;                 // 이 기기에 남기는 저장 기록 수
+    var MSG_UNKNOWN_QR = '이 QR은 쓸 수 없어요. 운영본부에서 새 QR을 받아 다시 찍어 주세요.';
+    // 서버가 이 화면의 실행 권한을 거둔 경우(보안 점검 경고를 보고 anon 권한을 회수하는 등).
+    // 열쇠 문제가 아니라 새 QR로는 고쳐지지 않으므로, 이 기기에 남긴 것(못 보낸 누름 · 확인 표시 ·
+    // 최근 연 부스)은 지우지 않습니다. 운영본부가 DB 설정을 다시 하면 '다시 시도' 로 이어집니다.
+    var MSG_NO_ACCESS = '부스 대기 입력이 잠시 꺼졌어요. 운영본부에 알려 주세요.';
+    var RELOAD_BTN = '<button type="button" class="btn btn--primary" data-act="reload">다시 시도</button>';
+
+    // 시연 값이 실제로 운영하는 부스의 '최근 연 부스' 를 덮지 않게 시연은 따로 적어 둡니다.
+    var KEY_LAST = isMock ? 'aisw-boothctrl-last-demo' : 'aisw-boothctrl-last';
+    var KEY_TIP = 'aisw-boothctrl-tip';
+    // 이 탭의 이름. QR을 찍을 때마다 새 탭이 열려 같은 부스를 여러 탭이 열고 있을 수 있어,
+    // 저장소에 남긴 누름이 어느 탭 것인지 가려내는 데 씁니다.
+    var TAB = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+
+    var token = '';
+    var booth = null;      // 서버가 마지막으로 알려 준 이 부스 (ctrl부스)
+    var cached = null;     // 이 기기에 기억해 둔 머리글 (연결이 안 될 때 보여 줌)
+    var settings = null;   // 행사 시간표 (문 열기 전 안내용)
+    // 아직 서버에 저장되지 않은 누름 {mode, wait, tappedAt, baseAt, baseVal, tab, conflict?}
+    //   baseAt   누를 때 알던 서버 값의 시각(ms). 오늘 값이 없었으면 0, 서버 값을 몰랐으면 null
+    //   baseVal  누를 때 알던 서버 값 {congestion, wait_minutes} | null (시연 모드에서만 견줌)
+    //   tab      누른 탭의 이름 — 누름은 tab + tappedAt 으로 가립니다(순번은 탭마다 따로 세어 겹칩니다)
+    //   conflict 누른 뒤 다른 기기에서 바꾼 값 {congestion, wait_minutes, at} — 이게 있으면 보내지 않고 묻습니다
+    var pending = null;
+    var persisted = false; // 지금 pending 이 이 기기 저장소에 적힌 것을 다시 읽어 확인했는가
+    var inflight = null;   // 서버로 보내는 중인 누름 (null = 없음)
+    var errTap = '';       // 마지막으로 오류를 알린 누름
+    // 연결 문제로 답을 못 받은 저장들 {congestion, wait_minutes, sentAt}. 서버에는 들어갔을 수 있어,
+    // 나중에 읽은 값이 이것과 같으면 '다른 기기' 가 아니라 이 기기가 보낸 것으로 봅니다.
+    var unknowns = [];
+    // 다른 탭에서 이어받은 누름을 보내기 전 잠깐 미뤄 둔 것 {id, ready, timer}. 그 탭이 아직 열려 있으면
+    // 같은 순간(인터넷이 돌아온 순간 등)에 둘 다 보내지 않도록, 그 탭이 먼저 보내고 표시를 남길 틈을 줍니다.
+    var hold = null;
+    var leaseTimer = null; // 다른 탭의 '보내는 중' 표시가 낡을 때 다시 볼 차례
+    var dropped = null;   // 다른 탭이 처리해 이 탭에서 막 버린 누름 — 다음 읽기에서 '저장됨' 으로 알릴지 가립니다
+    var touching = 0;      // '맞아요 · 지금 확인' 보내는 중인 수
+    var gen = 0;           // 서버 값을 새로 받을 때마다 하나씩 올라갑니다
+    var offline = false;   // 마지막 저장이 연결 문제로 실패했는가
+    var loaded = false;    // 서버에서 부스를 한 번이라도 받았는가
+    var loading = false;
+    var connBad = false;   // 처음 불러오기가 연결 문제로 실패해 다시 연결하는 중
+    var confirmed = false; // 이 기기에서 '이 부스를 운영한다' 고 확인했는가
+    var dead = false;      // 쓸 수 없는 QR · DB 설정 전 · 실행 권한 없음 — 모든 되풀이를 멈춤
+    var stopPoll = null;
+    var tickTimer = null;
+    var stopDemo = null;
+
+    /* ── 작은 도우미 ─────────────────────────────────────────────── */
+    function lsGet(key) {
+      try {
+        var raw = window.localStorage.getItem(key);
+        return raw ? JSON.parse(raw) : null;
+      } catch (e) { return null; }
+    }
+    function lsSet(key, val) {
+      try { window.localStorage.setItem(key, JSON.stringify(val)); } catch (e) { /* 저장소가 막힌 브라우저 — 이번 화면에서만 기억합니다 */ }
+    }
+    function lsDel(key) {
+      try { window.localStorage.removeItem(key); } catch (e) { /* 무시 */ }
+    }
+    function last6() { return token.slice(-6); }
+    function keyOk() { return 'aisw-boothctrl-ok-' + last6(); }
+    function keyPending() { return 'aisw-boothctrl-pending-' + last6(); }
+    // 이 기기(같은 브라우저의 모든 탭)가 이 부스에 남긴 저장 기록과 마지막으로 본 서버 값
+    function keyOwn() { return 'aisw-boothctrl-own-' + last6(); }
+    // 지금 이 부스 값을 서버로 보내는 탭 {tab, id, at}
+    function keySending() { return 'aisw-boothctrl-sending-' + last6(); }
+
+    // booth-core 와 같은 방식으로 시각을 읽습니다(소수점 여섯 자리를 못 읽는 옛 사파리 대비).
+    function toMs(v) {
+      if (v === null || v === undefined || v === '') return NaN;
+      if (v instanceof Date) return v.getTime();
+      if (typeof v === 'number') return v;
+      return Date.parse(String(v).replace(' ', 'T').replace(/(\.\d{3})\d+/, '$1'));
+    }
+    function safeDecode(s) {
+      try { return decodeURIComponent(s); } catch (e) { return s; }
+    }
+    function isAscii(s) { return /^[\x21-\x7E]+$/.test(String(s || '')); }
+
+    function today() { return core.kstDay(Date.now()); }
+    // 오늘(한국 날짜) 넣은 값인가. booth-core 는 서버에서 읽어 올 때만 이 규칙을 적용해서,
+    // 탭을 밤새 열어 두면 어제 값이 메모리에 그대로 남습니다. 그릴 때 · 확인할 때 다시 따집니다.
+    function liveToday(b) {
+      return !!b && !!b.congestion && core.kstDay(b.congestion_updated_at) === today();
+    }
+    function sameValue(a, b) {
+      return !!a && !!b && a.congestion === b.congestion && Number(a.wait_minutes) === Number(b.wait_minutes);
+    }
+    function sameTap(a, b) {
+      return !!a && !!b && (a.tab || '') === (b.tab || '') && a.tappedAt === b.tappedAt;
+    }
+    function tapId(p) { return p ? (p.tab || '') + ':' + p.tappedAt : ''; }
+    function pendingLive(p) { return p ? core.deriveLive(p.mode, p.wait) : null; }
+
+    // 인쇄 카드의 '발급 11.03 14:20' 과 같은 모양 — 카드와 화면을 견줘 볼 수 있게 합니다.
+    function fmtIssued(v) {
+      var p = core.kstParts(v);
+      return p ? pad2(p.m) + '.' + pad2(p.d) + ' ' + pad2(p.hh) + ':' + pad2(p.mi) : '';
+    }
+
+    // '보통 15분' · '잠시 중단' · '오늘 마감'. 받침이 늘 있어 뒤에 '이' · '으로' 를 붙입니다.
+    function valueLabel(c, w) {
+      if (c === '중단') return '잠시 중단';
+      if (c === '마감') return '오늘 마감';
+      return c + ' ' + (Number(w) || 0) + '분';
+    }
+    // 묻는 글에서 “보통 15분”이 두 줄로 갈라지면 읽기 어렵습니다. 따옴표째 한 덩어리로 둡니다.
+    function askHtml(before, c, w, after) {
+      return esc(before) + '<span class="nowrap">“' + esc(valueLabel(c, w)) + '”' + esc(after) + '</span>';
+    }
+
+    // 시연 값은 이 브라우저의 같은 사이트(origin) 저장소와 탭 사이 알림에만 있습니다. 관람객 사이트가
+    // 다른 주소이면 거기서는 여기서 누른 값이 보이지 않으므로, 시연 때는 visitorSiteUrl 을 쓰지 않고
+    // 같은 사이트의 관람객 화면으로 갑니다(visitor.html 은 운영 사이트에도 함께 올라갑니다).
+    function visitorHref() {
+      if (isMock) return 'visitor.html?demo';
+      return cfg.visitorSiteUrl || 'visitor.html';
+    }
+
+    function splitMsg(s) {
+      var i = String(s).indexOf('. ');
+      return i < 0 ? [s, ''] : [s.slice(0, i + 1), s.slice(i + 2)];
+    }
+
+    /* ── 알림 ────────────────────────────────────────────────────── */
+    var toastTimer = null;
+    function toast(text, kind, ms) {
+      var t = $('toast');
+      t.textContent = text;
+      t.className = 'toast is-show' + (kind ? ' toast--' + kind : '');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(function () { t.className = 'toast' + (kind ? ' toast--' + kind : ''); },
+        ms || (kind === 'info' ? 5000 : (kind === 'error' ? 4500 : 3000)));
+    }
+    function buzz() {
+      try { if (navigator.vibrate) navigator.vibrate(30); } catch (e) { /* 진동을 막은 브라우저 */ }
+    }
+
+    /* ── 주소에서 열쇠 읽기 ─────────────────────────────────────────
+       열쇠는 # 뒤(#k=…)에 둡니다. # 뒤는 서버 · 중간 장비 기록에 남지 않습니다.
+       ?k= 로 들어오면 곧바로 # 뒤로 옮겨, 뒤로 가기 · 주소 공유로 다시 새지 않게 합니다. */
+    function readToken() {
+      var search = window.location.search || '';
+      var fromQuery = null;
+      if (search.length > 1) {
+        var keep = [];
+        search.slice(1).split('&').forEach(function (part) {
+          if (!part) return;
+          if (part.indexOf('k=') === 0) fromQuery = safeDecode(part.slice(2));
+          else keep.push(part);
+        });
+        if (fromQuery !== null) {
+          try {
+            window.history.replaceState(null, '', window.location.pathname +
+              (keep.length ? '?' + keep.join('&') : '') + '#k=' + encodeURIComponent(fromQuery));
+          } catch (e) { /* 주소를 못 바꿔도 화면은 돕니다 */ }
+        }
+      }
+      var m = /(?:^#|&)k=([^&]*)/.exec(window.location.hash || '');
+      return (m ? safeDecode(m[1]) : '') || fromQuery || '';
+    }
+
+    /* ── 안내 화면 ─────────────────────────────────────────────────── */
+    function showMsg(title, text, extraHtml) {
+      $('msg-title').textContent = title;
+      $('msg-text').textContent = text || '';
+      $('msg-text').hidden = !text;
+      $('msg-extra').innerHTML = extraHtml || '';
+      $('msg-extra').hidden = !extraHtml;
+      $('msg-help').textContent = HELP;
+      $('msg-help').hidden = false;
+      // 방금 뜬 '저장됨' 알림이 '쓸 수 없어요' 안내 위에 남아 있으면 서로 어긋나 보입니다.
+      clearTimeout(toastTimer);
+      $('toast').className = 'toast';
+      show('msg');
+    }
+
+    function showNoToken() {
+      var extra = '';
+      var last = lsGet(KEY_LAST);
+      if (last && last.token && core.validToken(last.token)) {
+        extra += '<p class="recent">최근 연 부스: <b>' + esc(last.code || '') + ' ' + esc(last.name || '') + '</b></p>' +
+          '<a class="btn btn--primary" href="#k=' + encodeURIComponent(last.token) + '">이어서 열기</a>';
+      }
+      if (isMock) {
+        var first = (window.MOCK_BOOTHS || [])[0];
+        if (first) {
+          extra += '<a class="btn" href="#k=' + encodeURIComponent(core.demoToken(first.id)) + '">시연용 부스 열기 (' +
+            esc(first.code) + ')</a>';
+        }
+      }
+      showMsg('부스 QR 코드로 다시 열어 주세요', '부스 운영자 카드의 QR을 휴대폰 카메라로 찍으면 이 화면이 열려요.', extra);
+    }
+
+    function stopAll() {
+      dead = true;
+      if (stopPoll) { stopPoll(); stopPoll = null; }
+      if (stopDemo) { stopDemo(); stopDemo = null; }
+      clearInterval(tickTimer);
+    }
+
+    // 열쇠가 바뀌었거나(유출로 다시 발급) 없는 열쇠 — 이 기기에 남은 흔적도 지웁니다.
+    function invalidate(text) {
+      stopAll();
+      clearPending(true);
+      lsDel(keyOk());
+      lsDel(keyOwn());
+      var last = lsGet(KEY_LAST);
+      if (last && last.token === token) lsDel(KEY_LAST);
+      var p = splitMsg(text);
+      showMsg(p[0], p[1]);
+    }
+
+    function showNoConfig() {
+      stopAll();
+      var p = splitMsg(core.ctrlErrorText({ code: 'NO_CONFIG' }));
+      showMsg(p[0], p[1], RELOAD_BTN);
+    }
+
+    /* 42501 은 두 가지로 옵니다. 서버가 '모르는 열쇠' 라고 낸 것(hint 'booth_token_invalid')과,
+       PostgREST 가 '이 함수를 실행할 권한이 없음' 이라고 낸 것(anon 실행 권한을 거뒀을 때)입니다.
+       뒤의 것을 '죽은 QR' 로 다루면 모든 운영자 휴대폰이 열쇠 · 못 보낸 누름을 지우고, 운영본부는
+       고쳐지지도 않는 열쇠 바꾸기 · 재인쇄를 하게 됩니다. 그래서 열쇠 무효는 확실할 때만 봅니다. */
+    function isDeadKey(err) {
+      if (!err || err.code !== '42501') return false;
+      if (err.hint === 'booth_token_invalid') return true;
+      // 서버를 거치지 않은 오류(booth-core 가 열쇠 모양만 보고 바로 낸 것 · 시연)는 status 가 없습니다.
+      return err.status === undefined || err.status === null;
+    }
+    function isNoAccess(err) {
+      if (!err) return false;
+      if (err.code === 'NO_ACCESS') return true;
+      return err.code === '42501' && !isDeadKey(err);
+    }
+    function noAccessText() {
+      // booth-core 가 이 경우의 문구를 알면 그것을, 모르면(일반 오류 문구가 오면) 이 화면의 문구를 씁니다.
+      var t = core.ctrlErrorText({ code: 'NO_ACCESS' });
+      return (t && t !== core.ctrlErrorText({ code: '' })) ? t : MSG_NO_ACCESS;
+    }
+    function showNoAccess() {
+      stopAll(); // 되풀이만 멈춥니다. 못 보낸 누름 · 확인 표시 · 최근 연 부스는 그대로 둡니다
+      var p = splitMsg(noAccessText());
+      showMsg(p[0], p[1], RELOAD_BTN);
+    }
+    // hint 를 아직 주지 않는 옛 SQL 에서는 바뀐 열쇠도 저장 · 확인에서 같은 42501 로 옵니다.
+    // 읽기(booth_ctrl_get)는 모르는 열쇠에 빈 결과를 줄 뿐 42501 을 내지 않으므로, 한 번 읽어서
+    // 빈 결과일 때만 열쇠가 바뀐 것으로 봅니다. 읽기도 막혔거나 부스가 읽히면 권한 문제 화면입니다.
+    function checkKeyThenNoAccess() {
+      stopAll();
+      core.ctrlGet(token).then(function (b) {
+        if (!b) invalidate(MSG_UNKNOWN_QR);
+        else showNoAccess();
+      }, function () { showNoAccess(); });
+    }
+
+    // 다시 해 봐도 소용없는 오류는 화면을 바꿉니다. 처리했으면 true.
+    // fromWrite: 저장 · 확인(booth_ctrl_set · touch)에서 난 오류인가
+    function handleFatal(err, fromWrite) {
+      if (!err) return false;
+      if (isDeadKey(err)) { invalidate(core.ctrlErrorText(err)); return true; }
+      if (isNoAccess(err)) {
+        if (fromWrite && err.code === '42501') checkKeyThenNoAccess();
+        else showNoAccess();
+        return true;
+      }
+      if (err.code === 'NOT_INSTALLED' || err.code === 'PGRST202') {
+        stopAll();
+        var p = splitMsg(core.ctrlErrorText(err));
+        showMsg(p[0], p[1], RELOAD_BTN);
+        return true;
+      }
+      if (err.code === 'NO_CONFIG') { showNoConfig(); return true; }
+      return false;
+    }
+
+    /* ── 처음 여는 기기 확인 ───────────────────────────────────────── */
+    function showConfirm(b) {
+      $('cf-code').textContent = b.code || '';
+      $('cf-code').className = 'who__code' + (isAscii(b.code) ? ' mono' : '');
+      $('cf-name').textContent = b.name || '';
+      $('cf-org').textContent = [b.org, b.zone_name].filter(Boolean).join(' · ');
+      $('cf-help').textContent = HELP;
+      $('cf-ask').hidden = false;
+      $('cf-wrong').hidden = true;
+      show('confirm');
+    }
+
+    /* ── 이 기기에 남기는 것 ───────────────────────────────────────── */
+    function remember(b) {
+      if (!b || !confirmed) return;
+      lsSet(KEY_LAST, { token: token, code: b.code, name: b.name, org: b.org, zone_name: b.zone_name, at: Date.now() });
+      document.title = (b.code ? b.code + ' ' : '') + '대기 시간 입력';
+    }
+
+    function readStored() {
+      var p = lsGet(keyPending());
+      if (!p || typeof p !== 'object' || typeof p.tappedAt !== 'number') return null;
+      if (!core.deriveLive(p.mode, p.mode === 'open' ? p.wait : 0)) return null;
+      return p;
+    }
+    function loadPending() {
+      var p = readStored();
+      if (!p) return null;
+      // 어제 누르고 못 보낸 값은 오늘 줄과 상관이 없습니다. 날짜 없이 'HH:MM에 누른 …' 으로 묻지 않고 버립니다.
+      if (core.kstDay(p.tappedAt) !== today()) { lsDel(keyPending()); return null; }
+      p.conflict = null; // 묻던 것은 새로 읽은 서버 값으로 다시 따집니다
+      persisted = true;
+      return p;
+    }
+    function savePending() {
+      if (!pending) return;
+      lsSet(keyPending(), pending);
+      // 저장소가 막힌 브라우저에서는 읽으면 늘 비어 보입니다. 실제로 적힌 것을 확인한 때만
+      // '저장소에서 사라짐 = 다른 탭이 처리함' 으로 읽습니다(syncStored).
+      persisted = sameTap(readStored(), pending);
+    }
+    // 이 탭의 누름을 비웁니다. 저장소는 같은 누름일 때만 지웁니다 — 같은 부스를 연 다른 탭이
+    // 그사이 새로 누른 값이면 그 탭이 보낼 몫이라 남겨 둡니다. force: 이 부스의 누름을 모두 버릴 때.
+    function clearPending(force) {
+      var p = pending;
+      pending = null;
+      offline = false;
+      persisted = false;
+      if (!token) return;
+      if (force || (p && sameTap(readStored(), p))) lsDel(keyPending());
+    }
+    // 같은 부스를 연 다른 탭과 대기 칸을 맞춥니다.
+    //   'gone'    저장소에서 사라짐 — 다른 탭이 이미 보냈거나 버림. 이 탭의 사본도 버립니다
+    //   'adopted' 다른 탭이 더 늦게 누른 값이 있음 — 그 값을 이어받습니다(그 탭이 닫혔을 수 있어서)
+    function syncStored() {
+      if (!pending || !persisted) return '';
+      var s = readStored();
+      if (!s) {
+        dropped = pending;
+        pending = null;
+        offline = false;
+        persisted = false;
+        return 'gone';
+      }
+      if (sameTap(s, pending)) return '';
+      if (s.tappedAt > pending.tappedAt) {
+        s.conflict = null;
+        pending = s;
+        return 'adopted';
+      }
+      lsSet(keyPending(), pending); // 저장소 쪽이 더 오래된 누름 — 이 탭의 것을 다시 적어 둡니다
+      return '';
+    }
+    function isOld(p) { return !!p && Date.now() - p.tappedAt >= PENDING_FRESH_MS; }
+
+    /* 이 기기의 저장 기록 · 마지막으로 본 서버 값 (aisw-boothctrl-own-…)
+       { own: [{congestion, wait_minutes, sentAt, exact}] (최근 OWN_MAX 개), seen: {day, at, congestion, wait_minutes} }
+         exact  true = 저장이 된 값(sentAt 은 서버가 준 시각 그대로) · false = 답을 못 받은 값(sentAt 은 이 기기 시계)
+       메모리(unknowns · booth)는 새로 고침하면 비어, 이 기기가 조금 전 넣은 값을 '다른 기기에서 바꿨어요' 로
+       묻고 누른 값을 보내지 않게 됩니다. 그래서 이 기기 저장소에도 적어 두고, 같은 부스를 연 다른 탭과도
+       나눠 씁니다(같은 휴대폰의 다른 탭이 넣은 값도 이 기기의 것). 오늘(한국 날짜) 것만 씁니다. */
+    function readOwnRec() {
+      var r = lsGet(keyOwn());
+      return (r && typeof r === 'object' && !(r instanceof Array)) ? r : {};
+    }
+    function ownStored(rec) {
+      var list = (rec || readOwnRec()).own;
+      if (!(list instanceof Array)) return [];
+      var d = today();
+      return list.filter(function (u) {
+        return !!u && typeof u.sentAt === 'number' && core.kstDay(u.sentAt) === d;
+      });
+    }
+    // 저장이 됐거나(exact, 서버 시각) 답을 못 받은(보낸 시각) 값을 적어 둡니다.
+    // settleBefore: 이 시각(이 기기 시계)에 보낸 저장이 됨 — 그보다 먼저 보내고 답을 못 받은 기록은 지웁니다
+    //   (메모리의 unknowns = [] 와 같이). 남겨 두면 1분 남짓 안에 다른 기기가 같은 값을 다시 넣었을 때
+    //   이 기기의 것으로 잘못 봐 묻지 않고 덮습니다.
+    function noteOwn(c, w, at, exact, settleBefore) {
+      if (!token || !c || typeof at !== 'number' || isNaN(at)) return;
+      var r = readOwnRec();
+      var list = ownStored(r);
+      if (typeof settleBefore === 'number') {
+        list = list.filter(function (u) { return u.exact || u.sentAt > settleBefore; });
+      }
+      list.push({ congestion: c, wait_minutes: Number(w) || 0, sentAt: at, exact: !!exact });
+      r.own = list.slice(-OWN_MAX);
+      lsSet(keyOwn(), r);
+    }
+    // 새로 받은 서버 값을 적어 둡니다. 다른 탭이 더 새 값을 이미 봤으면 그대로 둡니다.
+    function noteSeen() {
+      if (!confirmed || !token || !booth) return;
+      var live = liveToday(booth);
+      var at = live ? toMs(booth.congestion_updated_at) : 0;
+      if (isNaN(at)) return;
+      var r = readOwnRec(), s = r.seen;
+      if (s && s.day === today() && typeof s.at === 'number' && s.at > at) return;
+      r.seen = { day: today(), at: at, congestion: live ? booth.congestion : null, wait_minutes: live ? booth.wait_minutes : null };
+      lsSet(keyOwn(), r);
+    }
+    function seenToday() {
+      var s = readOwnRec().seen;
+      return (s && s.day === today() && typeof s.at === 'number') ? s : null;
+    }
+
+    /* 보내는 중 표시(aisw-boothctrl-sending-…)
+       못 보낸 누름은 같은 부스를 연 모든 탭이 저장소에서 나눠 봅니다. 인터넷이 돌아오거나 QR을 다시 찍어
+       새 탭이 열리면 두 탭이 같은 누름을 한꺼번에 보내 기록이 두 줄 남습니다. 보내기 직전에 표시를 남기고,
+       다른 탭의 표시가 살아 있으면 보내지 않고 기다립니다(그 탭이 끝나면 다시 읽고 견줘 봅니다). */
+    function otherLease() {
+      var l = lsGet(keySending());
+      if (!l || typeof l !== 'object' || l.tab === TAB || typeof l.at !== 'number') return null;
+      var age = Date.now() - l.at;
+      return (age >= 0 && age < LEASE_MS) ? l : null;
+    }
+    function takeLease(p) { lsSet(keySending(), { tab: TAB, id: tapId(p), at: Date.now() }); }
+    function dropLease() {
+      var l = lsGet(keySending());
+      if (l && l.tab === TAB) lsDel(keySending());
+    }
+    // 다른 탭이 보내는 중이거나, 이어받은 누름을 잠깐 미뤄 둔 중 — 화면에는 '저장하는 중' 으로 보입니다.
+    function waitingOther() {
+      if (!pending || inflight || !confirmed || pending.conflict || isOld(pending)) return false;
+      return (!!hold && hold.id === tapId(pending) && !hold.ready) || !!otherLease();
+    }
+    function holdFor(p) {
+      if (hold) clearTimeout(hold.timer);
+      var h = { id: tapId(p), ready: false, timer: null };
+      h.timer = setTimeout(function () {
+        if (hold !== h) return;
+        h.ready = true;
+        flush();
+      }, 1000 + Math.random() * 2000);
+      hold = h;
+    }
+
+    /* ── 서버 값 받기 ─────────────────────────────────────────────── */
+    function applyServer(b) {
+      booth = b;
+      gen++;
+      noteSeen(); // 새로 고친 뒤 연결 없이 누른 값도 이 값을 기준으로 견주게 합니다(baseNow)
+      render();
+    }
+    // 내가 보낸 저장 · 확인의 답. '맞아요' 와 새 값이 엇갈려 도착해도 더 늦은 값이 이깁니다.
+    function applyOwn(b) {
+      var tb = toMs(b.congestion_updated_at);
+      var tc = booth ? toMs(booth.congestion_updated_at) : NaN;
+      if (isNaN(tc) || isNaN(tb) || tb >= tc) applyServer(b);
+    }
+    // 이 기기가 보낸 저장 · 확인의 답으로 서버 값을 알게 되면, 아직 못 보낸(그 뒤에 누른) 누름의
+    // 기준 시각도 그만큼 당깁니다. 이 기기가 만든 서버 변화를 '다른 기기의 변경' 으로 잘못 묻지 않게.
+    function seenOwn(b) {
+      var tb = toMs(b && b.congestion_updated_at);
+      if (!pending || isNaN(tb)) return;
+      if (typeof pending.baseAt !== 'number' || tb > pending.baseAt) {
+        pending.baseAt = tb;
+        pending.baseVal = b.congestion ? { congestion: b.congestion, wait_minutes: b.wait_minutes } : null;
+        if (persisted && sameTap(readStored(), pending)) lsSet(keyPending(), pending);
+      }
+    }
+    function markLoaded(b) {
+      if (!loaded) { loaded = true; connBad = false; }
+      if (confirmed) { remember(b); startPoll(); }
+    }
+
+    function changedElsewhere(prev, b) {
+      // 처음 읽은 값(이 기기가 아직 오늘 값을 모름)은 알리지 않습니다.
+      if (!prev || !prev.congestion || !b || !b.congestion) return false;
+      var tb = toMs(b.congestion_updated_at);
+      var tp = toMs(prev.congestion_updated_at);
+      if (!isNaN(tp) && !(tb > tp)) return false;
+      return !sameValue(prev, b);
+    }
+
+    // 서버에서 읽은 값이 이 기기가 넣은 것인가(답을 못 받은 저장 · 이미 된 저장).
+    // 이 탭의 기록(unknowns)과 함께, 새로 고치기 전 · 같은 부스를 연 다른 탭이 저장소에 남긴 기록도 봅니다.
+    function isMine(b) {
+      var tb = toMs(b && b.congestion_updated_at);
+      if (isNaN(tb)) return false;
+      var list = unknowns.concat(ownStored());
+      for (var i = 0; i < list.length; i++) {
+        var u = list[i];
+        if (!sameValue(b, u)) continue;
+        // 저장이 된 값은 서버 시각까지 같아야 이 기기의 것입니다. 같은 값을 다른 기기가 다시 넣은 것은
+        // 시각이 달라 '다른 기기의 변경' 으로 묻습니다. 답을 못 받은 값만 시계 어긋남만큼 넉넉히 봅니다.
+        if (u.exact ? Math.abs(tb - u.sentAt) < 1 : Math.abs(tb - u.sentAt) <= SKEW_MS + 10000) return true;
+      }
+      return false;
+    }
+
+    /* 서버를 막 읽은 뒤, 못 보낸 누름을 그대로 보내도 되는지 따집니다.
+       누른 뒤로 서버 값이 바뀌지 않았으면('' ) 보냅니다 — 마지막 누름이 이깁니다.
+       바뀌었으면(서버 시각이 baseAt 보다 늦음) 함부로 덮지 않습니다.
+         'landed'   누른 값과 같음 — 이미 들어감(답만 잃었거나 다른 탭이 대신 보냄). 비웁니다
+         'mine'     답을 못 받은 이 기기의 앞 저장과 같음 — 이어서 보냅니다
+         'conflict' 다른 기기에서 바꿈 — 보내지 않고 묻습니다
+       값만 같다고 비우지는 않습니다. 같은 값을 다시 눌러 시각을 새로 하려는 것일 수 있어서,
+       서버 시각이 누를 때 알던 것보다 늦을 때만 따집니다. */
+    function reconcile(b) {
+      if (!pending || inflight) return '';
+      // 서버 값이 비었으면(운영본부가 '실시간 값 모두 지우기' 를 함 등) 묻던 다른 기기의 값도 이제 없습니다.
+      // 묻기를 그대로 두면 위쪽 띠는 '다른 기기에서 “X”으로 바꿨어요' 라는데 판은 '아직 입력 전' 이고,
+      // flush() 도 계속 보내지 않습니다. 묻기를 거두고, 누른 값은 보내거나(10분이 넘었으면) 다시 묻습니다.
+      if (!liveToday(b)) { pending.conflict = null; return ''; }
+      var tb = toMs(b.congestion_updated_at);
+      if (isNaN(tb)) return '';
+      // 누를 때 서버 값을 몰랐으면(첫 읽기 전에 누름) 누른 시각에서 시계 어긋남만큼 앞을 기준으로 봅니다.
+      var since = typeof pending.baseAt === 'number' ? pending.baseAt : pending.tappedAt - SKEW_MS;
+      // 시연 모드에서 아직 아무도 누르지 않은 부스는 읽을 때마다 시각을 '지금 - N분' 으로 다시 셈해
+      // 시각만으로는 바뀐 것을 가릴 수 없습니다. 시연에서는 누를 때 보던 값 그대로면 안 바뀐 것으로 봅니다.
+      var drift = isMock && sameValue(b, pending.baseVal);
+      if (!(tb > since) || drift) { pending.conflict = null; return ''; }
+      if (sameValue(b, pendingLive(pending))) return 'landed';
+      if (isMine(b)) {
+        pending.conflict = null;
+        pending.baseAt = tb;
+        pending.baseVal = { congestion: b.congestion, wait_minutes: b.wait_minutes };
+        return 'mine';
+      }
+      pending.conflict = { congestion: b.congestion, wait_minutes: b.wait_minutes, at: b.congestion_updated_at };
+      return 'conflict';
+    }
+    // 못 보낸 누름이 이미 서버에 들어가 있음을 읽어서 알았을 때
+    function landed(b) {
+      clearPending();
+      unknowns = [];
+      applyOwn(b);
+      toastSaved(b);
+    }
+
+    function load() {
+      if (dead || loading) return null;
+      loading = true;
+      var g = gen;
+      return core.ctrlGet(token).then(function (b) {
+        loading = false;
+        if (dead) return;
+        // 서버가 '모르는 열쇠' 라고 답한 때만 이 화면을 냅니다. 연결 문제는 여기로 오지 않습니다.
+        if (!b) { invalidate(MSG_UNKNOWN_QR); return; }
+        connBad = false;
+        offline = false;
+        loaded = true;
+        if (!confirmed) { booth = b; gen++; showConfirm(b); return; }
+        // '다시 시도' 는 읽기와 저장을 함께 보낼 수 있습니다. 저장 답이 먼저 왔으면 읽은 값이 더 오래된 것입니다.
+        // 그때는 못 보낸 누름도 견줘 보지 않고 보내지 않습니다(다음 읽기에서 따집니다).
+        // 다만 아직 서버 값을 하나도 모르면 받은 값을 씁니다 — 머리글이 '불러오는 중' 에 멈추지 않게.
+        var fresh = g === gen && !inflight && !touching;
+        var verdict = '';
+        if (fresh) {
+          syncStored();
+          dropped = null;
+          verdict = reconcile(b);
+        }
+        if (verdict === 'landed') landed(b);
+        else if (fresh || !booth) applyServer(b);
+        markLoaded(b);
+        if (view !== 'main') showMain();
+        if (fresh) flush();
+      }, function (err) {
+        loading = false;
+        if (dead || handleFatal(err)) return;
+        // 연결 문제가 아닌 오류(키를 바꾸거나 끈 뒤의 HTTP_401 'Invalid API key' · 주소가 틀린 404 · PGRST301 등)는
+        // 다시 해 봐도 같습니다. '연결이 느려요' 를 띄우고 10초마다 되풀이하면 현장에서 와이파이만 살피게 되니,
+        // 되풀이를 멈추고 운영본부에 알리게 합니다. 오류 코드를 함께 보여 운영본부가 설정을 찾게 합니다.
+        // 못 보낸 누름 · 확인 표시 · 최근 연 부스는 지우지 않습니다(설정을 고치고 '다시 시도' 하면 이어집니다).
+        // 서버가 잠깐 바쁜 것(408 · 429)은 연결 문제처럼 다시 해 봅니다.
+        if (!err || !(err.offline || err.status === 408 || err.status === 429)) {
+          stopAll();
+          var code = err && err.code ? String(err.code) : '';
+          showMsg('지금은 이 화면을 열 수 없어요',
+            '인터넷 연결 문제는 아니에요. 운영본부에 알려 주세요.' + (code ? ' (오류 ' + code + ')' : ''),
+            RELOAD_BTN);
+          return;
+        }
+        // 연결이 느리거나 끊김: 기억해 둔 머리글로 화면을 열고, 누른 값은 대기 칸에 모읍니다.
+        connBad = true;
+        if (view !== 'main') showMain();
+        else render();
+      });
+    }
+
+    function refresh() {
+      if (dead) return null;
+      if (!loaded) return load();
+      if (!settings) loadSettings();
+      var g = gen;
+      return core.ctrlGet(token).then(function (b) {
+        if (dead) return;
+        if (!b) { invalidate(MSG_UNKNOWN_QR); return; }
+        connBad = false;
+        // 읽는 사이에 이 기기가 저장 · 확인했으면, 읽어 온 값이 더 오래된 것일 수 있어 버립니다.
+        // 그때는 못 보낸 누름도 보내지 않습니다 — 견줘 볼 서버 값이 없으니 다음 읽기를 기다립니다.
+        if (g !== gen || inflight || touching) return;
+        offline = false; // 읽기가 됐으니 연결은 살아 있습니다. 보낼 누름이 있으면 아래에서 곧 보냅니다
+        syncStored();
+        var gone = dropped;
+        dropped = null;
+        var verdict = reconcile(b);
+        if (verdict === 'landed') { landed(b); remember(b); return; }
+        // 다른 탭이 이 탭의 누름을 대신 보냈으면 '다른 기기에서 바꿨어요' 가 아니라 저장된 것입니다.
+        if (!pending && gone && sameValue(b, pendingLive(gone))) {
+          applyServer(b);
+          remember(b);
+          toastSaved(b);
+          return;
+        }
+        // 묻는 중(conflict)이면 위쪽 띠가 알리고, 이 기기가 보낸 값('mine')은 알릴 일이 아닙니다.
+        if (!verdict && changedElsewhere(booth, b) && !isMine(b)) {
+          toast('다른 기기에서 ' + core.formatClock(b.congestion_updated_at) + '에 “' +
+            valueLabel(b.congestion, b.wait_minutes) + '”으로 바꿨어요', 'info');
+        }
+        applyServer(b);
+        remember(b);
+        flush();
+      }, function (err) {
+        if (dead || handleFatal(err)) return;
+        // 연결 문제는 조용히 넘깁니다 — 다음 차례에 다시 읽습니다. 못 보낸 누름이 있으면 '저장 대기 중' 을 띄웁니다.
+        if (pending && !inflight) { offline = true; render(); }
+      });
+    }
+
+    // 시간표가 없으면 저장 알림이 '관람객 화면에 보이는지' 를 말할 수 없어(savedToast) 받을 때까지
+    // 다시 받습니다(10초 차례 · 1분 읽기 · 저장 알림). 한 번에 하나만, 차례로는 30초에 한 번만 보냅니다.
+    var settingsBusy = false;
+    var settingsTriedAt = 0;
+    function loadSettings() {
+      if (settingsBusy) return;
+      settingsBusy = true;
+      settingsTriedAt = Date.now();
+      core.getSettings().then(function (s) {
+        settingsBusy = false;
+        settings = s || {};
+        render();
+      }, function () { settingsBusy = false; /* 시간표 안내는 없어도 됩니다 */ });
+    }
+
+    function startPoll() {
+      if (stopPoll || dead) return;
+      stopPoll = core.poll(refresh, REFRESH_MS);
+    }
+
+    /* ── 누르기 · 저장 ─────────────────────────────────────────────── */
+    // 누를 때 알던 서버 값의 시각. 오늘 값이 없으면 0, 서버 값을 아직 모르면 null.
+    // 새로 고친 뒤 아직 못 읽었으면(연결 없음) 이 기기가 새로 고치기 전에 마지막으로 본 값을 씁니다.
+    // null 이면 reconcile 이 '누른 시각 - 1분' 을 기준으로 삼아, 이 기기가 그 1분 안에 넣은 값을
+    // 다른 기기의 변경으로 묻게 되기 때문입니다.
+    function baseNow() {
+      if (booth) return liveToday(booth) ? toMs(booth.congestion_updated_at) : 0;
+      var s = seenToday();
+      return s ? s.at : null;
+    }
+    function baseValNow() {
+      if (booth) return liveToday(booth) ? { congestion: booth.congestion, wait_minutes: booth.wait_minutes } : null;
+      var s = seenToday();
+      return (s && s.congestion) ? { congestion: s.congestion, wait_minutes: s.wait_minutes } : null;
+    }
+
+    function tap(mode, wait) {
+      if (dead) return;
+      var w = mode === 'open' ? wait : 0;
+      // 같은 값이 이미 서버로 가는 중이면(긴장해서 두 번 누름) 다시 보내지 않습니다. 한 번 보낼 때마다
+      // 기록이 한 줄씩 남아 행사 뒤 보고서의 입력 수가 부풀기 때문입니다. 보내는 중일 때만 거르므로,
+      // 저장이 끝난 뒤 같은 값을 다시 누르면 '지금 확인' 처럼 시각이 새로 됩니다.
+      if (inflight && pending && pending.mode === mode && (mode !== 'open' || pending.wait === w)) {
+        $('ask-close').hidden = true;
+        render();
+        return;
+      }
+      var now = Date.now();
+      if (pending && pending.tab === TAB && now <= pending.tappedAt) now = pending.tappedAt + 1;
+      pending = { mode: mode, wait: w, tappedAt: now, tab: TAB, baseAt: baseNow(), baseVal: baseValNow() };
+      savePending();
+      $('ask-close').hidden = true;
+      render();
+      flush();
+    }
+
+    // 바로 보내는 것은 방금 누른 값과, 보내는 사이 새로 누른 값뿐입니다. 한 번 실패한 누름은
+    // refresh() 가 서버를 먼저 읽고 reconcile() 로 따진 뒤에 이리로 보냅니다.
+    function flush() {
+      // 처음 여는 기기는 '이 부스가 맞다' 고 확인하기 전까지 보내지 않습니다.
+      if (!pending || inflight || dead || !confirmed) return;
+      var st = syncStored();
+      if (st) {
+        // 'gone': 다른 탭이 처리함 → 지금 서버 값을 읽어 보여 줍니다.
+        // 'adopted': 다른 탭의 누름을 이어받음 → 그 사이 서버가 바뀌었을 수 있어 읽고 따진 뒤 보냅니다.
+        render();
+        refresh();
+        return;
+      }
+      if (pending.conflict || isOld(pending)) { render(); return; }
+      var p = pending;
+      // 다른 탭(또는 새로 고치기 전 이 화면)이 누른 것을 이어받았으면, 그 탭이 아직 열려 있을 수 있습니다.
+      // 같은 순간에 둘 다 보내지 않게 1~3초 미룬 뒤, 그 탭이 남긴 '보내는 중' 표시를 보고 정합니다.
+      if (p.tab !== TAB) {
+        if (!hold || hold.id !== tapId(p)) { holdFor(p); render(); return; }
+        if (!hold.ready) { render(); return; }
+      }
+      // 다른 탭이 이 부스 값을 보내는 중이면 기다립니다. 그 탭이 끝나 표시를 지우면(storage 이벤트) ·
+      // 표시가 낡으면 서버를 다시 읽고 견줘 본 뒤 보냅니다(이미 들어갔으면 '저장됨' 으로 비웁니다).
+      var lease = otherLease();
+      if (lease) {
+        // 그 탭이 닫혔거나 멈춰 표시를 못 지우면 storage 이벤트가 오지 않습니다. 표시가 낡는 때에 맞춰 다시 봅니다.
+        clearTimeout(leaseTimer);
+        leaseTimer = setTimeout(function () {
+          if (!dead && pending && !inflight) refresh();
+        }, Math.max(0, lease.at + LEASE_MS - Date.now()) + 300);
+        render();
+        return;
+      }
+      var sentAt = Date.now();
+      inflight = p;
+      takeLease(p);
+      render();
+      core.ctrlSet(token, p.mode, p.wait).then(function (b) {
+        inflight = null;
+        dropLease();
+        if (dead) return;
+        if (!b) { invalidate(MSG_UNKNOWN_QR); return; }
+        offline = false;
+        connBad = false;
+        unknowns = [];
+        noteOwn(b.congestion, b.wait_minutes, toMs(b.congestion_updated_at), true, sentAt);
+        markLoaded(b);
+        if (sameTap(pending, p)) {
+          clearPending();
+          applyOwn(b);
+          toastSaved(b);
+          buzz();
+        } else {
+          applyOwn(b);
+          seenOwn(b);
+          flush(); // 보내는 사이에 새로 누른 값
+        }
+      }, function (err) {
+        inflight = null;
+        dropLease();
+        if (dead || handleFatal(err, true)) return;
+        if (err && err.code === '22023') {
+          if (sameTap(pending, p)) clearPending();
+          toast(core.ctrlErrorText(err), 'error');
+          render();
+          flush();
+          return;
+        }
+        // 연결 문제(그 밖의 오류도): 값은 그대로 두고, 10초마다 · 연결되면 먼저 읽어 본 뒤 다시 보냅니다.
+        // 연결 문제가 아닌 오류는 누를 때마다 한 번만 알립니다(10초마다 같은 알림이 뜨지 않게).
+        offline = true;
+        if (err && err.offline) {
+          // 답만 못 받았을 뿐 서버에는 들어갔을 수 있습니다. 나중에 읽은 값과 견줄 때 씁니다.
+          var v = pendingLive(p);
+          if (v) {
+            unknowns.push({ congestion: v.congestion, wait_minutes: v.wait_minutes, sentAt: sentAt });
+            if (unknowns.length > OWN_MAX) unknowns.shift();
+            noteOwn(v.congestion, v.wait_minutes, sentAt, false, null); // 새로 고친 뒤 · 다른 탭에서도 이 기기의 것으로 알아보게
+          }
+        } else if (errTap !== tapId(p)) {
+          errTap = tapId(p);
+          toast(core.ctrlErrorText(err), 'error');
+        }
+        render();
+        if (pending && !sameTap(pending, p)) flush(); // 보내는 사이에 새로 누른 값
+      });
+    }
+
+    function touch() {
+      // 이미 보내는 중이면 다시 보내지 않습니다. 와이파이가 느리면 답이 8초까지 걸려 '맞아요' 를
+      // 두 번 누르기 쉬운데, 한 번 보낼 때마다 기록이 한 줄씩 남아 보고서의 입력 수가 부풀기 때문입니다
+      // (대기 시간 단추의 두 번 누름 거르기와 같은 까닭). 보내는 중인 것은 단추 글자로 보여 줍니다(render).
+      if (touching) return;
+      expireDay();
+      if (dead || !liveToday(booth)) { render(); return; }
+      touching++;
+      render();
+      core.ctrlTouch(token).then(function (b) {
+        touching--;
+        if (dead) return;
+        if (!b) { invalidate(MSG_UNKNOWN_QR); return; }
+        noteOwn(b.congestion, b.wait_minutes, toMs(b.congestion_updated_at), true, null);
+        markLoaded(b);
+        applyOwn(b);
+        seenOwn(b);
+        toastSaved(b);
+        buzz();
+        render(); // applyOwn 이 더 늦은 값을 이미 알아 그리지 않았어도 '확인 중' 글자를 되돌립니다
+      }, function (err) {
+        touching--;
+        if (dead || handleFatal(err, true)) return;
+        render(); // '확인 중' 글자를 되돌려 다시 누를 수 있게 합니다
+        toast(core.ctrlErrorText(err), 'error');
+        // '아직 입력한 값이 없습니다' — 그사이 값이 지워졌을 수 있어 다시 읽습니다
+        if (err && err.code === '22023') refresh();
+      });
+    }
+
+    /* ── 그리기 ──────────────────────────────────────────────────── */
+    function buildPad() {
+      var html = WAITS.map(function (o) {
+        var c = core.congestionFor(o.w);
+        var k = core.meta(c).key;
+        return '<button type="button" class="w w--' + k + '" data-wait="' + o.w + '" aria-pressed="false">' +
+          '<span class="w__top"><span class="w__v' + (/^\d+$/.test(o.big) ? ' mono' : ' w__v--word') + '">' + esc(o.big) + '</span>' +
+          (o.unit ? '<span class="w__u">' + esc(o.unit) + '</span>' : '') + '</span>' +
+          '<span class="w__sub">' + esc(o.sub) + '</span>' +
+          '<span class="w__hint"><i class="sq" aria-hidden="true"></i>' + esc(c) + '</span>' +
+          '</button>';
+      }).join('');
+      $('waits').innerHTML = html;
+    }
+
+    // 화면에 걸어 둘 값: 저장 안 된 누름이 있으면 그것, 아니면 서버 값.
+    // 다른 기기의 새 값과 엇갈려 묻는 중이면 관람객이 실제로 보는 서버 값을 보여 줍니다(위쪽 띠가 묻습니다).
+    function shown() {
+      if (pending && !pending.conflict) {
+        var v = core.deriveLive(pending.mode, pending.wait);
+        if (v) return { congestion: v.congestion, wait_minutes: v.wait_minutes, pending: true };
+      }
+      if (booth && booth.congestion) {
+        return { congestion: booth.congestion, wait_minutes: booth.wait_minutes, at: booth.congestion_updated_at, pending: false };
+      }
+      return null;
+    }
+
+    function eventInfo() {
+      return settings ? core.eventInfo(settings) : null;
+    }
+    // 운영 중인데 오늘 문 열기 전에 넣은 값 — 관람객 화면에는 '정보 없음' 으로 보입니다.
+    function beforeOpen(b, info) {
+      if (!info || info.phase !== 'open' || !info.todayOpenAt || !b || !b.congestion) return false;
+      return toMs(b.congestion_updated_at) < info.todayOpenAt.getTime();
+    }
+    function beforeOpenValue(info) { return beforeOpen(booth, info); }
+    // 운영 시간(문을 연 뒤 닫기 전)인가. 시간표를 아직 못 받았거나 시연이면 운영 중으로 봅니다.
+    function visibleNow(info) { return !info || info.phase === 'open'; }
+
+    // 저장 알림. 운영 시간 밖에서 넣은 값은 관람객 화면에 보이지 않습니다(문을 열면 '문 열기 전 값' 으로,
+    // 날이 바뀌면 '어제 값' 으로 지워집니다). '반영됐어요' 라고 하면 안 되어 그대로 알립니다.
+    // 값이 '관람객 화면에 그대로 보임' 이면 true. 시간표를 못 받았으면 null(알 수 없음).
+    function savedShows(b) {
+      if (!settings) return null;
+      var info = eventInfo();
+      return info.phase === 'open' && !beforeOpen(b, info);
+    }
+    function savedToast(b) {
+      var head = '저장됨 ' + core.formatClock((b && b.congestion_updated_at) || new Date());
+      // 시간표를 못 받았으면(현장 와이파이에서 첫 읽기가 실패하는 등) 관람객 화면에 보이는지 알 수 없습니다.
+      // '반영됐어요' 라고 하면 행사 몇 주 전 리허설 값도 보이는 것처럼 알리게 되어, 저장된 것만 알리고
+      // 시간표를 다시 받아 봅니다.
+      if (!settings) { loadSettings(); return head; }
+      var info = eventInfo();
+      if (info.phase === 'open') {
+        // 문 열기 직전에 보내 답을 잃은 누름이 문을 연 뒤에 '이미 들어감' 으로 확인되는 경우 등.
+        // 바로 아래 안내('문 열기 전에 넣은 값이라 …')와 어긋나지 않게 같은 말로 알립니다.
+        if (beforeOpen(b, info)) return head + ' · 문 열기 전 값이라 관람객 화면에는 아직 안 보여요';
+        return head + ' · 관람객 화면에 반영됐어요';
+      }
+      if (info.phase === 'before') return head + ' · 연습 값이라 관람객 화면에는 안 보여요';
+      if (info.phase === 'preopen') {
+        return head + ' · 문을 연 뒤' + (info.openTime ? '(' + info.openTime + ')' : '') + ' 한 번 더 눌러 주세요';
+      }
+      return head + ' · 운영 시간이 지나 관람객 화면에는 안 보여요';
+    }
+    // '안 보여요' 알림은 읽을 틈을 더 줍니다.
+    function savedToastMs(b) { return savedShows(b) === false ? 5000 : 3000; }
+    function toastSaved(b) { toast(savedToast(b), '', savedToastMs(b)); }
+
+    function phaseNote(info) {
+      if (!info) return '';
+      if (info.phase === 'before' && info.nextOpenLabel) {
+        return '지금 누른 값은 연습이에요. 관람객 화면에는 ' + info.nextOpenLabel + '부터 보여요.';
+      }
+      if (info.phase === 'preopen' && info.openTime) {
+        return '문 열기 전이에요. ' + info.openTime + '에 문을 열면 대기 시간을 한 번 더 눌러 주세요.';
+      }
+      return '';
+    }
+
+    function renderHead() {
+      var h = booth || cached;
+      var code = h ? (h.code || '') : '';
+      $('h-code').textContent = code;
+      $('h-code').className = 'head__code' + (isAscii(code) ? ' mono' : '');
+      $('h-name').textContent = h ? (h.name || '') : '부스 정보를 불러오는 중';
+      $('h-name').className = 'head__name' + (h ? '' : ' is-muted');
+      $('h-org').textContent = h ? [h.org, h.zone_name].filter(Boolean).join(' · ') : '';
+      $('h-org').hidden = !$('h-org').textContent;
+
+      if (booth && (booth.token_tail || booth.issued_at)) {
+        var key = $('foot-key');
+        key.innerHTML = '열쇠 끝자리 <span class="mono">' + esc(booth.token_tail || '') + '</span>' +
+          (booth.issued_at ? ' · 발급 <span class="mono">' + esc(fmtIssued(booth.issued_at)) + '</span>' : '');
+        key.hidden = false;
+      }
+    }
+
+    // 하루가 바뀌면(탭을 밤새 열어 둔 채 다음 날 아침에 켬) 어제 값을 '지금 상태' 로 보여 주거나,
+    // 어제 못 보낸 누름을 날짜 없이 묻지 않습니다. 서버 · booth-core 와 같은 한국 날짜 규칙입니다.
+    // 다시 읽기를 기다리지 않고 그리기 전에 지웁니다(다시 읽기는 poll 이 합니다).
+    function expireDay() {
+      if (booth && booth.congestion && !liveToday(booth)) {
+        var c = {};
+        for (var k in booth) if (Object.prototype.hasOwnProperty.call(booth, k)) c[k] = booth[k];
+        c.congestion = null;
+        c.wait_minutes = null;
+        c.congestion_updated_at = null;
+        booth = c;
+      }
+      if (pending && core.kstDay(pending.tappedAt) !== today()) clearPending();
+    }
+
+    function render() {
+      expireDay();
+      if (view !== 'main') return;
+      renderHead();
+
+      var s = shown();
+      var c = s ? s.congestion : null;
+      var key = s ? core.meta(c).key : 'none';
+      var conflict = !!(pending && pending.conflict);
+      var old = !conflict && isOld(pending);
+      var info = eventInfo();
+      // 지금 값이 관람객 화면에 그대로 보이는가. 운영 시간 밖이거나, 운영 중이어도 오늘 문 열기 전에
+      // 넣은 값이면 관람객에게는 '정보 없음' 으로 보입니다.
+      var seen = visibleNow(info) && !beforeOpenValue(info);
+
+      // 지금 상태 판
+      var now = $('now');
+      now.className = 'now now--' + key + (s && s.pending ? ' is-pending' : '');
+      $('now-cap').textContent = seen ? '관람객 화면에 보이는 지금 상태' : '지금 입력된 상태';
+      var stateText;
+      if (c === '중단') stateText = '잠시 중단';
+      else if (c === '마감') stateText = '오늘 마감';
+      else if (c) stateText = c;
+      else if (loaded) stateText = '아직 입력 전';
+      else stateText = connBad ? '연결 기다리는 중' : '불러오는 중';
+      $('now-state').textContent = stateText;
+
+      var hasNum = !!c && c !== '중단' && c !== '마감';
+      $('now-wait').hidden = !hasNum;
+      if (hasNum) $('now-num').textContent = String(s.wait_minutes);
+
+      var when = '', warn = false;
+      if (s && s.pending) {
+        // 보내는 중인 요청이 있으면 저장하는 중입니다 — 고쳐 누른 값이 그 뒤에 줄을 서 있어도 곧 보냅니다.
+        // '아직 저장 안 됨' 경고는 연결 문제와 오래된 누름(보내는 중일 수 없음)에만 띄웁니다.
+        // 다른 탭이 같은 부스 값을 보내는 중이라 기다리는 때도 같습니다.
+        if ((inflight || waitingOther()) && !offline) when = '저장하는 중…';
+        else { when = core.formatClock(pending.tappedAt) + '에 누름 · 아직 저장 안 됨'; warn = true; }
+      } else if (s) {
+        when = core.formatClock(s.at) + '에 입력 · ' + core.formatAgo(s.at);
+        if (seen && core.isStale(booth)) { when += ' · 관람객 화면에 흐리게 보여요'; warn = true; }
+      } else if (loaded) {
+        when = '아래에서 지금 대기 시간을 눌러 주세요';
+      } else if (connBad) {
+        when = '연결되면 지금 상태를 보여 드려요';
+      }
+      $('now-when').textContent = when;
+      $('now-when').className = 'now__when' + (warn ? ' is-warn' : '');
+
+      var note = phaseNote(info);
+      $('now-note').textContent = note;
+      $('now-note').hidden = !note;
+
+      // 20분 넘게 그대로 · 문 열기 전 값 → 묻기. 아니면 조용한 '지금 확인'
+      var nudge = false, nudgeHtml = '';
+      if (!pending && liveToday(booth)) {
+        if (beforeOpenValue(info)) {
+          // '오늘 마감' 도 묻습니다. 문 열기 전에 누른 마감도 관람객에게는 '정보 없음' 으로 보이고,
+          // '맞아요'(지금 확인)는 마감에도 되어 시각이 문 연 뒤로 옮겨집니다.
+          nudge = true;
+          nudgeHtml = askHtml('문 열기 전에 넣은 값이라 관람객 화면에는 아직 안 보여요. 지금도 ',
+            booth.congestion, booth.wait_minutes, '이 맞나요?');
+        } else if (visibleNow(info) && booth.congestion !== '마감' &&
+            core.ageMinutes(booth.congestion_updated_at) >= NUDGE_MIN) {
+          // 운영 시간 밖에서는 확인해도 관람객 화면에 보이지 않아 20분 안내를 띄우지 않습니다.
+          nudge = true;
+          nudgeHtml = askHtml(NUDGE_MIN + '분 넘게 그대로예요. 지금도 ', booth.congestion, booth.wait_minutes, '이 맞나요?');
+        }
+      }
+      $('nudge').hidden = !nudge;
+      if (nudge) $('nudge-text').innerHTML = nudgeHtml;
+      $('still').hidden = nudge || !!pending || !liveToday(booth);
+      // '맞아요' · '지금 확인' 을 보내는 동안에는 눌린 것이 보이게 글자를 바꿉니다(다시 눌러도 touch() 가 거릅니다).
+      // '확인 중' 은 '맞아요' 와 폭이 같아 옆 글이 밀리지 않습니다.
+      $('nudge-btn').textContent = touching ? '확인 중' : '맞아요';
+      $('still').textContent = touching ? '확인하는 중…' : '변동 없음 · 지금 확인';
+
+      // 단추: 지금 값에 불을 켭니다
+      var nodes = $('waits').querySelectorAll('.w');
+      for (var i = 0; i < nodes.length; i++) {
+        var w = Number(nodes[i].getAttribute('data-wait'));
+        var on = hasNum && (s.wait_minutes === w || (w === 60 && s.wait_minutes >= 60));
+        nodes[i].classList.toggle('is-on', on);
+        nodes[i].setAttribute('aria-pressed', on ? 'true' : 'false');
+      }
+      var pauseOn = c === '중단', closedOn = c === '마감';
+      $('btn-pause').classList.toggle('is-on', pauseOn);
+      $('btn-pause').setAttribute('aria-pressed', pauseOn ? 'true' : 'false');
+      $('btn-closed').classList.toggle('is-on', closedOn);
+      $('btn-closed').setAttribute('aria-pressed', closedOn ? 'true' : 'false');
+
+      // 위쪽 띠
+      $('bar-conn').hidden = !(connBad && !loaded);
+      $('bar-pending').hidden = !(pending && !conflict && !old && (offline || connBad || !confirmed));
+      $('bar-old').hidden = !old;
+      $('bar-conflict').hidden = !conflict;
+      if (old) {
+        $('old-text').innerHTML = askHtml(core.formatClock(pending.tappedAt) + '에 누른 ',
+          pendingLive(pending).congestion, pending.wait, '이') +
+          ' 저장되지 않았어요. 지금도 맞나요?';
+      }
+      if (conflict) {
+        var cf = pending.conflict, mine = pendingLive(pending);
+        $('conflict-text').innerHTML =
+          askHtml('다른 기기에서 ' + core.formatClock(cf.at) + '에 ', cf.congestion, cf.wait_minutes, '으로') +
+          ' 바꿨어요. ' +
+          askHtml(core.formatClock(pending.tappedAt) + '에 누른 ', mine.congestion, mine.wait_minutes, '으로') +
+          ' 바꿀까요?';
+      }
+    }
+
+    function showMain() {
+      show('main');
+      var tipOff = !!lsGet(KEY_TIP);
+      var standalone = false;
+      try {
+        standalone = window.navigator.standalone === true ||
+          (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
+      } catch (e) { standalone = false; }
+      $('tip').hidden = tipOff || standalone || !confirmed;
+      render();
+    }
+
+    /* ── 이벤트 ──────────────────────────────────────────────────── */
+    function onClick(e) {
+      var t = e.target.closest ? e.target.closest('button, a') : null;
+      if (!t) return;
+      var act = t.getAttribute('data-act');
+
+      if (t.classList.contains('w')) { tap('open', Number(t.getAttribute('data-wait'))); return; }
+      if (t.id === 'btn-pause') { tap('pause', 0); return; }
+      if (t.id === 'btn-closed') {
+        // 이미 마감이면 묻지 않습니다. 처음 마감할 때만 한 번 더 묻습니다(관람객이 발길을 돌리게 되니까요).
+        var s = shown();
+        if (s && s.congestion === '마감') { tap('closed', 0); return; }
+        var ask = $('ask-close');
+        ask.hidden = !ask.hidden;
+        if (!ask.hidden) {
+          try { ask.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch (err) { ask.scrollIntoView(false); }
+        }
+        return;
+      }
+      if (!act) return;
+
+      if (act === 'close-yes') { tap('closed', 0); return; }
+      if (act === 'close-no') { $('ask-close').hidden = true; return; }
+      if (act === 'touch') { touch(); return; }
+      if (act === 'retry') {
+        offline = false;
+        render();
+        // 바로 다시 보내지 않고 먼저 읽습니다. 그사이 다른 기기에서 바꾼 값이 없을 때만 보냅니다.
+        if (!loaded) load();
+        else refresh();
+        return;
+      }
+      // '맞아요, 저장' · '바꾸기' 는 지금 다시 누른 것과 같습니다(지금 아는 서버 값을 기준으로 바로 보냄).
+      if (act === 'old-yes' || act === 'conflict-yes') { if (pending) tap(pending.mode, pending.wait); return; }
+      if (act === 'conflict-no') {
+        // 다른 기기에서 넣은 값을 그대로 둡니다. 화면에는 이미 그 서버 값이 걸려 있습니다.
+        clearPending();
+        render();
+        return;
+      }
+      if (act === 'old-no') {
+        clearPending();
+        render();
+        var first = $('waits').querySelector('.w');
+        if (first) { try { first.focus(); } catch (err) { /* 무시 */ } }
+        return;
+      }
+      if (act === 'tip-close') { lsSet(KEY_TIP, { at: Date.now() }); $('tip').hidden = true; return; }
+      if (act === 'reload') { window.location.reload(); }
+    }
+
+    function wire() {
+      buildPad();
+      document.addEventListener('click', onClick);
+
+      $('visitor-link').href = visitorHref();
+      $('demo-note').hidden = !isMock;
+      $('foot-help').textContent = HELP;
+
+      $('cf-yes').addEventListener('click', function () {
+        confirmed = true;
+        lsSet(keyOk(), { at: Date.now() });
+        if (booth) { remember(booth); markLoaded(booth); noteSeen(); }
+        showMain();
+        // 확인 전에(연결이 안 될 때) 눌러 둔 값은 서버를 한 번 더 읽고 견줘 본 뒤 보냅니다.
+        if (pending) refresh();
+      });
+      // 관람객이 운영자 카드를 찍은 경우: 이 주소를 방문 기록에서 지우고 관람객 화면으로 보냅니다.
+      $('cf-visitor').addEventListener('click', function () {
+        clearPending(true);
+        window.location.replace(visitorHref());
+      });
+      $('cf-other').addEventListener('click', function () {
+        clearPending(true);
+        $('cf-ask').hidden = true;
+        $('cf-wrong').hidden = false;
+      });
+      $('cf-back').addEventListener('click', function () {
+        $('cf-ask').hidden = false;
+        $('cf-wrong').hidden = true;
+      });
+
+      // 다른 카드의 QR 을 이 탭에서 이어 열면(주소의 # 만 바뀜) 처음부터 다시 엽니다.
+      window.addEventListener('hashchange', function () { window.location.reload(); });
+    }
+
+    function tick() {
+      if (dead) return;
+      if (!settings && Date.now() - settingsTriedAt >= 30000) loadSettings();
+      if (!loaded) load();
+      // 못 보낸 누름은 바로 다시 보내지 않고 먼저 읽습니다(refresh 가 서버 값과 견줘 본 뒤 보냅니다).
+      // 묻는 중이거나 오래된 누름은 보내지 않으니 읽을 까닭도 없습니다(1분마다 읽기는 poll 이 합니다).
+      else if (pending && confirmed && !inflight && !pending.conflict && !isOld(pending)) refresh();
+      render();             // 'N분 전' · 20분 안내를 새로 그립니다
+    }
+
+    /* ── 시작 ────────────────────────────────────────────────────── */
+    function boot() {
+      wire();
+      token = readToken();
+
+      // 모양이 틀린 열쇠는 서버에 묻지 않습니다.
+      if (!token || !core.validToken(token)) { showNoToken(); return; }
+      if (!isMock && !core.hasConfig) { showNoConfig(); return; }
+
+      confirmed = !!lsGet(keyOk());
+      pending = loadPending();
+      var last = lsGet(KEY_LAST);
+      if (last && last.token === token) cached = { code: last.code, name: last.name, org: last.org, zone_name: last.zone_name };
+
+      // 이미 확인한 기기는 기억해 둔 머리글로 바로 엽니다. 처음 여는 기기는 부스를 받아 확인부터 합니다.
+      if (confirmed) showMain();
+      load();
+      loadSettings();
+
+      tickTimer = setInterval(tick, RETRY_MS);
+      // 인터넷이 돌아오면: 아직 한 번도 못 읽었으면 읽습니다. 그 뒤로는 poll 이 곧바로 다시 읽고(refresh),
+      // 읽은 값과 견줘 본 다음에만 못 보낸 누름을 보냅니다. 여기서 바로 보내지 않습니다.
+      window.addEventListener('online', function () {
+        if (!dead && !loaded) load();
+      });
+      // 다시 보이면 곧바로 그립니다(하루가 바뀌었으면 어제 값을 지움). 다시 읽기 · 보내기는
+      // poll 이 0~3초 흩뜨린 뒤 refresh 로 합니다 — 숨어 있던 탭이 옛 누름을 그대로 다시 보내지 않게.
+      document.addEventListener('visibilitychange', function () {
+        if (!document.hidden && !dead) render();
+      });
+      // 같은 부스를 연 다른 탭이 보내기를 끝내면(보내는 중 표시를 지움) 기다리던 누름을 곧바로 따집니다.
+      // 서버를 먼저 읽어, 이미 들어갔으면 '저장됨' 으로 비우고 아니면 보냅니다. 10초 차례를 기다리지 않게.
+      window.addEventListener('storage', function (e) {
+        if (dead || !e || e.key !== keySending()) return;
+        if (!e.newValue && pending && loaded && confirmed && !inflight) refresh();
+        else render();
+      });
+      // 시연: 다른 탭(관람객 화면 시연 등)에서 값을 바꾸면 곧바로 다시 읽습니다.
+      stopDemo = core.onDemoChange(function () { if (loaded && confirmed) refresh(); });
+    }
+
+    boot();
+  })();
+  </script>
+</body>
+</html>

@@ -41,6 +41,40 @@
   [headers.values]
     Cache-Control = "no-store"
 
+# 부스 운영자 화면. 부스 열쇠는 주소의 # 뒤(#k=…)에 있어서 서버에도,
+# 다른 사이트로 가는 Referer 에도 실리지 않습니다. 그래도 화면 안의
+# 링크를 눌렀을 때 주소가 따라가지 않도록 no-referrer 를 겁니다.
+# 진짜 방어선은 페이지 안의 <meta name="referrer"> 입니다 — 이 헤더는
+# GitHub Pages 에서는 붙지 않기 때문입니다.
+# 캐시는 no-store 대신 no-cache 로 둡니다. HTML 에는 열쇠가 없어서
+# 저장돼도 새는 것이 없고, no-store 는 뒤로가기 캐시까지 꺼서 현장
+# 휴대폰에서 화면을 다시 열 때 느려지기만 합니다.
+# /booth-ctrl 은 Netlify 가 .html 없이도 같은 파일을 내주는 주소입니다.
+[[headers]]
+  for = "/booth-ctrl.html"
+  [headers.values]
+    Referrer-Policy = "no-referrer"
+    Cache-Control = "no-cache, must-revalidate"
+
+[[headers]]
+  for = "/booth-ctrl"
+  [headers.values]
+    Referrer-Policy = "no-referrer"
+    Cache-Control = "no-cache, must-revalidate"
+
+# QR 인쇄 화면은 관리자 로그인으로 모든 부스의 운영자 QR(열쇠)을
+# 띄웁니다. 관리자 화면과 같은 이유로 저장하지 않습니다 — 자리를
+# 비운 사이 뒤로가기로 QR 이 되살아나지 않게 합니다.
+[[headers]]
+  for = "/print-qr.html"
+  [headers.values]
+    Cache-Control = "no-store"
+
+[[headers]]
+  for = "/print-qr"
+  [headers.values]
+    Cache-Control = "no-store"
+
 # 설정 파일은 캐시하지 않습니다. Supabase 주소나 키를 바꿨을 때
 # 예전 값이 남아 "연결 안 됨"으로 보이는 일을 막습니다.
 [[headers]]
@@ -71,6 +105,15 @@
 
 [[redirects]]
   from = "/supabase/*"
+  to = "/index.html"
+  status = 404
+  force = true
+
+# 부스 Live 사이트(따로 배포)의 빌드 설정 폴더. 이 사이트에서 열 이유가 없습니다.
+# 운영 포털의 visitor.html · booth-ctrl.html 은 막지 않습니다 — ?demo 미리 보기가
+# 이 사이트의 사본을 씁니다(종이 QR 은 부스 Live 사이트로 갑니다).
+[[redirects]]
+  from = "/live/*"
   to = "/index.html"
   status = 404
   force = true
