@@ -206,7 +206,8 @@
   .listrow { padding: 13px 14px; gap: 8px; }
   .listrow__lead { flex-basis: 100%; min-width: 0; font-size: 13.5px; }
   .listrow__act { width: 100%; margin-left: 0; justify-content: flex-end; }
-  .listrow__tags { order: -1; }
+  /* 배지가 많은 줄(협의용 예시의 QR · 대기 배지 등)도 잘리지 않게 한 줄 전체를 쓰고 줄바꿈합니다. */
+  .listrow__tags { order: -1; flex: 1 1 100%; min-width: 0; }
   .subtab { padding: 10px 11px; font-size: 14px; }
   .rowsrow__c { flex-basis: 100%; }
   .adminstat__n { font-size: 24px; }
@@ -259,3 +260,59 @@
 .sheet__who { margin: 0; font-size: 13px; color: var(--muted); }
 .sheet__acts { display: flex; gap: 8px; }
 .sheet__acts .btn { flex: 1 1 0; min-height: 44px; }
+
+/* ── 협의용 예시 모드 (admin.html?demo=1#booths) ──────────────────
+   관람객 예시 화면(assets/visitor.css 의 .demobar)과 같은 말 · 같은 보라 계열 줄무늬.
+   초록 · 주황 · 빨강은 상태 색이라 띠에 쓰지 않습니다. 띠는 맨 위에 붙고,
+   휴대폰의 위쪽 제목 줄(topbar)은 띠 아래에 붙습니다. */
+html.is-demo { --demo-h: 44px; }
+.demobar {
+  position: sticky; top: 0; z-index: 45;
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  min-height: 44px; padding: 6px 16px;   /* --demo-h 는 아래 topbar 자리만 정합니다(admin.js 가 실제 높이로 맞춤) */
+  padding-top: calc(6px + env(safe-area-inset-top));
+  background: repeating-linear-gradient(-45deg, #ECE8FE 0 12px, #E1DAFD 12px 24px);
+  border-bottom: 2px solid var(--primary);
+}
+.demobar__t {
+  display: flex; align-items: center; gap: 8px; min-width: 0; margin: 0;
+  font-size: 14px; font-weight: 700; line-height: 1.3; color: var(--ink);
+}
+.demobar__w { min-width: 0; }
+.demotag {
+  flex: none; display: inline-flex; align-items: center; padding: 3px 8px;
+  background: var(--primary); color: #fff; font-size: 12.5px; font-weight: 700; line-height: 1.3;
+  white-space: nowrap;
+}
+.demobar__exit {
+  margin-left: auto; display: inline-flex; align-items: center; min-height: 32px; padding: 0 12px;
+  border: 1px solid var(--primary); border-radius: 999px; background: #fff;
+  color: var(--primary); font-size: 13px; font-weight: 700; text-decoration: none; white-space: nowrap;
+}
+.demobar__exit:hover { background: var(--primary-t); }
+html.is-demo .topbar { top: var(--demo-h); }
+
+/* 쪽 머리 아래 한 줄 — 저장해도 실제 DB 에 가지 않는다는 안내 */
+.demohint {
+  margin: 0 0 14px; padding: 10px 14px; border-radius: 10px;
+  background: var(--primary-t); color: var(--ink-2); font-size: 13.5px; line-height: 1.6;
+  border-left: 3px solid var(--primary);
+}
+
+/* 줄의 ⋯ 안 QR · 대기 현황 흉내 단추 */
+.demomore { flex-basis: 100%; display: flex; flex-direction: column; gap: 6px; }
+.demomore__t { margin: 4px 0 0; font-size: 12.5px; font-weight: 700; color: var(--muted); }
+.demomore__acts { display: flex; gap: 6px; flex-wrap: wrap; }
+.demomore__na { font-size: 13px; color: var(--muted); padding: 6px 0; }
+
+/* 빈 화면의 두 번째 길(협의용 예시 화면 보기) */
+.state__alt {
+  margin-top: 18px; padding-top: 16px; border-top: 1px dashed var(--line-2);
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+}
+.state__altlead { margin: 0; font-size: 14px; color: var(--muted); }
+
+@media (max-width: 560px) {
+  .demobar { padding-left: 14px; padding-right: 14px; }
+  .demobar__exit { margin-left: 0; }
+}

@@ -18,6 +18,25 @@
   var cache = {};
   var current = 'overview';
 
+  /* ── 협의용 예시 모드 (admin.html?demo=1#booths) ─────────────────
+     관리자 로그인은 그대로 거친 뒤, 부스 · 구역 화면만 예시 데이터로 보여 줍니다.
+     예시 모드에서는 Supabase 대신 assets/admin-demo.js 의 store 만 부릅니다 —
+     저장 · 공개 · 삭제가 데이터베이스로 가지 않고, 새로 고치면 처음 예시로 돌아갑니다.
+     파일이 없으면(옛 캐시 등) 예시 모드를 켜지 않고 실제 화면으로 둡니다. */
+  var DEMO = (function () {
+    try { return new URLSearchParams(window.location.search).has('demo'); } catch (e) { return false; }
+  })() && !!window.AdminDemo;
+  var DEMO_KEYS = ['booths', 'zones'];
+  var DEMO_TABLES = ['zones', 'booths', 'booth_private'];
+  var DEMO_TEXT = '협의용 예시 · 실제 행사 정보가 아닙니다.';
+  var DEMO_SAVE_NOTE = '협의용 예시 · 저장 내용은 실제 DB에 반영되지 않습니다.';
+  var AD = window.AdminDemo;
+  // 읽고 쓰는 곳. 실제 모드는 Core(Supabase), 예시 모드는 메모리 store 입니다.
+  var D = DEMO ? AD.store : {
+    select: C.select, selectSoft: C.selectSoft, insert: C.insert,
+    update: C.update, remove: C.remove, upsert: C.upsert
+  };
+
   var SCHEDULE_CATS = ['무대', '강연', '부스', '운영', '행사 지원'];
   var SCHEDULE_STATES = ['예정', '진행 중', '종료', '취소', '변경'];
   /* 새로 고를 수 있는 분류입니다. '주차' 는 뺐지만 이미 그렇게
@@ -102,7 +121,9 @@
     // 공개 칸에 전화번호가 남은 담당자 — 옮기고 비워야 합니다.
     '공개 칸 번호 정리 필요': 'warn',
     // 부스 · 구역의 공개 상태(publishState)
-    '공개': 'ok', '비공개': 'off', '미배정': 'warn', '구역 비공개': 'warn'
+    '공개': 'ok', '비공개': 'off', '미배정': 'warn', '구역 비공개': 'warn',
+    // 협의용 예시의 QR · 대기 현황 표시
+    'QR 발급됨': 'info', 'QR 미발급': 'warn', 'QR 꺼짐': 'off', '확인 필요': 'warn'
   };
   function badge(t) { return '<span class="badge badge--' + (TONE[t] || 'off') + '">' + esc(t) + '</span>'; }
   function tag(t) { return '<span class="badge badge--plain">' + esc(t) + '</span>'; }
@@ -204,6 +225,50 @@
     if (!z || !z.is_published) return '현재 구역이 비공개 상태입니다. 구역을 먼저 공개해 주세요.';
     return '';
   }
+  /* ── 협의용 예시: QR · 대기 현황 표시와 흉내 단추 ──────────────────
+     실제 관리자 화면에서는 QR 은 'QR 인쇄', 대기 입력은 부스 운영자 화면이 맡습니다.
+     예시에서는 한 화면에서 흐름을 보여 주려고 목록 줄에 같은 규칙으로 흉내 냅니다. */
+  function demoLiveTone(l) {
+    if (!l) return 'off';
+    return { '여유': 'ok', '보통': 'warn', '혼잡': 'danger' }[l.congestion] || 'off';
+  }
+  function demoTags(r) {
+    var a = AD.accessOf(r.id), l = AD.liveOf(r.id);
+    var qr = (!hasSlot(r) && a === 'none') ? ''
+      : badge(a === 'on' ? 'QR 발급됨' : (a === 'off' ? 'QR 꺼짐' : 'QR 미발급'));
+    return qr + '<span class="badge badge--' + demoLiveTone(l) + '">' + esc(AD.liveLabel(l)) + '</span>' +
+      (AD.isStale(l) && boothShown(r) ? badge('확인 필요') : '');
+  }
+  function demoSummary(all) {
+    function n(f) { return all.filter(f).length; }
+    return [
+      { n: all.length, l: '전체' },
+      { n: n(function (r) { return !!r.is_published; }), l: '공개', tone: 'ok' },
+      { n: n(function (r) { return hasSlot(r) && !r.is_published; }), l: '비공개' },
+      { n: n(function (r) { return !hasSlot(r); }), l: '미배정', tone: 'warn' },
+      { n: n(function (r) { return hasSlot(r) && AD.accessOf(r.id) === 'none'; }), l: 'QR 미발급', tone: 'warn' },
+      { n: n(function (r) { return boothShown(r) && AD.isStale(AD.liveOf(r.id)); }), l: '확인 필요', tone: 'danger' }
+    ];
+  }
+  function demoMore(r) {
+    var a = AD.accessOf(r.id);
+    function b(act, attrs, text) {
+      return '<button class="btn btn--ghost btn--sm" type="button" data-act="' + act + '" ' + attrs + '>' + esc(text) + '</button>';
+    }
+    var qr = !hasSlot(r) ? '<span class="demomore__na">구역 · 번호를 정해야 발급할 수 있어요</span>'
+      : a === 'none' ? b('demo-qr', 'data-op="issue"', '운영자 QR 발급')
+      : a === 'on' ? b('demo-qr', 'data-op="off"', 'QR 끄기')
+      : b('demo-qr', 'data-op="rekey"', '새 QR로 다시 켜기');
+    var live = [0, 5, 15, 30].map(function (w) {
+      return b('demo-live', 'data-mode="open" data-wait="' + w + '"', w ? w + '분' : '바로');
+    }).join('') + b('demo-live', 'data-mode="pause"', '잠시 중단') + b('demo-live', 'data-mode="closed"', '오늘 마감');
+    return '<div class="demomore">' +
+      '<p class="demomore__t">운영자 QR · 협의용 예시 화면에서는 실제 QR이 발급되지 않습니다</p>' +
+      '<div class="demomore__acts">' + qr + '</div>' +
+      '<p class="demomore__t">대기 현황 · 운영자 화면에서 누르는 것과 같은 규칙(공개 + QR 켜짐일 때만)</p>' +
+      '<div class="demomore__acts">' + live + '</div></div>';
+  }
+
   // 'A-2' 와 'A-10' 을 사람 순서대로(숫자는 숫자로) 견줍니다.
   function natCmp(a, b) {
     return String(a || '').localeCompare(String(b || ''), 'ko', { numeric: true, sensitivity: 'base' });
@@ -443,8 +508,12 @@
       tags: function (r) {
         return badge(publishState(r)) + (r.org_type ? tag(r.org_type) : '') + badge(r.status || '준비 전') +
           (r.needs_power ? '<span class="badge badge--plain badge--need">전기</span>' : '') +
-          (r.needs_network ? '<span class="badge badge--plain badge--need">네트워크</span>' : '');
+          (r.needs_network ? '<span class="badge badge--plain badge--need">네트워크</span>' : '') +
+          (DEMO ? demoTags(r) : '');
       },
+      // 협의용 예시에서만: 맨 위 요약 숫자 · 줄의 ⋯ 안 QR · 대기 입력 흉내 단추.
+      summary: DEMO ? demoSummary : null,
+      moreHtml: DEMO ? demoMore : null,
       // 목록에서 바로 켜고 끄는 공개 단추(quickHtml · onQuick).
       quick: function (r) { return { on: !!r.is_published, label: '공개', what: '부스' }; },
       onQuick: function (r) { return togglePublish('booths', r); },
@@ -491,9 +560,12 @@
           test: function (r, v) { return v === 'power' ? !!r.needs_power : !!r.needs_network; } }
       ],
       empty: function () {
-        return { title: '등록된 실제 부스가 없습니다.',
+        return { title: '아직 등록된 부스가 없습니다.', addText: '+ 첫 부스 등록',
           hint: '구역 · 번호가 정해지기 전에도 미배정으로 먼저 등록할 수 있습니다. 공개 포털에는 협의용 예시가 ' +
-                '표시되고, 실제 부스를 1곳 이상 공개하면 예시는 자동으로 숨겨집니다.' };
+                '표시되고, 실제 부스를 1곳 이상 공개하면 예시는 자동으로 숨겨집니다.',
+          // 실제 부스가 한 곳이라도 생기면 이 빈 화면 자체가 나오지 않으므로 함께 사라집니다.
+          alt: DEMO ? null : { lead: '화면 구성을 먼저 확인해 보시겠어요?', href: 'admin.html?demo=1#booths',
+                               label: '협의용 예시 화면 보기' } };
       },
       /* 입력 순서: 기본 정보(프로그램 포함) → 위치 → 운영 → 공개 → 관리자 전용 → 사진. */
       fields: [
@@ -1073,23 +1145,25 @@
         (k === current ? ' aria-current="page"' : '') + '>' + esc(ENTITIES[k].label) + n(k) + '</a>';
     }
     /* 관리 항목이 늘어 한 줄로 세우면 무엇이 무엇인지 알기 어렵습니다.
-       하는 일끼리 묶고 제목을 답니다. */
-    $('#sidenav').innerHTML = GROUPS.map(function (g) {
+       하는 일끼리 묶고 제목을 답니다. 예시 모드는 부스 · 구역만 둡니다. */
+    var groups = DEMO ? [{ label: '협의용 예시', keys: DEMO_KEYS }] : GROUPS;
+    var tabs = DEMO ? DEMO_KEYS : TABS;
+    $('#sidenav').innerHTML = groups.map(function (g) {
       var keys = g.keys.filter(function (k) { return ENTITIES[k] && !ENTITIES[k].hidden; });
       if (!keys.length) return '';
       return (g.label ? '<p class="side__group">' + esc(g.label) + '</p>' : '') +
         keys.map(link).join('');
     }).join('');
 
-    var short = { overview: '요약', schedule_items: '일정', booths: '부스', notices: '공지', operation_requests: '요청' };
-    $('#tabbar').innerHTML = TABS.map(function (k) {
+    var short = { overview: '요약', schedule_items: '일정', booths: '부스', zones: '구역', notices: '공지', operation_requests: '요청' };
+    $('#tabbar').innerHTML = tabs.map(function (k) {
       return '<a href="#' + k + '" class="' + (k === current ? 'is-on' : '') + '">' +
         '<span class="tab__dot">' + esc(short[k].charAt(0)) + '</span><span>' + esc(short[k]) + '</span></a>';
     }).join('') + '<button type="button" data-open-sheet><span class="tab__dot">⋯</span><span>더보기</span></button>';
 
-    $('#sheetnav').innerHTML = GROUPS.map(function (g) {
+    $('#sheetnav').innerHTML = groups.map(function (g) {
       var keys = g.keys.filter(function (k) {
-        return TABS.indexOf(k) < 0 && ENTITIES[k] && !ENTITIES[k].hidden;
+        return tabs.indexOf(k) < 0 && ENTITIES[k] && !ENTITIES[k].hidden;
       });
       if (!keys.length) return '';
       return (g.label ? '<p class="sheet__group">' + esc(g.label) + '</p>' : '') +
@@ -1103,7 +1177,7 @@
     $('#side-who').innerHTML = esc(me.name || me.email || '') + '<br /><span class="badge badge--plain">관리자</span>';
     $('#sheet-who').textContent = (me.name || me.email || '') + ' · 관리자';
     $('#topbar-title').textContent = ENTITIES[current].label;
-    document.title = ENTITIES[current].label + ' · 관리자';
+    document.title = (DEMO ? '협의용 예시 · ' : '') + ENTITIES[current].label + ' · 관리자';
   }
 
   /* ── 대시보드 ───────────────────────────────────────────────── */
@@ -1243,12 +1317,17 @@
     var hint = e.hint || '등록하면 관계자 포털에 바로 반영됩니다.';
     var btn = e.go
       ? '<button class="btn btn--primary btn--sm" type="button" data-go="' + esc(e.go[0]) + '" data-goadd="1">' + esc(e.go[1]) + '</button>'
-      : (ent.addLabel ? '<button class="btn btn--primary btn--sm" type="button" data-add>' + esc(ent.addLabel) + '</button>' : '');
+      : (ent.addLabel ? '<button class="btn btn--primary btn--sm" type="button" data-add>' + esc(e.addText || ent.addLabel) + '</button>' : '');
+    // 두 번째 길(예: 협의용 예시 화면). 등록 단추 아래에 한 단계 낮춰 둡니다.
+    var alt = e.alt
+      ? '<div class="state__alt"><p class="state__altlead">' + esc(e.alt.lead) + '</p>' +
+        '<a class="btn btn--ghost btn--sm" href="' + esc(e.alt.href) + '">' + esc(e.alt.label) + '</a></div>'
+      : '';
     return '<div class="state state--empty">' +
       '<span class="state__icon">' + ICON_EMPTY + '</span>' +
       '<p class="state__title">' + esc(title) + '</p>' +
       '<p class="state__hint">' + esc(hint) + '</p>' +
-      (btn ? '<div class="state__act">' + btn + '</div>' : '') + '</div>';
+      (btn ? '<div class="state__act">' + btn + '</div>' : '') + alt + '</div>';
   }
 
   function renderPanel() {
@@ -1271,10 +1350,13 @@
     var head = '<div class="page__head"><div><h1 class="page__title">' + esc(ent.label) + '</h1>' +
       '<p class="page__desc">' + esc(ent.desc || listEnt.desc || '') + '</p></div>' +
       (ent.single ? '' : '<div class="page__actions">' +
-        (listEnt.headLink ? '<a class="btn btn--ghost btn--sm" href="' + esc(listEnt.headLink[0]) +
+        // 예시 모드에서는 실제 인쇄 화면(실제 열쇠)으로 가는 단추를 두지 않습니다.
+        (listEnt.headLink && !DEMO ? '<a class="btn btn--ghost btn--sm" href="' + esc(listEnt.headLink[0]) +
           '" target="_blank" rel="noopener">' + esc(listEnt.headLink[1]) + '</a>' : '') +
         '<button class="btn btn--primary btn--sm" type="button" data-add>' +
-        esc(listEnt.addLabel || '+ 새로 추가') + '</button></div>') + '</div>';
+        esc(listEnt.addLabel || '+ 새로 추가') + '</button></div>') + '</div>' +
+      (DEMO ? '<p class="demohint">' + esc(DEMO_SAVE_NOTE) + ' QR 발급 · 대기 입력도 이 화면 안에서만 바뀌고, ' +
+        '새로 고치면 처음 예시로 돌아갑니다.</p>' : '');
 
     if (ent.single) { renderSingle(ent, head, host); return; }
 
@@ -1373,6 +1455,7 @@
           (i === 0 ? ' disabled' : '') + '>↑ 위로</button>' +
           '<button class="btn btn--ghost btn--sm" type="button" data-act="down"' +
           (i === total - 1 ? ' disabled' : '') + '>↓ 아래로</button>') +
+        (ent.moreHtml ? ent.moreHtml(r) : '') +
         '<button class="btn btn--danger btn--sm" type="button" data-act="del">삭제</button>' +
       '</div></div>';
   }
@@ -1414,7 +1497,7 @@
     }
     return ask.then(function (ok) {
       if (!ok) return;
-      return C.update(ent.table, row.id, { is_published: turnOn }).then(function (updated) {
+      return D.update(ent.table, row.id, { is_published: turnOn }).then(function (updated) {
         var list = cache[key] || [];
         for (var i = 0; i < list.length; i++) if (list[i].id === row.id) list[i] = updated;
         renderPanel();
@@ -1426,12 +1509,41 @@
     });
   }
 
+  /* 협의용 예시: QR · 대기 현황 흉내. 메모리 상태만 바꾸고 그 줄의 ⋯ 를 다시 펼쳐 둡니다
+     (이어서 눌러 보기 쉽게). 실제 열쇠 · 대기 함수(RPC)는 부르지 않습니다. */
+  function reopenMore(id) {
+    var rowEl = null;
+    Array.prototype.forEach.call(document.querySelectorAll('.listrow'), function (el) {
+      if (el.dataset.id === String(id)) rowEl = el;
+    });
+    if (!rowEl) return;
+    var box = rowEl.querySelector('.listrow__more'), btn = rowEl.querySelector('[data-act="more"]');
+    if (box) box.hidden = false;
+    if (btn) btn.setAttribute('aria-expanded', 'true');
+  }
+  function demoQr(row, op) {
+    var why = op === 'issue' ? AD.issue(row.id) : (op === 'off' ? AD.disable(row.id) : AD.rekey(row.id));
+    if (why) { toast(why, true); return; }
+    renderPanel();
+    reopenMore(row.id);
+    toast(op === 'issue' ? '운영자 QR 발급됨으로 바꿨습니다. 협의용 예시 화면에서는 실제 QR이 발급되지 않습니다.'
+      : op === 'off' ? 'QR 꺼짐으로 바꿨습니다(협의용 예시). 실제로는 그 카드와 열린 운영자 화면이 바로 멈춥니다.'
+      : '새 QR로 다시 켰습니다(협의용 예시). 실제로는 새 카드를 인쇄해 전달합니다.');
+  }
+  function demoLive(row, mode, wait) {
+    var why = AD.setLive(row.id, mode, wait);
+    if (why) { toast(why, true); return; }
+    renderPanel();
+    reopenMore(row.id);
+    toast('대기 현황을 바꿨습니다 — ' + AD.liveLabel(AD.liveOf(row.id)) + ' (협의용 예시)');
+  }
+
   /* 부스 목록을 데이터베이스에서 다시 읽습니다. 구역 코드를 바꾸거나 구역을 지우면
      데이터베이스가 부스의 구역 · 표시 번호 · 공개를 함께 바꾸므로, 화면이 추측해 고치지 않고
      새로 읽어 맞춥니다. */
   function reloadBooths() {
     var e = ENTITIES.booths;
-    return C.select(e.table, { order: e.order === false ? false : (e.order || [['sort_order', true]]) })
+    return D.select(e.table, { order: e.order === false ? false : (e.order || [['sort_order', true]]) })
       .then(function (d) { cache.booths = d; });
   }
 
@@ -1576,6 +1688,7 @@
   /* 바뀌거나 지워져서 더는 쓰이지 않는 이미지를 보관함에서 지웁니다.
      이걸 안 하면 교체할 때마다 예전 파일이 계속 쌓입니다. */
   function dropReplacedImages(ent, before, after) {
+    if (DEMO) return;   // 예시 모드는 보관함(Storage)을 건드리지 않습니다
     imageKeys(ent).forEach(function (k) {
       var old = (before || {})[k];
       if (old && old !== (after || {})[k]) C.deleteImage(old);
@@ -1598,6 +1711,10 @@
          보여서, 관리자가 비울 수 있게 합니다. 새 줄이나 빈 칸이면
          창에 나오지 않고, 나오지 않은 칸은 저장할 때 보내지도 않습니다. */
       if (f.legacyOnly) return !!(row && String(row[f.k] == null ? '' : row[f.k]).trim());
+      /* 예시 모드에서는 사진 칸을 두지 않습니다. 고르는 즉시 실제 보관함(Storage)에
+         올라가기 때문입니다(assets/ui.js 의 image 칸). */
+      if (DEMO && (f.type === 'image' || f.k === 'image_alt' || f.k === 'image_caption' ||
+                   (f.type === 'group' && /사진/.test(f.label || '')))) return false;
       /* 아직 표에 없는 칸은 편집창에서 뺍니다. 없는 칸을 보내면 저장이
          통째로 거절됩니다. 줄이 하나도 없으면 알 수 없으니 그대로 둡니다. */
       if (!f.needsColumn) return true;
@@ -1626,6 +1743,7 @@
     UI.form({
       // 창 제목은 메뉴 이름이 아니라 다루는 것 하나(예: '업무 배정' → '업무 추가').
       title: (ent.formLabel || ent.label.replace(' 관리', '')) + (isNew ? ' 추가' : ' 수정'),
+      desc: DEMO ? DEMO_SAVE_NOTE : '',
       fields: kept,
       values: values,
       submitLabel: isNew ? '추가' : '저장',
@@ -1673,7 +1791,7 @@
           v.sort_order = rows.reduce(function (m, r) { return Math.max(m, r.sort_order || 0); }, 0) + 1;
         }
         var createdId = null;
-        C.insert(ent.table, v).then(function (created) {
+        D.insert(ent.table, v).then(function (created) {
           cache[key].push(created);
           createdId = created.id;
           return Promise.resolve(after(created, null)).then(function () {
@@ -1691,7 +1809,7 @@
           toast(C.dataMessage(e), true);
         });
       } else {
-        C.update(ent.table, row.id, v).then(function (updated) {
+        D.update(ent.table, row.id, v).then(function (updated) {
           var i = -1;
           (cache[key] || []).forEach(function (x, idx) { if (x.id === row.id) i = idx; });
           if (i >= 0) cache[key][i] = updated;
@@ -1746,17 +1864,17 @@
       var payload = ch.fromRow(r);
       payload.sort_order = i + 1;
       var old = before[i];
-      if (old) jobs.push(C.update(table, old.id, payload));
-      else { payload[ch.parent] = parentId; jobs.push(C.insert(table, payload)); }
+      if (old) jobs.push(D.update(table, old.id, payload));
+      else { payload[ch.parent] = parentId; jobs.push(D.insert(table, payload)); }
     });
     before.slice(keep.length).forEach(function (old) {
-      jobs.push(C.remove(table, old.id));
+      jobs.push(D.remove(table, old.id));
     });
 
     if (!jobs.length) return Promise.resolve();
     // 끝나면 그 부모의 줄만 다시 읽어 화면과 표를 맞춥니다.
     return Promise.all(jobs).then(function () {
-      return C.selectSoft(table, { order: [['sort_order', true]] });
+      return D.selectSoft(table, { order: [['sort_order', true]] });
     }).then(function (all) {
       cache[ch.key] = all;
     });
@@ -1795,7 +1913,7 @@
 
     var payload = Object.assign({}, vals);
     payload[pv.parent] = parentId;
-    return C.upsert(ENTITIES[pv.key].table, payload, pv.onConflict).then(function (saved) {
+    return D.upsert(ENTITIES[pv.key].table, payload, pv.onConflict).then(function (saved) {
       var list = cache[pv.key] || (cache[pv.key] = []);
       var i = -1;
       list.forEach(function (x, idx) { if (x[pv.parent] === parentId) i = idx; });
@@ -1814,7 +1932,7 @@
       confirmLabel: '삭제', danger: true
     }).then(function (ok) {
       if (!ok) return;
-      C.remove(ent.table, row.id).then(function () {
+      D.remove(ent.table, row.id).then(function () {
         cache[key] = cache[key].filter(function (x) { return x.id !== row.id; });
         dropReplacedImages(ent, row, {});   // 딸린 이미지도 함께 정리
         /* 관리자 전용 한 줄은 데이터베이스가 함께 지웁니다
@@ -1843,8 +1961,8 @@
     if (ao === bo) { ao = i; bo = j; }
     var table = ENTITIES[key].table;
     Promise.all([
-      C.update(table, a.id, { sort_order: bo }),
-      C.update(table, b.id, { sort_order: ao })
+      D.update(table, a.id, { sort_order: bo }),
+      D.update(table, b.id, { sort_order: ao })
     ]).then(function () {
       a.sort_order = bo; b.sort_order = ao;
       rows[i] = b; rows[j] = a;
@@ -1860,11 +1978,16 @@
   function loadAll() {
     $('#view').innerHTML = '<div class="state">데이터를 불러오는 중입니다.</div>';
     var keys = ORDER.filter(function (k) { return ENTITIES[k].table; });
+    // 예시 모드는 부스 · 구역 · 관리자 전용 정보만 메모리 store 에서 읽습니다(Supabase 요청 없음).
+    if (DEMO) {
+      keys.forEach(function (k) { cache[k] = []; });
+      keys = keys.filter(function (k) { return DEMO_TABLES.indexOf(ENTITIES[k].table) >= 0; });
+    }
     return Promise.all(keys.map(function (k) {
       var e = ENTITIES[k];
       // soft 항목은 마이그레이션 전이라 표가 없을 수 있습니다. 그 하나
       // 때문에 관리자 화면 전체가 오류가 되면 안 됩니다.
-      var get = e.soft ? C.selectSoft : C.select;
+      var get = e.soft ? D.selectSoft : D.select;
       return get(e.table, { order: e.order === false ? false : (e.order || [['sort_order', true]]) })
         .then(function (d) { cache[k] = d; });
     })).then(renderPanel).catch(function (e) {
@@ -1888,6 +2011,8 @@
 
   function routeFromHash() {
     var id = (location.hash || '').replace(/^#/, '');
+    // 예시 모드는 부스 · 구역 화면만 엽니다. 다른 화면은 실제 데이터라 예시와 섞지 않습니다.
+    if (DEMO) return DEMO_KEYS.indexOf(id) >= 0 ? id : 'booths';
     // 숨긴 항목은 주소로도 들어오지 않게 합니다. 표 이름이 그대로
     // 주소가 되면 메뉴에서 감춘 뜻이 없어집니다.
     return (ENTITIES[id] && !ENTITIES[id].hidden) ? id : 'overview';
@@ -2017,6 +2142,8 @@
           act.disabled = true;   // 답이 오기 전에 두 번 눌러 켜고 끄기가 엇갈리지 않게
           Promise.resolve(ENTITIES[key].onQuick(row)).then(function () { act.disabled = false; });
         }
+        else if (act.dataset.act === 'demo-qr' && DEMO) demoQr(row, act.dataset.op);
+        else if (act.dataset.act === 'demo-live' && DEMO) demoLive(row, act.dataset.mode, act.dataset.wait);
         else if (act.dataset.act === 'del') confirmDelete(key, row);
         else if (act.dataset.act === 'up') move(key, i, -1);
         else if (act.dataset.act === 'down') move(key, i, 1);
@@ -2073,9 +2200,33 @@
     UI.hidePasswords($('#loginform'));
   }
 
+  /* 협의용 예시 띠. 관리자 화면 안(로그인한 뒤)에만 있고, 스크롤해도 맨 위에 붙어
+     있습니다. 관람객 예시 화면과 같은 말 · 같은 보라 계열을 씁니다(초록 · 주황 · 빨강은
+     상태 색이라 쓰지 않음). '실제 관리자 화면으로 돌아가기' 는 ?demo 없는 주소를 새로 엽니다. */
+  function paintDemoBar() {
+    if (!DEMO || $('#demobar')) return;
+    document.documentElement.classList.add('is-demo');
+    var bar = document.createElement('div');
+    bar.className = 'demobar';
+    bar.id = 'demobar';
+    bar.setAttribute('role', 'note');
+    bar.innerHTML = '<p class="demobar__t"><span class="demotag">협의용 예시</span>' +
+      '<span class="sr-only"> · </span><span class="demobar__w">실제 행사 정보가 아닙니다.</span></p>' +
+      '<a class="demobar__exit" href="admin.html#booths">실제 관리자 화면으로 돌아가기</a>';
+    var wrap = $('.main-wrap');
+    wrap.insertBefore(bar, wrap.firstChild);
+    // 좁은 화면에서는 띠가 두 줄이 됩니다. 위쪽 제목 줄(topbar)이 띠 밑에 붙도록 실제 높이를 씁니다.
+    function fit() { document.documentElement.style.setProperty('--demo-h', bar.offsetHeight + 'px'); }
+    fit();
+    // 띠 자체의 높이가 바뀔 때마다(회전 · 창 크기 · 글꼴 늦게 붙음) 다시 맞춥니다.
+    if (window.ResizeObserver) new ResizeObserver(fit).observe(bar);
+    window.addEventListener('resize', fit);
+  }
+
   function enter() {
     GATES.forEach(function (g) { $('#' + g).hidden = true; });
     $('#app').hidden = false;
+    paintDemoBar();
     current = routeFromHash();
     return loadAll();
   }
