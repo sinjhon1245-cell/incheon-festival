@@ -53,10 +53,11 @@ window.FESTIVAL_CONFIG = {
      그래서 아래 두 주소에는 같은 값(부스 Live 사이트 주소)이 들어갑니다. */
 
   /* 부스 Live 사이트 주소 — 관람객 QR(부스 앞 안내 · 입구 포스터)이 가리킵니다.
-     Netlify 에 부스 Live 사이트(Base directory: live)를 만들어 배포하고,
-     휴대폰으로 그 https 주소의 첫 화면이 열리는 것을 확인한 뒤에만 채웁니다.
-     그 전에는 '' 로 둡니다. 주소를 짐작해 넣지 마세요 — 없는 주소가 찍힌
-     QR 은 인쇄해 붙인 뒤에는 되돌릴 수 없습니다.
+     Vercel 프로젝트 incheon-live 의 운영(Production) 주소입니다. 2026-10-03 에
+     첫 화면(/) · 운영자 화면(booth-ctrl.html) 이 열리는 것을 확인하고 채웠습니다.
+     미리 보기(preview) 배포 주소는 넣지 않습니다 — 배포마다 바뀝니다.
+     주소를 짐작해 바꾸지 마세요 — 없는 주소가 찍힌 QR 은 인쇄해 붙인 뒤에는
+     되돌릴 수 없습니다.
      비어 있거나, https 가 아니거나, 내 컴퓨터 주소이거나, 운영 포털 주소
      (Netlify · 그 미리 보기 배포 · GitHub Pages · 인쇄하는 페이지 자신)이면
      인쇄 화면이 관람객용 QR 을 만들지 않습니다 — 관람객이 운영 포털 주소를
@@ -65,18 +66,16 @@ window.FESTIVAL_CONFIG = {
      (부스 Live 사이트에 올라가는 설정 파일에는 원본 값과 관계없이 './' 가
      들어갑니다. 운영자 화면의 '관람객 화면' 링크가 같은 사이트의 첫 화면으로
      가게 하려는 것입니다.) */
-  visitorSiteUrl: '',
+  visitorSiteUrl: 'https://incheon-live.vercel.app/',
 
   /* 운영자 카드 QR 이 가리킬 주소 — 이것도 부스 Live 사이트 주소입니다.
      카드의 QR 은 '이 주소 + booth-ctrl.html#k=열쇠' 가 됩니다. 부스 운영자
      화면은 부스 Live 사이트에 함께 올라가므로 visitorSiteUrl 과 같은 값을
      넣습니다(이름에 staff 가 붙었지만 운영 포털 주소가 아닙니다).
-     visitorSiteUrl 과 똑같이, Live 사이트를 배포하고 휴대폰으로
-     booth-ctrl.html 이 열리는 것을 확인한 뒤에만 채우고 그 전에는 '' 로
-     둡니다. 짐작한 주소로 찍은 카드는 되돌릴 수 없습니다.
+     짐작한 주소로 찍은 카드는 되돌릴 수 없습니다.
      비어 있거나 https 가 아니거나 내 컴퓨터 주소이면 인쇄 화면이 운영자
      카드를 만들지 않습니다. */
-  staffSiteUrl: '',
+  staffSiteUrl: 'https://incheon-live.vercel.app/',
 
   /* 운영자 화면의 오류 안내와 운영자 카드에 붙는 도움 요청 한 줄.
      QR 이 안 열리거나 카드를 잃어버렸을 때 어디로 가면 되는지 적습니다.
