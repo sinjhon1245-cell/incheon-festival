@@ -125,6 +125,22 @@
                · 'NOT_INSTALLED'(DB 설정 전, 또는 anon 실행 권한이 빠짐 — err.dbCode 에 원래 코드)
                · '22023'(허용되지 않는 값, err.message 는 서버 문구) · 'NO_CONFIG'
      ctrlErrorText(err)  → 운영자에게 보여 줄 한국어 문구
+     WAIT_CHOICES        [0, 5, 10, 15, 20, 30, 45, 60]  대기 시간 단추(60 은 '60분 이상').
+                         운영자 단추판 · 관리 화면의 직접 고치기가 같은 목록을 씁니다.
+
+   PIN 보조 로그인 (QR 카드를 쓸 수 없을 때 — QR 열쇠와 완전히 따로입니다)
+     SESSION_RE          /^[A-Za-z0-9_-]{43}$/  PIN 으로 받은 임시 세션(QR 열쇠 24자와 모양이 다름)
+     getPinEnabled()     → Promise<boolean>  settings.booth_pin_enabled. 읽지 못하면 false, 시연도 false
+     pinLogin(boothId, pin, device) → Promise<{ ok, reason, retryAfter, session, expiresAt, booth }>
+         틀린 PIN 도 오류가 아니라 ok:false 로 옵니다(서버가 실패를 기록해야 횟수 제한이 걸립니다).
+         reason: 'invalid'(부스 번호나 PIN 이 맞지 않음 — 미발급 · 꺼짐 · 비공개도 같음)
+                 | 'limited'(retryAfter 초 뒤 다시) | 'off'(PIN 로그인 꺼짐) | null(성공)
+         PIN 은 이 파일 어디에도 남기지 않습니다.
+     sessGet(session) · sessSet(session, mode, wait) · sessTouch(session) → Promise<ctrl부스 + expires_at>
+         부스 id 는 보내지 않습니다 — 서버가 세션으로 부스를 정합니다. issued_at 은 세션을 연 시각,
+         token_tail 은 늘 ''. 세션을 못 쓰면 err.code 'SESSION_END',
+         err.reason 'expired' | 'revoked'(운영본부가 PIN 을 바꾸거나 끔) | 'invalid' | 'off' | 'unavailable'
+     sessLogout(session) → Promise<boolean>  이 세션 하나만 끊습니다
 
    시연 모드 전용
      onDemoChange(fn)    → 끊기 함수. 다른 탭에서 시연 값을 바꾸면 fn({type,id,at}|null)
@@ -157,6 +173,9 @@
 
   var TOKEN_RE = /^[A-Za-z0-9_-]{24}$/;
   var DEMO_TOKEN_RE = /^demo-[A-Za-z0-9_-]+$/;
+  var SESSION_RE = /^[A-Za-z0-9_-]{43}$/;
+  // 대기 시간 단추. 운영자 단추판과 관리 화면의 직접 고치기가 같은 목록을 씁니다(60 = 60분 이상).
+  var WAIT_CHOICES = [0, 5, 10, 15, 20, 30, 45, 60];
 
   var MSG = {
     NO_CONFIG: '연결 설정을 불러오지 못했습니다. 새로 고침해 주세요.',
@@ -169,7 +188,20 @@
     CTRL_42501: '이 QR은 이제 쓸 수 없어요. 운영본부에서 새 QR을 받아 다시 찍어 주세요.',
     CTRL_NOT_INSTALLED: '부스 대기 현황 기능이 아직 켜지지 않았어요. 운영본부에 알려 주세요.',
     CTRL_OFFLINE: '연결이 불안정해 저장하지 못했어요.',
-    CTRL_OTHER: '저장하지 못했어요. 잠시 뒤 다시 눌러 주세요.'
+    CTRL_OTHER: '저장하지 못했어요. 잠시 뒤 다시 눌러 주세요.',
+    // PIN 세션이 끝났을 때(SESSION_END). 화면에는 ctrlErrorText 가 이 문구를 줍니다.
+    SESS_EXPIRED: 'PIN 로그인 시간이 끝났어요. PIN을 다시 입력해 주세요.',
+    SESS_REVOKED: '운영본부가 PIN을 변경했습니다. 새 PIN을 받아 다시 시작해 주세요.',
+    SESS_INVALID: 'PIN 로그인이 끝났어요. PIN을 다시 입력해 주세요.',
+    SESS_OFF: '지금은 PIN으로 쓸 수 없어요. QR 카드가 있으면 QR을 찍어 주세요.',
+    SESS_UNAVAILABLE: '지금은 이 부스를 열 수 없어요. 운영본부에 알려 주세요.'
+  };
+  var SESSION_HINTS = {
+    booth_session_expired: 'expired',
+    booth_session_revoked: 'revoked',
+    booth_session_invalid: 'invalid',
+    booth_pin_off: 'off',
+    booth_session_unavailable: 'unavailable'
   };
 
   var STATES = ['여유', '보통', '혼잡', '중단', '마감'];
@@ -971,8 +1003,94 @@
     return rpc('booth_ctrl_touch', { p_token: token }).then(firstRow);
   }
 
+  /* ── PIN 보조 로그인 ─────────────────────────────────────────────────
+     QR 카드를 쓸 수 없을 때만 쓰는 길입니다. 위의 열쇠 함수(ctrlGet · Set · Touch)와
+     서버 함수 · 저장 칸 모두 따로이고, 서로의 값을 받지 않습니다.
+     PIN 은 POST 본문으로 한 번 보내고 이 파일에 남기지 않습니다. 서버가 돌려준 세션
+     원문만 화면이 이 기기에 둡니다. 세션 함수에는 부스 id 를 보내지 않습니다.
+     시연 모드에서는 이 함수들이 서버를 부르지 않습니다. 예시 PIN(4자리) 체험은 아래 demoPinCheck 가 맡습니다. */
+  function getPinEnabled() {
+    if (isMock || !hasConfig) return Promise.resolve(false);
+    // 칸이 아직 없거나(설정 전) 읽지 못하면 꺼진 것으로 봅니다 — QR 은 그대로 씁니다.
+    return request('GET', 'settings?select=booth_pin_enabled&order=id.asc&limit=1').then(function (rows) {
+      return !!(rows && rows[0] && rows[0].booth_pin_enabled === true);
+    }, function () { return false; });
+  }
+
+  function pinLogin(boothId, pin, device) {
+    if (isMock) return Promise.reject(makeError(MSG.SESS_OFF, { code: 'SESSION_END', reason: 'off' }));
+    if (!hasConfig) return Promise.reject(noConfigError());
+    return rpc('booth_pin_login', { p_booth_id: boothId, p_pin: String(pin || ''), p_device: device || null })
+      .then(function (rows) {
+        var r = (Object.prototype.toString.call(rows) === '[object Array]') ? rows[0] : rows;
+        if (!r) throw makeError(MSG.CTRL_OTHER, { code: 'EMPTY' });
+        var ok = r.ok === true && SESSION_RE.test(String(r.session || ''));
+        return {
+          ok: ok,
+          reason: ok ? null : (r.reason || 'invalid'),
+          retryAfter: Math.max(0, Math.round(Number(r.retry_after) || 0)),
+          session: ok ? r.session : null,
+          expiresAt: ok ? r.expires_at : null,
+          booth: ok ? normalizeCtrl(r) : null
+        };
+      });
+  }
+
+  /* 협의용 예시 PIN(4자리). 예시 모드에서만 이 브라우저 안에서 견줍니다 — 서버 · 실제 PIN 표 ·
+     세션 · 횟수 기록 어디에도 닿지 않습니다. 규칙은 mock-data.js 의 MOCK_DEMO_PIN 하나입니다.
+     실제 모드에서는 늘 빈 값 · false 라 실제 PIN 입력(6자리)과 섞일 수 없습니다. */
+  function demoPinOf(code) {
+    if (!isMock || typeof window.MOCK_DEMO_PIN !== 'function') return '';
+    return String(window.MOCK_DEMO_PIN(code) || '');
+  }
+  function demoPinCheck(code, pin) {
+    var want = demoPinOf(code);
+    return !!want && /^\d{4}$/.test(String(pin || '')) && String(pin) === want;
+  }
+
+  function sessionEnd(reason) {
+    var key = { expired: 'SESS_EXPIRED', revoked: 'SESS_REVOKED', off: 'SESS_OFF', unavailable: 'SESS_UNAVAILABLE' }[reason] || 'SESS_INVALID';
+    return makeError(MSG[key], { code: 'SESSION_END', reason: reason || 'invalid' });
+  }
+  function sessFail(err) {
+    if (err && err.code === '42501' && err.hint && has(SESSION_HINTS, err.hint)) {
+      var e = sessionEnd(SESSION_HINTS[err.hint]);
+      e.status = err.status;
+      throw e;
+    }
+    throw err;
+  }
+  function sessRow(rows) {
+    var r = (Object.prototype.toString.call(rows) === '[object Array]') ? rows[0] : rows;
+    if (!r) throw sessionEnd('invalid');
+    var b = normalizeCtrl(r);
+    b.token_tail = '';
+    b.expires_at = r.expires_at || null;
+    return b;
+  }
+  function sessCall(name, args, session) {
+    if (isMock) return Promise.reject(sessionEnd('off'));
+    if (!hasConfig) return Promise.reject(noConfigError());
+    if (!SESSION_RE.test(String(session || ''))) return Promise.reject(sessionEnd('invalid'));
+    return rpc(name, args).then(sessRow, sessFail);
+  }
+  function sessGet(session) {
+    return sessCall('booth_session_get', { p_session: session }, session);
+  }
+  function sessSet(session, mode, waitMinutes) {
+    return sessCall('booth_session_set', { p_session: session, p_mode: mode, p_wait_minutes: roundWait(waitMinutes) }, session);
+  }
+  function sessTouch(session) {
+    return sessCall('booth_session_touch', { p_session: session }, session);
+  }
+  function sessLogout(session) {
+    if (isMock || !hasConfig || !SESSION_RE.test(String(session || ''))) return Promise.resolve(false);
+    return rpc('booth_session_logout', { p_session: session }).then(function (v) { return v === true; });
+  }
+
   function ctrlErrorText(err) {
     if (!err) return MSG.CTRL_OTHER;
+    if (err.code === 'SESSION_END') return err.message || MSG.SESS_INVALID;
     if (err.offline) return MSG.CTRL_OFFLINE;
     if (err.code === '42501') return MSG.CTRL_42501;
     if (err.code === 'PGRST202' || err.code === 'NOT_INSTALLED') return MSG.CTRL_NOT_INSTALLED;
@@ -1028,6 +1146,17 @@
   BoothCore.ctrlSet = ctrlSet;
   BoothCore.ctrlTouch = ctrlTouch;
   BoothCore.ctrlErrorText = ctrlErrorText;
+  BoothCore.WAIT_CHOICES = WAIT_CHOICES.slice();
+
+  BoothCore.SESSION_RE = SESSION_RE;
+  BoothCore.getPinEnabled = getPinEnabled;
+  BoothCore.pinLogin = pinLogin;
+  BoothCore.sessGet = sessGet;
+  BoothCore.sessSet = sessSet;
+  BoothCore.sessTouch = sessTouch;
+  BoothCore.sessLogout = sessLogout;
+  BoothCore.demoPinOf = demoPinOf;
+  BoothCore.demoPinCheck = demoPinCheck;
 
   BoothCore.onDemoChange = onDemoChange;
   BoothCore.resetDemo = resetDemo;

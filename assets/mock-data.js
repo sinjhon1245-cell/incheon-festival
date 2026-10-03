@@ -132,3 +132,18 @@ window.MOCK_BOOTHS = [
     congestion: '여유', wait_minutes: 10, age_min: 12
   }
 ];
+
+/* 협의용 예시 PIN (4자리) — 운영자 예시(booth-ctrl.html?demo)와 관리자 예시가 같은 규칙을 씁니다.
+     구역 순서(A=0 · B=1 · C=2 …) × 10 + 부스 번호 → 네 자리
+     A-01 0001 · A-04 0004 · B-01 0011 · B-03 0013 · C-01 0021 · C-02 0022
+   회의에서 말로 설명하기 쉬운 값입니다. 실제 운영자 PIN 과는 아무 관계가 없습니다 — 실제 PIN 은
+   데이터베이스가 만든 6자리이고, 원문은 발급할 때 한 번만 보입니다(supabase/migration-booth-pin.sql).
+   이 값은 서버에 보내지도 저장하지도 않습니다. */
+window.MOCK_DEMO_PIN = function (code) {
+  var m = /^([A-Z])-?0*(\d{1,3})$/.exec(String(code || '').trim().toUpperCase());
+  if (!m) return '';
+  var n = (m[1].charCodeAt(0) - 65) * 10 + Number(m[2]);
+  var s = String(n);
+  while (s.length < 4) s = '0' + s;
+  return s.slice(-4);
+};

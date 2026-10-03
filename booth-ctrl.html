@@ -8,8 +8,8 @@
   <!-- 열쇠는 주소의 # 뒤에 있어 Referer 로는 원래 나가지 않지만, 이 화면에서 누른 링크가
        운영 사이트 주소를 다른 곳에 알리지 않도록 아예 보내지 않습니다. -->
   <meta name="referrer" content="no-referrer" />
-  <meta name="theme-color" content="#0D1330" />
-  <meta name="color-scheme" content="dark" />
+  <meta name="theme-color" content="#F2F4F9" />
+  <meta name="color-scheme" content="light" />
   <meta name="format-detection" content="telephone=no" />
 
   <link rel="preconnect" href="https://cdn.jsdelivr.net" />
@@ -44,7 +44,44 @@
       <noscript><p class="screen__text">이 화면은 자바스크립트가 켜져 있어야 움직여요.</p></noscript>
     </section>
 
-    <!-- 안내 화면: QR 없음 · 쓸 수 없는 QR · DB 설정 전 · 연결 설정 없음 -->
+    <!-- 시작 화면: 주소에 QR 열쇠도, 이 기기에 PIN 세션도 없을 때.
+         막힌 화면이 아니라 '어떻게 시작하는지' 를 차례로 보여 줍니다.
+           1. QR (기본)   2. PIN (운영본부가 켰을 때만)   3. 최근 운영한 부스 (있을 때만)   4. 도움말 -->
+    <section class="screen screen--start" id="v-start" hidden>
+      <p class="screen__label">부스 운영자</p>
+      <h1 class="screen__title">부스 운영을 시작해 주세요</h1>
+
+      <div class="card">
+        <p class="card__text">운영자 카드의 QR을 휴대폰 기본 카메라로 촬영하면 내 부스 운영 화면이 바로 열립니다.</p>
+        <button type="button" class="btn" data-act="qr-guide" aria-expanded="false" aria-controls="qr-guide">QR 이용 안내</button>
+        <ol class="guide" id="qr-guide" hidden>
+          <li>휴대폰의 기본 카메라 앱을 열어요.</li>
+          <li>운영자 카드의 QR을 화면 가운데에 비춰요.</li>
+          <li>화면에 뜬 주소를 누르면 내 부스 운영 화면이 열려요.</li>
+          <li>다음부터는 이 화면의 “최근 운영한 부스”에서 바로 열 수 있어요.</li>
+        </ol>
+      </div>
+
+      <div class="card" id="start-pin" hidden>
+        <h2 class="card__title">QR 카드가 없나요?</h2>
+        <p class="card__text">구역과 부스 번호를 선택한 뒤 운영자 PIN으로 시작할 수 있습니다.</p>
+        <button type="button" class="btn btn--primary" data-act="pin-start">부스 번호와 PIN으로 시작</button>
+        <button type="button" class="btn btn--quiet" data-act="demo-direct" id="start-direct" hidden>예시 부스 바로 열기</button>
+      </div>
+
+      <div class="card card--recent" id="start-recent" hidden>
+        <h2 class="card__title">최근 운영한 부스</h2>
+        <p class="recent"><b class="recent__code" id="recent-code"></b><span class="recent__sep" aria-hidden="true">·</span><span class="recent__name" id="recent-name"></span></p>
+        <a class="btn btn--primary" id="recent-go" href="#">이어서 열기</a>
+      </div>
+
+      <div class="helpbox">
+        <h2 class="helpbox__title">도움이 필요하신가요?</h2>
+        <p class="helpbox__text"><span id="start-help-lead">QR 카드를 확인할 수 없다면</span> <span id="start-help"></span></p>
+      </div>
+    </section>
+
+    <!-- 안내 화면: 쓸 수 없는 QR · DB 설정 전 · 연결 설정 없음 · PIN 세션 끝 -->
     <section class="screen" id="v-msg" hidden>
       <p class="screen__label">부스 운영자</p>
       <h1 class="screen__title" id="msg-title"></h1>
@@ -79,6 +116,61 @@
       </div>
     </section>
 
+    <!-- QR 카드가 없을 때: 구역 → 실제 부스 → 운영자 PIN 6자리.
+         구역 · 부스는 관람객 화면과 같은 공개 목록에서 고릅니다(공개 · 배정된 부스만).
+         PIN 은 이 기기에 남기지 않고, 맞으면 서버가 준 임시 세션만 남깁니다.
+         협의용 예시(?demo)에서는 같은 세 단계를 예시 부스 · 예시 PIN 4자리로 보여 줍니다(서버에 묻지 않음). -->
+    <section class="screen screen--pin" id="v-pin" hidden>
+      <p class="screen__label" id="pin-label">부스 번호와 PIN으로 시작</p>
+      <p class="pinintro" id="pin-intro" hidden>운영할 부스를 선택해 주세요.</p>
+      <ol class="pinsteps" aria-label="단계">
+        <li data-step="1">구역</li><li data-step="2">부스</li><li data-step="3">PIN</li>
+      </ol>
+      <div id="pin-s0">
+        <h1 class="screen__title" id="pin-s0-title">부스 목록을 불러오는 중…</h1>
+        <p class="screen__text" id="pin-s0-text" hidden></p>
+        <div class="screen__actions" id="pin-s0-acts" hidden>
+          <button type="button" class="btn btn--primary" data-act="pin-reload">다시 불러오기</button>
+        </div>
+      </div>
+      <div id="pin-s1" hidden>
+        <h1 class="screen__title">구역을 골라 주세요</h1>
+        <div class="picks" id="pin-zones"></div>
+        <button type="button" class="btn btn--quiet pindirect" data-act="demo-direct" id="pin-direct" hidden>예시 부스 바로 열기</button>
+      </div>
+      <div id="pin-s2" hidden>
+        <h1 class="screen__title">부스를 골라 주세요</h1>
+        <p class="screen__text" id="pin-zone-name"></p>
+        <div class="picks picks--booths" id="pin-booths"></div>
+      </div>
+      <form id="pin-s3" hidden novalidate autocomplete="off">
+        <h1 class="screen__title" id="pin-s3-title">운영자 PIN 6자리</h1>
+        <div class="who who--pin">
+          <p class="who__code" id="pin-code"></p>
+          <p class="who__name" id="pin-name"></p>
+        </div>
+        <!-- 협의용 예시에서만: 그 부스의 예시 PIN 을 보여 줍니다. 실제 PIN 은 어디에도 보여 주지 않습니다. -->
+        <div class="demopin" id="pin-demo" hidden>
+          <p class="demopin__l">협의용 예시 PIN</p>
+          <p class="demopin__v mono" id="pin-demo-v"></p>
+          <p class="demopin__t">위 PIN을 입력해 운영 화면을 확인해 보세요.</p>
+        </div>
+        <label class="pinlabel" for="pin-input" id="pin-input-label">운영본부에서 받은 숫자 6자리</label>
+        <input class="pinbox mono" id="pin-input" type="text" inputmode="numeric" pattern="[0-9]*"
+               maxlength="6" autocomplete="one-time-code" enterkeyhint="go"
+               autocapitalize="off" autocorrect="off" spellcheck="false" aria-describedby="pin-err" />
+        <p class="pinerr" id="pin-err" role="alert" hidden></p>
+        <div class="screen__actions">
+          <button type="submit" class="btn btn--primary" id="pin-go" disabled>운영 시작</button>
+        </div>
+        <p class="pinnote" id="pin-note">PIN은 이 휴대폰에 저장하지 않아요. 오늘 하루 이 휴대폰에서는 다시 입력하지 않아도 돼요.</p>
+      </form>
+      <div class="screen__actions">
+        <button type="button" class="btn" data-act="pin-back" id="pin-back">뒤로</button>
+      </div>
+      <p class="help" id="pin-help"></p>
+    </section>
+
     <!-- 운영 화면 -->
     <div class="ctrl" id="v-main" hidden>
 
@@ -110,7 +202,8 @@
 
       <header class="head">
         <div class="head__id">
-          <p class="head__label"><span>부스 운영자</span><span class="head__code" id="h-code"></span></p>
+          <p class="head__label">부스 운영자</p>
+          <p class="head__code" id="h-code"></p>
           <h1 class="head__name" id="h-name">부스 정보를 불러오는 중</h1>
           <p class="head__org" id="h-org"></p>
         </div>
@@ -127,10 +220,10 @@
       <div class="main">
         <div class="col">
           <section class="now now--none" id="now" aria-labelledby="now-cap">
-            <p class="now__cap" id="now-cap">관람객 화면에 보이는 지금 상태</p>
+            <p class="now__cap" id="now-cap">현재 대기</p>
             <div class="now__main">
-              <span class="now__state" id="now-state">불러오는 중</span>
               <span class="now__wait" id="now-wait" hidden><b class="now__num" id="now-num"></b><span class="now__unit">분</span></span>
+              <span class="now__state" id="now-state">불러오는 중</span>
             </div>
             <p class="now__when" id="now-when"></p>
             <p class="now__note" id="now-note" hidden></p>
@@ -146,7 +239,7 @@
         <div class="col">
           <section class="pad" aria-labelledby="pad-title">
             <div class="pad__head">
-              <h2 class="pad__title" id="pad-title">지금 줄을 서면 몇 분 기다리나요?</h2>
+              <h2 class="pad__title" id="pad-title">대기시간을 선택해 주세요</h2>
               <span class="pad__hint">누르면 바로 저장돼요</span>
             </div>
             <div class="waits" id="waits"></div>
@@ -159,7 +252,7 @@
                 <span class="off__s">점심·재료 준비·회차 사이</span>
               </button>
               <button type="button" class="off" id="btn-closed" data-mode="closed" aria-pressed="false">
-                <span class="off__t">오늘 마감</span>
+                <span class="off__t">오늘 운영 마감</span>
                 <span class="off__s">재료 소진·운영 끝</span>
               </button>
             </div>
@@ -178,6 +271,12 @@
       <footer class="foot">
         <p>이 화면은 우리 부스 운영자만 써요. 주소나 QR 사진을 단체방에 올리지 마세요.</p>
         <p id="foot-key" hidden></p>
+        <!-- PIN 으로 연 화면: 언제까지 쓸 수 있는지와 나가기(이 휴대폰의 세션 하나만 끊음) -->
+        <div class="pinfoot" id="pin-foot" hidden>
+          <p class="pinfoot__t" id="pin-foot-t">PIN으로 연 화면</p>
+          <p class="pinfoot__until" id="pin-foot-until"></p>
+          <button type="button" class="btn btn--quiet pinfoot__out" id="pin-out" data-act="pin-logout">이 휴대폰에서 나가기</button>
+        </div>
         <p id="foot-help"></p>
       </footer>
     </div>
@@ -216,7 +315,7 @@
 
     var core = window.BoothCore;
     var $ = function (id) { return document.getElementById(id); };
-    var VIEWS = ['loading', 'msg', 'confirm', 'main'];
+    var VIEWS = ['loading', 'start', 'msg', 'confirm', 'pin', 'main'];
 
     // 다시 열 때 지난번 스크롤 자리로 돌아가면 부스 이름과 지금 상태가 위로 밀려 안 보입니다.
     try { if ('scrollRestoration' in window.history) window.history.scrollRestoration = 'manual'; } catch (e) { /* 무시 */ }
@@ -243,22 +342,24 @@
     var cfg = core.cfg || {};
     var isMock = core.isMock;
     // 협의용 예시: 맨 위 띠는 안내 · 확인 · 운영 화면 어디서든 보입니다.
-    if (isMock && document.getElementById('demobar')) document.getElementById('demobar').hidden = false;
+    if (isMock && document.getElementById('demobar')) {
+      var demobar = document.getElementById('demobar');
+      demobar.hidden = false;
+      // 위쪽 띠(연결 · 저장 대기)가 예시 띠 밑으로 숨지 않게 예시 띠 높이만큼 내려 붙입니다.
+      var fitDemo = function () { document.documentElement.style.setProperty('--demo-h', demobar.offsetHeight + 'px'); };
+      fitDemo();
+      window.addEventListener('resize', fitDemo);
+    }
     var esc = core.esc;
     var pad2 = core.pad2;
     var HELP = cfg.boothHelpLine || '운영본부에 문의해 주세요';
 
-    // 단추 판. 상태 힌트(여유/보통/혼잡)는 서버와 같은 규칙(BoothCore.congestionFor)으로 만듭니다.
-    var WAITS = [
-      { w: 0,  big: '바로', unit: '',  sub: '0분' },
-      { w: 5,  big: '5',   unit: '분', sub: '' },
-      { w: 10, big: '10',  unit: '분', sub: '' },
-      { w: 15, big: '15',  unit: '분', sub: '' },
-      { w: 20, big: '20',  unit: '분', sub: '' },
-      { w: 30, big: '30',  unit: '분', sub: '' },
-      { w: 45, big: '45',  unit: '분', sub: '' },
-      { w: 60, big: '60',  unit: '분', sub: '이상' }
-    ];
+    // 단추 판. 값 목록은 BoothCore.WAIT_CHOICES(관리 화면의 직접 고치기와 같은 목록)이고,
+    // 상태 힌트(여유/보통/혼잡)는 서버와 같은 규칙(BoothCore.congestionFor)으로 만듭니다.
+    var WAITS = (core.WAIT_CHOICES || [0, 5, 10, 15, 20, 30, 45, 60]).map(function (w) {
+      return { w: w, big: w === 0 ? '바로' : String(w), unit: w === 0 ? '' : '분',
+               sub: w === 0 ? '0분' : (w === 60 ? '이상' : '') };
+    });
 
     var RETRY_MS = 10000;            // 연결이 안 될 때 다시 해 보는 간격
     var REFRESH_MS = 60000;          // 다른 기기에서 바꾼 값을 읽어 오는 간격
@@ -279,11 +380,27 @@
     // 시연 값이 실제로 운영하는 부스의 '최근 연 부스' 를 덮지 않게 시연은 따로 적어 둡니다.
     var KEY_LAST = isMock ? 'aisw-boothctrl-last-demo' : 'aisw-boothctrl-last';
     var KEY_TIP = 'aisw-boothctrl-tip';
+    // PIN 으로 연 화면(QR 카드가 없을 때). PIN 은 어디에도 남기지 않고, 서버가 준 임시 세션만 둡니다.
+    //   KEY_PIN       { session, booth_id, zone_key, code, name, org, zone_name, expires_at }
+    //   KEY_PIN_LAST  세션이 끝난 뒤 'PIN 다시 입력' 에서 미리 고를 부스 { booth_id, zone_key, code, name }
+    //   KEY_DEVICE    이 기기의 무작위 이름(횟수 제한이 다른 기기와 섞이지 않게). 개인 정보가 아닙니다
+    var KEY_PIN = 'aisw-boothctrl-pin';
+    var KEY_PIN_LAST = 'aisw-boothctrl-pin-last';
+    var KEY_DEVICE = 'aisw-boothctrl-device';
+    // 협의용 예시의 'PIN 으로 연 화면'. 서버 세션이 아니라 이 탭에만 두는 표시입니다(sessionStorage —
+    // 새로 고침해도 이어지고, 탭을 닫으면 사라집니다). 실제 PIN 세션 칸(KEY_PIN)과 섞지 않습니다.
+    var KEY_PIN_DEMO = 'aisw-boothctrl-pin-demo';
+    var KEY_PIN_LAST_DEMO = 'aisw-boothctrl-pin-last-demo';
+    // PIN 자릿수. 실제 운영자 PIN 은 서버가 만든 6자리, 협의용 예시 PIN 은 4자리(0001 처럼 외우기 쉬운 값)입니다.
+    // 주소의 ?demo 만으로 정해지며, 예시의 4자리가 실제 입력 칸에 끼어들 길은 없습니다.
+    var PIN_LEN = isMock ? 4 : 6;
     // 이 탭의 이름. QR을 찍을 때마다 새 탭이 열려 같은 부스를 여러 탭이 열고 있을 수 있어,
     // 저장소에 남긴 누름이 어느 탭 것인지 가려내는 데 씁니다.
     var TAB = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 
-    var token = '';
+    var token = '';        // QR 열쇠 (주소의 #k=)
+    var sess = null;       // PIN 으로 연 화면이면 KEY_PIN 의 기록. QR 이면 null
+    var credId = '';       // 이 기기 저장 칸의 이름표: QR 은 열쇠 끝 6자(예전 그대로), PIN 은 'pin-' + 부스 id
     var booth = null;      // 서버가 마지막으로 알려 준 이 부스 (ctrl부스)
     var cached = null;     // 이 기기에 기억해 둔 머리글 (연결이 안 될 때 보여 줌)
     var settings = null;   // 행사 시간표 (문 열기 전 안내용)
@@ -329,7 +446,42 @@
     function lsDel(key) {
       try { window.localStorage.removeItem(key); } catch (e) { /* 무시 */ }
     }
-    function last6() { return token.slice(-6); }
+    function ssGet(key) {
+      try {
+        var raw = window.sessionStorage.getItem(key);
+        return raw ? JSON.parse(raw) : null;
+      } catch (e) { return null; }
+    }
+    function ssSet(key, val) {
+      try { window.sessionStorage.setItem(key, JSON.stringify(val)); } catch (e) { /* 이번 화면에서만 */ }
+    }
+    function ssDel(key) {
+      try { window.sessionStorage.removeItem(key); } catch (e) { /* 무시 */ }
+    }
+    // 저장 칸 이름표. QR 은 예전과 같은 '열쇠 끝 6자' 라 이미 있던 기기의 기록을 그대로 읽습니다.
+    function last6() { return credId; }
+
+    /* ── 자격 어댑터 ─────────────────────────────────────────────────
+       QR 열쇠와 PIN 세션이 같은 화면 · 같은 저장 흐름(대기 칸 · 견줘 보기 · 탭 조율)을 씁니다.
+       다른 것은 서버에 묻는 길뿐입니다. QR 은 예전 함수(ctrlGet · Set · Touch)를 그대로 부르고,
+       PIN 은 세션 함수(sessGet · Set · Touch)를 부릅니다 — 세션 함수에는 부스 id 를 보내지 않습니다.
+       협의용 예시의 PIN 화면(sess.demo)은 서버 세션이 없어 예시 부스의 시연 열쇠로 같은 시연 저장소를 씁니다
+       (booth-core 시연 모드 — 네트워크 요청 없음). */
+    function demoKey() { return core.demoToken(sess.booth_id); }
+    var api = {
+      get: function () {
+        if (!sess) return core.ctrlGet(token);
+        return sess.demo ? core.ctrlGet(demoKey()) : core.sessGet(sess.session);
+      },
+      set: function (mode, wait) {
+        if (!sess) return core.ctrlSet(token, mode, wait);
+        return sess.demo ? core.ctrlSet(demoKey(), mode, wait) : core.sessSet(sess.session, mode, wait);
+      },
+      touch: function () {
+        if (!sess) return core.ctrlTouch(token);
+        return sess.demo ? core.ctrlTouch(demoKey()) : core.sessTouch(sess.session);
+      }
+    };
     function keyOk() { return 'aisw-boothctrl-ok-' + last6(); }
     function keyPending() { return 'aisw-boothctrl-pending-' + last6(); }
     // 이 기기(같은 브라우저의 모든 탭)가 이 부스에 남긴 저장 기록과 마지막으로 본 서버 값
@@ -447,21 +599,381 @@
       show('msg');
     }
 
-    function showNoToken() {
-      var extra = '';
+    /* ── 시작 화면 (QR 열쇠도 PIN 세션도 없을 때) ───────────────────────
+       '막힌 화면' 이 아니라 시작하는 길을 차례로 보여 줍니다. 기본은 늘 QR 이고,
+       PIN 은 운영본부가 PIN 보조 로그인을 켜 두었을 때만(settings.booth_pin_enabled) 보입니다.
+       협의용 예시에서는 실제 설정과 관계없이 예시 PIN 체험을 늘 보여 줍니다(서버에 묻지 않음). */
+    var startAt = 0;
+    var pinOn = false;    // 실제 모드에서 PIN 보조 로그인이 켜져 있다고 확인했는가
+    function readLastQr() {
       var last = lsGet(KEY_LAST);
-      if (last && last.token && core.validToken(last.token)) {
-        extra += '<p class="recent">최근 연 부스: <b>' + esc(last.code || '') + ' ' + esc(last.name || '') + '</b></p>' +
-          '<a class="btn btn--primary" href="#k=' + encodeURIComponent(last.token) + '">이어서 열기</a>';
+      return (last && last.token && core.validToken(last.token)) ? last : null;
+    }
+    function readLastPin() {
+      var p = isMock ? ssGet(KEY_PIN_LAST_DEMO) : lsGet(KEY_PIN_LAST);
+      return (p && typeof p === 'object' && p.booth_id) ? p : null;
+    }
+    // 최근 운영한 부스 하나. QR 로 연 부스와 PIN 으로 연 부스를 나눠 묻지 않고 더 최근 것을 보여 줍니다.
+    // PIN 부스는 PIN 을 쓸 수 있을 때만(다시 PIN 을 넣어야 열림) 고릅니다.
+    function recentBooth() {
+      var q = readLastQr();
+      var p = (isMock || pinOn) ? readLastPin() : null;
+      if (q && p) return (Number(p.at) || 0) > (Number(q.at) || 0) ? { pin: p } : { qr: q };
+      return q ? { qr: q } : (p ? { pin: p } : null);
+    }
+    function paintRecent() {
+      $('start-help-lead').textContent = (isMock || pinOn) ? 'QR 카드 또는 PIN을 확인할 수 없다면' : 'QR 카드를 확인할 수 없다면';
+      var r = recentBooth();
+      $('start-recent').hidden = !r;
+      if (!r) return;
+      var b = r.qr || r.pin;
+      $('recent-code').textContent = b.code || '';
+      $('recent-code').className = 'recent__code' + (isAscii(b.code) ? ' mono' : '');
+      $('recent-name').textContent = b.name || '';
+      var go = $('recent-go');
+      if (r.qr) {
+        go.setAttribute('href', '#k=' + encodeURIComponent(r.qr.token));
+        go.removeAttribute('data-act');
+      } else {
+        go.setAttribute('href', '#');
+        go.setAttribute('data-act', 'pin-again');
       }
+    }
+    function showStart() {
+      $('start-help').textContent = HELP;
+      $('qr-guide').hidden = true;
+      document.querySelector('[data-act="qr-guide"]').setAttribute('aria-expanded', 'false');
+      $('start-pin').hidden = !(isMock || pinOn);
+      $('start-direct').hidden = !isMock;
+      paintRecent();
+      clearTimeout(toastTimer);
+      $('toast').className = 'toast';
+      document.title = '부스 운영 시작';
+      show('start');
+      offerPin();
+    }
+    // 협의용 예시는 QR 안내에서 멈추지 않고 바로 구역 고르기(예시 PIN 체험)부터 엽니다.
+    function showNoToken() {
+      if (isMock) { openPin(readLastPin()); return; }
+      showStart();
+    }
+
+    function offerPin() {
+      if (isMock || !core.hasConfig || !core.getPinEnabled) return;
+      var at = startAt = Date.now();
+      core.getPinEnabled().then(function (on) {
+        if (at !== startAt) return;
+        pinOn = !!on;
+        if (view !== 'start') return;
+        $('start-pin').hidden = !pinOn;
+        paintRecent();
+      });
+    }
+
+    function deviceId() {
+      var d = lsGet(KEY_DEVICE);
+      if (typeof d === 'string' && /^[A-Za-z0-9_-]{22}$/.test(d)) return d;
+      try {
+        var a = new Uint8Array(16);
+        (window.crypto || window.msCrypto).getRandomValues(a);
+        d = window.btoa(String.fromCharCode.apply(null, a)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+      } catch (e) { return null; } // 기기 이름이 없어도 로그인은 됩니다(서버가 '이름 없는 기기' 묶음으로 셉니다)
+      lsSet(KEY_DEVICE, d);
+      return d;
+    }
+
+    function readPin() {
       if (isMock) {
-        var first = (window.MOCK_BOOTHS || [])[0];
-        if (first) {
-          extra += '<a class="btn" href="#k=' + encodeURIComponent(core.demoToken(first.id)) + '">예시 부스 열기 (' +
-            esc(first.code) + ')</a>';
-        }
+        // 예시: 이 탭에만 둔 표시. 예시 부스(목록에 있는 id)일 때만 씁니다.
+        var d = ssGet(KEY_PIN_DEMO);
+        if (!d || typeof d !== 'object' || d.demo !== true || !d.booth_id) return null;
+        var ok = (window.MOCK_BOOTHS || []).some(function (m) { return m.id === d.booth_id; });
+        return ok ? d : null;
       }
-      showMsg('부스 QR 코드로 다시 열어 주세요', '부스 운영자 카드의 QR을 휴대폰 카메라로 찍으면 이 화면이 열려요.', extra);
+      var s = lsGet(KEY_PIN);
+      if (!s || typeof s !== 'object' || !core.SESSION_RE || !core.SESSION_RE.test(String(s.session || '')) || !s.booth_id) return null;
+      return s;
+    }
+    // 오늘 24:00(한국 시각). 예시 화면의 'PIN 으로 연 화면' 이 실제 세션과 같은 시각에 끝나 보이게 합니다.
+    function kstMidnight() {
+      var n = core.kstParts(Date.now());
+      return new Date(Date.UTC(n.y, n.m - 1, n.d + 1, -9, 0, 0)).toISOString();
+    }
+    // 예시 'PIN 으로 연 화면' 표시를 남기고 운영 화면으로 엽니다(새로 열어 보통의 시작 길로 들어감).
+    // via: 'pin' 예시 PIN 을 넣음 · 'direct' 예시 부스 바로 열기
+    function openDemoSession(b, via) {
+      ssSet(KEY_PIN_DEMO, {
+        demo: true, via: via, session: 'demo', booth_id: b.id, zone_key: b.zone_key || '',
+        code: codeOf(b), name: b.name || '', org: b.org || '', zone_name: b.zone_name || b.zone_label || '',
+        expires_at: kstMidnight(), at: Date.now()
+      });
+      ssDel(KEY_PIN_LAST_DEMO);
+      window.location.replace(window.location.pathname + window.location.search);
+    }
+    function pinExpired(s) {
+      var t = toMs(s && s.expires_at);
+      return isNaN(t) || t <= Date.now();
+    }
+    // '오늘 20:00까지' · 자정이면 '오늘 24:00까지'
+    function untilLabel(v) {
+      var p = core.kstParts(v), n = core.kstParts(Date.now());
+      if (!p) return '';
+      if (p.hh === 0 && p.mi === 0 && p.dayNum === n.dayNum + 1) return '오늘 24:00까지';
+      return (p.dayNum === n.dayNum ? '오늘 ' : p.m + '. ' + p.d + '. ') + pad2(p.hh) + ':' + pad2(p.mi) + '까지';
+    }
+
+    // 세션이 끝났을 때. 만료는 같은 사람이 PIN 만 다시 넣으면 되니 못 보낸 누름을 남기고,
+    // 운영본부가 PIN 을 바꿨거나(다른 사람일 수 있음) 모르는 세션이면 이 부스의 기록을 지웁니다.
+    // 꺼짐 · 부스 비공개는 세션이 서버에 그대로 있어 지우지 않고 '다시 시도' 만 둡니다.
+    function endSession(reason) {
+      stopAll();
+      if (reason === 'off' || reason === 'unavailable') {
+        showMsg(reason === 'off' ? '지금은 PIN으로 쓸 수 없어요' : '지금은 이 부스를 열 수 없어요',
+          reason === 'off' ? 'QR 카드가 있으면 QR을 찍어 주세요. 운영본부가 다시 켜면 “다시 시도”를 눌러 주세요.'
+                           : '부스가 잠시 비공개이거나 위치를 바꾸는 중이에요. 운영본부에 알려 주세요.',
+          RELOAD_BTN);
+        return;
+      }
+      if (reason !== 'expired') {
+        clearPending(true);
+        lsDel(keyOk());
+        lsDel(keyOwn());
+      }
+      if (sess && sess.demo) {
+        // 예시: 하루가 지나 표시만 끝난 것입니다. 같은 부스로 다시 체험할 수 있게 고른 부스를 남깁니다.
+        ssSet(KEY_PIN_LAST_DEMO, { booth_id: sess.booth_id, zone_key: sess.zone_key || '', code: sess.code || '', name: sess.name || '', at: Date.now() });
+        ssDel(KEY_PIN_DEMO);
+        openPin(readLastPin());
+        return;
+      }
+      if (sess) lsSet(KEY_PIN_LAST, { booth_id: sess.booth_id, zone_key: sess.zone_key || '', code: sess.code || '', name: sess.name || '', at: Date.now() });
+      lsDel(KEY_PIN);
+      sess = null; // 끝난 세션으로는 더 아무것도 보내지 않습니다('나가기' 포함)
+      var title = reason === 'expired' ? 'PIN 로그인 시간이 끝났어요.'
+        : reason === 'revoked' ? '운영본부가 PIN을 변경했습니다.' : 'PIN 로그인이 끝났어요.';
+      var text = reason === 'expired' ? '같은 부스로 PIN을 다시 입력해 주세요.'
+        : reason === 'revoked' ? '새 PIN을 받아 다시 시작해 주세요.' : 'PIN을 다시 입력해 주세요.';
+      showMsg(title, text, '<button type="button" class="btn btn--primary" data-act="pin-again">PIN 다시 입력</button>');
+    }
+
+    // 이 휴대폰에서 나가기: 이 세션 하나만 끊습니다(같은 부스의 다른 운영자 휴대폰은 그대로).
+    function pinLogout(btn) {
+      if (!sess) return;
+      if (btn) btn.disabled = true;
+      if (sess.demo) {
+        // 예시: 서버에 아무것도 보내지 않고 이 탭의 표시만 지웁니다(예시 부스의 값은 그대로 둡니다).
+        stopAll();
+        clearPending(true);
+        ssDel(KEY_PIN_DEMO);
+        ssDel(KEY_PIN_LAST_DEMO);
+        window.location.replace(window.location.pathname + window.location.search);
+        return;
+      }
+      var s = sess.session;
+      core.sessLogout(s).then(null, function () { /* 연결이 안 돼도 이 기기에서는 지웁니다(세션은 자정에 끝남) */ })
+        .then(function () {
+          stopAll();
+          clearPending(true);
+          lsDel(keyOk());
+          lsDel(keyOwn());
+          lsDel(KEY_PIN);
+          lsDel(KEY_PIN_LAST);
+          window.location.replace(window.location.pathname + window.location.search);
+        });
+    }
+
+    var pin = { zones: [], booths: [], zone: null, booth: null, busy: false, waitUntil: 0, waitTimer: null, pre: null };
+
+    function pinStep(n) {
+      [0, 1, 2, 3].forEach(function (i) { $('pin-s' + i).hidden = i !== n; });
+      // 협의용 예시의 첫 화면(구역 고르기)에만: '운영할 부스를 선택해 주세요' 와 '예시 부스 바로 열기'
+      $('pin-intro').hidden = !(isMock && n <= 1);
+      $('pin-direct').hidden = !(isMock && n === 1);
+      var lis = document.querySelectorAll('.pinsteps li');
+      for (var i = 0; i < lis.length; i++) {
+        var k = Number(lis[i].getAttribute('data-step'));
+        lis[i].className = k < n ? 'is-done' : (k === n ? 'is-on' : '');
+        if (k === n) lis[i].setAttribute('aria-current', 'step'); else lis[i].removeAttribute('aria-current');
+      }
+      if (n === 3) {
+        var input = $('pin-input');
+        input.value = '';
+        pinErr('');
+        pinButton();
+        try { input.focus(); } catch (e) { /* 무시 */ }
+      }
+      try { window.scrollTo(0, 0); } catch (e) { /* 무시 */ }
+    }
+    function zoneNameOf(key) {
+      for (var i = 0; i < pin.zones.length; i++) if (pin.zones[i].key === key) return pin.zones[i].label || key + '구역';
+      return key ? key + '구역' : '';
+    }
+    function boothsIn(key) {
+      return pin.booths.filter(function (b) { return b.zone_key === key; })
+        .sort(function (a, b) { return Number(a.no) - Number(b.no) || core.compareCode(a.name, b.name); });
+    }
+    function codeOf(b) { return b.code || (b.zone_key + '-' + pad2(b.no)); }
+
+    function openPin(pre) {
+      pin.pre = pre || null;
+      $('pin-help').textContent = HELP;
+      document.title = isMock ? '협의용 예시 · 부스 운영 시작' : '부스 번호와 PIN으로 시작';
+      show('pin');
+      pinStep(0);
+      $('pin-s0-title').textContent = '부스 목록을 불러오는 중…';
+      $('pin-s0-text').hidden = true;
+      $('pin-s0-acts').hidden = true;
+      // 관람객 화면과 같은 공개 목록입니다. 데이터베이스가 공개 구역 · 공개되고 배정된 부스만 돌려줍니다.
+      Promise.all([core.getZones(), core.getBoothRows()]).then(function (r) {
+        var booths = (r[1] || []).filter(function (b) {
+          return !!b.zone_key && b.no !== null && b.no !== undefined && b.no !== '';
+        });
+        pin.booths = booths;
+        pin.zones = (r[0] || []).filter(function (z) {
+          return booths.some(function (b) { return b.zone_key === z.key; });
+        });
+        if (!pin.zones.length) {
+          $('pin-s0-title').textContent = '지금 PIN으로 시작할 수 있는 부스가 없어요';
+          $('pin-s0-text').textContent = '부스가 공개되면 여기에 보여요. 운영본부에 알려 주세요.';
+          $('pin-s0-text').hidden = false;
+          $('pin-s0-acts').hidden = false;
+          return;
+        }
+        var p = pin.pre;
+        var hit = p && booths.filter(function (b) { return b.id === p.booth_id; })[0];
+        if (hit) { pin.zone = hit.zone_key; pickBooth(hit.id); return; }
+        renderZones();
+        pinStep(1);
+      }, function (err) {
+        $('pin-s0-title').textContent = '부스 목록을 불러오지 못했어요';
+        $('pin-s0-text').textContent = err && err.offline ? '인터넷 연결을 확인하고 다시 불러와 주세요.'
+          : '잠시 뒤 다시 불러와 주세요.';
+        $('pin-s0-text').hidden = false;
+        $('pin-s0-acts').hidden = false;
+      });
+    }
+    function renderZones() {
+      $('pin-zones').innerHTML = pin.zones.map(function (z) {
+        var n = boothsIn(z.key).length;
+        return '<button type="button" class="pick" data-zone="' + esc(z.key) + '">' +
+          '<span class="pick__k mono">' + esc(z.key) + '</span>' +
+          '<span class="pick__t">' + esc(z.label || z.key + '구역') + '</span>' +
+          '<span class="pick__s">부스 ' + n + '곳</span></button>';
+      }).join('');
+    }
+    function pickZone(key) {
+      pin.zone = key;
+      pin.booth = null;
+      $('pin-zone-name').textContent = zoneNameOf(key) + ' · ' + key + ' 구역';
+      $('pin-booths').innerHTML = boothsIn(key).map(function (b) {
+        return '<button type="button" class="pick pick--booth" data-booth="' + esc(b.id) + '">' +
+          '<span class="pick__k mono">' + esc(pad2(b.no)) + '</span>' +
+          '<span class="pick__t">' + esc(b.name || '') + '</span></button>';
+      }).join('');
+      pinStep(2);
+    }
+    function pickBooth(id) {
+      var b = pin.booths.filter(function (x) { return x.id === id; })[0];
+      if (!b) return;
+      // 'PIN 다시 입력' 으로 바로 3단계에 왔으면, 뒤로 갔을 때 그 구역의 부스 목록이 있도록 먼저 채웁니다.
+      // (pickZone 은 고른 부스를 비우므로 부스를 정하기 전에 부릅니다.)
+      if (!$('pin-booths').innerHTML || pin.zone !== b.zone_key) pickZone(b.zone_key);
+      pin.booth = b;
+      pin.zone = b.zone_key;
+      $('pin-code').textContent = codeOf(b);
+      $('pin-code').className = 'who__code' + (isAscii(codeOf(b)) ? ' mono' : '');
+      $('pin-name').textContent = b.name || '';
+      // 협의용 예시에서만 그 부스의 예시 PIN 을 보여 줍니다(mock-data.js 의 규칙 — 실제 PIN 과 관계없음).
+      $('pin-demo').hidden = !isMock;
+      $('pin-demo-v').textContent = isMock ? core.demoPinOf(codeOf(b)) : '';
+      pinStep(3);
+    }
+    function pinBack() {
+      if (!$('pin-s3').hidden) { if (pin.zone) pickZone(pin.zone); else pinStep(1); return; }
+      if (!$('pin-s2').hidden) { renderZones(); pinStep(1); return; }
+      showStart();
+    }
+    function pinErr(text) {
+      $('pin-err').textContent = text || '';
+      $('pin-err').hidden = !text;
+      $('pin-input').setAttribute('aria-invalid', text ? 'true' : 'false');
+    }
+    function pinButton() {
+      var btn = $('pin-go');
+      var left = Math.ceil((pin.waitUntil - Date.now()) / 1000);
+      var digits = $('pin-input').value.length === PIN_LEN;
+      if (pin.busy) { btn.disabled = true; btn.textContent = '확인하는 중…'; return; }
+      if (left > 0) { btn.disabled = true; btn.textContent = left + '초 뒤에 다시 할 수 있어요'; return; }
+      btn.disabled = !digits;
+      btn.textContent = '운영 시작';
+    }
+    function pinWait(sec) {
+      pin.waitUntil = Date.now() + Math.max(1, sec) * 1000;
+      clearInterval(pin.waitTimer);
+      pin.waitTimer = setInterval(function () {
+        pinButton();
+        if (Date.now() >= pin.waitUntil) clearInterval(pin.waitTimer);
+      }, 500);
+      pinButton();
+    }
+    function submitPin(e) {
+      if (e) e.preventDefault();
+      var input = $('pin-input');
+      var code = input.value.replace(/\D/g, '');
+      if (pin.busy || Date.now() < pin.waitUntil || code.length !== PIN_LEN || !pin.booth) { pinButton(); return; }
+      pin.busy = true;
+      pinErr('');
+      pinButton();
+      var b = pin.booth;
+      if (isMock) {
+        // 협의용 예시: 이 브라우저 안에서만 견줍니다. 서버 · 실제 PIN 표 · 세션을 쓰지 않습니다.
+        var hit = core.demoPinCheck(codeOf(b), code);
+        input.value = '';
+        code = '';
+        pin.busy = false;
+        if (hit) { openDemoSession(b, 'pin'); return; }
+        pinErr('부스 번호나 PIN이 맞지 않아요.');
+        pinButton();
+        try { input.focus(); } catch (x) { /* 무시 */ }
+        return;
+      }
+      var req = core.pinLogin(b.id, code, deviceId());
+      // 원문은 보내자마자 화면에서 지웁니다. 이 파일은 PIN 을 저장 · 기록하지 않습니다.
+      input.value = '';
+      code = '';
+      req.then(function (res) {
+        pin.busy = false;
+        if (res.ok) {
+          lsSet(KEY_PIN, {
+            session: res.session, booth_id: res.booth.id, zone_key: res.booth.zone_key || b.zone_key,
+            code: res.booth.code, name: res.booth.name, org: res.booth.org, zone_name: res.booth.zone_name,
+            expires_at: res.expiresAt, at: Date.now()
+          });
+          res = null;
+          lsDel(KEY_PIN_LAST);
+          // 새로 열어 보통의 시작 길(PIN 세션 이어서 열기)로 들어갑니다. 주소에는 아무것도 붙이지 않습니다.
+          window.location.replace(window.location.pathname + window.location.search);
+          return;
+        }
+        if (res.reason === 'off') {
+          pinErr('지금은 PIN으로 시작할 수 없어요. QR 카드가 있으면 QR을 찍거나 운영본부에 알려 주세요.');
+        } else if (res.reason === 'limited') {
+          pinErr('여러 번 시도해서 잠시 기다려야 해요.');
+          pinWait(res.retryAfter || 30);
+        } else {
+          pinErr('부스 번호나 PIN이 맞지 않아요.');
+          if (res.retryAfter > 0) pinWait(res.retryAfter);
+        }
+        pinButton();
+        try { input.focus(); } catch (x) { /* 무시 */ }
+      }, function (err) {
+        pin.busy = false;
+        pinErr(err && err.offline ? '연결이 불안정해요. 잠시 뒤 다시 눌러 주세요.'
+          : (err && (err.code === 'NOT_INSTALLED' || err.code === 'PGRST202'))
+            ? '지금은 PIN으로 시작할 수 없어요. QR 카드가 있으면 QR을 찍거나 운영본부에 알려 주세요.'
+            : '확인하지 못했어요. 잠시 뒤 다시 눌러 주세요.');
+        pinButton();
+      });
     }
 
     function stopAll() {
@@ -519,16 +1031,23 @@
     // 빈 결과일 때만 열쇠가 바뀐 것으로 봅니다. 읽기도 막혔거나 부스가 읽히면 권한 문제 화면입니다.
     function checkKeyThenNoAccess() {
       stopAll();
-      core.ctrlGet(token).then(function (b) {
+      api.get().then(function (b) {
         if (!b) invalidate(MSG_UNKNOWN_QR);
         else showNoAccess();
-      }, function () { showNoAccess(); });
+      }, function (e2) {
+        // PIN 세션이 끝난 것이면 그 안내로(세션 끝 화면), 아니면 실행 권한 문제 화면입니다.
+        if (!(e2 && e2.code === 'SESSION_END' && handleFatal(e2))) showNoAccess();
+      });
     }
 
     // 다시 해 봐도 소용없는 오류는 화면을 바꿉니다. 처리했으면 true.
     // fromWrite: 저장 · 확인(booth_ctrl_set · touch)에서 난 오류인가
     function handleFatal(err, fromWrite) {
       if (!err) return false;
+      // PIN 세션이 끝남(만료 · 운영본부가 PIN 을 바꿈 · 꺼짐 · 부스 비공개). QR 의 '새 QR 받으세요' 와 따로 안내합니다.
+      if (err.code === 'SESSION_END') { endSession(err.reason); return true; }
+      // PIN 함수가 없으면(되돌린 뒤) PIN 화면은 쓸 수 없습니다. QR 은 이 길로 오지 않습니다.
+      if (sess && (err.code === 'NOT_INSTALLED' || err.code === 'PGRST202')) { endSession('off'); return true; }
       if (isDeadKey(err)) { invalidate(core.ctrlErrorText(err)); return true; }
       if (isNoAccess(err)) {
         if (fromWrite && err.code === '42501') checkKeyThenNoAccess();
@@ -560,7 +1079,17 @@
     /* ── 이 기기에 남기는 것 ───────────────────────────────────────── */
     function remember(b) {
       if (!b || !confirmed) return;
-      lsSet(KEY_LAST, { token: token, code: b.code, name: b.name, org: b.org, zone_name: b.zone_name, at: Date.now() });
+      if (sess) {
+        // PIN 화면은 QR 의 '최근 연 부스'(열쇠)를 덮지 않습니다. 세션 기록의 머리글만 새로 합니다(재배치 등).
+        sess.code = b.code; sess.name = b.name; sess.org = b.org; sess.zone_name = b.zone_name;
+        sess.zone_key = b.zone_key || sess.zone_key;
+        if (b.expires_at) sess.expires_at = b.expires_at;
+        // 예시 표시는 이 탭의 예시 칸에만 둡니다(실제 PIN 세션 칸과 섞지 않음).
+        if (sess.demo) ssSet(KEY_PIN_DEMO, sess);
+        else lsSet(KEY_PIN, sess);
+      } else {
+        lsSet(KEY_LAST, { token: token, code: b.code, name: b.name, org: b.org, zone_name: b.zone_name, at: Date.now() });
+      }
       document.title = (b.code ? b.code + ' ' : '') + '대기 시간 입력';
     }
 
@@ -593,7 +1122,7 @@
       pending = null;
       offline = false;
       persisted = false;
-      if (!token) return;
+      if (!credId) return;
       if (force || (p && sameTap(readStored(), p))) lsDel(keyPending());
     }
     // 같은 부스를 연 다른 탭과 대기 칸을 맞춥니다.
@@ -643,7 +1172,7 @@
     //   (메모리의 unknowns = [] 와 같이). 남겨 두면 1분 남짓 안에 다른 기기가 같은 값을 다시 넣었을 때
     //   이 기기의 것으로 잘못 봐 묻지 않고 덮습니다.
     function noteOwn(c, w, at, exact, settleBefore) {
-      if (!token || !c || typeof at !== 'number' || isNaN(at)) return;
+      if (!credId || !c || typeof at !== 'number' || isNaN(at)) return;
       var r = readOwnRec();
       var list = ownStored(r);
       if (typeof settleBefore === 'number') {
@@ -655,7 +1184,7 @@
     }
     // 새로 받은 서버 값을 적어 둡니다. 다른 탭이 더 새 값을 이미 봤으면 그대로 둡니다.
     function noteSeen() {
-      if (!confirmed || !token || !booth) return;
+      if (!confirmed || !credId || !booth) return;
       var live = liveToday(booth);
       var at = live ? toMs(booth.congestion_updated_at) : 0;
       if (isNaN(at)) return;
@@ -798,7 +1327,7 @@
       if (dead || loading) return null;
       loading = true;
       var g = gen;
-      return core.ctrlGet(token).then(function (b) {
+      return api.get().then(function (b) {
         loading = false;
         if (dead) return;
         // 서버가 '모르는 열쇠' 라고 답한 때만 이 화면을 냅니다. 연결 문제는 여기로 오지 않습니다.
@@ -850,7 +1379,7 @@
       if (!loaded) return load();
       if (!settings) loadSettings();
       var g = gen;
-      return core.ctrlGet(token).then(function (b) {
+      return api.get().then(function (b) {
         if (dead) return;
         if (!b) { invalidate(MSG_UNKNOWN_QR); return; }
         connBad = false;
@@ -978,7 +1507,7 @@
       inflight = p;
       takeLease(p);
       render();
-      core.ctrlSet(token, p.mode, p.wait).then(function (b) {
+      api.set(p.mode, p.wait).then(function (b) {
         inflight = null;
         dropLease();
         if (dead) return;
@@ -1038,7 +1567,7 @@
       if (dead || !liveToday(booth)) { render(); return; }
       touching++;
       render();
-      core.ctrlTouch(token).then(function (b) {
+      api.touch().then(function (b) {
         touching--;
         if (dead) return;
         if (!b) { invalidate(MSG_UNKNOWN_QR); return; }
@@ -1046,7 +1575,7 @@
         markLoaded(b);
         applyOwn(b);
         seenOwn(b);
-        toastSaved(b);
+        toastSaved(b, true);
         buzz();
         render(); // applyOwn 이 더 늦은 값을 이미 알아 그리지 않았어도 '확인 중' 글자를 되돌립니다
       }, function (err) {
@@ -1107,28 +1636,41 @@
       var info = eventInfo();
       return info.phase === 'open' && !beforeOpen(b, info);
     }
-    function savedToast(b) {
-      var head = '저장됨 ' + core.formatClock((b && b.congestion_updated_at) || new Date());
+    // 알림 첫 줄의 값 이름. 모두 받침으로 끝나 뒤에 '으로' 를 붙입니다.
+    function savedWord(b) {
+      var c = b && b.congestion;
+      if (c === '중단') return '잠시 중단';
+      if (c === '마감') return '오늘 마감';
+      var w = Number(b && b.wait_minutes) || 0;
+      return w === 0 ? '바로 입장' : w + '분';
+    }
+    // 저장 알림 두 줄: '✓ 15분으로 반영했습니다.' + 관람객 화면에 언제 보이는지.
+    // again: '맞아요 · 지금 확인' 으로 같은 값을 다시 확인한 것
+    function savedToast(b, again) {
+      var head = '✓ ' + savedWord(b) + (again ? '으로 다시 확인했습니다.' : '으로 반영했습니다.');
       // 시간표를 못 받았으면(현장 와이파이에서 첫 읽기가 실패하는 등) 관람객 화면에 보이는지 알 수 없습니다.
-      // '반영됐어요' 라고 하면 행사 몇 주 전 리허설 값도 보이는 것처럼 알리게 되어, 저장된 것만 알리고
+      // '곧 표시됩니다' 라고 하면 행사 몇 주 전 리허설 값도 보이는 것처럼 알리게 되어, 저장 시각만 알리고
       // 시간표를 다시 받아 봅니다.
-      if (!settings) { loadSettings(); return head; }
+      if (!settings) {
+        loadSettings();
+        return head + '\n저장 ' + core.formatClock((b && b.congestion_updated_at) || new Date());
+      }
       var info = eventInfo();
       if (info.phase === 'open') {
         // 문 열기 직전에 보내 답을 잃은 누름이 문을 연 뒤에 '이미 들어감' 으로 확인되는 경우 등.
         // 바로 아래 안내('문 열기 전에 넣은 값이라 …')와 어긋나지 않게 같은 말로 알립니다.
-        if (beforeOpen(b, info)) return head + ' · 문 열기 전 값이라 관람객 화면에는 아직 안 보여요';
-        return head + ' · 관람객 화면에 반영됐어요';
+        if (beforeOpen(b, info)) return head + '\n문 열기 전 값이라 관람객 화면에는 아직 안 보여요.';
+        return head + '\n관람객 화면에도 곧 표시됩니다.';
       }
-      if (info.phase === 'before') return head + ' · 연습 값이라 관람객 화면에는 안 보여요';
+      if (info.phase === 'before') return head + '\n연습 값이라 관람객 화면에는 안 보여요.';
       if (info.phase === 'preopen') {
-        return head + ' · 문을 연 뒤' + (info.openTime ? '(' + info.openTime + ')' : '') + ' 한 번 더 눌러 주세요';
+        return head + '\n문을 연 뒤' + (info.openTime ? '(' + info.openTime + ')' : '') + ' 한 번 더 눌러 주세요.';
       }
-      return head + ' · 운영 시간이 지나 관람객 화면에는 안 보여요';
+      return head + '\n운영 시간이 지나 관람객 화면에는 안 보여요.';
     }
     // '안 보여요' 알림은 읽을 틈을 더 줍니다.
     function savedToastMs(b) { return savedShows(b) === false ? 5000 : 3000; }
-    function toastSaved(b) { toast(savedToast(b), '', savedToastMs(b)); }
+    function toastSaved(b, again) { toast(savedToast(b, again), '', savedToastMs(b)); }
 
     function phaseNote(info) {
       if (!info) return '';
@@ -1151,7 +1693,15 @@
       $('h-org').textContent = h ? [h.org, h.zone_name].filter(Boolean).join(' · ') : '';
       $('h-org').hidden = !$('h-org').textContent;
 
-      if (booth && (booth.token_tail || booth.issued_at)) {
+      if (sess) {
+        // PIN 으로 연 화면: 열쇠 끝자리 대신 언제까지 쓸 수 있는지와 나가기 단추를 둡니다.
+        $('foot-key').hidden = true;
+        $('pin-foot').hidden = false;
+        $('pin-foot-t').textContent = sess.demo
+          ? (sess.via === 'direct' ? '협의용 예시 · 바로 연 화면' : '협의용 예시 · PIN으로 연 화면')
+          : 'PIN으로 연 화면';
+        $('pin-foot-until').textContent = untilLabel((booth && booth.expires_at) || sess.expires_at);
+      } else if (booth && (booth.token_tail || booth.issued_at)) {
         var key = $('foot-key');
         key.innerHTML = '열쇠 끝자리 <span class="mono">' + esc(booth.token_tail || '') + '</span>' +
           (booth.issued_at ? ' · 발급 <span class="mono">' + esc(fmtIssued(booth.issued_at)) + '</span>' : '');
@@ -1192,7 +1742,7 @@
       // 지금 상태 판
       var now = $('now');
       now.className = 'now now--' + key + (s && s.pending ? ' is-pending' : '');
-      $('now-cap').textContent = seen ? '관람객 화면에 보이는 지금 상태' : '지금 입력된 상태';
+      $('now-cap').textContent = seen ? '현재 대기 · 관람객 화면에 보이는 상태' : '현재 대기 · 지금 입력된 상태';
       var stateText;
       if (c === '중단') stateText = '잠시 중단';
       else if (c === '마감') stateText = '오늘 마감';
@@ -1213,7 +1763,7 @@
         if ((inflight || waitingOther()) && !offline) when = '저장하는 중…';
         else { when = core.formatClock(pending.tappedAt) + '에 누름 · 아직 저장 안 됨'; warn = true; }
       } else if (s) {
-        when = core.formatClock(s.at) + '에 입력 · ' + core.formatAgo(s.at);
+        when = '마지막 입력 · ' + core.formatAgo(s.at) + ' (' + core.formatClock(s.at) + ')';
         if (seen && core.isStale(booth)) { when += ' · 관람객 화면에 흐리게 보여요'; warn = true; }
       } else if (loaded) {
         when = '아래에서 지금 대기 시간을 눌러 주세요';
@@ -1303,6 +1853,30 @@
       if (!t) return;
       var act = t.getAttribute('data-act');
 
+      // PIN 으로 시작: 구역 · 부스 고르기와 단계 이동
+      if (t.hasAttribute('data-zone')) { pickZone(t.getAttribute('data-zone')); return; }
+      if (t.hasAttribute('data-booth')) { pickBooth(t.getAttribute('data-booth')); return; }
+      // 주소 '#' 로 가는 링크 단추(최근 운영한 부스 · PIN)는 주소를 바꾸지 않습니다(바꾸면 hashchange 로 새로 엶).
+      if (act && t.tagName === 'A') e.preventDefault();
+      if (act === 'pin-start') { openPin(readLastPin()); return; }
+      if (act === 'pin-again') { openPin(readLastPin()); return; }
+      if (act === 'qr-guide') {
+        var g = $('qr-guide');
+        g.hidden = !g.hidden;
+        t.setAttribute('aria-expanded', g.hidden ? 'false' : 'true');
+        return;
+      }
+      if (act === 'demo-direct') {
+        // 예시 부스 바로 열기: PIN 을 넣지 않고 첫 예시 부스를 엽니다(회의에서 운영 화면만 빨리 볼 때).
+        var first = (window.MOCK_BOOTHS || []).filter(function (m) { return !!m.zone_key; })[0];
+        if (isMock && first) openDemoSession({ id: first.id, zone_key: first.zone_key, no: first.no, code: first.code,
+          name: first.name, org: first.org, zone_label: first.zone_label }, 'direct');
+        return;
+      }
+      if (act === 'pin-reload') { openPin(pin.pre); return; }
+      if (act === 'pin-back') { pinBack(); return; }
+      if (act === 'pin-logout') { pinLogout(t); return; }
+
       if (t.classList.contains('w')) { tap('open', Number(t.getAttribute('data-wait'))); return; }
       if (t.id === 'btn-pause') { tap('pause', 0); return; }
       if (t.id === 'btn-closed') {
@@ -1381,10 +1955,30 @@
 
       // 다른 카드의 QR 을 이 탭에서 이어 열면(주소의 # 만 바뀜) 처음부터 다시 엽니다.
       window.addEventListener('hashchange', function () { window.location.reload(); });
+
+      // PIN 화면 글. 실제는 6자리(운영본부가 발급), 협의용 예시는 4자리(그 부스의 예시 PIN 을 화면에 보여 줌).
+      $('pin-input').setAttribute('maxlength', String(PIN_LEN));
+      if (isMock) {
+        $('pin-label').textContent = '협의용 예시 · 부스 운영 시작';
+        $('pin-s3-title').textContent = '예시 PIN 4자리';
+        $('pin-input-label').textContent = '예시 PIN 4자리';
+        $('pin-note').textContent = '협의용 예시예요. 실제 운영자 PIN은 운영본부가 발급하는 6자리 숫자이고, 발급할 때 한 번만 보여 드려요.';
+      }
+
+      // PIN 칸: 숫자만, 자릿수가 차면 '운영 시작' 을 켭니다. 보내기는 Enter · 단추 모두 submitPin.
+      $('pin-input').addEventListener('input', function () {
+        var v = this.value.replace(/\D/g, '').slice(0, PIN_LEN);
+        if (v !== this.value) this.value = v;
+        if (!$('pin-err').hidden && v.length) pinErr('');
+        pinButton();
+      });
+      $('pin-s3').addEventListener('submit', submitPin);
     }
 
     function tick() {
       if (dead) return;
+      // PIN 세션은 서버 시각으로 끝나지만, 화면도 끝난 시각이 지나면 바로 알립니다(다음 읽기를 기다리지 않음).
+      if (sess && pinExpired(booth && booth.expires_at ? booth : sess)) { endSession('expired'); return; }
       if (!settings && Date.now() - settingsTriedAt >= 30000) loadSettings();
       if (!loaded) load();
       // 못 보낸 누름은 바로 다시 보내지 않고 먼저 읽습니다(refresh 가 서버 값과 견줘 본 뒤 보냅니다).
@@ -1398,14 +1992,29 @@
       wire();
       token = readToken();
 
-      // 모양이 틀린 열쇠는 서버에 묻지 않습니다.
-      if (!token || !core.validToken(token)) { showNoToken(); return; }
-      if (!isMock && !core.hasConfig) { showNoConfig(); return; }
-
-      confirmed = !!lsGet(keyOk());
+      if (!token) {
+        // 주소에 QR 열쇠가 없으면: 이 기기에 PIN 세션이 있으면 그 화면을 이어서 엽니다(PIN 은 다시 묻지 않음).
+        // 주소에 열쇠가 있으면 늘 QR 이 먼저입니다(아래).
+        // 협의용 예시는 이 탭에 남긴 예시 표시(readPin 이 예시 칸만 읽음)로 엽니다 — 서버 세션이 아닙니다.
+        var s = readPin();
+        if (!s) { showNoToken(); return; }
+        if (!isMock && !core.hasConfig) { showNoConfig(); return; }
+        sess = s;
+        credId = 'pin-' + s.booth_id;
+        if (pinExpired(s)) { endSession('expired'); return; }
+        // 방금 직접 고른 부스라 '이 부스를 운영하시나요?' 는 다시 묻지 않습니다.
+        confirmed = true;
+        cached = { code: s.code, name: s.name, org: s.org, zone_name: s.zone_name };
+      } else {
+        // 모양이 틀린 열쇠는 서버에 묻지 않습니다.
+        if (!core.validToken(token)) { showNoToken(); return; }
+        if (!isMock && !core.hasConfig) { showNoConfig(); return; }
+        credId = token.slice(-6);
+        confirmed = !!lsGet(keyOk());
+        var last = lsGet(KEY_LAST);
+        if (last && last.token === token) cached = { code: last.code, name: last.name, org: last.org, zone_name: last.zone_name };
+      }
       pending = loadPending();
-      var last = lsGet(KEY_LAST);
-      if (last && last.token === token) cached = { code: last.code, name: last.name, org: last.org, zone_name: last.zone_name };
 
       // 이미 확인한 기기는 기억해 둔 머리글로 바로 엽니다. 처음 여는 기기는 부스를 받아 확인부터 합니다.
       if (confirmed) showMain();
