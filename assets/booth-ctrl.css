@@ -6,9 +6,10 @@
    (Pretendard)을 써서 회의에서 나란히 보여 줘도 한 서비스로 보이게 합니다.
 
    정보의 무게
-     현재 대기 시간(60px 안팎)  >  예시 PIN(36px)  >  부스 이름(제목)  >  부스 번호(작은 머리글)
-   숫자도 Pretendard 로 씁니다. 고정폭 · 전광판 글꼴은 쓰지 않고, 자릿수 폭만
-   맞춥니다(.num = tabular-nums).
+     현재 대기 시간(60px 안팎 · 800)  >  예시 PIN(32px · 700)  >  부스 이름(제목)  >  부스 번호(작은 머리글)
+   숫자도 Pretendard 로 씁니다. 고정폭 · 전광판 글꼴은 쓰지 않습니다. 값이 바뀌어도 옆 글이
+   밀리면 안 되는 숫자만 자릿수 폭을 맞추고(.num = tabular-nums), PIN 은 비례 숫자로 둡니다
+   (아래 'PIN 숫자').
 
    색의 역할
      보라    고른 것 · 주 단추 · 작은 강조에만
@@ -299,51 +300,120 @@ button {
   letter-spacing: -0.035em;
 }
 
-/* 협의용 예시 PIN — 참고 정보. 흰 카드 · 중립 테두리, 숫자는 남색. */
+/* ── PIN 숫자 ──────────────────────────────────────────────────
+   예시 PIN · 입력 칸 · (관리자 화면의) 발급 PIN 은 같은 숫자 모양을 씁니다.
+     Pretendard 700 · 남색 · 비례 숫자(font-variant-numeric: normal)
+   자릿수 폭을 똑같이 맞추는 tabular-nums 는 '1' 을 '0' 만큼 넓혀 0001 · 0011 이 띄엄띄엄
+   고정폭 글꼴처럼 보여서, 다시 그릴 일이 없는 PIN 에는 쓰지 않습니다(현재 대기 숫자처럼 값이
+   바뀌며 옆 글이 밀리면 안 되는 곳만 .num). 자간은 아주 조금(0.03em)만 엽니다. */
+
+/* 협의용 예시 PIN — 참고 정보. 흰 카드 · 1px 중립 테두리 · 넉넉한 여백. 보라는 쓰지 않습니다. */
 .demopin {
   margin-top: 16px;
-  padding: 14px 16px;
+  padding: 14px 16px 16px;
   border: 1px solid var(--line);
   border-radius: var(--r-card);
   background: var(--panel);
 }
-.demopin__badge {
+.demopin__head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.demopin__label { font-size: 13px; font-weight: 700; line-height: 1.4; color: var(--muted); }
+.demopin__v {
+  margin-top: 2px;
+  font-size: 32px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: 0.03em;
+  font-variant-numeric: normal;
+  color: var(--ink);
+}
+.demopin__t { margin-top: 6px; font-size: 13.5px; line-height: 1.5; color: var(--muted); }
+
+/* 복사 — 작고 단정한 보조 단추. 눈에 보이는 높이는 34px, 누르는 자리는 위아래로 넓혀 44px. */
+.copybtn {
+  position: relative;
+  flex: none;
   display: inline-flex;
   align-items: center;
-  padding: 3px 8px;
-  border-radius: 999px;
-  background: var(--accent-t);
-  color: var(--accent-d);
-  font-size: 12px;
+  gap: 5px;
+  min-height: 34px;
+  padding: 0 11px;
+  border: 1px solid var(--line-2);
+  border-radius: 10px;
+  background: var(--panel);
+  color: var(--ink-2);
+  font-size: 13.5px;
   font-weight: 700;
-  line-height: 1.4;
+  line-height: 1;
 }
-.demopin__row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 6px; }
-.demopin__v { font-size: 36px; font-weight: 800; line-height: 1.1; letter-spacing: 0.02em; color: var(--ink); }
-.demopin__copy { flex: none; }
-.demopin__t { margin-top: 4px; font-size: 14px; line-height: 1.5; color: var(--muted); }
+.copybtn::after { content: ''; position: absolute; inset: -5px -4px; }
+.copybtn svg { flex: none; color: var(--muted); }
+.copybtn:hover { border-color: var(--muted); }
+.copybtn:active { background: var(--sink); }
 
-/* PIN 입력 — 위의 예시 PIN 과 모양을 달리합니다(보여 주는 값 ≠ 넣는 칸) */
+/* PIN 입력 — 위의 예시 PIN(숫자 한 줄)과 모양을 달리합니다(보여 주는 값 ≠ 넣는 칸).
+   자릿수만큼 칸(4 · 6)을 그리고, 실제 글칸은 그 위에 투명하게 겹쳐 둡니다.
+   6자리는 3 · 3 으로 조금 떼어 관리자 화면의 발급 PIN('483 921')과 같은 묶음으로 읽히게 합니다.
+   과한 인증번호 화면처럼 보이지 않게 칸은 흰 바탕 · 1px 테두리만 두고, 다음에 채울 칸만 보라로 알립니다. */
 .pinfield { margin-top: 20px; }
 .pinlabel { display: block; font-size: 16px; font-weight: 800; letter-spacing: -0.02em; }
 .pinhint { margin-top: 2px; font-size: 13.5px; line-height: 1.5; color: var(--muted); }
-.pinbox {
-  display: block;
-  width: 100%;
-  min-height: 56px;
-  margin-top: 8px;
-  padding: 0 14px;
-  border: 1.5px solid var(--line-2);
+.pinwrap {
+  position: relative;
+  width: fit-content;
+  max-width: 100%;
+  margin-top: 10px;
+}
+.pinslots { display: grid; grid-template-columns: repeat(4, minmax(0, 54px)); gap: 8px; }
+/* 6자리: 셋째와 넷째 칸 사이에 좁은 빈 줄(2px + 간격)을 끼워 3 · 3 으로 묶습니다. 칸 폭은 모두 같습니다. */
+.pinslots--6 { grid-template-columns: repeat(3, minmax(0, 50px)) 2px repeat(3, minmax(0, 50px)); }
+.pinslots--6 .pinslot:nth-child(4) { grid-column: 5; }
+.pinslot {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 56px;
+  border: 1px solid var(--line-2);
   border-radius: var(--r-btn);
   background: var(--panel);
   color: var(--ink);
-  font-size: 24px;
+  font-size: 26px;
   font-weight: 700;
-  letter-spacing: 0.12em;
-  text-align: center;
+  line-height: 1;
+  font-variant-numeric: normal;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
 }
-.pinbox:focus { outline: 3px solid var(--accent-t); outline-offset: 0; border-color: var(--accent); }
-.pinbox[aria-invalid="true"] { border-color: var(--busy); }
+.pinslot.is-next { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-t); }
+/* 다음 칸의 깜빡이는 세로선(움직임 줄이기 설정이면 깜빡이지 않음) */
+.pinslot.is-next::after {
+  content: '';
+  width: 2px;
+  height: 24px;
+  border-radius: 1px;
+  background: var(--accent);
+  animation: pincaret 1s steps(1) infinite;
+}
+@keyframes pincaret { 50% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .pinslot.is-next::after { animation: none; } }
+.pinwrap.is-err .pinslot { border-color: var(--busy); }
+.pinwrap.is-err .pinslot.is-next { box-shadow: 0 0 0 3px var(--busy-t); }
+.pinwrap.is-busy .pinslot { color: var(--muted); }
+/* 실제 글칸: 칸 그림 위에 겹쳐 두고 보이지 않게(누르면 숫자 자판 · 붙여넣기는 그대로) */
+.pinbox {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: transparent;
+  caret-color: transparent;
+  font-size: 16px;   /* 16px 보다 작으면 iOS 가 화면을 확대합니다 */
+  opacity: 0;
+  cursor: text;
+}
 .pinerr { margin-top: 8px; font-size: 14.5px; font-weight: 700; line-height: 1.5; color: var(--busy); }
 .pinfield__go { margin-top: 12px; }
 .pinnote { margin-top: 12px; font-size: 13px; line-height: 1.55; color: var(--muted); }

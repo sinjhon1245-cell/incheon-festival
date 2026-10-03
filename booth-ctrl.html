@@ -153,20 +153,28 @@
         </div>
         <!-- 협의용 예시에서만: 그 부스의 예시 PIN 을 보여 줍니다(참고 정보). 실제 PIN 은 어디에도 보여 주지 않습니다. -->
         <div class="demopin" id="pin-demo" hidden>
-          <p class="demopin__badge">협의용 예시 PIN</p>
-          <div class="demopin__row">
-            <p class="demopin__v num" id="pin-demo-v"></p>
-            <button type="button" class="btn btn--outline btn--sm demopin__copy" data-act="copy-pin">복사</button>
+          <div class="demopin__head">
+            <p class="demopin__label">협의용 예시 PIN</p>
+            <button type="button" class="copybtn" data-act="copy-pin" aria-label="예시 PIN 복사">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="9" y="9" width="11" height="11" rx="2" /><path d="M15 9V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h3" /></svg>
+              <span>복사</span>
+            </button>
           </div>
+          <p class="demopin__v" id="pin-demo-v"></p>
           <p class="demopin__t">이 PIN을 입력해 운영 화면을 확인해 보세요.</p>
         </div>
-        <!-- 입력 칸: 위의 예시 PIN 과 모양을 달리해 '보여 주는 값' 과 '넣는 칸' 이 헷갈리지 않게 합니다. -->
+        <!-- 입력 칸: 위의 예시 PIN(카드 안 숫자 한 줄)과 모양을 달리해 '보여 주는 값' 과 '넣는 칸' 이
+             헷갈리지 않게 합니다. 자릿수만큼 칸을 그려 두고(pinslots, 화면용), 실제로 받는 것은 그 위에
+             투명하게 겹친 글칸 하나입니다 — 붙여넣기 · 숫자 자판 · 화면 읽기 프로그램은 보통 글칸처럼 움직입니다. -->
         <div class="pinfield">
           <label class="pinlabel" for="pin-input" id="pin-input-label">운영자 PIN 6자리</label>
           <p class="pinhint" id="pin-input-hint">운영본부에서 받은 숫자 6자리를 입력해 주세요.</p>
-          <input class="pinbox num" id="pin-input" type="text" inputmode="numeric" pattern="[0-9]*"
-                 maxlength="6" autocomplete="one-time-code" enterkeyhint="go"
-                 autocapitalize="off" autocorrect="off" spellcheck="false" aria-describedby="pin-input-hint pin-err" />
+          <div class="pinwrap" id="pin-wrap">
+            <div class="pinslots" id="pin-slots" aria-hidden="true"></div>
+            <input class="pinbox" id="pin-input" type="text" inputmode="numeric" pattern="[0-9]*"
+                   maxlength="6" autocomplete="one-time-code" enterkeyhint="go"
+                   autocapitalize="off" autocorrect="off" spellcheck="false" aria-describedby="pin-input-hint pin-err" />
+          </div>
           <p class="pinerr" id="pin-err" role="alert" hidden></p>
           <button type="submit" class="btn btn--primary pinfield__go" id="pin-go" disabled>운영 시작</button>
         </div>
@@ -869,6 +877,13 @@
         }
         var p = pin.pre;
         var hit = p && booths.filter(function (b) { return b.id === p.booth_id; })[0];
+        // 운영 준비용 예시 부스('[예시]' 기관)가 공개돼 있으면 고르기 화면에 작게 알립니다.
+        // 협의용 예시(?demo)는 이 자리에 따로 안내가 있어 건드리지 않습니다.
+        if (!isMock) {
+          var ex = booths.some(core.isSample);
+          $('pin-s1-text').textContent = ex ? '지금은 운영 준비용 예시 부스가 공개돼 있어요. 실제 부스 정보는 추후 바뀝니다.' : '';
+          $('pin-s1-text').hidden = !ex;
+        }
         if (hit) { pin.zone = hit.zone_key; pickBooth(hit.id); return; }
         renderZones();
         pinStep(1);
@@ -925,11 +940,33 @@
       $('pin-err').textContent = text || '';
       $('pin-err').hidden = !text;
       $('pin-input').setAttribute('aria-invalid', text ? 'true' : 'false');
+      paintSlots();
+    }
+    // PIN 칸 그림. 글칸의 값을 자릿수만큼의 칸에 한 글자씩 옮겨 그립니다(화면용 · aria-hidden).
+    // 다음에 채울 칸은 글칸에 커서가 있을 때만 보라 테두리로 알려 줍니다. 값이 그대로면 다시 그리지 않습니다.
+    var slotKey = '';
+    function paintSlots() {
+      var input = $('pin-input');
+      var v = input.value, focused = document.activeElement === input;
+      var err = input.getAttribute('aria-invalid') === 'true';
+      var key = [PIN_LEN, v, focused, err, pin.busy].join('|');
+      if (key === slotKey) return;
+      slotKey = key;
+      var html = '';
+      for (var i = 0; i < PIN_LEN; i++) {
+        var cls = 'pinslot' + (i < v.length ? ' is-filled' : '') + (focused && i === v.length ? ' is-next' : '');
+        html += '<span class="' + cls + '">' + (i < v.length ? esc(v.charAt(i)) : '') + '</span>';
+      }
+      var box = $('pin-slots');
+      box.className = 'pinslots pinslots--' + PIN_LEN;
+      box.innerHTML = html;
+      $('pin-wrap').className = 'pinwrap' + (focused ? ' is-focus' : '') + (err ? ' is-err' : '') + (pin.busy ? ' is-busy' : '');
     }
     function pinButton() {
       var btn = $('pin-go');
       var left = Math.ceil((pin.waitUntil - Date.now()) / 1000);
       var digits = $('pin-input').value.length === PIN_LEN;
+      paintSlots();
       if (pin.busy) { btn.disabled = true; btn.textContent = '확인하는 중…'; return; }
       if (left > 0) { btn.disabled = true; btn.textContent = left + '초 뒤에 다시 할 수 있어요'; return; }
       btn.disabled = !digits;
@@ -966,9 +1003,10 @@
         return;
       }
       var req = core.pinLogin(b.id, code, deviceId());
-      // 원문은 보내자마자 화면에서 지웁니다. 이 파일은 PIN 을 저장 · 기록하지 않습니다.
+      // 원문은 보내자마자 화면에서 지웁니다(칸 그림도 함께). 이 파일은 PIN 을 저장 · 기록하지 않습니다.
       input.value = '';
       code = '';
+      paintSlots();
       req.then(function (res) {
         pin.busy = false;
         if (res.ok) {
@@ -1652,7 +1690,7 @@
       return toMs(b.congestion_updated_at) < info.todayOpenAt.getTime();
     }
     function beforeOpenValue(info) { return beforeOpen(booth, info); }
-    // 행사 전이라도 샘플 부스('[샘플]' 기관)의 값은 관람객 화면에 미리 보입니다(visitor.html 과 같은 규칙).
+    // 행사 전이라도 운영 준비용 예시 부스('[예시]' 기관)의 값은 관람객 화면에 미리 보입니다(visitor.html 과 같은 규칙).
     function samplePreview(info, b) { return core.samplePreview(info, b || booth || cached); }
     // 운영 시간(문을 연 뒤 닫기 전)인가. 시간표를 아직 못 받았거나 시연이면 운영 중으로 봅니다.
     function visibleNow(info) { return !info || info.phase === 'open' || samplePreview(info); }
@@ -1691,7 +1729,7 @@
         if (beforeOpen(b, info)) return head + '\n문 열기 전 값이라 관람객 화면에는 아직 안 보여요.';
         return head + '\n관람객 화면에도 곧 표시됩니다.';
       }
-      if (samplePreview(info, b)) return head + '\n샘플 부스라 관람객 화면에 미리 표시됩니다.';
+      if (samplePreview(info, b)) return head + '\n예시 부스라 관람객 화면에 미리 표시됩니다.';
       if (info.phase === 'before') return head + '\n연습 값이라 관람객 화면에는 안 보여요.';
       if (info.phase === 'preopen') {
         return head + '\n문을 연 뒤' + (info.openTime ? '(' + info.openTime + ')' : '') + ' 한 번 더 눌러 주세요.';
@@ -1704,7 +1742,7 @@
 
     function phaseNote(info) {
       if (!info) return '';
-      if (samplePreview(info)) return '샘플 부스예요. 행사 전이지만 지금 누른 값이 관람객 화면에 미리 보여요.';
+      if (samplePreview(info)) return '운영 준비용 예시 부스예요. 행사 전이지만 지금 누른 값이 관람객 화면에 미리 보여요.';
       if (info.phase === 'before' && info.nextOpenLabel) {
         return '지금 누른 값은 연습이에요. 관람객 화면에는 ' + info.nextOpenLabel + '부터 보여요.';
       }
@@ -2035,6 +2073,10 @@
         if (!$('pin-err').hidden && v.length) pinErr('');
         pinButton();
       });
+      // 칸 그림의 '다음 칸' 표시는 커서가 있을 때만 보입니다.
+      $('pin-input').addEventListener('focus', paintSlots);
+      $('pin-input').addEventListener('blur', paintSlots);
+      paintSlots();
       $('pin-s3').addEventListener('submit', submitPin);
     }
 

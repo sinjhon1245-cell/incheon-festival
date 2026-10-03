@@ -211,9 +211,9 @@
     var z = zoneOf(b.zone_key);
     return !!(b.is_published && hasSlot(b) && z && z.is_published);
   }
-  // 운영 준비용 샘플 부스 — 운영기관 이름이 '[샘플]' 로 시작합니다. 표에 칸을 따로 두지 않고
-  // 이 글자로만 알아봅니다(관람객 화면의 샘플 안내 · BoothCore.isSample 과 같은 규칙).
-  function isSampleBooth(b) { return /^\s*\[샘플\]/.test(String((b && b.org) || '')); }
+  // 운영 준비용 예시 부스 — 운영기관 이름이 '[예시]'(예전 표기 '[샘플]')로 시작합니다. 표에 칸을
+  // 따로 두지 않고 이 글자로만 알아봅니다(관람객 화면의 예시 안내 · BoothCore.isSample 과 같은 규칙).
+  function isSampleBooth(b) { return /^\s*\[(예시|샘플)\]/.test(String((b && b.org) || '')); }
   // 목록 · 걸러 보기에 쓰는 공개 상태 한 낱말.
   function publishState(b) {
     if (!hasSlot(b)) return '미배정';
@@ -720,7 +720,7 @@
           (p && p.manager ? '<span class="listrow__sub"> · 담당 ' + esc(p.manager) + '</span>' : '');
       },
       tags: function (r) {
-        return (isSampleBooth(r) ? tag('샘플') : '') +
+        return (isSampleBooth(r) ? tag('운영 준비용 예시') : '') +
           badge(publishState(r)) + (r.org_type ? tag(r.org_type) : '') + badge(r.status || '준비 전') +
           (r.needs_power ? '<span class="badge badge--plain badge--need">전기</span>' : '') +
           (r.needs_network ? '<span class="badge badge--plain badge--need">네트워크</span>' : '') +

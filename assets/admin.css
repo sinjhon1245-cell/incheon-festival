@@ -388,10 +388,12 @@ html.is-demo .topbar { top: var(--demo-h); }
 .pinshow__who { margin: 0; font-size: 15px; color: var(--ink-2); }
 .pinshow__who b { color: var(--ink); font-variant-numeric: tabular-nums; }
 .pinshow__label { margin: 6px 0 0; font-size: 13px; font-weight: 700; color: var(--muted); }
+/* 부스 운영자 화면의 예시 PIN · PIN 칸과 같은 숫자 모양: Pretendard 700 · 남색 · 비례 숫자 ·
+   자간 아주 조금. 6자리는 '483 921' 처럼 셋씩 떼어(가운데 띄어쓰기를 조금 넓혀) 불러 주기 쉽게. */
 .pinshow__pin {
-  margin: 0; padding: 10px 16px; border-radius: 10px; background: var(--bg-sink);
-  font-size: 40px; font-weight: 800; line-height: 1.1; letter-spacing: 0.08em; color: var(--ink);
-  font-variant-numeric: tabular-nums; user-select: all;
+  margin: 0; padding: 12px 20px; border: 1px solid var(--line); border-radius: 12px; background: var(--bg-sink);
+  font-size: 34px; font-weight: 700; line-height: 1.2; letter-spacing: 0.03em; word-spacing: 0.25em; color: var(--ink);
+  font-variant-numeric: normal; user-select: all;
 }
 .pinshow__warn {
   margin: 4px 0 0; padding: 10px 12px; border-radius: 10px; border-left: 3px solid var(--warn, #B7791F);
