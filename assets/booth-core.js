@@ -105,8 +105,7 @@
      applyOpenRule(booths|booth, info) → 같은 모양
          phase 가 'open' 이면 오늘 문 열기 전에 넣은 값(리허설)을 '없음' 으로 바꾼
          사본을 돌려줍니다. 다른 phase 이거나 todayOpenAt 이 없으면 그대로.
-     isSample(b)         → boolean  기관(org)이 '[예시]'(또는 예전 표기 '[샘플]')로 시작하는
-                           운영 준비용 예시 부스
+     isSample(b)         → boolean  기관(org)이 '[예시]' 로 시작하는 운영 준비용 예시 부스
      samplePreview(info, b) → boolean  행사 전(phase 'before')의 예시 부스인가.
          관람객 화면은 행사 전에는 대기 값을 감추지만, 이때만 그 부스의 값을 미리
          보여 줍니다(협의 · 리허설용). 기관에서 '[예시]' 를 지우면 원래 규칙으로 돌아갑니다.
@@ -136,6 +135,8 @@
    PIN 보조 로그인 (QR 카드를 쓸 수 없을 때 — QR 열쇠와 완전히 따로입니다)
      SESSION_RE          /^[A-Za-z0-9_-]{43}$/  PIN 으로 받은 임시 세션(QR 열쇠 24자와 모양이 다름)
      getPinEnabled()     → Promise<boolean>  settings.booth_pin_enabled. 읽지 못하면 false, 시연도 false
+     getCommonPinEnabled() → Promise<boolean>  PIN 전체 스위치와 예시 부스 공통 PIN 스위치가 모두 켜졌는가
+                         (안내용 — 공통 PIN 이 맞는지는 서버가 정함). 읽지 못하면 false, 시연도 false
      pinLogin(boothId, pin, device) → Promise<{ ok, reason, retryAfter, session, expiresAt, booth }>
          틀린 PIN 도 오류가 아니라 ok:false 로 옵니다(서버가 실패를 기록해야 횟수 제한이 걸립니다).
          reason: 'invalid'(부스 번호나 PIN 이 맞지 않음 — 미발급 · 꺼짐 · 비공개도 같음)
@@ -386,11 +387,11 @@
     return Object.prototype.toString.call(booths) === '[object Array]' ? booths.map(one) : one(booths);
   }
 
-  /* 운영 준비용 예시 부스. 표에 칸을 따로 두지 않고 기관 이름 앞의 '[예시]' 로 알아봅니다
-     (처음 넣을 때 쓴 '[샘플]' 도 같은 뜻으로 받습니다). 실제 부스로 고칠 때 기관 이름을
-     바꾸면 예시 안내와 미리 보기가 함께 사라집니다. 협의용 예시 화면(?demo)의 가짜 부스와는
-     다릅니다 — 그쪽은 서버에 없고, 이쪽은 Production 에 공개된 실제 행입니다. */
-  var SAMPLE_RE = /^\s*\[(예시|샘플)\]/;
+  /* 운영 준비용 예시 부스. 표에 칸을 따로 두지 않고 기관 이름 앞의 '[예시]' 로 알아봅니다.
+     서버의 공통 PIN 조건(private.booth_common_pin_target)과 같은 규칙입니다. 실제 부스로 고칠 때
+     기관 이름을 바꾸면 예시 안내 · 미리 보기 · 공통 PIN 이 함께 사라집니다. 협의용 예시 화면(?demo)의
+     가짜 부스와는 다릅니다 — 그쪽은 서버에 없고, 이쪽은 Production 에 공개된 실제 행입니다. */
+  var SAMPLE_RE = /^\s*\[예시\]/;
   function isSample(b) { return !!b && SAMPLE_RE.test(String(b.org || '')); }
   // 행사 날(문 열기 전 · 닫은 뒤 포함)부터는 예시여도 원래 규칙을 따릅니다.
   function samplePreview(info, b) { return !!info && info.phase === 'before' && isSample(b); }
@@ -1035,6 +1036,17 @@
     // 읽지 못하면 꺼진 것으로 봅니다 — QR 은 그대로 씁니다.
     return pinSwitch().then(null, function () { return false; });
   }
+  // 운영 준비용 예시 부스 공통 PIN 스위치(settings.booth_sample_common_pin_enabled). 운영자 화면이
+  // 예시 부스에서 공통 PIN 을 안내할지 정할 때만 씁니다 — 맞는지는 늘 서버(booth_pin_login)가 정합니다.
+  // 읽지 못하면(칸이 아직 없음 · 연결 문제) 안내하지 않습니다(false).
+  function getCommonPinEnabled() {
+    if (isMock || !hasConfig) return Promise.resolve(false);
+    return request('GET', 'settings?select=booth_pin_enabled,booth_sample_common_pin_enabled&order=id.asc&limit=1')
+      .then(function (rows) {
+        var s = rows && rows[0];
+        return !!(s && s.booth_pin_enabled === true && s.booth_sample_common_pin_enabled === true);
+      }, function () { return false; });
+  }
 
   function pinLogin(boothId, pin, device) {
     if (isMock) return Promise.reject(makeError(MSG.SESS_OFF, { code: 'SESSION_END', reason: 'off' }));
@@ -1172,6 +1184,7 @@
   BoothCore.SESSION_RE = SESSION_RE;
   BoothCore.getPinEnabled = getPinEnabled;
   BoothCore.pinSwitch = pinSwitch;
+  BoothCore.getCommonPinEnabled = getCommonPinEnabled;
   BoothCore.pinLogin = pinLogin;
   BoothCore.sessGet = sessGet;
   BoothCore.sessSet = sessSet;

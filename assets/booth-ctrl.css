@@ -357,6 +357,16 @@ button {
 .pinfield { margin-top: 20px; }
 .pinlabel { display: block; font-size: 16px; font-weight: 800; letter-spacing: -0.02em; }
 .pinhint { margin-top: 2px; font-size: 13.5px; line-height: 1.5; color: var(--muted); }
+/* 운영 준비용 공통 PIN 안내 속 숫자 — 위 'PIN 숫자' 규칙(700 · 남색 · 비례 숫자 · 자간 조금)을 글줄 크기로 */
+.pinhint__v {
+  margin: 0 1px;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  font-variant-numeric: normal;
+  color: var(--ink);
+}
+.pinsub { margin-top: 8px; font-size: 13px; line-height: 1.5; color: var(--muted); }
 .pinwrap {
   position: relative;
   width: fit-content;

@@ -211,9 +211,16 @@
     var z = zoneOf(b.zone_key);
     return !!(b.is_published && hasSlot(b) && z && z.is_published);
   }
-  // 운영 준비용 예시 부스 — 운영기관 이름이 '[예시]'(예전 표기 '[샘플]')로 시작합니다. 표에 칸을
-  // 따로 두지 않고 이 글자로만 알아봅니다(관람객 화면의 예시 안내 · BoothCore.isSample 과 같은 규칙).
-  function isSampleBooth(b) { return /^\s*\[(예시|샘플)\]/.test(String((b && b.org) || '')); }
+  // 운영 준비용 예시 부스 — 운영기관 이름이 '[예시]' 로 시작합니다. 표에 칸을 따로 두지 않고
+  // 이 글자로만 알아봅니다(관람객 화면의 예시 안내 · BoothCore.isSample · 서버의 공통 PIN 조건과 같은 규칙).
+  function isSampleBooth(b) { return /^\s*\[예시\]/.test(String((b && b.org) || '')); }
+  // 화면 설명은 글이거나(대부분) 지금 상태에 따라 바뀌는 함수입니다(부스 — 공통 PIN 안내).
+  function descOf(d) { return typeof d === 'function' ? d() : (d || ''); }
+  // 운영 준비용 공통 PIN 이 지금 켜져 있는가(PIN 보조 로그인 · 공통 PIN 스위치 둘 다). 공개 예시 부스만 대상입니다.
+  function commonPinOn() {
+    var s = (cache.settings || [])[0] || {};
+    return s.booth_pin_enabled === true && s.booth_sample_common_pin_enabled === true;
+  }
   // 목록 · 걸러 보기에 쓰는 공개 상태 한 낱말.
   function publishState(b) {
     if (!hasSlot(b)) return '미배정';
@@ -536,6 +543,11 @@
         { k: 'booth_pin_enabled', label: 'PIN 보조 로그인 사용', type: 'bool', needsColumn: true,
           hint: '켜면 QR 카드를 쓸 수 없는 운영자가 부스 번호와 PIN으로 운영자 화면을 엽니다. 끄면 새 PIN 로그인과 ' +
                 '열려 있는 PIN 화면이 바로 멈춥니다(QR은 그대로). PIN은 부스 목록의 ⋯ 에서 요청한 부스에만 발급합니다.' },
+        /* 운영 준비용 예시 부스 공통 PIN(supabase/migration-booth-example-pin.sql). 맞는지는 늘 서버가 정합니다. */
+        { k: 'booth_sample_common_pin_enabled', label: '운영 준비용 예시 부스 공통 PIN', type: 'bool', needsColumn: true,
+          hint: '켜면 운영기관 이름이 [예시] 로 시작하는 공개 부스는 부스마다 PIN을 발급하지 않아도 공통 PIN 123456 으로 ' +
+                '운영자 화면을 엽니다(협의 · 리허설용). 실제 부스의 PIN · QR 은 그대로이고, [예시] 를 지운 부스는 그 순간 ' +
+                '대상에서 빠집니다. 실제 행사로 넘어갈 때 끕니다. 위의 PIN 보조 로그인도 켜져 있어야 합니다.' },
 
         /* 지도는 부스 배치도 한 장만 관리합니다. 행사장 안내도까지
            두면 그림을 두 번 올려야 하는데, 현장에서 실제로 찾는 것은
@@ -705,8 +717,12 @@
       headLink: ['print-qr.html', '부스 QR 인쇄'],
       // 행사 당일 전체 현황(대기 시간 · 확인 필요 · 긴급 수정)은 따로 된 화면입니다.
       liveLink: ['booth-admin.html', '부스 운영 현황'],
-      desc: '부스 정보와 운영기관을 관리합니다. 구역 · 번호가 정해지기 전에도 미배정으로 먼저 등록할 수 있고, ' +
-        '공개한 부스(공개한 구역 안)만 관람객 · 부스 운영자에게 보입니다.',
+      desc: function () {
+        return '부스 정보와 운영기관을 관리합니다. 구역 · 번호가 정해지기 전에도 미배정으로 먼저 등록할 수 있고, ' +
+          '공개한 부스(공개한 구역 안)만 관람객 · 부스 운영자에게 보입니다.' +
+          (commonPinOn() && (cache.booths || []).some(isSampleBooth)
+            ? ' 예시 부스([예시] 기관)는 운영 준비 기간 동안 공통 PIN을 사용합니다(기본정보 → 부스 운영자 PIN 에서 끕니다).' : '');
+      },
       blank: function () {
         return { zone_key: '', no: null, name: '', org: '', status: '준비 전', is_published: false };
       },
@@ -720,7 +736,7 @@
           (p && p.manager ? '<span class="listrow__sub"> · 담당 ' + esc(p.manager) + '</span>' : '');
       },
       tags: function (r) {
-        return (isSampleBooth(r) ? tag('운영 준비용 예시') : '') +
+        return (isSampleBooth(r) ? tag('운영 준비용 예시') + (commonPinOn() && boothShown(r) ? tag('공통 PIN 사용 중') : '') : '') +
           badge(publishState(r)) + (r.org_type ? tag(r.org_type) : '') + badge(r.status || '준비 전') +
           (r.needs_power ? '<span class="badge badge--plain badge--need">전기</span>' : '') +
           (r.needs_network ? '<span class="badge badge--plain badge--need">네트워크</span>' : '') +
@@ -1660,7 +1676,7 @@
       : '';
 
     var head = '<div class="page__head"><div><h1 class="page__title">' + esc(ent.label) + '</h1>' +
-      '<p class="page__desc">' + esc(ent.desc || listEnt.desc || '') + '</p></div>' +
+      '<p class="page__desc">' + esc(descOf(ent.desc || listEnt.desc)) + '</p></div>' +
       (ent.single ? '' : '<div class="page__actions">' +
         (listEnt.liveLink ? '<a class="btn btn--ghost btn--sm" href="' + esc(listEnt.liveLink[0] + (DEMO ? '?demo=1' : '')) +
           '">' + esc(listEnt.liveLink[1]) + '</a>' : '') +
