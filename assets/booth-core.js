@@ -191,9 +191,9 @@
     CTRL_OTHER: '저장하지 못했어요. 잠시 뒤 다시 눌러 주세요.',
     // PIN 세션이 끝났을 때(SESSION_END). 화면에는 ctrlErrorText 가 이 문구를 줍니다.
     SESS_EXPIRED: 'PIN 로그인 시간이 끝났어요. PIN을 다시 입력해 주세요.',
-    SESS_REVOKED: '운영본부가 PIN을 변경했습니다. 새 PIN을 받아 다시 시작해 주세요.',
+    SESS_REVOKED: '운영본부가 이 부스의 PIN을 바꿨습니다. 새 PIN을 받았다면 다시 입력해 주세요.',
     SESS_INVALID: 'PIN 로그인이 끝났어요. PIN을 다시 입력해 주세요.',
-    SESS_OFF: '지금은 PIN으로 쓸 수 없어요. QR 카드가 있으면 QR을 찍어 주세요.',
+    SESS_OFF: '지금은 PIN으로 시작할 수 없습니다. QR을 이용해 주세요.',
     SESS_UNAVAILABLE: '지금은 이 부스를 열 수 없어요. 운영본부에 알려 주세요.'
   };
   var SESSION_HINTS = {
