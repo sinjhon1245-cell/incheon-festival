@@ -30,6 +30,11 @@
   <link rel="stylesheet" href="assets/booth-ctrl.css" />
 </head>
 <body>
+  <!-- 협의용 예시(주소에 ?demo)일 때만 보이는 띠. 어느 화면에서든 맨 위에 붙어 있어
+       예시 부스를 실제 운영 정보로 읽지 않게 합니다(관람객 · 관리자 예시와 같은 말). -->
+  <div class="demobar" id="demobar" role="note" hidden>
+    <p class="demobar__t"><span class="demotag">협의용 예시</span><span class="sr-only"> · </span><span class="demobar__w">실제 행사 정보가 아닙니다.</span></p>
+  </div>
   <div class="app" id="app">
 
     <!-- 불러오는 중 (이 기기에서 처음 여는 부스) -->
@@ -113,7 +118,7 @@
         <a class="head__link" id="visitor-link" href="visitor.html" target="_blank" rel="noopener noreferrer">관람객 화면 &#x2197;&#xFE0E;</a>
       </header>
 
-      <p class="note" id="demo-note" hidden>시연 화면 · 여기서 누른 값은 이 브라우저에만 남아요</p>
+      <p class="note" id="demo-note" hidden>협의용 예시 · 여기서 누른 값은 이 브라우저의 예시 화면에만 보여요</p>
       <div class="tip" id="tip" hidden>
         <p class="tip__text">홈 화면에 추가해 두면 다음에 바로 열 수 있어요</p>
         <button type="button" class="tip__x" data-act="tip-close">닫기</button>
@@ -237,6 +242,8 @@
 
     var cfg = core.cfg || {};
     var isMock = core.isMock;
+    // 협의용 예시: 맨 위 띠는 안내 · 확인 · 운영 화면 어디서든 보입니다.
+    if (isMock && document.getElementById('demobar')) document.getElementById('demobar').hidden = false;
     var esc = core.esc;
     var pad2 = core.pad2;
     var HELP = cfg.boothHelpLine || '운영본부에 문의해 주세요';
@@ -450,7 +457,7 @@
       if (isMock) {
         var first = (window.MOCK_BOOTHS || [])[0];
         if (first) {
-          extra += '<a class="btn" href="#k=' + encodeURIComponent(core.demoToken(first.id)) + '">시연용 부스 열기 (' +
+          extra += '<a class="btn" href="#k=' + encodeURIComponent(core.demoToken(first.id)) + '">예시 부스 열기 (' +
             esc(first.code) + ')</a>';
         }
       }

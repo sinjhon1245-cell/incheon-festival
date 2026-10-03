@@ -27,7 +27,7 @@
            GitHub Pages 어느 쪽이든, …/visitor.html 포함)을 가리키면 ② ③ 을 막습니다.
          · 모든 QR 아래에 가리키는 주소(호스트)를 작게 찍어, 종이만 봐도
            어디로 가는지 알 수 있게 합니다.
-       ?demo 로 열면 막지 않고 모든 종이에 '시연용 · 인쇄 금지' 를 찍습니다.
+       ?demo 로 열면 막지 않고 모든 종이에 '협의용 예시 · 인쇄 금지' 를 찍습니다.
 
        ① 카드마다 화면에만 보이는 관리 단추가 있습니다(인쇄되지 않음).
          열쇠 끄기 · 대기 값 직접 고치기 · 열쇠 바꾸기. 끄기 · 직접 고치기는
@@ -415,7 +415,7 @@
   </header>
 
   <main class="wrap">
-    <p class="demo" id="demo-note" hidden>시연 화면 · 실제 부스 정보가 아닙니다. 종이마다 “시연용 · 인쇄 금지”가 함께 찍혀요.</p>
+    <p class="demo" id="demo-note" hidden>협의용 예시 · 실제 행사 정보가 아닙니다. 종이마다 “협의용 예시 · 인쇄 금지”가 함께 찍혀요.</p>
 
     <!-- ① 부스 운영자용 -->
     <section class="panel" id="panel-ops" role="tabpanel" aria-labelledby="tab-ops">
@@ -593,7 +593,7 @@
       LOAD_FAIL: '부스 정보를 불러오지 못했어요. 인터넷 연결을 확인한 뒤 다시 불러와 주세요.',
       NET: '연결이 불안정해요. 잠시 뒤 다시 눌러 주세요.',
       OTHER: '처리하지 못했어요. 잠시 뒤 다시 시도해 주세요.',
-      STAMP: '시연용 · 인쇄 금지'
+      STAMP: '협의용 예시 · 인쇄 금지'
     };
 
     /* ── QR 이 가리킬 주소 ─────────────────────────────────────────── */
@@ -1781,7 +1781,7 @@
         job = sleep(150).then(function () {
           delete S.ops.demoOff[id];
           putKey(id, { token: BC.demoToken(id), issued_at: new Date().toISOString(), rotated: true, disabled: false });
-          return '시연이라 열쇠는 그대로예요. 실제로는 새 열쇠가 만들어지고 예전 카드와 열려 있던 운영자 화면이 멈춰요.';
+          return '협의용 예시라 열쇠는 그대로예요. 실제로는 새 열쇠가 만들어지고 예전 카드와 열려 있던 운영자 화면이 멈춰요.';
         });
       } else {
         job = Core.rpc('admin_rotate_booth_token', { p_booth_id: id }).then(function (rows) {
@@ -1943,7 +1943,7 @@
         var cur = rerenderOpsItem(id);
         if (cur) {
           setNote(cur, isMock
-            ? '시연이라 이 화면에서만 껐어요. 실제로는 이 부스의 운영자 QR과 열려 있던 운영자 화면이 바로 멈춰요.'
+            ? '협의용 예시라 이 화면에서만 껐어요. 실제로는 이 부스의 운영자 QR과 열려 있던 운영자 화면이 바로 멈춰요.'
             : '열쇠를 껐어요. 이 부스 값은 운영본부가 ‘대기 값 직접 고치기’로만 바꿀 수 있어요.');
           var n = cur.querySelector('[data-offnote]');
           if (n) n.focus();
@@ -2073,7 +2073,7 @@
           // 되살아나지 않게 지운 표시를 붙들어 둡니다(아래 sticky, putNow 참고).
           job = sleep(150).then(function () {
             return { congestion: null, wait_minutes: null, updated_at: null,
-                     demoNote: '시연이라 값 지우기는 이 화면에만 보여요. 관람객 · 운영자 시연 화면에는 예전 값이 그대로 남아요.' };
+                     demoNote: '협의용 예시라 값 지우기는 이 화면에만 보여요. 관람객 · 운영자 예시 화면에는 예전 값이 그대로 남아요.' };
           });
         } else {
           // 시연 값은 BoothCore 의 시연 저장소(이 브라우저)에 씁니다. 관람객 시연 화면에도 보입니다.
@@ -2257,7 +2257,7 @@
         S.ops.now = {};
         Object.keys(S.byId).forEach(paintNow);
         msg.className = 'tb__msg is-ok';
-        msg.textContent = isMock ? '시연 값을 처음 상태로 되돌렸어요' : '지웠어요 (' + (Number(n) || 0) + '곳)';
+        msg.textContent = isMock ? '예시 값을 처음 상태로 되돌렸어요' : '지웠어요 (' + (Number(n) || 0) + '곳)';
       }, function (err) {
         yes.disabled = false;
         msg.className = 'tb__msg is-err';

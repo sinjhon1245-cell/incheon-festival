@@ -480,3 +480,41 @@ button {
   .toast { transition: none; }
   .btn:active, .w:active, .off:active, .still:active, .nudge__btn:active { transform: none; }
 }
+
+/* ── 협의용 예시 띠 (주소에 ?demo) ────────────────────────────────
+   관람객 · 관리자 예시와 같은 말('협의용 예시 · 실제 행사 정보가 아닙니다.')과
+   같은 보라 계열 줄무늬. 이 화면은 어두운 바탕이라 줄무늬도 어둡게 칠합니다.
+   여유 · 보통 · 혼잡 색(초록 · 노랑 · 빨강)은 쓰지 않습니다. */
+.demobar {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  padding: calc(8px + env(safe-area-inset-top)) var(--gutter) 8px;
+  background: repeating-linear-gradient(-45deg, #221C52 0 12px, #2A2363 12px 24px);
+  border-bottom: 2px solid var(--accent);
+}
+.demobar__t {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 480px;
+  margin: 0 auto;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.3;
+  color: var(--ink);
+}
+.demobar__w { min-width: 0; }
+.demotag {
+  flex: none;
+  padding: 3px 8px;
+  background: var(--accent);
+  color: var(--on);
+  font-size: 12.5px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+}
