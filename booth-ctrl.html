@@ -666,16 +666,34 @@
       showStart();
     }
 
+    // PIN 단추는 PIN 전체 스위치 하나로만 정합니다(공개 부스가 0곳이어도 켜져 있으면 보임 —
+    // 고를 부스가 없다는 안내는 단추를 누른 다음 화면이 합니다).
+    // 스위치는 한 번만 읽지 않습니다. 시작 화면을 열어 둔 사이 운영본부가 켜거나 끌 수 있어서,
+    // 화면이 다시 보일 때(탭 전환 · 포커스 · 뒤로 가기)와 보이는 동안 30초마다 다시 읽습니다.
+    // 읽지 못하면(연결 문제) '꺼짐' 으로 단정하지 않고 지금 보이는 대로 둔 채 3 · 6 · 9초 뒤 다시 읽습니다.
+    var PIN_RECHECK_MS = 30000;
+    var pinRetry = { n: 0, timer: null };
     function offerPin() {
-      if (isMock || !core.hasConfig || !core.getPinEnabled) return;
+      if (isMock || !core.hasConfig || !core.pinSwitch) return;
       var at = startAt = Date.now();
-      core.getPinEnabled().then(function (on) {
+      core.pinSwitch().then(function (on) {
         if (at !== startAt) return;
+        pinRetry.n = 0;
         pinOn = !!on;
         if (view !== 'start') return;
         $('start-pin').hidden = !pinOn;
         paintRecent();
+      }, function () {
+        if (at !== startAt || pinRetry.n >= 3) return;
+        pinRetry.n++;
+        clearTimeout(pinRetry.timer);
+        pinRetry.timer = setTimeout(function () { if (view === 'start') offerPin(); }, 3000 * pinRetry.n);
       });
+    }
+    function recheckPin() {
+      if (view !== 'start' || document.hidden) return;
+      pinRetry.n = 0;
+      offerPin();
     }
 
     function deviceId() {
@@ -842,10 +860,11 @@
           return booths.some(function (b) { return b.zone_key === z.key; });
         });
         if (!pin.zones.length) {
-          $('pin-s0-title').textContent = '지금 PIN으로 시작할 수 있는 부스가 없어요';
-          $('pin-s0-text').textContent = '부스가 공개되면 여기에 보여요. 운영본부에 알려 주세요.';
+          // 고를 부스가 없음(아직 공개 전). 단추는 [뒤로] 하나만 둡니다.
+          $('pin-s0-title').textContent = '현재 PIN으로 시작할 수 있는 부스가 없습니다.';
+          $('pin-s0-text').textContent = '부스 정보가 공개되면 여기에서 구역과 부스를 선택할 수 있습니다.';
           $('pin-s0-text').hidden = false;
-          $('pin-s0-acts').hidden = false;
+          $('pin-s0-acts').hidden = true;
           return;
         }
         var p = pin.pre;
@@ -1956,6 +1975,12 @@
     function wire() {
       buildPad();
       document.addEventListener('click', onClick);
+
+      // 시작 화면의 PIN 단추: 스위치를 다시 읽는 차례(offerPin 설명). 시작 화면이 아닐 때는 아무것도 하지 않습니다.
+      document.addEventListener('visibilitychange', recheckPin);
+      window.addEventListener('focus', recheckPin);
+      window.addEventListener('pageshow', function (e) { if (e && e.persisted) recheckPin(); });
+      setInterval(recheckPin, PIN_RECHECK_MS);
 
       $('visitor-link').href = visitorHref();
       $('demo-note').hidden = !isMock;

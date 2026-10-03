@@ -1009,12 +1009,17 @@
      PIN 은 POST 본문으로 한 번 보내고 이 파일에 남기지 않습니다. 서버가 돌려준 세션
      원문만 화면이 이 기기에 둡니다. 세션 함수에는 부스 id 를 보내지 않습니다.
      시연 모드에서는 이 함수들이 서버를 부르지 않습니다. 예시 PIN(4자리) 체험은 아래 demoPinCheck 가 맡습니다. */
-  function getPinEnabled() {
+  // PIN 전체 스위치(settings.booth_pin_enabled). 읽지 못하면(연결 문제 · 칸 없음) 거절합니다 —
+  // '꺼짐' 과 '모름' 을 가려, 부르는 쪽이 잠시 뒤 다시 읽을 수 있게 합니다.
+  function pinSwitch() {
     if (isMock || !hasConfig) return Promise.resolve(false);
-    // 칸이 아직 없거나(설정 전) 읽지 못하면 꺼진 것으로 봅니다 — QR 은 그대로 씁니다.
     return request('GET', 'settings?select=booth_pin_enabled&order=id.asc&limit=1').then(function (rows) {
       return !!(rows && rows[0] && rows[0].booth_pin_enabled === true);
-    }, function () { return false; });
+    });
+  }
+  function getPinEnabled() {
+    // 읽지 못하면 꺼진 것으로 봅니다 — QR 은 그대로 씁니다.
+    return pinSwitch().then(null, function () { return false; });
   }
 
   function pinLogin(boothId, pin, device) {
@@ -1150,6 +1155,7 @@
 
   BoothCore.SESSION_RE = SESSION_RE;
   BoothCore.getPinEnabled = getPinEnabled;
+  BoothCore.pinSwitch = pinSwitch;
   BoothCore.pinLogin = pinLogin;
   BoothCore.sessGet = sessGet;
   BoothCore.sessSet = sessSet;
