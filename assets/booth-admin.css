@@ -1,0 +1,223 @@
+/* ===================================================================
+   부스 운영 현황 (booth-admin.html) — 관리자 디자인(portal.css · admin.css) 위에 얹습니다.
+
+   이 화면의 주인공은 '대기 시간' 입니다. 숫자를 가장 크게, 상태색은 왼쪽 선 · 숫자 ·
+   점에만 씁니다(색만으로 뜻을 전하지 않고 늘 글자를 함께). 휴대폰(390px)이 먼저입니다.
+     휴대폰      카드 한 줄
+     태블릿      카드 두 줄
+     데스크톱    표처럼 한 줄(부스 · 프로그램 · 운영상태 · 대기시간 · 마지막 입력 · 접속 · 관리)
+   =================================================================== */
+
+.lvpage { gap: 14px; }
+
+/* 마지막으로 읽은 시각 · 기준 안내 */
+.lvmeta { display: flex; flex-wrap: wrap; gap: 2px 10px; margin: -4px 2px 0; font-size: 13px; color: var(--muted); }
+.lvmeta__t { font-weight: 700; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.lvmeta__t.is-bad { color: var(--danger); }
+
+/* 요약 숫자 = 걸러 보기 단추. 화면을 덮지 않게 작게. */
+.sumgrid { grid-template-columns: repeat(auto-fit, minmax(84px, 1fr)); gap: 6px; }
+.sum { padding: 8px 10px; min-height: 56px; border-radius: 10px; }
+.sum .mini__n { font-size: 19px; }
+.sum .mini__l { font-size: 12.5px; }
+.sum--ok .mini__n { color: var(--ok); }
+.sum--warn .mini__n { color: var(--warn); }
+.sum--danger .mini__n { color: var(--danger); }
+.sum.is-zero .mini__n { color: var(--muted-2); }
+
+/* 검색 · 구역 · 정렬 */
+.lvtools { gap: 8px; }
+.lvtools__row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.lvtools__row .search { flex: 1 1 260px; min-width: 0; max-width: 480px; }
+.lvtools__row .listsel { flex: 0 1 200px; min-width: 140px; }
+@media (max-width: 560px) {
+  .lvtools__row .search { flex-basis: 100%; max-width: none; }
+  .lvtools__row .listsel { flex: 1 1 calc(50% - 4px); min-width: 0; }
+}
+.lvtools__row .select { width: 100%; min-height: 44px; }
+.lvtools .input { min-height: 44px; }
+/* 결과 줄: '전체 7곳 중 2곳 · 초기화' 와 비공개 부스 보기(자주 쓰지 않아 도구 줄에서 뺐습니다) */
+.lvcount { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 12px; margin-top: -4px; }
+.lvcount .resultline { margin: 0; }
+.lvcount .linkreset { display: inline; }
+.lvtoggle {
+  min-height: 44px; padding: 6px 2px; border: 0; background: none; font: inherit; font-size: 13px; font-weight: 600;
+  color: var(--muted); text-decoration: underline; text-underline-offset: 3px; cursor: pointer;
+}
+.lvtoggle[aria-pressed="true"] { color: var(--primary); }
+
+/* ── 부스 한 줄(카드) ────────────────────────────────────────── */
+.lvhead { display: none; }
+.lvhead[hidden] { display: none !important; }
+.lvlist { display: grid; gap: 10px; }
+
+.lv {
+  --c: var(--off);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "booth state"
+    "prog  prog"
+    "wait  ago"
+    "cred  cred"
+    "act   act"
+    "more  more";
+  gap: 6px 12px;
+  min-width: 0;
+  padding: 14px 16px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-left: 5px solid var(--c);
+  border-radius: 12px;
+  box-shadow: var(--sh);
+}
+.lv--free    { --c: var(--ok); }
+.lv--normal  { --c: var(--warn); }
+.lv--busy    { --c: var(--danger); }
+.lv--pause, .lv--closed { --c: var(--off); }
+.lv--missing { --c: var(--muted-2); border-left-style: dashed; }
+.lv.is-stale { background: #FFF8F9; border-color: #F0CFD4; border-left-color: var(--danger); }
+.lv.is-hidden { opacity: 0.72; }
+
+.lv__booth { grid-area: booth; display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; min-width: 0; }
+.lv__code { font-size: 15px; font-weight: 800; color: var(--ink); font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+.lv__name { min-width: 0; font-size: 15.5px; font-weight: 700; color: var(--ink); overflow-wrap: anywhere; }
+.lv__prog { grid-area: prog; min-width: 0; font-size: 13px; color: var(--muted); line-height: 1.45;
+  overflow: hidden; display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; }
+.lv__prog:empty { display: none; }
+
+.lv__state { grid-area: state; display: inline-flex; align-items: center; gap: 6px; align-self: start;
+  font-size: 13px; font-weight: 700; color: var(--ink-2); white-space: nowrap; }
+.lv__dot { width: 9px; height: 9px; border-radius: 50%; background: var(--c); flex: none; }
+.lv--missing .lv__dot { background: transparent; border: 2px solid var(--muted-2); }
+
+/* 대기 시간 — 이 화면에서 가장 큰 글자 */
+.lv__wait { grid-area: wait; display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 6px; min-width: 0; }
+.lv__num { font-size: 40px; font-weight: 800; line-height: 1.05; letter-spacing: -0.04em; color: var(--c);
+  font-variant-numeric: tabular-nums; }
+.lv__num--word { font-size: 26px; letter-spacing: -0.03em; }
+.lv--pause .lv__num, .lv--closed .lv__num { color: var(--ink-2); }
+.lv__num--none { color: var(--muted-2); }
+.lv__unit { font-size: 16px; font-weight: 700; color: var(--ink-2); margin-left: -4px; }
+.lv__cong { flex-basis: 100%; font-size: 14px; font-weight: 800; color: var(--c); }
+.lv--missing .lv__cong { color: var(--muted); font-weight: 700; }
+
+.lv__ago { grid-area: ago; display: flex; flex-direction: column; align-items: flex-end; justify-content: center; gap: 2px;
+  text-align: right; font-size: 13px; color: var(--muted); min-width: 0; }
+.lv__agol { font-size: 12px; font-weight: 600; color: var(--muted-2); }
+.lv__agov { font-size: 15px; font-weight: 800; color: var(--ink); font-variant-numeric: tabular-nums; }
+.lv__clock { font-size: 12px; font-variant-numeric: tabular-nums; }
+.lv__by { font-size: 12px; font-weight: 600; color: var(--ink-2); }
+.lv__warn { margin-top: 2px; padding: 2px 8px; border-radius: 6px; background: var(--danger-t); color: var(--danger);
+  font-size: 12.5px; font-weight: 800; white-space: nowrap; }
+.is-stale .lv__agov { color: var(--danger); }
+
+.lv__cred { grid-area: cred; display: flex; flex-wrap: wrap; gap: 4px; padding-top: 8px; border-top: 1px solid var(--line-2); }
+.cred { padding: 3px 8px; border-radius: 6px; background: var(--ok-t); color: var(--ok); font-size: 12.5px; font-weight: 700; white-space: nowrap; }
+.cred--live { background: var(--info-t); color: var(--info); }
+.cred--off { background: var(--off-t); color: var(--off); }
+.cred--bad { background: var(--danger-t); color: var(--danger); }
+
+.lv__act { grid-area: act; display: flex; gap: 8px; align-items: center; }
+.lv__act .btn { flex: 1 1 auto; min-height: 44px; }
+.lv__act .iconbtn { flex: none; width: 44px; height: 44px; }
+.lv__more { grid-area: more; display: flex; flex-wrap: wrap; gap: 6px; padding-top: 4px; }
+.lv__more[hidden] { display: none; }
+.lv__more .btn { min-height: 40px; }
+
+/* ── 구역 현황 ─────────────────────────────────────────────── */
+.zgrid { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+.zc {
+  display: flex; flex-direction: column; gap: 10px; min-width: 0; padding: 14px 16px; text-align: left;
+  background: #fff; border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--sh);
+  font: inherit; color: var(--ink); cursor: pointer;
+}
+.zc:hover, .zc:focus-visible { border-color: var(--primary); }
+.zc__head { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.zc__key { font-size: 22px; font-weight: 800; color: var(--primary); }
+.zc__label { flex: 1; min-width: 0; font-size: 15.5px; font-weight: 700; overflow-wrap: anywhere; }
+.zc__all { font-size: 12.5px; color: var(--muted); white-space: nowrap; }
+.zc__top { font-size: 13.5px; color: var(--ink-2); line-height: 1.5; }
+.zc__top b { font-size: 17px; color: var(--ink); }
+.zc__nums { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.zc__n { display: flex; flex-direction: column; padding: 6px 8px; border-radius: 8px; background: var(--bg-sink);
+  font-size: 12px; font-weight: 600; color: var(--muted); }
+.zc__n b { font-size: 17px; font-weight: 800; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.zc__n.is-ok b { color: var(--ok); }
+.zc__n.is-bad b { color: var(--danger); }
+.zc__n.is-warn b { color: var(--warn); }
+
+/* ── 태블릿 · 좁은 데스크톱: 카드 두 줄 ─────────────────────────── */
+@media (min-width: 720px) and (max-width: 1199px) {
+  .lvlist { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* ── 데스크톱: 표처럼 한 줄 ──────────────────────────────────────
+   1200px 부터 표. 1440px 아래에서는 프로그램을 부스 이름 밑에 두고(칸 하나 아낌),
+   1440px 부터 프로그램 칸을 따로 둡니다. 어느 폭에서도 가로로 밀리지 않게 최소 폭을 맞췄습니다. */
+@media (min-width: 1200px) {
+  .lvpage { --lv-cols: minmax(150px, 1.4fr) 92px 130px minmax(110px, 1fr) minmax(120px, 1fr) 136px; }
+  .lvhead {
+    display: grid; grid-template-columns: var(--lv-cols); gap: 12px; padding: 0 16px 0 21px;
+    font-size: 12px; font-weight: 700; color: var(--muted-2);
+  }
+  .lvhead span:nth-child(2) { display: none; }
+  .lvlist { gap: 6px; }
+  .lv {
+    grid-template-columns: var(--lv-cols);
+    grid-template-areas:
+      "booth state wait ago cred act"
+      "prog  state wait ago cred act"
+      "more  more  more more more more";
+    align-items: center;
+    gap: 2px 12px;
+    padding: 10px 16px;
+    border-radius: 10px;
+    box-shadow: none;
+  }
+  .lv__booth { flex-direction: column; align-items: flex-start; gap: 0; align-self: end; }
+  .lv__prog { align-self: start; }
+  .lv__state { align-self: center; white-space: normal; }
+  .lv__num { font-size: 32px; }
+  .lv__num--word { font-size: 18px; }
+  .lv__unit { font-size: 14px; }
+  .lv__cong { font-size: 13px; }
+  .lv__ago { align-items: flex-start; text-align: left; }
+  .lv__cred { padding-top: 0; border-top: 0; }
+  .lv__act { flex-direction: column; align-items: stretch; gap: 6px; }
+  .lv__act .btn { min-height: 36px; }
+  .lv__act .iconbtn { width: 100%; height: 30px; }
+  .lv__more { justify-content: flex-end; }
+}
+@media (min-width: 1440px) {
+  .lvpage { --lv-cols: minmax(150px, 1.2fr) minmax(120px, 1fr) 92px 130px minmax(110px, 0.9fr) minmax(120px, 1fr) 136px; }
+  .lvhead span:nth-child(2) { display: block; }
+  .lv {
+    grid-template-areas:
+      "booth prog state wait ago cred act"
+      "more  more more  more more more more";
+  }
+  .lv__booth, .lv__prog { align-self: center; }
+  .lv__prog { -webkit-line-clamp: 2; }
+}
+
+@media (max-width: 360px) {
+  .lv__num { font-size: 34px; }
+  .sumgrid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+/* 휴대폰: 문제 부스가 빨리 보이게 머리 설명을 줄입니다. */
+@media (max-width: 560px) {
+  .lvpage .page__desc { display: none; }
+  .lvpage .page__title { font-size: 21px; }
+}
+
+/* 휴대폰: 요약 카드 3칸 */
+@media (max-width: 560px) {
+  .sumgrid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+/* 휴대폰: 머리의 작은 단추(새로 고침 · 부스 정보 관리)도 엄지로 누르기 쉬운 높이(44px)로 */
+@media (max-width: 680px) {
+  .lvpage .page__actions .btn { min-height: 44px; }
+}
