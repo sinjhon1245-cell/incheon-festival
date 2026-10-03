@@ -41,6 +41,9 @@
 .listrow__meta { font-size: 14px; color: var(--muted); margin-top: 3px; line-height: 1.55; }
 .listrow__meta b { font-weight: 700; color: var(--ink-2); font-variant-numeric: tabular-nums; }
 .listrow__tags { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; flex: 0 0 auto; }
+/* 넓은 화면: 배지가 많은 줄(부스의 공개 · 상태 · QR · PIN …)도 수정 단추를 다음 줄로 밀지 않게 배지 묶음 안에서 줄바꿈합니다.
+   (520px = 왼쪽 기둥 · 제목 칸 최소 폭 · 단추 묶음 · 사이 간격. 더 좁으면 지금처럼 단추가 아래 줄로 갑니다.) */
+@media (min-width: 1100px) { .listrow__tags { flex: 0 1 auto; max-width: calc(100% - 520px); justify-content: flex-end; } }
 .listrow__act { display: flex; gap: 6px; align-items: center; margin-left: auto; flex: 0 0 auto; }
 
 /* 나머지 작업은 ⋯ 안에 둡니다. 삭제가 늘 보이면 잘못 누르기 쉽습니다. */
@@ -158,6 +161,79 @@
 .select--sm { min-height: 40px; padding: 7px 30px 7px 11px; font-size: 13.5px; width: auto; max-width: 100%; }
 .listtools + .resultline { margin-top: -6px; }
 .page > .resultline { margin-bottom: -6px; }
+
+/* ── 요약 카드 = 걸러 보기 · 검색 · 걸러 보기 한 덩어리 (filterHtml) ──────────
+   요약 카드가 '공개 · 비공개 · 미배정 …' 숫자를 맡고, 아래 줄은 숫자를 되풀이하지 않습니다.
+     데스크톱  (구역 칩) → [검색][구역 ▾][기관 유형 ▾][상태 ▾][운영 필요 ▾][필터 초기화]
+     휴대폰    [검색][필터 n] → 아래에서 올라오는 패널(고를 칸이 셋 이상인 목록만)
+   고른 것은 보라색(관리 UI 색)으로만 표시합니다. 초록 · 주황 · 빨강은 상태색이라 쓰지 않습니다. */
+.sumgrid { grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 6px; }
+.sumgrid .mini { padding: 9px 12px; min-height: 58px; }
+.sumgrid .mini.is-zero .mini__n { color: var(--muted-2); }
+.mini--danger .mini__n { color: var(--danger); }
+.mini--btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+.ftools { display: flex; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 8px; }
+.ftools > .filterrow, .ftools > .chiprow { flex: 1 1 100%; order: -2; }
+.ftools__panel, .ftools__sheet { display: contents; }
+.ftools__panel .filterrow { flex: 1 1 100%; order: -1; }
+.ftools__scrim, .ftools__head, .ftools__foot, .ftools__open { display: none; }
+.ftools__search { flex: 1 1 260px; min-width: 200px; max-width: 440px; }
+.ftools__sels { display: flex; flex-wrap: wrap; gap: 6px; }
+/* 고르기 상자의 이름: 넓은 화면에서는 상자 안 '… 전체' 가 대신하고(화면 읽기 도구에만), 휴대폰 패널에서는 위에 보입니다. */
+.listsel__l { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+.ftools__reset { order: 5; color: var(--primary); }
+.select--sm.is-set { border-color: var(--primary); background-color: var(--primary-t); color: var(--primary); font-weight: 700; }
+.ftools__n {
+  display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 20px; padding: 0 6px;
+  border-radius: 999px; background: var(--primary); color: #fff; font-size: 12px; font-weight: 800;
+}
+.ftools__open.is-set { border-color: var(--primary); color: var(--primary); }
+.resultline b { color: var(--ink-2); }
+.linkreset {
+  display: none; margin-left: 6px; padding: 0; border: 0; background: none; font: inherit; font-weight: 700;
+  color: var(--primary); text-decoration: underline; text-underline-offset: 3px; cursor: pointer;
+}
+
+@media (max-width: 680px) {
+  .ftools__search { flex: 1 1 100%; min-width: 0; max-width: none; }
+  .ftools__sels { flex: 1 1 100%; }
+  .ftools__sels .listsel { flex: 1 1 calc(50% - 3px); }
+  .ftools__sels .select--sm { width: 100%; min-height: 44px; }
+
+  /* 고를 칸이 셋 이상인 목록(부스): [검색][필터 n] 한 줄 + 아래에서 올라오는 패널 */
+  .ftools--sheet .ftools__search { flex: 1 1 0; }
+  .ftools--sheet .ftools__open { display: inline-flex; gap: 6px; flex: 0 0 auto; min-height: 44px; padding: 8px 14px; }
+  .ftools--sheet .ftools__reset { display: none; }
+  .ftools--sheet + .resultline .linkreset { display: inline; }
+  .ftools--sheet .ftools__panel { display: none; }
+  .ftools--sheet[data-open="1"] .ftools__panel { display: block; position: fixed; inset: 0; z-index: 80; }
+  .ftools--sheet[data-open="1"] .ftools__scrim { display: block; position: absolute; inset: 0; background: rgba(22, 32, 60, 0.42); }
+  .ftools--sheet[data-open="1"] .ftools__sheet {
+    display: flex; flex-direction: column; gap: 14px; position: absolute; left: 0; right: 0; bottom: 0;
+    max-height: 85vh; max-height: 85dvh; overflow-y: auto; overscroll-behavior: contain;
+    padding: 0 16px calc(16px + env(safe-area-inset-bottom)); border-radius: 18px 18px 0 0; background: #fff;
+    box-shadow: 0 -8px 30px -12px rgba(22, 32, 60, 0.35);
+  }
+  .ftools--sheet[data-open="1"] .ftools__head {
+    display: flex; align-items: center; justify-content: space-between; min-height: 56px;
+    position: sticky; top: 0; z-index: 1; background: #fff; border-bottom: 1px solid var(--line-2);
+  }
+  .ftools__title { margin: 0; font-size: 17px; font-weight: 800; letter-spacing: -0.02em; }
+  .ftools--sheet[data-open="1"] .ftools__head .iconbtn { width: 44px; height: 44px; }
+  .ftools--sheet[data-open="1"] .filterrow { flex-direction: column; align-items: stretch; gap: 6px; order: 0; }
+  .ftools--sheet[data-open="1"] .chiprow { flex-wrap: wrap; overflow: visible; row-gap: 6px; }
+  .ftools--sheet[data-open="1"] .filterrow__l { width: auto; padding-top: 0; font-size: 13px; color: var(--ink-2); }
+  .ftools--sheet[data-open="1"] .chip { min-height: 44px; padding: 9px 16px; }
+  .ftools--sheet[data-open="1"] .ftools__sels { flex-direction: column; gap: 10px; }
+  .ftools--sheet[data-open="1"] .ftools__sels .listsel { flex: none; width: 100%; }
+  .ftools--sheet[data-open="1"] .listsel__l { position: static; width: auto; height: auto; margin: 0 0 6px; overflow: visible; clip: auto; display: block; font-size: 13px; font-weight: 700; color: var(--ink-2); }
+  .ftools--sheet[data-open="1"] .ftools__sels .select--sm { min-height: 48px; font-size: 15px; }
+  .ftools--sheet[data-open="1"] .ftools__foot {
+    display: flex; gap: 8px; position: sticky; bottom: 0; padding-top: 10px; background: #fff; border-top: 1px solid var(--line-2);
+  }
+  .ftools--sheet[data-open="1"] .ftools__foot .btn { flex: 1 1 0; min-height: 48px; }
+}
 
 /* 목록 줄의 3순위 정보(담당자 등)는 한 단계 옅게. */
 .listrow__sub { color: var(--muted-2); }
@@ -304,6 +380,47 @@ html.is-demo .topbar { top: var(--demo-h); }
 .demomore__t { margin: 4px 0 0; font-size: 12.5px; font-weight: 700; color: var(--muted); }
 .demomore__acts { display: flex; gap: 6px; flex-wrap: wrap; }
 .demomore__na { font-size: 13px; color: var(--muted); padding: 6px 0; }
+/* 실제 모드의 ⋯ — 운영자 PIN 발급 · 재발급 · 끄기(같은 모양을 씁니다) */
+.credmore a { color: var(--primary); font-weight: 700; }
+
+/* 운영자 PIN 을 한 번만 보여 주는 창(UI.reveal) */
+.pinshow { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+.pinshow__who { margin: 0; font-size: 15px; color: var(--ink-2); }
+.pinshow__who b { color: var(--ink); font-variant-numeric: tabular-nums; }
+.pinshow__label { margin: 6px 0 0; font-size: 13px; font-weight: 700; color: var(--muted); }
+.pinshow__pin {
+  margin: 0; padding: 10px 16px; border-radius: 10px; background: var(--bg-sink);
+  font-size: 40px; font-weight: 800; line-height: 1.1; letter-spacing: 0.08em; color: var(--ink);
+  font-variant-numeric: tabular-nums; user-select: all;
+}
+.pinshow__warn {
+  margin: 4px 0 0; padding: 10px 12px; border-radius: 10px; border-left: 3px solid var(--warn, #B7791F);
+  background: var(--warn-t, #FFF6E5); color: var(--ink); font-size: 14px; font-weight: 700; line-height: 1.5;
+}
+.pinshow__note { margin: 0; font-size: 13.5px; line-height: 1.6; color: var(--ink-2); }
+
+/* 고르기 창(UI.pick) — 부스 운영 현황의 '현황 수정' 단추 판.
+   상태색은 글자와 왼쪽 선에만 씁니다(색만으로 뜻을 전하지 않음). */
+.pickgrid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
+.pickbtn {
+  --c: var(--off);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  min-height: 60px; padding: 8px 6px; border: 1px solid var(--line); border-left: 4px solid var(--c);
+  border-radius: 10px; background: #fff; color: var(--ink); font: inherit; cursor: pointer;
+}
+.pickbtn:hover, .pickbtn:focus-visible { border-color: var(--primary); border-left-color: var(--c); background: var(--primary-t); }
+.pickbtn__l { font-size: 17px; font-weight: 800; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.pickbtn__s { font-size: 12px; font-weight: 700; color: var(--c); }
+.pickbtn--free   { --c: var(--ok); }
+.pickbtn--normal { --c: var(--warn); }
+.pickbtn--busy   { --c: var(--danger); }
+.pickbtn--pause, .pickbtn--closed { --c: var(--off); grid-column: span 2; }
+.pickbtn--clear  { --c: var(--muted-2); grid-column: span 4; min-height: 48px; }
+.pickgrid__note { margin: 10px 0 0; font-size: 13px; line-height: 1.55; color: var(--muted); }
+@media (max-width: 360px) {
+  .pickgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pickbtn--clear { grid-column: span 2; }
+}
 
 /* 빈 화면의 두 번째 길(협의용 예시 화면 보기) */
 .state__alt {
@@ -315,4 +432,10 @@ html.is-demo .topbar { top: var(--demo-h); }
 @media (max-width: 560px) {
   .demobar { padding-left: 14px; padding-right: 14px; }
   .demobar__exit { margin-left: 0; }
+}
+
+/* 휴대폰: 요약 카드를 고르게(4장은 2×2, 5~6장은 3칸) */
+@media (max-width: 560px) {
+  .sumgrid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .sumgrid--4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }

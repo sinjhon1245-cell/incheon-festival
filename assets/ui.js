@@ -848,5 +848,79 @@ window.UI = (function () {
     });
   }
 
-  return { form: form, confirm: confirm, close: close, passwordToggle: passwordToggle, hidePasswords: hidePasswords };
+  /* ── 한 번만 보여 주는 창 (예: 방금 만든 운영자 PIN) ─────────────────
+     바깥(어두운 바탕)을 눌러도 닫히지 않습니다 — 받아 적기 전에 실수로 닫으면 다시 볼 수
+     없는 값이기 때문입니다. 닫기 단추 · ✕ · Esc 로만 닫고, 닫으면 창 안의 내용을 통째로
+     지웁니다(close 가 비웁니다). 닫힌 뒤에 resolve 합니다.
+     opts: { title, bodyHtml(이미 esc 한 HTML), closeLabel, onReady(panel) } */
+  function reveal(opts) {
+    return new Promise(function (resolve) {
+      function done() { close(); resolve(true); }
+      open(
+        '<div class="modal__scrim"></div>' +
+        '<div class="modal__panel modal__panel--sm" role="dialog" aria-modal="true" aria-labelledby="modal-title">' +
+          '<div class="modal__head">' +
+            '<h2 class="modal__title" id="modal-title">' + esc(opts.title) + '</h2>' +
+            '<button class="iconbtn" type="button" data-close aria-label="닫기">✕</button>' +
+          '</div>' +
+          '<div class="modal__body">' + (opts.bodyHtml || '') + '</div>' +
+          '<div class="modal__foot">' +
+            '<button class="btn btn--primary" type="button" id="modal-ok">' + esc(opts.closeLabel || '닫기') + '</button>' +
+          '</div>' +
+        '</div>',
+        function (h, panel) {
+          panel.querySelector('[data-close]').addEventListener('click', done);
+          panel.querySelector('#modal-ok').addEventListener('click', done);
+          if (opts.onReady) opts.onReady(panel);
+          panel.querySelector('#modal-ok').focus();
+        },
+        done
+      );
+    });
+  }
+
+  /* ── 고르기 창 (단추 여러 개 중 하나) ─────────────────────────────
+     예: 부스 운영 현황의 '현황 수정'(바로 · 5분 … · 잠시 중단 · 오늘 마감).
+     opts: { title, desc, choices: [{ v, label, sub, tone }], note }  → 고른 v · 취소면 null */
+  function pick(opts) {
+    return new Promise(function (resolve) {
+      function done(v) { close(); resolve(v); }
+      var list = opts.choices || [];
+      open(
+        '<div class="modal__scrim" data-cancel></div>' +
+        '<div class="modal__panel modal__panel--sm" role="dialog" aria-modal="true" aria-labelledby="modal-title">' +
+          '<div class="modal__head">' +
+            '<h2 class="modal__title" id="modal-title">' + esc(opts.title) + '</h2>' +
+            '<button class="iconbtn" type="button" data-cancel aria-label="닫기">✕</button>' +
+          '</div>' +
+          '<div class="modal__body">' +
+            (opts.desc ? '<p class="modal__desc">' + esc(opts.desc) + '</p>' : '') +
+            '<div class="pickgrid">' + list.map(function (c, i) {
+              return '<button class="pickbtn' + (c.tone ? ' pickbtn--' + esc(c.tone) : '') + '" type="button" data-i="' + i + '">' +
+                '<span class="pickbtn__l">' + esc(c.label) + '</span>' +
+                (c.sub ? '<span class="pickbtn__s">' + esc(c.sub) + '</span>' : '') + '</button>';
+            }).join('') + '</div>' +
+            (opts.note ? '<p class="pickgrid__note">' + esc(opts.note) + '</p>' : '') +
+          '</div>' +
+          '<div class="modal__foot">' +
+            '<button class="btn btn--ghost" type="button" data-cancel>취소</button>' +
+          '</div>' +
+        '</div>',
+        function (h, panel) {
+          Array.prototype.forEach.call(h.querySelectorAll('[data-cancel]'), function (b) {
+            b.addEventListener('click', function () { done(null); });
+          });
+          Array.prototype.forEach.call(panel.querySelectorAll('.pickbtn'), function (b) {
+            b.addEventListener('click', function () { done(list[Number(b.getAttribute('data-i'))].v); });
+          });
+          var first = panel.querySelector('.pickbtn');
+          if (first) first.focus();
+        },
+        function () { done(null); }
+      );
+    });
+  }
+
+  return { form: form, confirm: confirm, reveal: reveal, pick: pick, close: close,
+           passwordToggle: passwordToggle, hidePasswords: hidePasswords };
 })();

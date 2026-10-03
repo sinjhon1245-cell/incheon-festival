@@ -70,6 +70,19 @@ window.AdminDemo = (function () {
     org_type: '기관', status: '준비 전', pub: false, qr: null, power: true
   };
 
+  /* 부스 운영 현황(booth-admin.html?demo=1)에서 쓰는 운영자 PIN 상태 · 마지막 입력 주체.
+     PIN 은 상태만 흉내 냅니다(실제 PIN · 세션은 만들지 않습니다).
+     state: 'on' 발급됨 · 'off' 꺼짐 · 없으면 미발급 / sessions: PIN 로그인 기기 수 / failures: 최근 1시간 실패 */
+  var PIN_OVERLAY = {
+    'ex-a01': { state: 'on', sessions: 2 },
+    'ex-a03': { state: 'on', sessions: 0 },
+    'ex-b02': { state: 'off', sessions: 0 },
+    'ex-b03': { state: 'on', sessions: 0, failures: 12 },
+    // 운영자 카드를 잃어버려 QR 을 꺼 두고 PIN 으로 운영하는 부스
+    'ex-b04': { state: 'on', sessions: 1 }
+  };
+  var LIVE_BY = { 'ex-a01': 'pin', 'ex-b04': 'pin', 'ex-c01': 'admin' };
+
   var state = null;
   var seq = 0;
 
@@ -108,7 +121,7 @@ window.AdminDemo = (function () {
                     memo: o.memo || '', notes: o.notes || '' });
       }
       if (m.congestion) live[m.id] = { congestion: m.congestion, wait_minutes: m.wait_minutes || 0,
-                                       updated_at: isoAgo(m.age_min || 0) };
+                                       updated_at: isoAgo(m.age_min || 0), by: LIVE_BY[m.id] || 'qr' };
       if (o.qr) access[m.id] = { on: o.qr === 'on', issued_at: isoAgo(60 * 24) };
     }
     src.forEach(function (m, i) {
@@ -116,7 +129,7 @@ window.AdminDemo = (function () {
     });
     addBooth(UNASSIGNED, UNASSIGNED, null, null, src.length);
     booths.forEach(function (b) { b.code = codeOf(b); if (!hasSlot(b)) b.is_published = false; });
-    state = { zones: zones, booths: booths, booth_private: priv, live: live, access: access };
+    state = { zones: zones, booths: booths, booth_private: priv, live: live, access: access, pin: copy(PIN_OVERLAY) };
   }
 
   function rows(table) {
@@ -303,8 +316,65 @@ window.AdminDemo = (function () {
     if (accessOf(id) !== 'on') return '운영자 QR이 켜진 부스만 입력할 수 있습니다.';
     var c = mode === 'pause' ? '중단' : (mode === 'closed' ? '마감' : congestionFor(Number(wait) || 0));
     state.live[id] = { congestion: c, wait_minutes: mode === 'open' ? (Number(wait) || 0) : 0,
-                       updated_at: new Date().toISOString() };
+                       updated_at: new Date().toISOString(), by: 'qr' };
     return '';
+  }
+
+  /* ── 부스 운영 현황(booth-admin.html?demo=1) 전용 ───────────────────
+     관리자 직접 수정은 실제 admin_set_booth_live 처럼 QR · 공개와 상관없이 됩니다('clear' = 값 지우기).
+     PIN 은 상태만 돌려줍니다. */
+  function adminSetLive(id, mode, wait) {
+    var b = find('booths', id);
+    if (!b) return '없는 부스입니다.';
+    if (mode === 'clear') { delete state.live[id]; return ''; }
+    if (mode !== 'open' && mode !== 'pause' && mode !== 'closed') return '허용되지 않는 상태입니다.';
+    var w = Number(wait);
+    if (mode === 'open' && (isNaN(w) || w < 0 || w > 180)) return '대기 시간은 0~180분이어야 합니다.';
+    var c = mode === 'pause' ? '중단' : (mode === 'closed' ? '마감' : congestionFor(w));
+    state.live[id] = { congestion: c, wait_minutes: mode === 'open' ? w : 0, updated_at: new Date().toISOString(), by: 'admin' };
+    return '';
+  }
+  function pinOf(id) {
+    if (!state) seed();
+    var p = state.pin[id];
+    return p ? { state: p.state, sessions: p.sessions || 0, failures: p.failures || 0 } : { state: 'none', sessions: 0, failures: 0 };
+  }
+  /* ── 운영자 PIN 흉내(관리자 예시) ───────────────────────────────────
+     상태만 바꿉니다: 미발급 → 발급됨 → (재발급) → 꺼짐 → (새 PIN 으로) 다시 켜짐.
+     보여 주는 PIN 은 운영자 예시와 같은 4자리 규칙(mock-data.js 의 MOCK_DEMO_PIN)이라
+     관리자 예시에서 본 PIN 으로 운영자 예시 화면을 바로 열어 볼 수 있습니다. 실제 PIN · 세션 ·
+     데이터베이스와는 관계가 없고, 재발급해도 예시 PIN 값은 바뀌지 않습니다. */
+  function demoPin(id) {
+    var b = find('booths', id);
+    return (b && hasSlot(b) && typeof window.MOCK_DEMO_PIN === 'function') ? window.MOCK_DEMO_PIN(codeOf(b)) : '';
+  }
+  function pinIssue(id) {
+    var b = find('booths', id);
+    if (!b) return { error: '없는 부스입니다.' };
+    if (!hasSlot(b)) return { error: '구역과 부스 번호를 먼저 지정해 주세요.' };
+    var old = state.pin[id];
+    var revoked = old && old.state === 'on' ? (old.sessions || 0) : 0;
+    state.pin[id] = { state: 'on', sessions: 0, failures: 0 };
+    return { pin: demoPin(id), revoked: revoked, before: old ? old.state : 'none' };
+  }
+  function pinOff(id) {
+    var p = state && state.pin[id];
+    if (!p || p.state !== 'on') return { error: '켜진 운영자 PIN이 없습니다.' };
+    var revoked = p.sessions || 0;
+    state.pin[id] = { state: 'off', sessions: 0, failures: 0 };
+    return { revoked: revoked };
+  }
+  /* 행사 당일 화면에서 보여 줄 경우를 더 채웁니다(이 화면을 열 때만, 관리자 예시에는 영향 없음).
+       C-02  공개 · QR 미발급 · PIN 으로 넣은 값이 38분째 그대로 → '확인 필요'
+       C-04  공개 · QR · PIN 미발급 · 아직 아무도 누르지 않음 → '현황 미입력' */
+  function prepareLiveDemo() {
+    if (!state) seed();
+    ['ex-c02', 'ex-c04'].forEach(function (id) { var b = find('booths', id); if (b && hasSlot(b)) b.is_published = true; });
+    if (find('booths', 'ex-c02')) {
+      state.live['ex-c02'] = { congestion: '보통', wait_minutes: 20, updated_at: isoAgo(38), by: 'pin' };
+      state.pin['ex-c02'] = { state: 'on', sessions: 0 };
+    }
+    delete state.live['ex-c04'];
   }
   function minutesAgo(l) { return l ? Math.max(0, Math.floor((nowMs() - Date.parse(l.updated_at)) / 60000)) : null; }
   // 30분 넘게 그대로면 '확인 필요'. 마감은 그날 안에는 흐려지지 않습니다(관람객 화면과 같음).
@@ -320,6 +390,10 @@ window.AdminDemo = (function () {
     store: store,
     accessOf: accessOf, issue: issue, disable: disable, rekey: rekey,
     liveOf: liveOf, setLive: setLive, isStale: isStale, liveLabel: liveLabel, minutesAgo: minutesAgo,
-    staleMinutes: STALE_MIN
+    staleMinutes: STALE_MIN,
+    adminSetLive: adminSetLive, pinOf: pinOf, prepareLiveDemo: prepareLiveDemo,
+    demoPin: demoPin, pinIssue: pinIssue, pinOff: pinOff,
+    // 부스 운영 현황 예시가 그 자리에서 그리도록 구역 · 부스의 복사본을 바로 돌려줍니다.
+    rowsOf: function (table) { return copy(rows(table) || []); }
   };
 })();

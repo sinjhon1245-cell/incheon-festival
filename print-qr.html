@@ -1183,7 +1183,8 @@
         // 직접 고치기 칸은 처음 열 때 채웁니다. 부스마다 단추 11개를 미리 만들어 둘 까닭이 없습니다.
         '<div class="fix" data-fix hidden></div>' +
         '<div class="confirm" data-confirm="off" hidden>' +
-          '<p>이 부스의 운영자 QR과 열려 있는 운영자 화면이 바로 멈춥니다. 새 열쇠는 나오지 않아요. 계속할까요?</p>' +
+          '<p>이 부스의 운영자 QR과 열려 있는 운영자 화면이 바로 멈춥니다. 새 열쇠는 나오지 않아요. ' +
+            '(PIN을 발급한 부스라면 PIN 로그인은 계속 사용할 수 있습니다.) 계속할까요?</p>' +
           '<div class="confirm__acts">' +
             '<button type="button" class="btn btn--danger-solid" data-act="off-yes"' + busyAttr + '>열쇠 끄기</button>' +
             '<button type="button" class="btn" data-act="off-no">그만두기</button>' +
@@ -1205,7 +1206,8 @@
 
     // 직접 고치기 칸의 단추. 부스 운영자 화면(booth-ctrl.html)의 단추판과 같은 값에
     // '값 지우기' 하나를 더합니다. 아래 작은 글씨는 서버와 같은 규칙(congestionFor)의 상태입니다.
-    var FIX_WAITS = [0, 5, 10, 15, 20, 30, 45, 60];
+    // 운영자 단추판과 같은 목록(BoothCore.WAIT_CHOICES). 옛 공통 엔진이면 같은 값으로 둡니다.
+    var FIX_WAITS = (BC && BC.WAIT_CHOICES) || [0, 5, 10, 15, 20, 30, 45, 60];
     function fixPanelHtml() {
       var btns = FIX_WAITS.map(function (w) {
         var big = w === 0 ? '바로' : w + '분';

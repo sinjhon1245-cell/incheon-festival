@@ -122,8 +122,9 @@
     '공개 칸 번호 정리 필요': 'warn',
     // 부스 · 구역의 공개 상태(publishState)
     '공개': 'ok', '비공개': 'off', '미배정': 'warn', '구역 비공개': 'warn',
-    // 협의용 예시의 QR · 대기 현황 표시
-    'QR 발급됨': 'info', 'QR 미발급': 'warn', 'QR 꺼짐': 'off', '확인 필요': 'warn'
+    // 운영자 QR · PIN · 대기 현황 표시(PIN 미발급은 평소 상태라 회색 — 요청한 부스에만 발급합니다)
+    'QR 발급됨': 'info', 'QR 미발급': 'warn', 'QR 꺼짐': 'off', '확인 필요': 'danger',
+    'PIN 발급됨': 'info', 'PIN 미발급': 'off', 'PIN 꺼짐': 'off', 'PIN 실패 많음': 'danger'
   };
   function badge(t) { return '<span class="badge badge--' + (TONE[t] || 'off') + '">' + esc(t) + '</span>'; }
   function tag(t) { return '<span class="badge badge--plain">' + esc(t) + '</span>'; }
@@ -232,23 +233,48 @@
     if (!l) return 'off';
     return { '여유': 'ok', '보통': 'warn', '혼잡': 'danger' }[l.congestion] || 'off';
   }
-  function demoTags(r) {
-    var a = AD.accessOf(r.id), l = AD.liveOf(r.id);
-    var qr = (!hasSlot(r) && a === 'none') ? ''
-      : badge(a === 'on' ? 'QR 발급됨' : (a === 'off' ? 'QR 꺼짐' : 'QR 미발급'));
-    return qr + '<span class="badge badge--' + demoLiveTone(l) + '">' + esc(AD.liveLabel(l)) + '</span>' +
-      (AD.isStale(l) && boothShown(r) ? badge('확인 필요') : '');
+  // 예시에서만: 대기 현황 흉내(⋯ 의 입력 단추)의 결과를 줄에서 바로 보게 합니다.
+  function demoLiveTag(r) {
+    var l = AD.liveOf(r.id);
+    return '<span class="badge badge--' + demoLiveTone(l) + '">' + esc(AD.liveLabel(l)) + '</span>';
   }
-  function demoSummary(all) {
+
+  /* ── 부스 요약 · '확인 필요' (실제 · 예시 같은 화면) ───────────────
+     요약 카드: 전체 · 공개 · 비공개 · 미배정 · QR 미발급 · 확인 필요. 카드가 걸러 보기를 겸합니다.
+     QR 상태를 모르면(PIN 기능 전) QR 카드를, 대기 값을 못 읽었으면 '확인 필요' 카드를 빼고 그립니다.
+     '확인 필요' = 관람객에게 보이는 부스인데 오늘 넣은 대기 값이 기준(분)보다 오래됨(마감 제외) —
+     관람객 화면 · 부스 운영 현황과 같은 규칙입니다. */
+  var liveMap = null;   // 실제 모드: { 부스 id: booth_live 한 줄 } · null = 모름
+  var STALE_MIN = Number((window.FESTIVAL_CONFIG || {}).freshnessThresholdMinutes) || 30;
+  function kstDayNum(ms) { return Math.floor((ms + 9 * 3600000) / 86400000); }
+  function isStaleRow(r) {
+    if (!boothShown(r)) return false;
+    if (DEMO) return AD.isStale(AD.liveOf(r.id));
+    var l = liveMap ? liveMap[r.id] : null;
+    if (!l || !l.congestion || l.congestion === '마감') return false;
+    var t = Date.parse(String(l.updated_at || '').replace(' ', 'T').replace(/(\.\d{3})\d+/, '$1'));
+    if (isNaN(t) || kstDayNum(t) !== kstDayNum(Date.now())) return false;   // 어제 값은 '정보 없음'
+    return (Date.now() - t) / 60000 > STALE_MIN;
+  }
+  // 운영자 QR 상태 'on' · 'off' · 'none' · null(모름)
+  function qrStateOf(r) {
+    if (DEMO) return AD.accessOf(r.id);
+    var c = credOf(r);
+    return c ? c.qr_state : null;
+  }
+  function boothSummary(all) {
     function n(f) { return all.filter(f).length; }
-    return [
-      { n: all.length, l: '전체' },
-      { n: n(function (r) { return !!r.is_published; }), l: '공개', tone: 'ok' },
-      { n: n(function (r) { return hasSlot(r) && !r.is_published; }), l: '비공개' },
-      { n: n(function (r) { return !hasSlot(r); }), l: '미배정', tone: 'warn' },
-      { n: n(function (r) { return hasSlot(r) && AD.accessOf(r.id) === 'none'; }), l: 'QR 미발급', tone: 'warn' },
-      { n: n(function (r) { return boothShown(r) && AD.isStale(AD.liveOf(r.id)); }), l: '확인 필요', tone: 'danger' }
+    var out = [
+      { n: all.length, l: '전체', all: true },
+      { n: n(function (r) { return !!r.is_published; }), l: '공개', tone: 'ok', f: ['quick', 'on'] },
+      { n: n(function (r) { return hasSlot(r) && !r.is_published; }), l: '비공개', f: ['quick', 'off'] },
+      { n: n(function (r) { return !hasSlot(r); }), l: '미배정', tone: 'warn', f: ['quick', 'none'] }
     ];
+    if (DEMO || creds) {
+      out.push({ n: n(function (r) { return hasSlot(r) && qrStateOf(r) === 'none'; }), l: 'QR 미발급', tone: 'warn', f: ['quick', 'qrnone'] });
+    }
+    if (DEMO || liveMap) out.push({ n: n(isStaleRow), l: '확인 필요', tone: 'danger', f: ['quick', 'stale'] });
+    return out;
   }
   function demoMore(r) {
     var a = AD.accessOf(r.id);
@@ -262,11 +288,185 @@
     var live = [0, 5, 15, 30].map(function (w) {
       return b('demo-live', 'data-mode="open" data-wait="' + w + '"', w ? w + '분' : '바로');
     }).join('') + b('demo-live', 'data-mode="pause"', '잠시 중단') + b('demo-live', 'data-mode="closed"', '오늘 마감');
+    var ps = AD.pinOf(r.id).state;
+    var pinActs = !hasSlot(r) ? '<span class="demomore__na">구역 · 번호를 정해야 발급할 수 있어요</span>'
+      : ps === 'on' ? b('demo-pin', 'data-op="issue"', 'PIN 재발급') + b('demo-pin', 'data-op="off"', 'PIN 끄기')
+      : ps === 'off' ? b('demo-pin', 'data-op="issue"', '새 PIN으로 다시 켜기')
+      : b('demo-pin', 'data-op="issue"', 'PIN 발급');
     return '<div class="demomore">' +
       '<p class="demomore__t">운영자 QR · 협의용 예시 화면에서는 실제 QR이 발급되지 않습니다</p>' +
       '<div class="demomore__acts">' + qr + '</div>' +
+      '<p class="demomore__t">운영자 PIN · 협의용 예시 PIN(4자리)만 보여 드립니다. 실제 PIN은 6자리이고 발급할 때 한 번만 보입니다</p>' +
+      '<div class="demomore__acts">' + pinActs + '</div>' +
       '<p class="demomore__t">대기 현황 · 운영자 화면에서 누르는 것과 같은 규칙(공개 + QR 켜짐일 때만)</p>' +
       '<div class="demomore__acts">' + live + '</div></div>';
+  }
+
+  /* ── 운영자 QR · PIN 상태 (실제 모드) ─────────────────────────────
+     admin_booth_credentials() 가 부스마다 '상태' 만 돌려줍니다(QR 열쇠 · PIN · 해시 없음).
+     PIN 기능(supabase/migration-booth-pin.sql) 전이면 함수가 없어 상태 칸만 비웁니다 —
+     목록 · 수정 · 공개는 그대로 동작합니다.
+     PIN 은 요청한 부스에만 발급합니다(행사 전 일괄 발급 금지). 원문은 발급 창에서 한 번만 보이고
+     창을 닫으면 화면 · 변수에서 사라집니다 — 저장 · 기록 · 알림 · 주소 어디에도 넣지 않습니다. */
+  var creds = null;          // { 부스 id: {qr_state, pin_state, pin_sessions, pin_failures_1h, …} } · null = 모름
+  var PIN_FAIL_WARN = 10;    // 최근 1시간 PIN 실패가 이만큼이면 'PIN 실패 많음'
+  function loadCreds() {
+    if (DEMO) return Promise.resolve();
+    var a = C.rpc('admin_booth_credentials').then(function (rows) {
+      var m = {};
+      (rows || []).forEach(function (r) { m[r.booth_id] = r; });
+      creds = m;
+    }, function (e) {
+      creds = null;
+      if (window.console) console.warn('[admin] 운영자 QR · PIN 상태를 읽지 못했습니다', e && (e.code || e.message));
+    });
+    // '확인 필요' 를 세려고 대기 값도 함께 읽습니다(관리자는 모든 부스의 값을 읽을 수 있음). 못 읽으면 그 카드만 뺍니다.
+    var b = C.select('booth_live', { columns: 'booth_id,congestion,updated_at', order: false }).then(function (rows) {
+      var m = {};
+      (rows || []).forEach(function (l) { m[l.booth_id] = l; });
+      liveMap = m;
+    }, function () { liveMap = null; });
+    return Promise.all([a, b]);
+  }
+  function credOf(r) {
+    if (!creds) return null;
+    return creds[r.id] || { qr_state: 'none', pin_state: 'none', pin_sessions: 0, pin_failures_1h: 0 };
+  }
+  // 예시는 admin-demo.js 의 흉내 상태를 같은 모양으로 씁니다(PIN 은 상태만).
+  function credShape(r) {
+    if (!DEMO) return credOf(r);
+    var p = AD.pinOf(r.id);
+    return { qr_state: AD.accessOf(r.id), pin_state: p.state, pin_sessions: p.sessions, pin_failures_1h: p.failures };
+  }
+  function credTags(r) {
+    var c = credShape(r);
+    if (!c) return '';
+    // 미배정 부스는 아직 발급할 수 없어 '미발급' 을 늘어놓지 않습니다.
+    if (!hasSlot(r) && c.qr_state === 'none' && c.pin_state === 'none') return '';
+    // 협의용 예시에서만 예시 PIN(4자리)을 줄에 보입니다. 실제 PIN 원문은 발급 창에서 한 번만 보이고 다시 조회할 수 없습니다.
+    var demoPinTag = DEMO && c.pin_state === 'on' && AD.demoPin(r.id) ? tag('예시 PIN ' + AD.demoPin(r.id)) : '';
+    return badge({ on: 'QR 발급됨', off: 'QR 꺼짐' }[c.qr_state] || 'QR 미발급') +
+      badge({ on: 'PIN 발급됨', off: 'PIN 꺼짐' }[c.pin_state] || 'PIN 미발급') + demoPinTag +
+      (c.pin_sessions > 0 ? tag('PIN 로그인 ' + c.pin_sessions + '대') : '') +
+      (c.pin_failures_1h >= PIN_FAIL_WARN ? badge('PIN 실패 많음') : '');
+  }
+  function credMore(r) {
+    var c = credOf(r);
+    if (!c) return '';
+    function b(act, text, danger) {
+      return '<button class="btn ' + (danger ? 'btn--danger' : 'btn--ghost') + ' btn--sm" type="button" data-act="' + act + '">' +
+        esc(text) + '</button>';
+    }
+    var acts = !hasSlot(r) ? '<span class="demomore__na">구역과 부스 번호를 먼저 지정해 주세요.</span>'
+      : c.pin_state === 'on' ? b('pin-issue', 'PIN 재발급') + b('pin-off', 'PIN 끄기', true)
+      : c.pin_state === 'off' ? b('pin-issue', '새 PIN으로 다시 켜기')
+      : b('pin-issue', 'PIN 발급');
+    return '<div class="demomore credmore">' +
+      '<p class="demomore__t">운영자 PIN · QR 카드를 쓸 수 없는 부스에만 요청을 받아 발급합니다' +
+        (c.pin_sessions > 0 ? ' · 지금 PIN 로그인 ' + c.pin_sessions + '대' : '') + '</p>' +
+      '<div class="demomore__acts">' + acts + '</div>' +
+      '<p class="demomore__t">운영자 QR 발급 · 끄기 · 바꾸기는 ' +
+        '<a href="print-qr.html" target="_blank" rel="noopener">부스 QR 인쇄</a> 화면에서 합니다</p></div>';
+  }
+  // 운영자에게 불러 줄 운영자 화면 주소(QR 카드와 같은 사이트).
+  function opSite() {
+    var base = (window.FESTIVAL_CONFIG || {}).staffSiteUrl;
+    try {
+      if (base) { var u = new URL('booth-ctrl', base); return u.host + u.pathname; }
+    } catch (e) { /* 아래 */ }
+    return 'booth-ctrl.html';
+  }
+  function pinMessage(e) {
+    if (e && e.hint === 'booth_pin_needs_slot') return '구역과 부스 번호를 먼저 지정해 주세요.';
+    if (e && (e.code === 'PGRST202' || e.code === '42883')) return 'PIN 기능이 아직 켜지지 않았습니다(DB 설정 전).';
+    if (e && e.code === 'P0002') return e.message || '해당 부스를 찾을 수 없습니다.';
+    return C.dataMessage(e);
+  }
+  // 방금 만든 PIN 을 한 번만 보여 줍니다. 창을 닫으면 원문을 담은 변수도 비웁니다.
+  function showPinOnce(row, pin, revoked, before) {
+    UI.reveal({
+      title: before === 'none' ? '운영자 PIN 발급' : '운영자 PIN 새로 발급',
+      closeLabel: '확인했어요 · 닫기',
+      bodyHtml:
+        '<div class="pinshow">' +
+          '<p class="pinshow__who"><b>' + esc(boothSlot(row)) + '</b> ' + esc(row.name || '') + '</p>' +
+          '<p class="pinshow__label">운영자 PIN</p>' +
+          '<p class="pinshow__pin" id="pin-once">' + esc(pin.slice(0, 3) + ' ' + pin.slice(3)) + '</p>' +
+          '<button class="btn btn--ghost btn--sm" type="button" id="pin-copy">복사</button>' +
+          '<p class="pinshow__warn">이 PIN은 다시 확인할 수 없습니다. 분실하면 새 PIN을 발급해 주세요.</p>' +
+          (revoked ? '<p class="pinshow__note">예전 PIN으로 연 휴대폰 ' + revoked + '대는 로그아웃됐습니다.</p>' : '') +
+          '<p class="pinshow__note">운영자에게 알려 줄 것: ' + esc(opSite()) + ' → “부스 번호와 PIN으로 시작” → 구역 → 부스 → PIN 6자리. ' +
+            'QR 카드는 그대로 쓸 수 있습니다.</p>' +
+        '</div>',
+      onReady: function (panel) {
+        panel.querySelector('#pin-copy').addEventListener('click', function (ev) {
+          var btn = ev.currentTarget;
+          if (!pin) return;
+          var ok = function () { btn.textContent = '복사했어요'; };
+          var no = function () { btn.textContent = '복사하지 못했어요 — 직접 적어 주세요'; };
+          try {
+            if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(pin).then(ok, no);
+            else no();
+          } catch (x) { no(); }
+        });
+      }
+    }).then(function () { pin = null; });
+  }
+  function pinIssue(row) {
+    var c = credOf(row) || { pin_state: 'none', pin_sessions: 0 };
+    var label = boothSlot(row) + ' ' + (row.name || '');
+    var p = privateOf('booths', row.id);
+    var contact = p && (p.manager || p.manager_phone) ? [p.manager, p.manager_phone].filter(Boolean).join(' · ') : '';
+    var ask = ' 전화로 요청을 받았다면 ' + (contact ? '등록된 담당자(' + contact + ')' : '등록된 담당자 연락처') +
+      '로 되걸어 확인한 뒤 알려 주세요.';
+    var o = c.pin_state === 'on'
+      ? { title: 'PIN을 재발급할까요?', label: 'PIN 재발급', danger: true,
+          message: '“' + label + '”의 지금 PIN이 바로 실패하고, 그 PIN으로 연 휴대폰 ' + (c.pin_sessions || 0) +
+            '대가 로그아웃됩니다. QR은 그대로입니다.' }
+      : c.pin_state === 'off'
+      ? { title: '새 PIN으로 다시 켤까요?', label: '새 PIN 만들기', danger: false,
+          message: '“' + label + '”에 새 PIN을 만들어 PIN 로그인을 다시 켭니다. 예전 PIN은 다시 쓸 수 없습니다. QR은 그대로입니다.' }
+      : { title: '운영자 PIN을 발급할까요?', label: 'PIN 발급', danger: false,
+          message: '“' + label + '” 부스의 운영자 PIN을 만듭니다. PIN은 다음 창에서 한 번만 보여 드려요.' };
+    return UI.confirm({ title: o.title, message: o.message + ask, confirmLabel: o.label, danger: o.danger }).then(function (yes) {
+      if (!yes) return;
+      return C.rpc('admin_issue_booth_pin', { p_booth_id: row.id }).then(function (rows) {
+        var r = Object.prototype.toString.call(rows) === '[object Array]' ? rows[0] : rows;
+        var pin = r && /^\d{6}$/.test(String(r.pin || '')) ? String(r.pin) : null;
+        var revoked = (r && r.revoked_sessions) || 0;
+        r = null; rows = null;
+        if (!pin) throw new Error('PIN 응답을 받지 못했습니다. 목록을 새로 고친 뒤 다시 발급해 주세요.');
+        showPinOnce(row, pin, revoked, c.pin_state);
+        pin = null;
+        return loadCreds().then(function () { renderPanel(); });
+      }).catch(function (e) {
+        console.error('[admin] PIN 발급 실패', e && (e.code || e.message));
+        toast(pinMessage(e), true);
+      });
+    });
+  }
+  function pinOff(row) {
+    var c = credOf(row) || { pin_sessions: 0 };
+    return UI.confirm({
+      title: 'PIN 로그인을 끌까요?',
+      message: '“' + boothSlot(row) + ' ' + (row.name || '') + '”의 PIN 로그인이 바로 막히고, PIN으로 연 휴대폰 ' +
+        (c.pin_sessions || 0) + '대가 로그아웃됩니다. QR은 그대로입니다. 다시 켜려면 새 PIN을 발급합니다.',
+      confirmLabel: 'PIN 끄기', danger: true
+    }).then(function (yes) {
+      if (!yes) return;
+      return C.rpc('admin_disable_booth_pin', { p_booth_id: row.id }).then(function (rows) {
+        var r = Object.prototype.toString.call(rows) === '[object Array]' ? rows[0] : rows;
+        var n = (r && r.revoked_sessions) || 0;
+        return loadCreds().then(function () {
+          renderPanel();
+          reopenMore(row.id);
+          toast('PIN 로그인을 껐습니다.' + (n ? ' 휴대폰 ' + n + '대가 로그아웃됐습니다.' : '') + ' QR은 그대로입니다.');
+        });
+      }).catch(function (e) {
+        console.error('[admin] PIN 끄기 실패', e && (e.code || e.message));
+        toast(pinMessage(e), true);
+      });
+    });
   }
 
   // 'A-2' 와 'A-10' 을 사람 순서대로(숫자는 숫자로) 견줍니다.
@@ -325,6 +525,14 @@
           hint: '행사 당일 먼저 확인할 내용. 포털 홈 아래에 보이고 줄바꿈도 그대로 보입니다' },
         { k: 'footer_note',   label: '하단 안내 문구', type: 'textarea', wide: true,
           hint: '포털 홈 맨 아래 작은 글씨 한 줄. 예: 운영 내용 및 규모는 변경될 수 있습니다' },
+
+        /* 부스 운영자 PIN 보조 로그인의 전체 스위치(supabase/migration-booth-pin.sql).
+           끄면 새 PIN 로그인과 열려 있는 PIN 화면이 바로 멈춥니다. QR 은 상관없습니다.
+           칸이 아직 없으면(DB 설정 전) 창에서 빠집니다(needsColumn). */
+        { type: 'group', label: '부스 운영자 PIN' },
+        { k: 'booth_pin_enabled', label: 'PIN 보조 로그인 사용', type: 'bool', needsColumn: true,
+          hint: '켜면 QR 카드를 쓸 수 없는 운영자가 부스 번호와 PIN으로 운영자 화면을 엽니다. 끄면 새 PIN 로그인과 ' +
+                '열려 있는 PIN 화면이 바로 멈춥니다(QR은 그대로). PIN은 부스 목록의 ⋯ 에서 요청한 부스에만 발급합니다.' },
 
         /* 지도는 부스 배치도 한 장만 관리합니다. 행사장 안내도까지
            두면 그림을 두 번 올려야 하는데, 현장에서 실제로 찾는 것은
@@ -387,8 +595,9 @@
         return [r.title, r.place, r.team, r.owner, r.memo].join(' ');
       },
       searchPlaceholder: '일정명 · 장소 · 담당팀 · 담당자 검색',
+      searchPlaceholderShort: '일정 검색',
       filters: [
-        { key: 'day', label: '날짜', kind: 'chips',
+        { key: 'day', label: '날짜', kind: 'chips', inline: true,
           options: function (all) {
             var days = eventDays().slice();
             all.forEach(function (r) { if (r.event_date && days.indexOf(r.event_date) < 0) days.push(r.event_date); });
@@ -491,6 +700,8 @@
       // 부스 QR(운영자 카드 · 부스 앞 안내 · 입구 포스터)은 부스를 등록한 뒤
       // 여기서 바로 뽑습니다. 새 탭으로 열어 관리 화면의 입력을 잃지 않게 합니다.
       headLink: ['print-qr.html', '부스 QR 인쇄'],
+      // 행사 당일 전체 현황(대기 시간 · 확인 필요 · 긴급 수정)은 따로 된 화면입니다.
+      liveLink: ['booth-admin.html', '부스 운영 현황'],
       desc: '부스 정보와 운영기관을 관리합니다. 구역 · 번호가 정해지기 전에도 미배정으로 먼저 등록할 수 있고, ' +
         '공개한 부스(공개한 구역 안)만 관람객 · 부스 운영자에게 보입니다.',
       blank: function () {
@@ -509,11 +720,12 @@
         return badge(publishState(r)) + (r.org_type ? tag(r.org_type) : '') + badge(r.status || '준비 전') +
           (r.needs_power ? '<span class="badge badge--plain badge--need">전기</span>' : '') +
           (r.needs_network ? '<span class="badge badge--plain badge--need">네트워크</span>' : '') +
-          (DEMO ? demoTags(r) : '');
+          credTags(r) + (DEMO ? demoLiveTag(r) : '') + (isStaleRow(r) ? badge('확인 필요') : '');
       },
-      // 협의용 예시에서만: 맨 위 요약 숫자 · 줄의 ⋯ 안 QR · 대기 입력 흉내 단추.
-      summary: DEMO ? demoSummary : null,
-      moreHtml: DEMO ? demoMore : null,
+      // 맨 위 요약 카드(실제 · 예시 같음) — 누르면 그 부스만 거릅니다(아래 filters 의 quick).
+      // 줄의 ⋯: 예시는 QR · 대기 입력 흉내, 실제는 운영자 PIN 발급 · 재발급 · 끄기(QR 은 부스 QR 인쇄 화면).
+      summary: boothSummary,
+      moreHtml: DEMO ? demoMore : credMore,
       // 목록에서 바로 켜고 끄는 공개 단추(quickHtml · onQuick).
       quick: function (r) { return { on: !!r.is_published, label: '공개', what: '부스' }; },
       onQuick: function (r) { return togglePublish('booths', r); },
@@ -535,19 +747,25 @@
         var p = privateOf('booths', r.id);
         return [boothSlot(r), r.code, r.name, r.org, p ? p.manager : '', r.program, zoneLabel(r.zone_key)].join(' ');
       },
-      searchPlaceholder: '부스번호 · 부스명 · 운영기관 · 담당자 · 프로그램 검색',
+      searchPlaceholder: '부스번호 · 부스명 · 기관 · 담당자 · 프로그램 검색',
+      searchPlaceholderShort: '부스 검색',
       filters: [
-        { key: 'pub', label: '공개', kind: 'chips',
-          options: function () { return [['on', '공개'], ['off', '비공개'], ['none', '미배정']]; },
+        /* 요약 카드가 거는 조건(공개 · 비공개 · 미배정 · QR 미발급 · 확인 필요). 칩으로는 그리지 않습니다 —
+           예전의 '공개' 칩 줄은 요약 카드와 같은 숫자를 한 번 더 보여 줘서 뺐습니다. */
+        { key: 'quick', label: '요약', kind: 'summary',
           test: function (r, v) {
             if (v === 'none') return !hasSlot(r);
             if (v === 'on') return !!r.is_published;
-            return hasSlot(r) && !r.is_published;
+            if (v === 'off') return hasSlot(r) && !r.is_published;
+            if (v === 'qrnone') return hasSlot(r) && qrStateOf(r) === 'none';
+            if (v === 'stale') return isStaleRow(r);
+            return true;
           } },
-        { key: 'zone', label: '구역', kind: 'chips',
+        /* 구역이 여섯 이하면 짧은 칩('A 4'), 더 많아지면 고르기 상자(긴 이름)로 바뀝니다. */
+        { key: 'zone', label: '구역', kind: 'chips', maxChips: 6,
           options: function (all) {
             return zoneList().filter(function (z) { return all.some(function (r) { return r.zone_key === z.key; }); })
-              .map(function (z) { return [z.key, z.label || z.key + '구역']; });
+              .map(function (z) { return [z.key, (z.label || z.key + '구역') + ' (' + z.key + ')', z.key]; });
           },
           test: function (r, v) { return r.zone_key === v; } },
         { key: 'org', label: '기관 유형', kind: 'select',
@@ -663,7 +881,7 @@
         return null;
       },
       deleteMessage: function (r) {
-        return '“' + (r.name || '이름 없음') + '” 부스를 삭제합니다. 이 부스의 운영자 QR · 대기 현황 · 입력 기록 · ' +
+        return '“' + (r.name || '이름 없음') + '” 부스를 삭제합니다. 이 부스의 운영자 QR · PIN · PIN 로그인 · 대기 현황 · 입력 기록 · ' +
           '관리자 전용 정보도 함께 지워지고 되돌릴 수 없습니다. 잠시 숨기려면 삭제 대신 공개를 끄세요.';
       }
     },
@@ -1001,16 +1219,18 @@
         SUPPLY_STATES.forEach(function (st) {
           by[st] = rows.filter(function (r) { return r.status === st; }).length;
         });
+        // 카드를 누르면 그 상태만 봅니다(예전 상태 칩 줄은 같은 숫자를 반복해 뺐습니다).
         return [
-          { n: rows.length, l: '전체 대상' },
-          { n: by['미배부'], l: '미배부', tone: 'warn' },
-          { n: by['일부 배부'], l: '일부 배부', tone: 'info' },
-          { n: by['배부 완료'], l: '배부 완료', tone: 'ok' }
+          { n: rows.length, l: '전체 대상', all: true },
+          { n: by['미배부'], l: '미배부', tone: 'warn', status: '미배부' },
+          { n: by['일부 배부'], l: '일부 배부', tone: 'info', status: '일부 배부' },
+          { n: by['배부 완료'], l: '배부 완료', tone: 'ok', status: '배부 완료' }
         ];
       },
       statuses: SUPPLY_STATES,
       statusKey: 'status',
       searchPlaceholder: '대상 · 담당자 · 물품 검색',
+      searchPlaceholderShort: '대상 검색',
       searchText: function (r) {
         return r.name + ' ' + (r.manager || '') + ' ' + (r.kind || '') + ' ' +
           allocNames(r.id).join(' ');
@@ -1118,6 +1338,8 @@
   }
   /* 목록 검색 · 걸러 보기 상태. 다른 화면으로 옮기면 지웁니다. */
   var listQ = '', listStatus = '전체', listF = {};
+  // 휴대폰의 걸러 보기 패널이 열려 있나. 다른 화면으로 옮기면 닫습니다.
+  var listSheet = false;
 
   /* ── 알림 ───────────────────────────────────────────────────── */
   var toastTimer;
@@ -1131,6 +1353,11 @@
   }
 
   /* ── 내비 ───────────────────────────────────────────────────── */
+  // 행사 당일 콘솔(booth-admin.html). 정보 설정을 하는 이 화면과 따로 된 페이지라 메뉴 끝에 링크로만 둡니다.
+  function liveNavHtml(cls) {
+    return '<p class="' + cls + '__group">행사 당일</p>' +
+      '<a href="booth-admin.html' + (DEMO ? '?demo=1' : '') + '">부스 운영 현황</a>';
+  }
   function paintNav() {
     function n(k) {
       var e = ENTITIES[k];
@@ -1153,7 +1380,7 @@
       if (!keys.length) return '';
       return (g.label ? '<p class="side__group">' + esc(g.label) + '</p>' : '') +
         keys.map(link).join('');
-    }).join('');
+    }).join('') + liveNavHtml('side');
 
     var short = { overview: '요약', schedule_items: '일정', booths: '부스', zones: '구역', notices: '공지', operation_requests: '요청' };
     $('#tabbar').innerHTML = tabs.map(function (k) {
@@ -1171,7 +1398,7 @@
           return '<a href="#' + k + '" class="' + (k === current ? 'is-on' : '') + '">' +
             esc(ENTITIES[k].label) + '</a>';
         }).join('');
-    }).join('');
+    }).join('') + liveNavHtml('sheet');
 
     var me = C.me() || {};
     $('#side-who').innerHTML = esc(me.name || me.email || '') + '<br /><span class="badge badge--plain">관리자</span>';
@@ -1263,51 +1490,132 @@
        sort(a, b) · groupBy(r)             정렬 · 묶음 제목
        noReorder                           ↑ · ↓ 를 두지 않음(시각 · 번호 순 목록)
        empty | empty()                     { title, hint, go: [화면, 단추 글자] } */
+  /* 지금 걸려 있는 조건이 있나(검색 · 상태 칩 · 걸러 보기 · 요약 카드). '필터 초기화' 를 보일지 정합니다. */
+  function listActive() {
+    return !!listQ.trim() || listStatus !== '전체' || Object.keys(listF).some(function (k) { return !!listF[k]; });
+  }
+  /* 패널(구역 · 고르기 상자)에서 고른 수. 휴대폰의 '필터 n' 단추에 씁니다. */
+  function panelCount(listEnt) {
+    return (listEnt.filters || []).filter(function (f) { return f.kind !== 'summary' && !f.inline && !!listF[f.key]; }).length;
+  }
+  function narrowScreen() {
+    try { return window.matchMedia('(max-width: 680px)').matches; } catch (e) { return false; }
+  }
+  function placeholderOf(listEnt) {
+    return (narrowScreen() && listEnt.searchPlaceholderShort) || listEnt.searchPlaceholder || '검색';
+  }
+  /* 검색칸 안내 글을 칸의 실제 폭에 맞춥니다. 긴 글이 잘려 '… 프로' 로 끝나느니 짧게('부스 검색').
+     찾는 대상은 같습니다. 그린 뒤 · 창 폭이 바뀔 때 부릅니다. */
+  var phObserver = null;
+  function fitOne(q) {
+    var long = q.dataset.ph || q.placeholder;
+    q.placeholder = q.clientWidth && q.clientWidth < long.length * 12 + 48 ? q.dataset.phShort : long;
+  }
+  function fitPlaceholder() {
+    var q = $('#list-q');
+    if (!q || !q.dataset.phShort) return;
+    fitOne(q);
+    // 칸 폭이 바뀔 때마다(창 크기 · 화면 회전 · 사이드바) 다시 맞춥니다.
+    if (window.ResizeObserver) {
+      if (!phObserver) phObserver = new ResizeObserver(function (es) { es.forEach(function (e) { fitOne(e.target); }); });
+      phObserver.disconnect();
+      phObserver.observe(q);
+    }
+  }
+  /* 요약 카드가 상태 칩(statuses)을 대신하면 칩 줄을 두지 않습니다(같은 숫자를 두 번 보이지 않게). */
+  function summaryCoversStatus(listEnt, all) {
+    return !!(listEnt.summary && all.length && listEnt.summary(all).some(function (c) { return c.status; }));
+  }
+
+  /* 검색 · 걸러 보기 줄.
+       데스크톱  (구역 칩 한 줄) → [검색][구역 ▾][기관 유형 ▾][상태 ▾]…[필터 초기화]
+       휴대폰    [검색][필터 n] — 누르면 아래에서 올라오는 패널에 같은 칸이 들어 있습니다
+                 (고를 칸이 셋 이상인 목록만. 적으면 지금처럼 한 줄에 둡니다)
+     칩의 '전체' 에는 숫자를 붙이지 않습니다 — 전체 수는 요약 카드와 결과 줄이 이미 말합니다.
+     칩이 maxChips 보다 많아지면(구역이 늘어나는 등) 고르기 상자로 바꿉니다.
+     kind 'summary' 인 걸러 보기는 여기 그리지 않고 위의 요약 카드가 맡습니다.
+     inline 인 걸러 보기(일정의 날짜)는 휴대폰에서도 패널에 넣지 않고 늘 보입니다. */
   function filterHtml(listEnt, all) {
-    var chipRows = '', selects = '';
+    var inlineRows = '', panelRows = '', selects = '', nPanel = 0;
+    function chipRow(f, options, cur) {
+      return '<div class="filterrow"><span class="filterrow__l">' + esc(f.label) + '</span>' +
+        '<div class="chiprow" role="group" aria-label="' + esc(f.label) + '">' +
+        [['', '전체']].concat(options).map(function (o) {
+          var on = cur === o[0];
+          var n = o[0] === '' ? null : all.filter(function (r) { return f.test(r, o[0]); }).length;
+          // o[2] 는 칩에 쓰는 짧은 글자(구역 'A'). 긴 이름은 고르기 상자와 마우스를 올렸을 때 보입니다.
+          return '<button class="chip' + (on ? ' is-on' : '') + '" type="button" data-listf="' + esc(f.key) + '" ' +
+            'data-v="' + esc(o[0]) + '" aria-pressed="' + on + '"' +
+            (o[2] ? ' title="' + esc(o[1]) + '" aria-label="' + esc(o[1] + (n === null ? '' : ' ' + n)) + '"' : '') + '>' +
+            esc(o[2] || o[1]) + (n === null ? '' : '<span class="chip__n">' + n + '</span>') + '</button>';
+        }).join('') + '</div></div>';
+    }
+    function selectHtml(f, options, cur) {
+      return '<label class="listsel"><span class="listsel__l">' + esc(f.label) + '</span>' +
+        '<select class="select select--sm' + (cur ? ' is-set' : '') + '" data-listf="' + esc(f.key) + '">' +
+        '<option value="">' + esc(f.label) + ' 전체</option>' +
+        options.map(function (o) {
+          return '<option value="' + esc(o[0]) + '"' + (cur === o[0] ? ' selected' : '') + '>' + esc(o[1]) + '</option>';
+        }).join('') + '</select></label>';
+    }
     (listEnt.filters || []).forEach(function (f) {
+      if (f.kind === 'summary') return;
       var options = f.options(all);
       if (!options.length) return;
       var cur = listF[f.key] || '';
-      if (f.kind === 'chips') {
+      var asChips = f.kind === 'chips' && !(f.maxChips && options.length > f.maxChips);
+      if (asChips) {
         // 고를 것이 하나뿐이면(예: 구역 하나) 칩 줄을 두지 않습니다.
         if (options.length < 2 && !cur) return;
-        chipRows += '<div class="filterrow"><span class="filterrow__l">' + esc(f.label) + '</span>' +
-          '<div class="chiprow" role="group" aria-label="' + esc(f.label) + '">' +
-          [['', '전체']].concat(options).map(function (o) {
-            var n = o[0] === '' ? all.length : all.filter(function (r) { return f.test(r, o[0]); }).length;
-            var on = cur === o[0];
-            return '<button class="chip' + (on ? ' is-on' : '') + '" type="button" data-listf="' + esc(f.key) + '" ' +
-              'data-v="' + esc(o[0]) + '" aria-pressed="' + on + '">' + esc(o[1]) +
-              '<span class="chip__n">' + n + '</span></button>';
-          }).join('') + '</div></div>';
+        if (f.inline) inlineRows += chipRow(f, options, cur);
+        else { panelRows += chipRow(f, options, cur); nPanel++; }
       } else {
-        selects += '<label class="listsel"><span class="sr-only">' + esc(f.label) + '</span>' +
-          '<select class="select select--sm" data-listf="' + esc(f.key) + '">' +
-          '<option value="">' + esc(f.label) + ' 전체</option>' +
-          options.map(function (o) {
-            return '<option value="' + esc(o[0]) + '"' + (cur === o[0] ? ' selected' : '') + '>' + esc(o[1]) + '</option>';
-          }).join('') + '</select></label>';
+        selects += selectHtml(f, options, cur);
+        nPanel++;
       }
     });
     var search = listEnt.searchText
-      ? '<div class="search"><label class="sr-only" for="list-q">검색</label>' +
-        '<input class="input" id="list-q" type="search" placeholder="' +
-        esc(listEnt.searchPlaceholder || '검색') + '" value="' + esc(listQ) + '" /></div>'
+      ? '<div class="search ftools__search"><label class="sr-only" for="list-q">검색</label>' +
+        '<input class="input" id="list-q" type="search" placeholder="' + esc(placeholderOf(listEnt)) + '" ' +
+        'data-ph="' + esc(listEnt.searchPlaceholder || '검색') + '" data-ph-short="' + esc(listEnt.searchPlaceholderShort || '') + '" ' +
+        'value="' + esc(listQ) + '" /></div>'
       : '';
-    var statusChips = listEnt.statuses
+    var statusChips = listEnt.statuses && !summaryCoversStatus(listEnt, all)
       ? '<div class="chiprow" role="group">' + ['전체'].concat(listEnt.statuses).map(function (st) {
-          var n = st === '전체' ? all.length
-            : all.filter(function (r) { return r[listEnt.statusKey] === st; }).length;
+          var n = st === '전체' ? null : all.filter(function (r) { return r[listEnt.statusKey] === st; }).length;
           return '<button class="chip' + (listStatus === st ? ' is-on' : '') + '" type="button" ' +
             'data-liststatus="' + esc(st) + '" aria-pressed="' + (listStatus === st) + '">' +
-            esc(st) + '<span class="chip__n">' + n + '</span></button>';
+            esc(st) + (n === null ? '' : '<span class="chip__n">' + n + '</span>') + '</button>';
         }).join('') + '</div>'
       : '';
-    if (!chipRows && !selects && !search && !statusChips) return '';
-    return '<div class="tools listtools">' + chipRows + statusChips +
-      ((search || selects) ? '<div class="listtools__row">' + search +
-        (selects ? '<div class="listtools__sel">' + selects + '</div>' : '') + '</div>' : '') +
+    if (!inlineRows && !panelRows && !selects && !search && !statusChips) return '';
+
+    // 고를 칸이 셋 이상이면 휴대폰에서 패널로 접습니다(CSS 가 좁은 화면에서만 접음).
+    var sheet = nPanel >= 3;
+    var open = sheet && listSheet;
+    var n = panelCount(listEnt);
+    var active = listActive();
+    var panel = (panelRows || selects)
+      ? '<div class="ftools__panel" id="list-fpanel">' +
+          '<div class="ftools__scrim" data-fclose></div>' +
+          '<div class="ftools__sheet"' + (open ? ' role="dialog" aria-modal="true" aria-labelledby="list-fpanel-t"' : '') + '>' +
+            '<div class="ftools__head"><h2 class="ftools__title" id="list-fpanel-t">필터</h2>' +
+              '<button class="iconbtn" type="button" data-fclose aria-label="필터 닫기">✕</button></div>' +
+            panelRows +
+            (selects ? '<div class="ftools__sels">' + selects + '</div>' : '') +
+            '<div class="ftools__foot">' +
+              '<button class="btn btn--ghost" type="button" data-listreset' + (active ? '' : ' disabled') + '>초기화</button>' +
+              '<button class="btn btn--primary" type="button" data-fclose>결과 보기</button>' +
+            '</div>' +
+          '</div>' +
+        '</div>'
+      : '';
+    return '<div class="tools listtools ftools' + (sheet ? ' ftools--sheet' : '') + '" data-open="' + (open ? '1' : '0') + '">' +
+      inlineRows + statusChips + search +
+      (sheet ? '<button class="btn btn--ghost ftools__open' + (n ? ' is-set' : '') + '" type="button" data-fopen ' +
+        'aria-expanded="' + open + '" aria-controls="list-fpanel">필터' + (n ? '<span class="ftools__n">' + n + '</span>' : '') + '</button>' : '') +
+      panel +
+      (active ? '<button class="btn btn--ghost btn--sm ftools__reset" type="button" data-listreset>필터 초기화</button>' : '') +
       '</div>';
   }
 
@@ -1350,6 +1658,8 @@
     var head = '<div class="page__head"><div><h1 class="page__title">' + esc(ent.label) + '</h1>' +
       '<p class="page__desc">' + esc(ent.desc || listEnt.desc || '') + '</p></div>' +
       (ent.single ? '' : '<div class="page__actions">' +
+        (listEnt.liveLink ? '<a class="btn btn--ghost btn--sm" href="' + esc(listEnt.liveLink[0] + (DEMO ? '?demo=1' : '')) +
+          '">' + esc(listEnt.liveLink[1]) + '</a>' : '') +
         // 예시 모드에서는 실제 인쇄 화면(실제 열쇠)으로 가는 단추를 두지 않습니다.
         (listEnt.headLink && !DEMO ? '<a class="btn btn--ghost btn--sm" href="' + esc(listEnt.headLink[0]) +
           '" target="_blank" rel="noopener">' + esc(listEnt.headLink[1]) + '</a>' : '') +
@@ -1362,13 +1672,31 @@
 
     var all = cache[key] || [];
 
-    /* 요약 숫자 — 정의한 항목에서만. */
+    /* 요약 숫자 — 정의한 항목에서만. 카드가 걸러 보기를 겸합니다.
+         { all: true }        누르면 요약이 거는 조건을 모두 풉니다('전체')
+         { f: [키, 값] }      그 걸러 보기(kind 'summary' 등)를 켜고, 다시 누르면 끕니다
+         { status: '미배부' } 예전 방식의 상태 칩(statuses)을 대신합니다
+       고른 카드는 보라색(관리 UI 색)으로 둡니다. 숫자 색(상태색)과 섞지 않습니다. */
     var sumHtml = '';
     if (listEnt.summary && all.length) {
-      sumHtml = '<div class="minigrid">' + listEnt.summary(all).map(function (c) {
-        return '<div class="mini' + (c.tone ? ' mini--' + c.tone : '') + '">' +
-          '<span class="mini__n">' + c.n + '</span>' +
-          '<span class="mini__l">' + esc(c.l) + '</span></div>';
+      var sums = listEnt.summary(all);
+      var sumKeys = sums.filter(function (c) { return c.f; }).map(function (c) { return c.f[0]; });
+      var sumOn = function (c) {
+        if (c.all) return listStatus === '전체' && sumKeys.every(function (k) { return !listF[k]; });
+        if (c.status) return listStatus === c.status;
+        if (c.f) return listF[c.f[0]] === c.f[1];
+        return false;
+      };
+      sumHtml = '<div class="minigrid sumgrid sumgrid--' + sums.length + '" role="group" aria-label="요약 · 걸러 보기">' + sums.map(function (c) {
+        var cls = 'mini' + (c.tone ? ' mini--' + c.tone : '') + (c.n ? '' : ' is-zero');
+        if (!c.all && !c.status && !c.f) {
+          return '<div class="' + cls + '"><span class="mini__n">' + c.n + '</span><span class="mini__l">' + esc(c.l) + '</span></div>';
+        }
+        var on = sumOn(c);
+        var data = c.all ? 'data-sumall' : (c.status ? 'data-sumstatus="' + esc(c.status) + '"'
+          : 'data-sumf="' + esc(c.f[0]) + '" data-v="' + esc(c.f[1]) + '"');
+        return '<button class="' + cls + ' mini--btn' + (on ? ' is-on' : '') + '" type="button" ' + data +
+          ' aria-pressed="' + on + '"><span class="mini__n">' + c.n + '</span><span class="mini__l">' + esc(c.l) + '</span></button>';
       }).join('') + '</div>';
     }
 
@@ -1392,9 +1720,11 @@
     });
     if (listEnt.sort) rows = rows.slice().sort(listEnt.sort);
     var toolsHtml = filterHtml(listEnt, all);
-    var filtered = rows.length !== all.length;
-    var countHtml = '<p class="resultline">' + (filtered ? '조건에 맞는 ' + rows.length + '건 / 전체 ' + all.length + '건'
-      : '전체 ' + all.length + '건') + '</p>';
+    var filtered = listActive();
+    // 휴대폰에서는 '필터 초기화' 단추 대신 결과 줄 끝의 '초기화' 로 풉니다(CSS 가 하나만 보이게).
+    var countHtml = '<p class="resultline">' + (filtered ? '전체 ' + all.length + '건 중 <b>' + rows.length + '건</b>'
+      : '전체 ' + all.length + '건') +
+      (filtered ? ' <button class="linkreset" type="button" data-listreset>초기화</button>' : '') + '</p>';
 
     if (!rows.length) {
       host.innerHTML = '<div class="page">' + head + tabsHtml + sumHtml + toolsHtml +
@@ -1402,6 +1732,7 @@
         '<p class="state__title">조건에 맞는 항목이 없습니다.</p>' +
         '<p class="state__hint">검색어나 걸러 보기를 바꿔 보세요.</p>' +
         '<div class="state__act"><button class="btn btn--ghost btn--sm" type="button" data-listreset>조건 지우기</button></div></div></div>';
+      fitPlaceholder();
       paintNav(); return;
     }
 
@@ -1429,6 +1760,7 @@
     }
 
     host.innerHTML = '<div class="page">' + head + tabsHtml + sumHtml + toolsHtml + countHtml + body + '</div>';
+    fitPlaceholder();
     paintNav();
   }
 
@@ -1530,6 +1862,41 @@
       : op === 'off' ? 'QR 꺼짐으로 바꿨습니다(협의용 예시). 실제로는 그 카드와 열린 운영자 화면이 바로 멈춥니다.'
       : '새 QR로 다시 켰습니다(협의용 예시). 실제로는 새 카드를 인쇄해 전달합니다.');
   }
+  /* 협의용 예시: 운영자 PIN 흉내. 실제 함수(admin_issue_booth_pin · admin_disable_booth_pin)는 부르지 않습니다.
+     예시 PIN 은 운영자 예시와 같은 4자리 규칙이라, 보여 준 PIN 으로 운영자 예시 화면을 바로 열어 볼 수 있습니다. */
+  function demoPinAct(row, op) {
+    var label = boothSlot(row) + ' ' + (row.name || '');
+    var c = AD.pinOf(row.id);
+    var o = op === 'off'
+      ? { title: 'PIN 로그인을 끌까요?', label: 'PIN 끄기', danger: true,
+          message: '“' + label + '”의 PIN 로그인이 막히고 PIN으로 연 휴대폰 ' + c.sessions + '대가 로그아웃됩니다(협의용 예시). QR은 그대로입니다.' }
+      : c.state === 'on'
+      ? { title: 'PIN을 재발급할까요?', label: 'PIN 재발급', danger: true,
+          message: '실제로는 지금 PIN이 바로 실패하고 그 PIN으로 연 휴대폰 ' + c.sessions + '대가 로그아웃됩니다. ' +
+            '협의용 예시에서는 상태만 바뀌고 예시 PIN 값은 그대로입니다. QR은 그대로입니다.' }
+      : { title: '운영자 PIN을 발급할까요?', label: c.state === 'off' ? '새 PIN 만들기' : 'PIN 발급', danger: false,
+          message: '“' + label + '”의 운영자 PIN을 만듭니다(협의용 예시). 다음 창에서 예시 PIN을 보여 드려요.' };
+    return UI.confirm({ title: o.title, message: o.message, confirmLabel: o.label, danger: o.danger }).then(function (yes) {
+      if (!yes) return;
+      var res = op === 'off' ? AD.pinOff(row.id) : AD.pinIssue(row.id);
+      if (res.error) { toast(res.error, true); return; }
+      renderPanel();
+      reopenMore(row.id);
+      if (op === 'off') { toast('PIN 꺼짐으로 바꿨습니다(협의용 예시). QR은 그대로입니다.'); return; }
+      UI.reveal({
+        title: '운영자 PIN 발급 · 협의용 예시',
+        closeLabel: '닫기',
+        bodyHtml:
+          '<div class="pinshow">' +
+            '<p class="pinshow__who"><b>' + esc(boothSlot(row)) + '</b> ' + esc(row.name || '') + '</p>' +
+            '<p class="pinshow__label">협의용 예시 PIN</p>' +
+            '<p class="pinshow__pin">' + esc(res.pin) + '</p>' +
+            '<p class="pinshow__warn">협의용 예시 PIN입니다. 실제 운영자 PIN은 6자리이고, 발급할 때 이 창에서 한 번만 보입니다.</p>' +
+            '<p class="pinshow__note">운영자 예시 화면(booth-ctrl.html?demo=1)에서 구역 → 부스 → 이 PIN을 넣으면 운영 화면이 열립니다.</p>' +
+          '</div>'
+      });
+    });
+  }
   function demoLive(row, mode, wait) {
     var why = AD.setLive(row.id, mode, wait);
     if (why) { toast(why, true); return; }
@@ -1579,6 +1946,7 @@
         var dv = v ? new Date(v) : null;
         v = dv && !isNaN(dv) ? C.fmtDateTime(dv) : '';
       }
+      if (f.type === 'bool') v = v ? '켜짐' : '꺼짐';
       if (f.type === 'image') {
         out += '<div class="listrow"><div class="listrow__body">' +
           '<div class="listrow__meta">' + esc(f.label) + '</div>' +
@@ -1990,7 +2358,8 @@
       var get = e.soft ? D.selectSoft : D.select;
       return get(e.table, { order: e.order === false ? false : (e.order || [['sort_order', true]]) })
         .then(function (d) { cache[k] = d; });
-    })).then(renderPanel).catch(function (e) {
+    // 운영자 QR · PIN 상태는 함께 읽되, 못 읽어도 목록은 그립니다(loadCreds 는 실패하지 않습니다).
+    }).concat([loadCreds()])).then(renderPanel).catch(function (e) {
       console.error('[admin] 로드 실패', e);
       $('#view').innerHTML = '<div class="state state--error">' + esc(C.dataMessage(e)) +
         '<div class="state__act"><button class="btn btn--ghost btn--sm" type="button" data-retry>다시 시도</button></div></div>';
@@ -2017,9 +2386,16 @@
     // 주소가 되면 메뉴에서 감춘 뜻이 없어집니다.
     return (ENTITIES[id] && !ENTITIES[id].hidden) ? id : 'overview';
   }
+  // 부스 운영 현황(booth-admin.html)의 '부스 정보 관리' 가 admin.html?find=A-01#booths 로 엽니다.
+  // 처음 한 번만 부스 검색칸에 넣습니다.
+  var findOnce = (function () {
+    try { return String(new URLSearchParams(window.location.search).get('find') || '').slice(0, 40); } catch (e) { return ''; }
+  })();
   function go() {
     current = routeFromHash();
     listQ = ''; listStatus = '전체'; listF = {};
+    if (listSheet) { listSheet = false; document.body.style.overflow = ''; }
+    if (findOnce && current === 'booths') { listQ = findOnce; findOnce = ''; }
     renderPanel();
     if (pendingAdd) { var k = pendingAdd; pendingAdd = null; openEditor(k, null); }
     window.scrollTo({ top: 0, behavior: 'instant' });
@@ -2097,7 +2473,11 @@
       }
 
       var st = t.closest('[data-subtab]');
-      if (st) { subTab[current] = st.dataset.subtab; listQ = ''; listStatus = '전체'; listF = {}; renderPanel(); return; }
+      if (st) {
+        subTab[current] = st.dataset.subtab; listQ = ''; listStatus = '전체'; listF = {};
+        if (listSheet) { listSheet = false; document.body.style.overflow = ''; }
+        renderPanel(); return;
+      }
 
       var ls = t.closest('[data-liststatus]');
       if (ls) { listStatus = ls.dataset.liststatus; renderPanel(); return; }
@@ -2113,6 +2493,32 @@
         return;
       }
       if (t.closest('[data-listreset]')) { listQ = ''; listStatus = '전체'; listF = {}; renderPanel(); return; }
+
+      // 요약 카드 = 걸러 보기. 고른 카드를 다시 누르거나 '전체' 를 누르면 풉니다.
+      if (t.closest('[data-sumall]')) {
+        var sumEnt = ENTITIES[listKey()];
+        (sumEnt.filters || []).forEach(function (f) { if (f.kind === 'summary') listF[f.key] = ''; });
+        listStatus = '전체';
+        renderPanel();
+        return;
+      }
+      var sf = t.closest('[data-sumf]');
+      if (sf) {
+        listF[sf.dataset.sumf] = listF[sf.dataset.sumf] === sf.dataset.v ? '' : sf.dataset.v;
+        renderPanel();
+        var sfAgain = $('#view [data-sumf="' + sf.dataset.sumf + '"][data-v="' + sf.dataset.v + '"]');
+        if (sfAgain) sfAgain.focus();
+        return;
+      }
+      var ss = t.closest('[data-sumstatus]');
+      if (ss) {
+        listStatus = listStatus === ss.dataset.sumstatus ? '전체' : ss.dataset.sumstatus;
+        renderPanel();
+        return;
+      }
+      // 휴대폰의 걸러 보기 패널
+      if (t.closest('[data-fopen]')) { setListSheet(true); return; }
+      if (t.closest('[data-fclose]')) { setListSheet(false); return; }
 
       if (t.closest('[data-add]')) { openEditor(listKey(), null); return; }
       if (t.closest('[data-edit-settings]')) { openEditor('settings', (cache.settings || [])[0]); return; }
@@ -2142,7 +2548,10 @@
           act.disabled = true;   // 답이 오기 전에 두 번 눌러 켜고 끄기가 엇갈리지 않게
           Promise.resolve(ENTITIES[key].onQuick(row)).then(function () { act.disabled = false; });
         }
+        else if (act.dataset.act === 'pin-issue' && !DEMO) pinIssue(row);
+        else if (act.dataset.act === 'pin-off' && !DEMO) pinOff(row);
         else if (act.dataset.act === 'demo-qr' && DEMO) demoQr(row, act.dataset.op);
+        else if (act.dataset.act === 'demo-pin' && DEMO) demoPinAct(row, act.dataset.op);
         else if (act.dataset.act === 'demo-live' && DEMO) demoLive(row, act.dataset.mode, act.dataset.wait);
         else if (act.dataset.act === 'del') confirmDelete(key, row);
         else if (act.dataset.act === 'up') move(key, i, -1);
@@ -2176,8 +2585,32 @@
     document.addEventListener('keydown', function (e) {
       if (e.key !== 'Escape') return;
       if (!$('#sheet').hidden) { $('#sheet').hidden = true; document.body.style.overflow = ''; return; }
+      if (listSheet) { setListSheet(false); return; }
       closeRowMenus();
     });
+
+    // 화면 폭이 바뀌면 검색칸 안내 글을 맞추고(넓으면 길게 · 좁으면 '부스 검색'),
+    // 넓어지면 휴대폰용 패널은 닫습니다(데스크톱은 같은 칸을 한 줄로 보여 줌).
+    try {
+      var mq = window.matchMedia('(max-width: 680px)');
+      var onWidth = function () {
+        if (!mq.matches && listSheet) { listSheet = false; document.body.style.overflow = ''; renderPanel(); }
+      };
+      if (mq.addEventListener) mq.addEventListener('change', onWidth); else mq.addListener(onWidth);
+    } catch (e2) { /* 옛 브라우저 — 패널은 그대로 */ }
+    // ResizeObserver 를 못 쓰거나 늦게 오는 브라우저를 위해 창 크기 변화에도 맞춥니다.
+    var fitTimer = null;
+    window.addEventListener('resize', function () { clearTimeout(fitTimer); fitTimer = setTimeout(fitPlaceholder, 150); });
+  }
+
+  /* 휴대폰의 걸러 보기 패널 열고 닫기. 열면 첫 칸으로, 닫으면 '필터' 단추로 초점을 돌려줍니다. */
+  function setListSheet(open) {
+    listSheet = !!open;
+    document.body.style.overflow = listSheet ? 'hidden' : '';
+    renderPanel();
+    var target = listSheet ? $('#list-fpanel .ftools__sheet button:not([disabled]), #list-fpanel .ftools__sheet select')
+      : $('[data-fopen]');
+    if (target) { try { target.focus(); } catch (e) { /* 무시 */ } }
   }
 
   /* ── 시작 ─────────────────────────────────────────────────────
@@ -2228,6 +2661,7 @@
     $('#app').hidden = false;
     paintDemoBar();
     current = routeFromHash();
+    if (findOnce && current === 'booths') { listQ = findOnce; findOnce = ''; }
     return loadAll();
   }
 
