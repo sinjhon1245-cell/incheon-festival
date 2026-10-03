@@ -105,6 +105,10 @@
      applyOpenRule(booths|booth, info) → 같은 모양
          phase 가 'open' 이면 오늘 문 열기 전에 넣은 값(리허설)을 '없음' 으로 바꾼
          사본을 돌려줍니다. 다른 phase 이거나 todayOpenAt 이 없으면 그대로.
+     isSample(b)         → boolean  기관(org)이 '[샘플]' 로 시작하는 운영 준비용 샘플 부스
+     samplePreview(info, b) → boolean  행사 전(phase 'before')의 샘플 부스인가.
+         관람객 화면은 행사 전에는 대기 값을 감추지만, 이때만 그 부스의 값을 미리
+         보여 줍니다(협의 · 리허설용). 기관에서 '[샘플]' 을 지우면 원래 규칙으로 돌아갑니다.
      compareCode(a, b)   → number  'A-2' 와 'A-10' 을 숫자 순서로 견줍니다
      esc(s)              → HTML 에 넣을 수 있게 & < > " ' 를 바꾼 문자열
      pad2(n)             → '03' (두 자리보다 길면 자르지 않습니다)
@@ -380,6 +384,13 @@
     }
     return Object.prototype.toString.call(booths) === '[object Array]' ? booths.map(one) : one(booths);
   }
+
+  /* 운영 준비용 샘플 부스. 표에 칸을 따로 두지 않고 기관 이름 앞의 '[샘플]' 로 알아봅니다.
+     실제 부스로 고칠 때 기관 이름을 바꾸면 샘플 안내와 미리 보기가 함께 사라집니다. */
+  var SAMPLE_RE = /^\s*\[샘플\]/;
+  function isSample(b) { return !!b && SAMPLE_RE.test(String(b.org || '')); }
+  // 행사 날(문 열기 전 · 닫은 뒤 포함)부터는 샘플이어도 원래 규칙을 따릅니다.
+  function samplePreview(info, b) { return !!info && info.phase === 'before' && isSample(b); }
 
   /* ── 상태 ────────────────────────────────────────────────────── */
   function meta(congestion) {
@@ -1139,6 +1150,8 @@
   BoothCore.eventPhase = eventPhase;
   BoothCore.eventInfo = eventInfo;
   BoothCore.applyOpenRule = applyOpenRule;
+  BoothCore.isSample = isSample;
+  BoothCore.samplePreview = samplePreview;
   BoothCore.compareCode = compareCode;
   BoothCore.esc = esc;
   BoothCore.pad2 = pad2;

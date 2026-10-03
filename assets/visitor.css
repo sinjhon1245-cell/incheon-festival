@@ -268,6 +268,32 @@ html.is-demo .row { scroll-margin-top: calc(56px + var(--demo-h) + env(safe-area
   .demoexit .line-btn { width: 100%; justify-content: center; }
 }
 
+/* 운영 준비용 샘플 안내 — 경고가 아니라 알림이라 상태 색 · 보라를 쓰지 않고 옅은 회색으로 둡니다 */
+.samplenote {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 16px;
+  padding: 10px 12px;
+  background: var(--line-2);
+  border: 1px solid var(--line);
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--ink-2);
+}
+.samplenote[hidden] { display: none; }
+.samplenote__tag {
+  flex: none;
+  margin-top: 1px;
+  padding: 1px 6px;
+  border: 1px solid var(--muted-2);
+  color: var(--ink-2);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+.samplenote__t { min-width: 0; word-break: keep-all; overflow-wrap: anywhere; }
+
 /* ── 4. '지금 계신 부스' (?b=) ───────────────────────────────── */
 .here {
   margin-top: 20px;

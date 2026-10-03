@@ -1652,8 +1652,10 @@
       return toMs(b.congestion_updated_at) < info.todayOpenAt.getTime();
     }
     function beforeOpenValue(info) { return beforeOpen(booth, info); }
+    // 행사 전이라도 샘플 부스('[샘플]' 기관)의 값은 관람객 화면에 미리 보입니다(visitor.html 과 같은 규칙).
+    function samplePreview(info, b) { return core.samplePreview(info, b || booth || cached); }
     // 운영 시간(문을 연 뒤 닫기 전)인가. 시간표를 아직 못 받았거나 시연이면 운영 중으로 봅니다.
-    function visibleNow(info) { return !info || info.phase === 'open'; }
+    function visibleNow(info) { return !info || info.phase === 'open' || samplePreview(info); }
 
     // 저장 알림. 운영 시간 밖에서 넣은 값은 관람객 화면에 보이지 않습니다(문을 열면 '문 열기 전 값' 으로,
     // 날이 바뀌면 '어제 값' 으로 지워집니다). '반영됐어요' 라고 하면 안 되어 그대로 알립니다.
@@ -1661,7 +1663,7 @@
     function savedShows(b) {
       if (!settings) return null;
       var info = eventInfo();
-      return info.phase === 'open' && !beforeOpen(b, info);
+      return (info.phase === 'open' && !beforeOpen(b, info)) || samplePreview(info, b);
     }
     // 알림 첫 줄의 값 이름. 모두 받침으로 끝나 뒤에 '으로' 를 붙입니다.
     function savedWord(b) {
@@ -1689,6 +1691,7 @@
         if (beforeOpen(b, info)) return head + '\n문 열기 전 값이라 관람객 화면에는 아직 안 보여요.';
         return head + '\n관람객 화면에도 곧 표시됩니다.';
       }
+      if (samplePreview(info, b)) return head + '\n샘플 부스라 관람객 화면에 미리 표시됩니다.';
       if (info.phase === 'before') return head + '\n연습 값이라 관람객 화면에는 안 보여요.';
       if (info.phase === 'preopen') {
         return head + '\n문을 연 뒤' + (info.openTime ? '(' + info.openTime + ')' : '') + ' 한 번 더 눌러 주세요.';
@@ -1701,6 +1704,7 @@
 
     function phaseNote(info) {
       if (!info) return '';
+      if (samplePreview(info)) return '샘플 부스예요. 행사 전이지만 지금 누른 값이 관람객 화면에 미리 보여요.';
       if (info.phase === 'before' && info.nextOpenLabel) {
         return '지금 누른 값은 연습이에요. 관람객 화면에는 ' + info.nextOpenLabel + '부터 보여요.';
       }
