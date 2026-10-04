@@ -221,3 +221,6 @@
 @media (max-width: 680px) {
   .lvpage .page__actions .btn { min-height: 44px; }
 }
+
+/* 확인 창의 문단 나눔(예시 현황 초기화 안내처럼 두 문단인 글) */
+.modal__desc { white-space: pre-line; }

@@ -5,6 +5,7 @@
    공개 · 기관 · 담당자 · QR · PIN)은 관리자 화면(admin.html)이 맡고, 이 화면은
    대기 시간 · 혼잡 · 마지막 입력 · 미입력 · 확인 필요 · 중단 · 마감을 봅니다.
    고칠 수 있는 것은 하나뿐입니다 — 관리자 긴급 수정(admin_set_booth_live, 기록에 'admin').
+   시연 전 '예시 현황 초기화' 도 같은 함수를 [예시] 부스마다 부를 뿐입니다(아래 resetExamples).
 
    보안: 관리자 화면과 같은 로그인 · 같은 문지기(staff_profiles.role = 'admin').
    이 파일에는 권한이 없습니다. 읽기는 관리자 RLS, 쓰기는 함수 안의 is_admin() 이 막습니다.
@@ -341,6 +342,8 @@
           '<p class="page__desc">행사 당일 모든 공개 부스의 대기 시간과 손이 가야 하는 부스를 봅니다. ' +
           '부스 정보 · QR · PIN 설정은 관리자 화면에서 합니다.</p></div>' +
           '<div class="page__actions">' +
+            // 운영 준비용 예시 부스가 공개돼 있을 때만 보입니다(paintExampleBtn). 협의용 예시(?demo)에는 없습니다.
+            '<button class="btn btn--ghost btn--sm" type="button" id="lv-example" data-example-reset hidden>↻ 예시 현황 초기화</button>' +
             '<button class="btn btn--ghost btn--sm" type="button" data-refresh>새로 고침</button>' +
             '<a class="btn btn--ghost btn--sm" href="admin.html' + (DEMO ? '?demo=1' : '') + '#booths">부스 정보 관리</a>' +
           '</div></div>' +
@@ -383,6 +386,7 @@
     sel.classList.toggle('is-set', !!ui.zone);
     document.querySelector('.lvhead').hidden = !rows.length;
     $('#lv-list').innerHTML = rows.length ? rows.map(rowHtml).join('') : emptyHtml(all);
+    paintExampleBtn(all);
   }
 
   /* ── 구역 현황 ─────────────────────────────────────────────── */
@@ -489,6 +493,81 @@
       });
   }
 
+  /* ── 시연 전 예시 현황 초기화 ──────────────────────────────────────
+     운영 준비용 예시 부스(기관이 '[예시]' 로 시작)의 대기 값을 시연용 처음 값으로 다시 넣습니다.
+     30분 '확인 필요' · 자정 초기화 같은 실제 규칙은 그대로 두고, 시연 직전에 값을 새로 넣는 도구일 뿐입니다.
+     새 쓰기 함수 없이 부스마다 관리자 긴급 수정과 같은 admin_set_booth_live 를 부릅니다 — 미입력은 그 함수의
+     'clear'(부스 하나의 값 지우기, '값 지우기' 단추와 같은 길). 모든 부스를 지우는 admin_reset_booth_live 는
+     실제 부스까지 지우므로 쓰지 않습니다.
+     대상: 누르는 순간 서버에서 다시 읽은 부스 중 기관이 '[예시]' 로 시작하고(BoothCore.isSample), 공개 · 구역 공개 ·
+     번호가 있으며, 아래 표에 그 부스 번호가 있는 곳만. '[예시]' 를 지운 실제 부스는 같은 번호여도 건드리지 않고,
+     부스마다 UUID(r.id)로 보냅니다. 값은 대기 시간 단추(WAIT_CHOICES) · 중단 · 마감 · 미입력만 씁니다. */
+  var EXAMPLE_PRESET = {
+    'A-01': ['open', 5],  'A-02': ['open', 15], 'A-03': ['open', 30], 'A-04': ['clear'],
+    'B-01': ['open', 10], 'B-02': ['open', 20], 'B-03': ['pause'],    'B-04': ['closed'],
+    'C-01': ['open', 5],  'C-02': ['open', 15], 'C-03': ['open', 30], 'C-04': ['clear']
+  };
+  var exampleBusy = false;
+  function presetOf(r) {
+    var p = Object.prototype.hasOwnProperty.call(EXAMPLE_PRESET, r.code) ? EXAMPLE_PRESET[r.code] : null;
+    if (!p) return null;
+    if (p[0] === 'open' && (BC.WAIT_CHOICES || []).indexOf(p[1]) < 0) return null;
+    return p;
+  }
+  function exampleTargets(rows) {
+    return rows.filter(function (r) { return r.shown && BC.isSample(r.b) && !!presetOf(r); });
+  }
+  function paintExampleBtn(all) {
+    var b = $('#lv-example');
+    if (!b) return;
+    b.hidden = DEMO || !exampleTargets(all || rowsNow()).length;
+    b.disabled = exampleBusy;
+    b.textContent = exampleBusy ? '초기화하는 중…' : '↻ 예시 현황 초기화';
+  }
+  function resetExamples() {
+    if (DEMO || exampleBusy) return;
+    if (!exampleTargets(rowsNow()).length) { toast('초기화할 예시 부스가 없습니다.', true); return; }
+    UI.confirm({
+      title: '예시 현황을 초기화할까요?',
+      message: '현재 공개된 운영 준비용 예시 부스의 대기 상태를 시연용 초기값으로 다시 설정합니다.\n\n' +
+        '[예시] 부스에만 적용되며 실제 부스 정보에는 영향을 주지 않습니다.',
+      confirmLabel: '초기화'
+    }).then(function (ok) {
+      if (!ok) return;
+      exampleBusy = true;
+      paintExampleBtn();
+      var done = [], failed = [];
+      // 누르는 순간의 부스 정보로 다시 고릅니다(그 사이 다른 화면에서 '[예시]' 를 지웠을 수 있음).
+      loadMaster().then(function () {
+        var targets = exampleTargets(rowsNow());
+        // 하나씩 차례로 보내 성공 · 실패를 부스마다 정확히 셉니다.
+        return targets.reduce(function (p, r) {
+          return p.then(function () {
+            var s = presetOf(r);
+            return C.rpc('admin_set_booth_live', { p_booth_id: r.id, p_mode: s[0], p_wait_minutes: s[0] === 'open' ? s[1] : null })
+              .then(function () { done.push(r.code); }, function (e) {
+                failed.push(r.code);
+                console.warn('[booth-admin] 예시 현황 초기화 실패', r.code, e && e.code);
+              });
+          });
+        }, Promise.resolve());
+      }).then(function () {
+        exampleBusy = false;
+        // 결과를 기다리지 않고 바로 다시 읽어 요약 · 카드를 새 값으로 그립니다.
+        return refreshMaster().then(function () {
+          if (!failed.length) { toast('예시 부스 ' + done.length + '곳의 현황을 초기화했어요.'); return; }
+          toast((done.length ? done.length + '곳 완료 · ' : '') + failed.length + '곳 실패 — ' +
+            failed.join(', ') + ' 현황을 변경하지 못했습니다.', true);
+        });
+      }, function (e) {
+        exampleBusy = false;
+        paintExampleBtn();
+        console.warn('[booth-admin] 예시 현황 초기화 — 부스 목록을 읽지 못했습니다', e && (e.code || e.message));
+        toast(C.dataMessage(e), true);
+      });
+    });
+  }
+
   /* ── 다시 읽기 ─────────────────────────────────────────────── */
   function refreshLive() {
     return loadLive().then(paint, function (e) {
@@ -568,6 +647,7 @@
       if (t.closest('[data-open-sheet]')) { $('#sheet').hidden = false; document.body.style.overflow = 'hidden'; return; }
       if (t.closest('[data-close-sheet]')) { $('#sheet').hidden = true; document.body.style.overflow = ''; return; }
       if (t.closest('[data-refresh]')) { refreshMaster().then(function () { toast('새로 읽었습니다.'); }); return; }
+      if (t.closest('[data-example-reset]')) { resetExamples(); return; }
       if (t.closest('#lv-hidden')) { ui.hidden = !ui.hidden; paintLive(); return; }
       if (t.closest('[data-reset]')) { ui.quick = 'all'; ui.zone = ''; ui.q = ''; var qi = $('#lv-q'); if (qi) qi.value = ''; paint(); return; }
       var qb = t.closest('[data-quick]');
