@@ -289,6 +289,29 @@ button {
 .pick--booth .pick__k { flex: none; min-width: 1.8em; font-size: 17px; }
 .pindirect { margin-top: 8px; }
 
+/* 부스 고르기 찾기 칸(한 구역 부스가 많을 때만) — 번호(12 · A-12)나 부스명으로 */
+.pinfind { position: relative; margin-top: 14px; }
+.pinfind::before {
+  content: ''; position: absolute; left: 15px; top: 50%; width: 14px; height: 14px; margin-top: -9px;
+  border: 2px solid var(--muted); border-radius: 50%; pointer-events: none;
+}
+.pinfind::after {
+  content: ''; position: absolute; left: 28px; top: 50%; width: 7px; height: 2px; margin-top: 5px;
+  background: var(--muted); transform: rotate(45deg); pointer-events: none;
+}
+.pinfind__input {
+  display: block; width: 100%; min-height: 50px; padding: 0 14px 0 44px;
+  border: 1px solid var(--line-2); border-radius: var(--r-btn); background: var(--panel);
+  color: var(--ink); font: inherit; font-size: 16px;   /* 16px 아래면 iOS 가 확대합니다 */
+  -webkit-appearance: none; appearance: none;
+}
+.pinfind__input::placeholder { color: var(--muted); }
+.pinfind__input:focus { outline: 3px solid var(--accent-t); outline-offset: 0; border-color: var(--accent); }
+.pinfind__none { margin-top: 12px; font-size: 14px; line-height: 1.5; color: var(--muted); }
+/* 다른 구역 번호를 쳤을 때 맨 위에 보이는 부스 — 전체 번호(B-12)와 구역 이름을 함께 */
+.pick--other .pick__k { min-width: 3.2em; }
+.pick--other .pick__s { display: block; margin-top: 2px; font-weight: 600; }
+
 /* 고른 부스: 번호는 작은 머리글, 이름이 제목 */
 .boothhead { margin-top: 16px; }
 .boothhead__code { font-size: 15px; font-weight: 700; line-height: 1.3; color: var(--accent-d); }

@@ -60,6 +60,12 @@
       <p class="samplenote" id="samplenote" role="note" hidden><span class="samplenote__tag">운영 준비용 예시</span> <span class="samplenote__t">지금 보이는 부스와 대기 시간은 실제 행사 정보가 아닌 예시입니다. 실제 부스 정보는 추후 업데이트됩니다.</span></p>
       <div id="here" hidden></div>
       <section class="hero" id="hero" aria-label="지금 상황 요약"></section>
+      <!-- 부스가 많을 때(SEARCH_FIELD_MIN 곳 이상) 검색을 아이콘에만 두지 않고 검색칸 모양으로도 보여 줍니다.
+           누르면 붙박이 줄의 검색칸이 열립니다(붙박이 줄 높이는 그대로). -->
+      <button type="button" class="qopen" id="search-field" data-act="search-open" hidden>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" aria-hidden="true" focusable="false"><circle cx="10.5" cy="10.5" r="6.5" /><path d="M15.5 15.5 20.5 20.5" /></svg>
+        <span>부스 이름 · 번호 · 체험 내용으로 찾기</span>
+      </button>
     </div>
 
     <div class="bar" id="bar" hidden>
@@ -288,7 +294,12 @@
     function searching() { return !!searchTest(); }
 
     function hay(b) {
-      return norm([b.code, String(b.code || '').replace(/-/g, ''), b.name, b.org, b.program, b.zone_name].join(' '));
+      return norm([b.code, String(b.code || '').replace(/-/g, ''), looseCode(b), looseCode(b, '-'), b.name, b.org, b.program, b.zone_name].join(' '));
+    }
+    // 앞의 0 을 뺀 부스 번호: 'B-03' → 'b3'(sep 이 '-' 이면 'b-3'). 'b3' · 'B-3' 으로 쳐도 B-03 이 찾아집니다.
+    function looseCode(b, sep) {
+      var m = /^([a-z]+)-?0*(\d+)$/i.exec(String(b.code || ''));
+      return m ? norm(m[1] + (sep || '') + m[2]) : '';
     }
 
     // 한글 낱자모: 조합형(0x1100-0x11FF)과 호환형 'ㄱ'-'ㆎ'(0x3131-0x318E)
@@ -381,14 +392,37 @@
         if (q && !q(hay(b))) return false;
         return true;
       });
-      if (effView() === 'list' && effSort() === 'wait') {
+      var byWait = effView() === 'list' && effSort() === 'wait';
+      if (q) {
+        // 검색 중에는 맞은 자리 순서가 먼저입니다(searchRank). 같은 순위 안에서는 지금 정렬을 따릅니다.
+        var rank = {};
+        list.forEach(function (b) { rank[b.id] = searchRank(b, q); });
         list = list.slice().sort(function (a, b) {
-          return (waitRank(a) - waitRank(b)) ||
-            ((a.wait_minutes || 0) - (b.wait_minutes || 0)) ||
-            core.compareCode(a.code, b.code);
+          return (rank[a.id] - rank[b.id]) || (byWait ? waitCmp(a, b) : core.compareCode(a.code, b.code));
         });
+      } else if (byWait) {
+        list = list.slice().sort(waitCmp);
       }
       return list;
+    }
+    function waitCmp(a, b) {
+      return (waitRank(a) - waitRank(b)) ||
+        ((a.wait_minutes || 0) - (b.wait_minutes || 0)) ||
+        core.compareCode(a.code, b.code);
+    }
+    // 검색 결과 순위: 부스 번호가 꼭 맞음(B-12 · b12 · b3 · 숫자만 12) → 번호 일부 → 부스 이름 → 체험 내용 → 운영기관 → 구역 이름.
+    // 구역 이름에만 걸린 부스(그 구역 전부)가 이름 · 체험 내용이 맞는 부스를 덮지 않게 맨 뒤로 보냅니다.
+    // 어느 칸이 맞는지는 검색과 같은 함수(q — 한글 부분 입력까지 맞춤)로 칸마다 다시 봅니다.
+    function searchRank(b, q) {
+      var code = norm(b.code), bare = code.replace(/-/g, ''), loose = looseCode(b);
+      var want = norm(S.ui.q).replace(/-/g, '');
+      if (want && (bare === want || loose === want.replace(/^([a-z]+)0+(?=\d)/, '$1'))) return 0;
+      if (/^\d{1,3}$/.test(want) && loose && loose.replace(/^[a-z]+/, '') === String(+want)) return 0;
+      if (q(code + ' ' + bare + ' ' + loose + ' ' + looseCode(b, '-'))) return 1;
+      if (q(norm(b.name))) return 2;
+      if (q(norm(b.program))) return 3;
+      if (q(norm(b.org))) return 4;
+      return 5;
     }
 
     // 검색칸이 열려 있으면 검색어가 비었거나 낱자모뿐이어도 묶지 않습니다. 치는 동안
@@ -473,9 +507,12 @@
       return cls;
     }
 
-    function codeLabel(b, grouped) {
-      if (grouped && b.no !== null && b.no !== undefined && b.no !== '') return pad2(b.no);
-      return b.code || '';
+    // 줄 앞의 부스 번호는 늘 전체 번호(A-07)입니다. 구역 제목이 화면 위로 지나간 뒤에도
+    // 07 이 A-07 인지 B-07 인지 바로 알 수 있게 합니다(부스가 수십 곳일 때).
+    function codeLabel(b) {
+      if (b.code) return b.code;
+      if (b.zone_key && b.no !== null && b.no !== undefined && b.no !== '') return b.zone_key + '-' + pad2(b.no);
+      return '';
     }
 
     /* ── 1 · 2 · 3. 띠 ─────────────────────────────────────────── */
@@ -727,7 +764,7 @@
       // 숨어 있던 탭 줄은 폭이 0 이라 그때 잰 흐림(is-more)이 틀립니다. 다시 보일 때 고쳐 잽니다.
       var tabsWereHidden = $('bar').hidden || $('bar-tabs').hidden;
       $('bar').hidden = !show;
-      if (!show) return;
+      if (!show) { $('search-field').hidden = true; return; }
       var zs = zoneList();
       var multi = zs.length >= 2;
       if (!multi) S.ui.zone = '';
@@ -737,6 +774,8 @@
       if (multi && S.ui.q) S.ui.search = true;
       $('bar-tabs').hidden = searchMode;
       $('search').hidden = !searchMode;
+      // 부스가 많으면 요약 아래에 검색칸 모양의 단추를 하나 더 둡니다(검색칸이 열려 있으면 숨김).
+      $('search-field').hidden = searchMode || S.booths.length < SEARCH_FIELD_MIN;
       S.multi = multi;
       var cancel = $('search-cancel');
       if (multi) { cancel.textContent = '취소'; cancel.hidden = false; }
@@ -753,17 +792,52 @@
       S.keys.tabs = key;
       var tabs = $('tabs');
       var restore = focusKey(tabs);
-      tabs.innerHTML = [{ key: '', label: '전체', n: S.booths.length }].concat(zs).map(function (z) {
+      // 탭에는 짧은 이름(A 스쿨존)만 둡니다. 전체 이름은 목록의 구역 제목 · 탭의 title 에 있습니다.
+      // 구역이 ZONE_SELECT_MIN 곳 이상이면 탭을 늘어놓지 않고 [전체] · [고른 구역] · [구역 선택 ▾](기기 기본 고르기 창)으로 줄입니다.
+      function tabHtml(z) {
         var on = S.ui.zone === z.key;
-        return '<button type="button" class="tab" data-zone="' + esc(z.key) + '" aria-pressed="' + on + '">' +
-          esc(z.label) + '<span class="tab__n">' + z.n + '</span></button>';
-      }).join('');
+        var full = z.key ? z.label + ' · 부스 ' + z.n + '곳' : '전체 부스 ' + z.n + '곳';
+        return '<button type="button" class="tab" data-zone="' + esc(z.key) + '" aria-pressed="' + on + '"' +
+          ' title="' + esc(full) + '" aria-label="' + esc(full) + '">' +
+          '<span class="tab__t">' + esc(z.key ? shortZone(z) : z.label) + '</span><span class="tab__n">' + z.n + '</span></button>';
+      }
+      var all = { key: '', label: '전체', n: S.booths.length };
+      if (zs.length >= ZONE_SELECT_MIN) {
+        var cur = zs.filter(function (z) { return z.key === S.ui.zone; })[0];
+        tabs.innerHTML = tabHtml(all) + (cur ? tabHtml(cur) : '') +
+          '<label class="tab tab--sel"><span class="tab__t">구역 선택</span><span class="tab__caret" aria-hidden="true">▾</span>' +
+            '<select id="zone-sel" class="tab__select" aria-label="구역 선택">' +
+              '<option value="">전체 구역 · ' + S.booths.length + '곳</option>' +
+              zs.map(function (z) {
+                return '<option value="' + esc(z.key) + '"' + (z.key === S.ui.zone ? ' selected' : '') + '>' +
+                  esc(z.key + ' · ' + z.label + ' · ' + z.n + '곳') + '</option>';
+              }).join('') +
+            '</select></label>';
+      } else {
+        tabs.innerHTML = [all].concat(zs).map(tabHtml).join('');
+      }
       restoreFocus(tabs, restore);
       // 탭을 새로 만들어도 줄의 scrollLeft 는 그대로 남습니다. 여유 수 · 다른 구역 대안 ·
       // '대기 짧은 순' 이 구역 고름을 '전체' 로 풀면, 눌린 '전체' 탭이 왼쪽 화면 밖에
       // 남아 아무 탭도 골라지지 않은 것처럼 보입니다. 새로 만들 때만 눌린 탭을 보이게 합니다.
       // (탭 줄이 숨어 있으면 폭이 0 이라 잴 수 없으니, 다시 보일 때 위에서 맞춥니다.)
       if (!searchMode) revealTab();
+    }
+
+    // 구역 탭의 짧은 이름. 관리자가 적은 구역 이름은 길 수 있어('피지컬 AI · 로봇 메이커존') 탭에는
+    // 구역 코드와 이름의 끝말만 둡니다(A 메이커존). 이름이 이미 짧거나('로봇존' → 'A 로봇존')
+    // 구역 코드가 들어 있으면('A구역') 그대로 씁니다. 표에 칸을 새로 두지 않고 이름에서 만듭니다.
+    var ZONE_SELECT_MIN = 7;
+    var SEARCH_FIELD_MIN = 20;
+    function shortZone(z) {
+      var key = String(z.key || ''), label = String(z.label || '').trim();
+      if (!label) return key;
+      var hasKey = label.indexOf(key) === 0 || label.split(/\s+/).indexOf(key) >= 0;
+      if (label.length <= 6) return hasKey ? label : key + ' ' + label;
+      var words = label.replace(/[·・|/,()]/g, ' ').split(/\s+/).filter(Boolean);
+      var last = words.length ? words[words.length - 1] : label;
+      if (last === key && words.length > 1) last = words[words.length - 2];
+      return key + ' ' + last;
     }
 
     function tabsFade() {
@@ -839,7 +913,7 @@
       var open = !!S.open[b.id], did = domId(b.id);
       return '<li class="' + rowCls(b) + '" data-id="' + esc(b.id) + '">' +
         '<button type="button" class="row__main" aria-expanded="' + open + '" aria-controls="more-' + did + '">' +
-          '<span class="row__code">' + esc(codeLabel(b, grouped)) + '</span>' +
+          '<span class="row__code">' + esc(codeLabel(b)) + '</span>' +
           '<span class="row__name">' + esc(b.name || '이름 미정') + '</span>' +
           '<span class="row__right">' + rightHtml(b) + '</span>' +
         '</button>' +
@@ -987,7 +1061,7 @@
       var view = effView(), grouped = view === 'grid' ? true : isGrouped();
       // patch() 는 상태 칸만 고칩니다. 그래서 이름 · 번호 · 구역 이름이 바뀌면(5분마다 전부
       // 다시 받을 때 관리자가 고친 값) 줄을 새로 만들어야 합니다. 펼침(S.open)과 초점은
-      // 새로 만들어도 이어집니다. 묶음 줄은 code 대신 no 를 보여 주니 no 도 넣습니다.
+      // 새로 만들어도 이어집니다. 한눈에 타일은 code 대신 no 를 보여 주니 no 도 넣습니다.
       var key = [view, grouped ? 'g' : 'f', liveOn() ? 1 : 0, safeMapUrl(S.settings.booth_map_url),
         zoneList().map(function (z) { return z.key + ':' + z.label; }).join(','),
         items.map(function (b) { return [b.id, b.no, b.code, b.name].join(':'); }).join(',')].join('|');
@@ -1257,6 +1331,15 @@
     }
 
     function bind() {
+      // 구역이 많을 때의 '구역 선택' 고르기 창(renderBar). 탭을 누른 것과 같게 움직입니다.
+      document.addEventListener('change', function (e) {
+        if (!e.target || e.target.id !== 'zone-sel') return;
+        S.ui.zone = e.target.value;
+        S.ui.count = '';
+        render(false);
+        revealTab();
+        showResults(true);
+      });
       document.addEventListener('click', function (e) {
         var t = e.target.closest('button, [data-act]');
         if (!t) return;

@@ -3,9 +3,9 @@
 
    이 화면의 주인공은 '대기 시간' 입니다. 숫자를 가장 크게, 상태색은 왼쪽 선 · 숫자 ·
    점에만 씁니다(색만으로 뜻을 전하지 않고 늘 글자를 함께). 휴대폰(390px)이 먼저입니다.
-     휴대폰      카드 한 줄
-     태블릿      카드 두 줄
-     데스크톱    표처럼 한 줄(부스 · 프로그램 · 운영상태 · 대기시간 · 마지막 입력 · 접속 · 관리)
+     휴대폰 · 태블릿    한 부스 한 줄(약 72px) — 부스 · 손이 가야 할 표시 · 마지막 입력 / 대기 / 수정
+     데스크톱(1024px~)  표처럼 한 줄(약 64px) — 부스 · 운영상태 · 대기시간 · 마지막 입력 · 확인할 것 · 관리
+   검색 · 구역 · 정렬 · 지금 걸러 보는 것(데스크톱은 표 머리까지)은 스크롤해도 위에 붙어 있습니다.
    =================================================================== */
 
 .lvpage { gap: 14px; }
@@ -46,84 +46,125 @@
 }
 .lvtoggle[aria-pressed="true"] { color: var(--primary); }
 
-/* ── 부스 한 줄(카드) ────────────────────────────────────────── */
+/* ── 붙박이 도구 줄 ─────────────────────────────────────────────
+   검색 · 구역 · 정렬과 '지금 걸러 보는 것' 이 스크롤해도 위에 붙어 있습니다. 휴대폰은 위 막대(52px)
+   아래에, 데스크톱(옆 메뉴가 있는 1024px 부터)은 맨 위에 붙고 표 머리도 함께 붙습니다. */
+.lvbar {
+  position: sticky; top: 52px; z-index: 30;
+  display: flex; flex-direction: column; gap: 6px;
+  margin: 0 calc(var(--main-pad) * -1); padding: 8px var(--main-pad);
+  background: var(--bg); border-bottom: 1px solid var(--line);
+}
+.lvbar .lvtools__row { flex-wrap: nowrap; }
+.lvbar .lvtools__row .search { flex: 1 1 auto; max-width: 480px; }
+.lvbar .lvtools__row .listsel { flex: 0 1 180px; min-width: 0; }
+@media (max-width: 560px) {
+  .lvbar .lvtools__row { gap: 6px; }
+  .lvbar .lvtools__row .search { flex: 1 1 auto; max-width: none; }
+  .lvbar .lvtools__row .listsel { flex: 0 0 100px; }
+  .lvbar .select { padding-left: 9px; padding-right: 22px; font-size: 13.5px; background-position: right 6px center; }
+  .lvbar .search input { padding-left: 32px; padding-right: 8px; font-size: 15px; }
+  .lvbar .search::before { left: 11px; }
+}
+.lvactive { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 36px;
+  padding: 2px 4px 2px 12px; border-radius: 10px; background: var(--primary-t); font-size: 13.5px; color: var(--ink-2); }
+.lvactive[hidden] { display: none; }
+.lvactive b { color: var(--primary); }
+.lvactive__x { min-height: 36px; padding: 0 10px; border: 0; background: none; font: inherit; font-size: 13px; font-weight: 700;
+  color: var(--primary); cursor: pointer; }
+
+/* ── 부스 한 줄 ──────────────────────────────────────────────────
+   휴대폰(약 72px): 1줄 부스번호 · 이름 / 2줄 손이 가야 할 표시 · 마지막 입력, 오른쪽에 대기 · 수정 단추.
+   줄의 왼쪽(부스 · 표시)을 누르면 자세히(운영기관 · 프로그램 · 접속 · 입력 주체)가 펼쳐집니다.
+   상태색은 왼쪽 띠(4px) · 숫자 · 점에만 씁니다(색만으로 뜻을 전하지 않고 늘 글자를 함께). */
 .lvhead { display: none; }
 .lvhead[hidden] { display: none !important; }
-.lvlist { display: grid; gap: 10px; }
+.lvlist { display: flex; flex-direction: column; background: #fff; border: 1px solid var(--line); border-radius: 12px;
+  box-shadow: var(--sh); overflow: hidden; }
+.lvlist:has(> .state) { background: none; border: 0; box-shadow: none; }
 
 .lv {
   --c: var(--off);
+  position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   grid-template-areas:
-    "booth state"
-    "prog  prog"
-    "wait  ago"
-    "cred  cred"
-    "act   act"
-    "more  more";
-  gap: 6px 12px;
+    "booth wait act"
+    "meta  wait act"
+    "more  more more";
+  align-items: center;
+  gap: 2px 10px;
   min-width: 0;
-  padding: 14px 16px;
-  background: #fff;
-  border: 1px solid var(--line);
-  border-left: 5px solid var(--c);
-  border-radius: 12px;
-  box-shadow: var(--sh);
+  min-height: 72px;
+  padding: 10px 12px 10px 16px;
+  border-bottom: 1px solid var(--line-2);
+  box-shadow: inset 4px 0 0 var(--c);
 }
+.lv:last-child { border-bottom: 0; }
 .lv--free    { --c: var(--ok); }
 .lv--normal  { --c: var(--warn); }
 .lv--busy    { --c: var(--danger); }
 .lv--pause, .lv--closed { --c: var(--off); }
-.lv--missing { --c: var(--muted-2); border-left-style: dashed; }
-.lv.is-stale { background: #FFF8F9; border-color: #F0CFD4; border-left-color: var(--danger); }
+.lv--missing { --c: var(--line-3, #C9D1E0); }
+.lv.is-stale { --c: var(--danger); background: #FFF8F9; }
 .lv.is-hidden { opacity: 0.72; }
 
-.lv__booth { grid-area: booth; display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; min-width: 0; }
-.lv__code { font-size: 15px; font-weight: 800; color: var(--ink); font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
-.lv__name { min-width: 0; font-size: 15.5px; font-weight: 700; color: var(--ink); overflow-wrap: anywhere; }
-.lv__prog { grid-area: prog; min-width: 0; font-size: 13px; color: var(--muted); line-height: 1.45;
-  overflow: hidden; display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; }
-.lv__prog:empty { display: none; }
+.lv__booth { grid-area: booth; display: flex; align-items: baseline; gap: 7px; min-width: 0; white-space: nowrap; }
+.lv__code { flex: none; font-size: 14.5px; font-weight: 800; color: var(--ink); font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+.lv__name { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 15px; font-weight: 700; color: var(--ink); }
+.lv__booth .badge { flex: none; }
 
-.lv__state { grid-area: state; display: inline-flex; align-items: center; gap: 6px; align-self: start;
-  font-size: 13px; font-weight: 700; color: var(--ink-2); white-space: nowrap; }
+.lv__meta { grid-area: meta; display: flex; align-items: center; gap: 6px; min-width: 0; overflow: hidden; white-space: nowrap;
+  font-size: 12.5px; color: var(--muted); }
+.lv__state { display: none; align-items: center; gap: 6px; font-size: 13px; font-weight: 700; color: var(--ink-2); white-space: nowrap; }
 .lv__dot { width: 9px; height: 9px; border-radius: 50%; background: var(--c); flex: none; }
 .lv--missing .lv__dot { background: transparent; border: 2px solid var(--muted-2); }
+.lv__flags, .lv__cred { display: inline-flex; align-items: center; gap: 4px; min-width: 0; }
+.lv__flags:empty, .lv__cred:empty { display: none; }
+.flag { flex: none; padding: 1px 6px; border-radius: 6px; font-size: 12px; font-weight: 700; line-height: 1.5; white-space: nowrap; }
+.flag--bad  { background: var(--danger-t); color: var(--danger); }
+.flag--warn { background: var(--warn-t); color: var(--warn); }
+.flag--off  { background: var(--bg-sink); color: var(--muted); font-weight: 600; }
+.lv__ago { display: inline-flex; align-items: baseline; gap: 6px; font-variant-numeric: tabular-nums; }
+.lv__agov { font-weight: 600; color: var(--ink-2); }
+.lv__clock { display: none; color: var(--muted-2); }
+.is-stale .lv__agov { color: var(--danger); font-weight: 700; }
 
-/* 대기 시간 — 이 화면에서 가장 큰 글자 */
-.lv__wait { grid-area: wait; display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 6px; min-width: 0; }
-.lv__num { font-size: 40px; font-weight: 800; line-height: 1.05; letter-spacing: -0.04em; color: var(--c);
-  font-variant-numeric: tabular-nums; }
-.lv__num--word { font-size: 26px; letter-spacing: -0.03em; }
-.lv--pause .lv__num, .lv--closed .lv__num { color: var(--ink-2); }
+/* 대기 — 줄에서 가장 큰 글자 */
+.lv__wait { grid-area: wait; display: flex; flex-direction: column; align-items: flex-end; justify-content: center; min-width: 56px; text-align: right; }
+.lv__val { display: inline-flex; align-items: baseline; }
+.lv__num { font-size: 24px; font-weight: 800; line-height: 1.05; letter-spacing: -0.03em; color: var(--c); font-variant-numeric: tabular-nums; }
+.lv__num--word { font-size: 17px; }
 .lv__num--none { color: var(--muted-2); }
-.lv__unit { font-size: 16px; font-weight: 700; color: var(--ink-2); margin-left: -4px; }
-.lv__cong { flex-basis: 100%; font-size: 14px; font-weight: 800; color: var(--c); }
-.lv--missing .lv__cong { color: var(--muted); font-weight: 700; }
+.lv__unit { margin-left: 1px; font-size: 12.5px; font-weight: 700; color: var(--ink-2); }
+.lv__cong { font-size: 12px; font-weight: 800; color: var(--c); }
+.lv--missing .lv__cong { color: var(--warn); }
+.lv__word { font-size: 14px; font-weight: 800; color: var(--ink-2); white-space: nowrap; }
+.lv__dash { display: none; color: var(--muted-2); font-size: 18px; font-weight: 700; }
 
-.lv__ago { grid-area: ago; display: flex; flex-direction: column; align-items: flex-end; justify-content: center; gap: 2px;
-  text-align: right; font-size: 13px; color: var(--muted); min-width: 0; }
-.lv__agol { font-size: 12px; font-weight: 600; color: var(--muted-2); }
-.lv__agov { font-size: 15px; font-weight: 800; color: var(--ink); font-variant-numeric: tabular-nums; }
-.lv__clock { font-size: 12px; font-variant-numeric: tabular-nums; }
-.lv__by { font-size: 12px; font-weight: 600; color: var(--ink-2); }
-.lv__warn { margin-top: 2px; padding: 2px 8px; border-radius: 6px; background: var(--danger-t); color: var(--danger);
-  font-size: 12.5px; font-weight: 800; white-space: nowrap; }
-.is-stale .lv__agov { color: var(--danger); }
+.lv__act { grid-area: act; display: flex; align-items: center; }
+.lv__act .btn { position: relative; z-index: 2; min-width: 64px; min-height: 44px; padding: 0 12px; }
+.lv__act .btn--ghost { color: var(--ink-2); }
+/* 미입력 — 확인 필요보다 한 단계 옅게(연한 보라 바탕 · 보라 글자) */
+.btn--soft { background: var(--primary-t); color: var(--primary); border-color: transparent; }
+.btn--soft:hover { background: #E6E1FD; }
+/* 휴대폰: 줄의 왼쪽 전체를 덮는 투명 단추(자세히 펼치기). 수정 단추 · 펼친 칸은 그 위에 있습니다. */
+.lv__morebtn {
+  position: absolute; z-index: 1; left: 0; top: 0; height: 72px; right: 88px;
+  padding: 0; border: 0; background: transparent; color: transparent; cursor: pointer;
+}
+.lv__morebtn span { display: none; }
+.lv__morebtn:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; border-radius: 10px; }
 
-.lv__cred { grid-area: cred; display: flex; flex-wrap: wrap; gap: 4px; padding-top: 8px; border-top: 1px solid var(--line-2); }
-.cred { padding: 3px 8px; border-radius: 6px; background: var(--ok-t); color: var(--ok); font-size: 12.5px; font-weight: 700; white-space: nowrap; }
-.cred--live { background: var(--info-t); color: var(--info); }
-.cred--off { background: var(--off-t); color: var(--off); }
-.cred--bad { background: var(--danger-t); color: var(--danger); }
-
-.lv__act { grid-area: act; display: flex; gap: 8px; align-items: center; }
-.lv__act .btn { flex: 1 1 auto; min-height: 44px; }
-.lv__act .iconbtn { flex: none; width: 44px; height: 44px; }
-.lv__more { grid-area: more; display: flex; flex-wrap: wrap; gap: 6px; padding-top: 4px; }
+.lv__more { grid-area: more; position: relative; z-index: 2; display: flex; flex-direction: column; gap: 8px;
+  margin-top: 8px; padding-top: 10px; border-top: 1px dashed var(--line); }
 .lv__more[hidden] { display: none; }
-.lv__more .btn { min-height: 40px; }
+.lvd { display: grid; gap: 4px; margin: 0; font-size: 13px; }
+.lvd div { display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: 8px; }
+.lvd dt { color: var(--muted-2); font-weight: 600; }
+.lvd dd { margin: 0; color: var(--ink-2); overflow-wrap: anywhere; }
+.lv__links { display: flex; flex-wrap: wrap; gap: 6px; }
+.lv__links .btn { min-height: 40px; }
 
 /* ── 구역 현황 ─────────────────────────────────────────────── */
 .zgrid { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
@@ -147,62 +188,57 @@
 .zc__n.is-bad b { color: var(--danger); }
 .zc__n.is-warn b { color: var(--warn); }
 
-/* ── 태블릿 · 좁은 데스크톱: 카드 두 줄 ─────────────────────────── */
-@media (min-width: 720px) and (max-width: 1199px) {
-  .lvlist { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-}
-
-/* ── 데스크톱: 표처럼 한 줄 ──────────────────────────────────────
-   1200px 부터 표. 1440px 아래에서는 프로그램을 부스 이름 밑에 두고(칸 하나 아낌),
-   1440px 부터 프로그램 칸을 따로 둡니다. 어느 폭에서도 가로로 밀리지 않게 최소 폭을 맞췄습니다. */
-@media (min-width: 1200px) {
-  .lvpage { --lv-cols: minmax(150px, 1.4fr) 92px 130px minmax(110px, 1fr) minmax(120px, 1fr) 136px; }
+/* ── 데스크톱: 표처럼 한 줄(약 64px) ─────────────────────────────────
+   옆 메뉴가 생기는 1024px 부터. 부스 · 운영상태 · 대기시간 · 마지막 입력 · 확인할 것 · 관리.
+   표 머리는 붙박이 도구 줄 안에 있어 함께 붙습니다. 어느 폭에서도 가로로 밀리지 않게 최소 폭을 맞췄습니다. */
+@media (min-width: 1024px) {
+  .lvpage { --lv-cols: minmax(170px, 2fr) 96px 104px 132px minmax(120px, 1.4fr) 132px; }
+  .lvbar { top: 0; padding-top: 10px; }
   .lvhead {
-    display: grid; grid-template-columns: var(--lv-cols); gap: 12px; padding: 0 16px 0 21px;
+    display: grid; grid-template-columns: var(--lv-cols); gap: 12px; padding: 2px 13px 0 17px;
     font-size: 12px; font-weight: 700; color: var(--muted-2);
   }
-  .lvhead span:nth-child(2) { display: none; }
-  .lvlist { gap: 6px; }
   .lv {
     grid-template-columns: var(--lv-cols);
     grid-template-areas:
-      "booth state wait ago cred act"
-      "prog  state wait ago cred act"
-      "more  more  more more more more";
-    align-items: center;
-    gap: 2px 12px;
-    padding: 10px 16px;
-    border-radius: 10px;
-    box-shadow: none;
+      "booth state wait ago flags act"
+      "more  more  more more more  more";
+    gap: 0 12px;
+    min-height: 60px;
+    padding: 8px 12px 8px 16px;
   }
-  .lv__booth { flex-direction: column; align-items: flex-start; gap: 0; align-self: end; }
-  .lv__prog { align-self: start; }
-  .lv__state { align-self: center; white-space: normal; }
-  .lv__num { font-size: 32px; }
-  .lv__num--word { font-size: 18px; }
-  .lv__unit { font-size: 14px; }
-  .lv__cong { font-size: 13px; }
-  .lv__ago { align-items: flex-start; text-align: left; }
-  .lv__cred { padding-top: 0; border-top: 0; }
-  .lv__act { flex-direction: column; align-items: stretch; gap: 6px; }
-  .lv__act .btn { min-height: 36px; }
-  .lv__act .iconbtn { width: 100%; height: 30px; }
-  .lv__more { justify-content: flex-end; }
+  .lv__meta { display: contents; }
+  .lv__state { grid-area: state; display: inline-flex; }
+  .lv__flags { grid-area: flags; flex-wrap: wrap; row-gap: 3px; }
+  .lv__flags:empty { display: block; }
+  .lv__cred { flex-wrap: wrap; row-gap: 3px; }
+  .lv__ago { grid-area: ago; font-size: 13px; color: var(--muted); }
+  .lv__clock { display: inline; font-size: 12px; }
+  .lv__wait { flex-direction: row; align-items: baseline; justify-content: flex-start; gap: 6px; text-align: left; }
+  .lv__num { font-size: 22px; }
+  .lv__word { display: none; }
+  .lv__dash { display: inline; }
+  .lv--missing .lv__cong { display: none; }   /* '운영상태' 칸이 '현황 미입력' 이라고 이미 말합니다 */
+  .lv__act { justify-content: flex-end; gap: 6px; }
+  .lv__act .btn { min-height: 36px; min-width: 76px; }
+  .lv__morebtn {
+    position: static; z-index: auto; height: 36px; width: 36px; border-radius: 8px;
+    color: var(--ink-2); font-size: 18px; line-height: 1;
+  }
+  .lv__morebtn span { display: inline; }
+  .lv__morebtn:hover { background: var(--bg-sink); }
+  .lv__more { flex-direction: row; align-items: flex-start; justify-content: space-between; gap: 16px; }
+  .lvd { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 24px; flex: 1; }
+  .lv__links { flex: none; justify-content: flex-end; }
 }
-@media (min-width: 1440px) {
-  .lvpage { --lv-cols: minmax(150px, 1.2fr) minmax(120px, 1fr) 92px 130px minmax(110px, 0.9fr) minmax(120px, 1fr) 136px; }
-  .lvhead span:nth-child(2) { display: block; }
-  .lv {
-    grid-template-areas:
-      "booth prog state wait ago cred act"
-      "more  more more  more more more more";
-  }
-  .lv__booth, .lv__prog { align-self: center; }
-  .lv__prog { -webkit-line-clamp: 2; }
+/* 1024~1279px: 옆 메뉴(224px)와 스크롤 막대를 빼면 표가 쓸 폭이 700px 안팎이라 칸을 좁힙니다. */
+@media (min-width: 1024px) and (max-width: 1279.98px) {
+  .lvpage { --lv-cols: minmax(140px, 2fr) 84px 76px 88px minmax(104px, 1.4fr) 118px; }
+  .lvhead { gap: 10px; }
+  .lv { gap: 0 10px; }
 }
 
 @media (max-width: 360px) {
-  .lv__num { font-size: 34px; }
   .sumgrid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 

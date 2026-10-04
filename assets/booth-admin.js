@@ -206,61 +206,95 @@
     if (r.state === 'open') return BC.meta(r.congestion).key;   // free · normal · busy
     return r.state;                                              // pause · closed · missing
   }
+  /* 한 부스 = 한 줄(휴대폰 약 72px · 데스크톱 약 64px). 줄에는 부스번호 · 이름 · 지금 대기/상태 ·
+     마지막 입력 · 손이 가야 할 표시만 둡니다. 운영기관 · 프로그램 · 접속(QR · PIN) 자세히 · 입력 주체는
+     줄을 눌러(데스크톱은 ⋯) 펼친 칸에서 봅니다. 정상인 접속(QR 정상 · PIN 정상)은 줄에 쓰지 않습니다. */
   function waitHtml(r) {
     if (r.state === 'open') {
       var big = r.wait === 0 ? '바로' : String(r.wait);
-      return '<span class="lv__num' + (r.wait === 0 ? ' lv__num--word' : '') + '">' + esc(big) + '</span>' +
-        (r.wait === 0 ? '' : '<span class="lv__unit">' + (r.wait >= 60 ? '분 이상' : '분') + '</span>') +
+      return '<span class="lv__val"><span class="lv__num' + (r.wait === 0 ? ' lv__num--word' : '') + '">' + esc(big) + '</span>' +
+        (r.wait === 0 ? '' : '<span class="lv__unit">' + (r.wait >= 60 ? '분 이상' : '분') + '</span>') + '</span>' +
         '<span class="lv__cong">' + esc(r.congestion) + '</span>';
     }
-    if (r.state === 'missing') return '<span class="lv__num lv__num--none">—</span><span class="lv__cong">현황 미입력</span>';
-    return '<span class="lv__num lv__num--word">' + esc(stateText(r)) + '</span>';
+    if (r.state === 'missing') return '<span class="lv__val"><span class="lv__num lv__num--none">—</span></span><span class="lv__cong">미입력</span>';
+    // 중단 · 마감: 휴대폰은 이 칸에 낱말을, 데스크톱은 '운영상태' 칸이 말하므로 여기는 — 만
+    return '<span class="lv__val"><span class="lv__word">' + esc(stateText(r)) + '</span><span class="lv__dash" aria-hidden="true">—</span></span>';
   }
-  function credHtml(r) {
+  // 줄에 띄울 '손이 가야 할 표시' — 정상은 쓰지 않습니다. 빨강: 확인 필요 · QR 문제 · PIN 실패 많음,
+  // 주황: QR 미발급(PIN 은 있음), 회색: PIN 미발급 · PIN 꺼짐(QR 이 기본 길이라 약하게).
+  function flag(text, kind) { return '<span class="flag flag--' + kind + '">' + esc(text) + '</span>'; }
+  function credFlags(r) {
     var c = r.cred;
-    if (!c) return '<span class="muted">—</span>';
+    if (!c) return '';
+    var out = '';
+    if (c.qr_state === 'off') out += flag('QR 꺼짐', 'bad');
+    else if (c.qr_state !== 'on') out += flag('QR 미발급', r.qrIssue ? 'bad' : 'warn');
+    if (c.pin_state === 'off') out += flag('PIN 꺼짐', 'off');
+    else if (c.pin_state !== 'on') out += flag('PIN 미발급', 'off');
+    if (r.pinIssue) out += flag('PIN 실패 많음', 'bad');
+    return out;
+  }
+  function credText(r) {
+    var c = r.cred;
+    if (!c) return '접속 정보를 읽지 못했습니다';
     var qr = { on: 'QR 정상', off: 'QR 꺼짐' }[c.qr_state] || 'QR 미발급';
-    var pin = c.pin_state === 'on' ? (c.pin_sessions > 0 ? 'PIN 로그인 ' + c.pin_sessions + '대' : 'PIN 정상')
-      : (c.pin_state === 'off' ? 'PIN 꺼짐' : 'PIN 미발급');
-    return '<span class="cred' + (c.qr_state === 'on' ? '' : (r.qrIssue ? ' cred--bad' : ' cred--off')) + '">' + esc(qr) + '</span>' +
-      '<span class="cred' + (c.pin_state === 'on' ? (c.pin_sessions > 0 ? ' cred--live' : '') : ' cred--off') + '">' + esc(pin) + '</span>' +
-      (r.pinIssue ? '<span class="cred cred--bad">⚠ PIN 로그인 확인 필요</span>' : '');
+    var pin = c.pin_state === 'on' ? 'PIN 정상' : (c.pin_state === 'off' ? 'PIN 꺼짐' : 'PIN 미발급');
+    return qr + ' · ' + pin + (c.pin_sessions > 0 ? ' · PIN 로그인 ' + c.pin_sessions + '대' : '') +
+      (c.pin_failures_1h ? ' · 최근 1시간 PIN 실패 ' + c.pin_failures_1h + '번' : '');
   }
   function agoHtml(r) {
-    if (!r.at) return '<span class="lv__agov muted">' + (r.state === 'missing' ? '입력 없음' : '') + '</span>';
+    if (!r.at) return '<span class="lv__agov">' + (r.state === 'missing' ? '입력 없음' : '') + '</span>';
     return '<span class="lv__agov">' + esc(BC.formatAgo(r.at)) + '</span>' +
-      '<span class="lv__clock">' + esc(BC.formatClock(r.at)) + '</span>' +
-      (r.by && BY[r.by] ? '<span class="lv__by">' + esc(BY[r.by]) + '</span>' : '') +
-      (r.stale ? '<span class="lv__warn">⚠ 확인 필요</span>' : '');
+      '<span class="lv__clock">' + esc(BC.formatClock(r.at)) + '</span>';
   }
+  function attention(r) { return !!(r.stale || r.state === 'missing' || r.qrIssue || r.pinIssue); }
+  function urgent(r) { return !!(r.stale || r.qrIssue || r.pinIssue); }
+  function actClass(r) { return urgent(r) ? 'btn--primary' : (r.state === 'missing' ? 'btn--soft' : 'btn--ghost'); }
+  function actLabel(r) { return urgent(r) ? '확인·수정' : (r.state === 'missing' ? '입력' : '수정'); }
   function adminHref(r) {
     var q = r.code || r.name;
     return 'admin.html?' + (DEMO ? 'demo=1&' : '') + 'find=' + encodeURIComponent(q) + '#booths';
   }
+  function moreHtml(r) {
+    function row(k, v) { return v ? '<div><dt>' + esc(k) + '</dt><dd>' + esc(v) + '</dd></div>' : ''; }
+    return '<dl class="lvd">' +
+        row('운영기관', r.org) + row('프로그램', r.program) + row('구역', r.zone_label) +
+        row('접속', credText(r)) +
+        row('마지막 입력', r.at ? BC.formatClock(r.at) + ' · ' + BC.formatAgo(r.at) + (r.by && BY[r.by] ? ' · ' + BY[r.by] : '') : '입력 없음') +
+      '</dl>' +
+      '<div class="lv__links">' +
+        '<a class="btn btn--ghost btn--sm" href="' + esc(adminHref(r)) + '">부스 정보 관리</a>' +
+        '<a class="btn btn--ghost btn--sm" href="' + esc(adminHref(r)) + '">PIN 관리</a>' +
+        (DEMO ? '' : '<a class="btn btn--ghost btn--sm" href="print-qr.html" target="_blank" rel="noopener">QR 관리</a>') +
+      '</div>';
+  }
   function rowHtml(r) {
     var open = ui.more === r.id;
+    var attn = attention(r);
+    var name = (r.code ? r.code + ' ' : '') + (r.name || '(이름 없음)');
     var hiddenTag = r.shown ? '' : '<span class="badge badge--' + (r.slot ? 'off' : 'warn') + '">' + (r.slot ? '비공개' : '미배정') + '</span>';
-    return '<article class="lv lv--' + tone(r) + (r.stale ? ' is-stale' : '') + (r.shown ? '' : ' is-hidden') + '" data-id="' + esc(r.id) + '">' +
+    return '<article class="lv lv--' + tone(r) + (r.stale ? ' is-stale' : '') + (attn ? ' is-attn' : '') + (open ? ' is-open' : '') +
+        (r.shown ? '' : ' is-hidden') + '" data-id="' + esc(r.id) + '">' +
       '<div class="lv__booth">' +
         '<span class="lv__code">' + esc(r.code || '번호 미정') + '</span>' +
         '<span class="lv__name">' + esc(r.name || '(이름 없음)') + '</span>' + hiddenTag +
       '</div>' +
-      '<div class="lv__prog">' + esc([r.org, r.program].filter(Boolean).join(' · ') || '') + '</div>' +
-      '<div class="lv__state"><i class="lv__dot" aria-hidden="true"></i>' + esc(stateText(r)) + '</div>' +
+      '<div class="lv__meta">' +
+        '<span class="lv__state"><i class="lv__dot" aria-hidden="true"></i>' + esc(stateText(r)) + '</span>' +
+        '<span class="lv__flags">' + (r.stale ? flag('확인 필요', 'bad') : '') +
+          '<span class="lv__cred">' + credFlags(r) + '</span></span>' +
+        '<span class="lv__ago">' + agoHtml(r) + '</span>' +
+      '</div>' +
       '<div class="lv__wait">' + waitHtml(r) + '</div>' +
-      '<div class="lv__ago"><span class="lv__agol">마지막 입력</span>' + agoHtml(r) + '</div>' +
-      '<div class="lv__cred">' + credHtml(r) + '</div>' +
       '<div class="lv__act">' +
-        '<button class="btn btn--primary btn--sm" type="button" data-act="override"' + (busy[r.id] ? ' disabled' : '') + '>' +
-          (busy[r.id] ? '저장 중…' : (r.stale ? '확인 · 수정' : '현황 수정')) + '</button>' +
-        '<button class="iconbtn iconbtn--sm" type="button" data-act="more" aria-expanded="' + open + '" ' +
-          'aria-label="' + esc((r.code ? r.code + ' ' : '') + r.name) + ' 더보기">⋯</button>' +
+        // 단추 무게: 확인 필요 · QR/PIN 문제 = 진한 단추(확인·수정), 미입력 = 연한 보라(입력), 나머지 = 옅은 단추(수정)
+        '<button class="btn ' + actClass(r) + ' btn--sm" type="button" data-act="override"' + (busy[r.id] ? ' disabled' : '') + '>' +
+          (busy[r.id] ? '저장 중…' : actLabel(r)) + '</button>' +
+        // 휴대폰에서는 줄의 왼쪽(부스 · 표시) 전체를 덮는 투명 단추, 데스크톱에서는 ⋯ 단추
+        '<button class="lv__morebtn" type="button" data-act="more" aria-expanded="' + open + '" ' +
+          'aria-label="' + esc(name) + ' 자세히"><span aria-hidden="true">⋯</span></button>' +
       '</div>' +
-      '<div class="lv__more"' + (open ? '' : ' hidden') + '>' +
-        '<a class="btn btn--ghost btn--sm" href="' + esc(adminHref(r)) + '">부스 정보 관리</a>' +
-        '<a class="btn btn--ghost btn--sm" href="' + esc(adminHref(r)) + '">PIN 관리</a>' +
-        (DEMO ? '' : '<a class="btn btn--ghost btn--sm" href="print-qr.html" target="_blank" rel="noopener">QR 관리</a>') +
-      '</div>' +
+      '<div class="lv__more"' + (open ? '' : ' hidden') + '>' + moreHtml(r) + '</div>' +
     '</article>';
   }
 
@@ -273,13 +307,18 @@
 
   /* ── 부스 운영 현황 ─────────────────────────────────────────── */
   function base(all) { return ui.hidden ? all : all.filter(function (r) { return r.shown; }); }
+  // 부스 번호는 'B-03' · 'b03' · 'b3' · 'b-3' 어느 꼴로 쳐도 맞게 합니다(관람객 · 인쇄 화면 검색과 같음).
+  function codeHay(code) {
+    var c = String(code || '').toLowerCase(), m = /^([a-z]+)-?0*(\d+)$/.exec(c);
+    return [c, c.replace(/-/g, ''), m ? m[1] + m[2] + ' ' + m[1] + '-' + m[2] : ''].join(' ');
+  }
   function filtered(all) {
     var q = ui.q.trim().toLowerCase();
     return base(all).filter(function (r) {
       if (!inQuick(r, ui.quick)) return false;
       if (ui.zone && r.zone_key !== ui.zone) return false;
       if (!q) return true;
-      return [r.code, r.name, r.org, r.program, r.zone_label].join(' ').toLowerCase().indexOf(q) >= 0;
+      return [codeHay(r.code), r.name, r.org, r.program, r.zone_label].join(' ').toLowerCase().indexOf(q) >= 0;
     }).sort(sorter(ui.sort));
   }
   function summaryHtml(all) {
@@ -313,9 +352,10 @@
     base(rowsNow()).forEach(function (r) { if (r.zone_key) used[r.zone_key] = true; });
     var zs = data.zones.filter(function (z) { return used[z.key]; });
     if (ui.zone && !used[ui.zone]) ui.zone = '';
+    // 좁은 고르기 칸에서도 어느 구역인지 보이게 구역 코드를 앞에 둡니다(A · 읽걷쓰AI 스쿨존).
     return '<option value="">구역 전체</option>' + zs.map(function (z) {
       return '<option value="' + esc(z.key) + '"' + (ui.zone === z.key ? ' selected' : '') + '>' +
-        esc((z.label || z.key + '구역') + ' (' + z.key + ')') + '</option>';
+        esc(z.key + ' · ' + (z.label || z.key + '구역')) + '</option>';
     }).join('');
   }
   function emptyHtml(all) {
@@ -350,20 +390,24 @@
         (DEMO ? '<p class="demohint">' + esc(DEMO_TEXT) + ' 현황 수정을 눌러도 실제 DB에 반영되지 않고, 새로 고치면 처음 예시로 돌아갑니다.</p>' : '') +
         '<p class="lvmeta" id="lv-meta" aria-live="polite"></p>' +
         '<div class="minigrid sumgrid" id="lv-sum" role="group" aria-label="걸러 보기"></div>' +
-        '<div class="tools lvtools">' +
-          '<div class="lvtools__row">' +
-            '<div class="search"><label class="sr-only" for="lv-q">검색</label>' +
-              '<input class="input" id="lv-q" type="search" placeholder="' + esc(searchPh()) + '" value="' + esc(ui.q) + '" /></div>' +
-            '<label class="listsel"><span class="sr-only">구역</span><select class="select select--sm" id="lv-zone"></select></label>' +
-            '<label class="listsel"><span class="sr-only">정렬</span><select class="select select--sm" id="lv-sort">' +
-              SORTS.map(function (s) { return '<option value="' + s[0] + '"' + (ui.sort === s[0] ? ' selected' : '') + '>' + esc(s[1]) + '</option>'; }).join('') +
-            '</select></label>' +
+        // 검색 · 구역 · 정렬 · 지금 걸러 보는 것은 스크롤해도 맨 위에 붙어 있습니다(데스크톱은 표 머리도 함께).
+        '<div class="lvbar" id="lv-bar">' +
+          '<div class="tools lvtools">' +
+            '<div class="lvtools__row">' +
+              '<div class="search"><label class="sr-only" for="lv-q">검색</label>' +
+                '<input class="input" id="lv-q" type="search" placeholder="' + esc(searchPh()) + '" value="' + esc(ui.q) + '" /></div>' +
+              '<label class="listsel"><span class="sr-only">구역</span><select class="select select--sm" id="lv-zone"></select></label>' +
+              '<label class="listsel"><span class="sr-only">정렬</span><select class="select select--sm" id="lv-sort">' +
+                SORTS.map(function (s) { return '<option value="' + s[0] + '"' + (ui.sort === s[0] ? ' selected' : '') + '>' + esc(s[1]) + '</option>'; }).join('') +
+              '</select></label>' +
+            '</div>' +
           '</div>' +
+          '<div class="lvactive" id="lv-active" hidden></div>' +
+          '<div class="lvhead" aria-hidden="true"><span>부스</span><span>운영상태</span><span>대기시간</span>' +
+            '<span>마지막 입력</span><span>확인할 것</span><span>관리</span></div>' +
         '</div>' +
         '<div class="lvcount"><p class="resultline" id="lv-count"></p>' +
           '<button class="lvtoggle" type="button" id="lv-hidden" aria-pressed="' + ui.hidden + '"></button></div>' +
-        '<div class="lvhead" aria-hidden="true"><span>부스</span><span>프로그램</span><span>운영상태</span><span>대기시간</span>' +
-          '<span>마지막 입력</span><span>접속</span><span>관리</span></div>' +
         '<div class="lvlist" id="lv-list"></div>' +
       '</div>';
   }
@@ -384,6 +428,17 @@
     hb.textContent = ui.hidden ? '공개 부스만 보기' : '비공개 · 미배정도 보기';
     hb.setAttribute('aria-pressed', String(ui.hidden));
     sel.classList.toggle('is-set', !!ui.zone);
+    // 붙박이 줄의 '지금 걸러 보는 것' — 위의 요약 카드가 화면 밖으로 지나가도 무엇을 보고 있는지 알 수 있게
+    var act = $('#lv-active');
+    var q = QUICK.concat([['qr', 'QR 문제'], ['pin', 'PIN 확인']]).filter(function (o) { return o[0] === ui.quick; })[0];
+    if (ui.quick !== 'all' && q) {
+      act.hidden = false;
+      act.innerHTML = '<span class="lvactive__t"><b>' + esc(q[1]) + '</b>만 보는 중 · ' + rows.length + '곳</span>' +
+        '<button class="lvactive__x" type="button" data-quick="all">전체 보기</button>';
+    } else {
+      act.hidden = true;
+      act.innerHTML = '';
+    }
     document.querySelector('.lvhead').hidden = !rows.length;
     $('#lv-list').innerHTML = rows.length ? rows.map(rowHtml).join('') : emptyHtml(all);
     paintExampleBtn(all);

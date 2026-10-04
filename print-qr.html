@@ -153,6 +153,33 @@
     .item--sign { width: 136mm; }
     .item.is-filtered { display: none; }
     .item.is-off .card, .item.is-off .sign { opacity: 0.4; }
+    /* 구역 고르기(① · ②) — 칩은 구역 코드와 수만(A 20), 전체 이름은 title */
+    .zchips { display: flex; flex-wrap: wrap; gap: 6px; }
+    .zchips[hidden] { display: none; }
+    .zchip { min-height: 40px; padding: 0 12px; border: 1px solid var(--line-3); background: #FFFFFF; font: inherit;
+      font-size: 14px; font-weight: 700; color: var(--ink-2); cursor: pointer; }
+    .zchip span { margin-left: 3px; font-weight: 600; color: var(--muted); }
+    .zchip[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: #FFFFFF; }
+    .zchip[aria-pressed="true"] span { color: #D5D9E6; }
+    /* 인쇄 설정(구역별 새 페이지 · 인쇄 화면으로 보기) */
+    .opt { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 4px; font-size: 14px; font-weight: 600;
+      color: var(--ink-2); cursor: pointer; white-space: nowrap; }
+    .opt input { width: 18px; height: 18px; margin: 0; accent-color: var(--accent); }
+    /* 구역 묶음. '구역별로 새 페이지' 가 꺼져 있으면 묶음이 없는 것처럼(display: contents) 카드가 이어서 놓이고,
+       켜면 구역마다 제목과 함께 따로 놓입니다(종이에서는 구역마다 새 페이지). */
+    .zsect { display: contents; }
+    .zsect__h { display: none; }
+    .grid.is-zoned { display: block; }
+    .grid.is-zoned .zsect { display: flex; flex-wrap: wrap; gap: 24px 20px; justify-content: center; margin: 0 0 32px; }
+    .grid.is-zoned .zsect__h { display: block; flex-basis: 100%; margin: 0; padding-bottom: 6px; border-bottom: 2px solid var(--ink);
+      font-size: 16px; font-weight: 800; }
+    .grid.is-zoned .zsect.is-empty { display: none; }
+    /* 인쇄 화면으로 보기: 관리 단추 · 확인 칸 · 상태 글 · 고르지 않은 카드를 숨겨, 종이로 나갈 카드만 보여 줍니다 */
+    body.is-printview .lead, body.is-printview .unassigned, body.is-printview .issue,
+    body.is-printview .item .acts, body.is-printview .item .confirm, body.is-printview .item .fix,
+    body.is-printview .item .now, body.is-printview .item .note, body.is-printview .item .kst,
+    body.is-printview .item .kst__hint { display: none !important; }
+    body.is-printview .item.is-off, body.is-printview .item.is-keyoff, body.is-printview .item.is-nokey { display: none !important; }
     .acts { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin-top: 8px; }
     .pick { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding-right: 6px; font-size: 14px; font-weight: 600; cursor: pointer; }
     .pick input { width: 20px; height: 20px; margin: 0; accent-color: var(--accent); }
@@ -329,6 +356,7 @@
       .ctl input[type="search"] { flex-basis: 100%; max-width: none; }
       .ctl__count { margin-left: 0; width: 100%; }
       .grid { gap: 12px; }
+      .grid.is-zoned .zsect { gap: 12px; }
       .item, .item--sign { width: 100%; }
       .card { height: auto; }
       .card__band { font-size: 12px; padding: 6px 12px; }
@@ -382,6 +410,15 @@
       .poster { border: 0; padding-top: 6mm; padding-bottom: 2mm; min-height: calc(272mm * var(--k)); }
       .poster__foot { margin-top: auto; }
       .state { border: 0; }
+      /* 구역 묶음: 꺼져 있으면 그대로(display: contents), 켜져 있으면 구역마다 새 페이지.
+         첫 묶음(is-lead)은 새 페이지를 만들지 않고, 인쇄할 카드가 없는 묶음(is-empty)은 빈 종이가 되지 않게 뺍니다. */
+      .zsect__h { display: none !important; }
+      .grid.is-zoned { display: block; }
+      .grid.is-zoned .zsect { display: grid; justify-content: center; margin: 0; }
+      .grid--ops.is-zoned .zsect { grid-template-columns: repeat(2, 92mm); gap: 5mm 6mm; }
+      .grid--signs.is-zoned .zsect { grid-template-columns: repeat(2, 136mm); gap: 0 3mm; }
+      .grid.is-zoned .zsect.is-empty { display: none !important; }
+      .grid.is-zoned .zsect:not(.is-lead) { break-before: page; page-break-before: always; }
     }
   </style>
   <!-- 탭마다 종이 방향 · 크기가 달라서 고른 탭에 맞춰 이 칸을 바꿉니다(② A4 가로, ③ A4 · A3). -->
@@ -394,6 +431,10 @@
       <div class="tb__row">
         <h1 class="tb__title"><i class="sq" aria-hidden="true"></i>QR 안내문 인쇄</h1>
         <div class="tb__acts">
+          <!-- 인쇄 설정: ① · ② 에 함께 적용. 구역별 새 페이지는 구역마다 새 종이에서 시작하고(묶어서 나눠 주기 쉽게),
+               인쇄 화면으로 보기는 관리 단추 · 확인 칸 · 상태 글을 숨겨 종이로 나갈 카드만 화면에 보여 줍니다. -->
+          <label class="opt"><input type="checkbox" id="opt-zonebreak" /> 구역별로 새 페이지에서 시작</label>
+          <label class="opt"><input type="checkbox" id="opt-printview" /> 인쇄 화면으로 보기</label>
           <button type="button" class="btn btn--danger" id="reset-btn" hidden>실시간 값 모두 지우기</button>
           <button type="button" class="btn btn--primary" id="print-btn" disabled>인쇄하기</button>
         </div>
@@ -432,6 +473,7 @@
       <p class="unassigned" id="unassigned-ops"></p>
       <div class="ctl" id="ctl-ops" hidden>
         <input type="search" id="q-ops" placeholder="부스 코드 · 이름 찾기" aria-label="부스 코드나 이름으로 찾기" autocomplete="off" />
+        <div class="zchips" id="zchips-ops" role="group" aria-label="구역" hidden></div>
         <button type="button" class="btn" data-pick="all" data-list="ops">모두 선택</button>
         <button type="button" class="btn" data-pick="none" data-list="ops">모두 해제</button>
         <button type="button" class="btn btn--primary" id="issue-all" hidden></button>
@@ -464,6 +506,7 @@
       <p class="unassigned" id="unassigned-signs"></p>
       <div class="ctl" id="ctl-signs" hidden>
         <input type="search" id="q-signs" placeholder="부스 코드 · 이름 찾기" aria-label="부스 코드나 이름으로 찾기" autocomplete="off" />
+        <div class="zchips" id="zchips-signs" role="group" aria-label="구역" hidden></div>
         <button type="button" class="btn" data-pick="all" data-list="signs">모두 선택</button>
         <button type="button" class="btn" data-pick="none" data-list="signs">모두 해제</button>
         <span class="ctl__count" id="count-signs" aria-live="polite"></span>
@@ -805,7 +848,8 @@
       // 로그아웃할 때마다 하나씩 올립니다. 그 전에 보낸 요청의 답(열쇠)이 늦게 와도
       // 번호가 다르면 버려서, 로그아웃한 화면에 열쇠가 다시 그려지지 않게 합니다.
       gen: 0,
-      lists: { ops: { q: '', off: {} }, signs: { q: '', off: {} } },
+      lists: { ops: { q: '', zone: '', off: {} }, signs: { q: '', zone: '', off: {} } },
+      zoneBreak: false,   // 구역별로 새 페이지에서 시작(① · ②)
       posterOk: false,
       // seq: 크게 보기를 열거나 닫을 때마다 올립니다. 늦게 온 열쇠 확인 결과가
       // 이미 닫았거나 다른 부스로 바뀐 창에 그려지지 않게 합니다.
@@ -1040,19 +1084,79 @@
       for (var i = 0; i < all.length; i++) if (all[i].getAttribute('data-id') === id) return all[i];
       return null;
     }
+    // 찾는 칸은 관람객 화면 검색과 같은 칸을 봅니다: 부스 코드(B-12 · b12 · 12) · 부스명 · 체험 내용 · 운영기관 · 구역 이름.
+    // 인쇄 순서는 바꾸지 않습니다(종이는 늘 구역 · 번호 순) — 여기서는 맞는 카드만 남깁니다.
     function matches(b, q) {
       if (!q) return true;
-      var code = norm(b.code);
-      var hay = code + ' ' + code.replace(/-/g, '') + ' ' + norm(b.name);
+      var code = norm(b.code), m = /^([a-z]+)-?0*(\d+)$/.exec(code);
+      var hay = [code, code.replace(/-/g, ''), m ? m[1] + m[2] + ' ' + m[1] + '-' + m[2] : '', norm(b.name), norm(b.program), norm(b.org), norm(b.zone_name)].join(' ');
       return hay.indexOf(q) >= 0 || hay.replace(/\s+/g, '').indexOf(q.replace(/\s+/g, '')) >= 0;
     }
     function applyFilter(kind) {
-      var q = norm(S.lists[kind].q);
+      var q = norm(S.lists[kind].q), z = S.lists[kind].zone;
       items(kind).forEach(function (el) {
         var b = S.byId[el.getAttribute('data-id')];
-        el.classList.toggle('is-filtered', !!b && !matches(b, q));
+        el.classList.toggle('is-filtered', !!b && (!matches(b, q) || (!!z && (b.zone_key || '') !== z)));
       });
       updateCount(kind);
+    }
+
+    /* ── 구역 ─────────────────────────────────────────────────────────
+       카드는 구역마다 묶어 그립니다(.zsect). '구역별로 새 페이지' 가 꺼져 있으면 묶음은 배치에 아무
+       영향이 없고(display: contents), 켜면 구역마다 새 종이에서 시작합니다. 구역 칩은 그 구역 카드만 남깁니다. */
+    function zonedHtml(list, itemHtml) {
+      var out = '', cur = null;
+      list.forEach(function (b) {
+        var k = b.zone_key || '';
+        if (k !== cur) {
+          if (cur !== null) out += '</section>';
+          cur = k;
+          out += '<section class="zsect" data-zone="' + esc(k) + '"><h3 class="zsect__h">' +
+            esc([k, b.zone_name].filter(Boolean).join(' · ') || '구역 미정') + '</h3>';
+        }
+        out += itemHtml(b);
+      });
+      return out + (cur !== null ? '</section>' : '');
+    }
+    function zoneList() {
+      var seen = {}, out = [];
+      (S.booths || []).forEach(function (b) {
+        var k = b.zone_key || '';
+        if (!seen[k]) { seen[k] = { key: k, name: b.zone_name || '', n: 0 }; out.push(seen[k]); }
+        seen[k].n++;
+      });
+      return out;
+    }
+    function renderZoneChips(kind) {
+      var box = $('zchips-' + kind);
+      var zs = zoneList();
+      if (zs.length < 2) { box.hidden = true; box.innerHTML = ''; S.lists[kind].zone = ''; return; }
+      if (S.lists[kind].zone && !zs.some(function (z) { return z.key === S.lists[kind].zone; })) S.lists[kind].zone = '';
+      box.hidden = false;
+      box.innerHTML = [{ key: '', name: '', n: S.booths.length }].concat(zs).map(function (z) {
+        var on = S.lists[kind].zone === z.key;
+        var label = z.key ? z.key : '전체';
+        return '<button type="button" class="zchip" data-zone-f="' + esc(z.key) + '" data-list="' + kind + '" aria-pressed="' + on + '"' +
+          (z.key ? ' title="' + esc(z.key + ' · ' + z.name) + '" aria-label="' + esc(z.key + ' · ' + z.name + ' · ' + z.n + '곳') + '"' : '') + '>' +
+          esc(label) + '<span>' + z.n + '</span></button>';
+      }).join('');
+    }
+    // 종이 쪽수. 구역별 새 페이지가 켜져 있으면 구역마다 따로 셉니다. 인쇄할 카드가 없는 묶음은 빼고(is-empty),
+    // 첫 묶음(is-lead)은 새 페이지를 만들지 않습니다(인쇄 CSS).
+    function printable(el) {
+      return !el.classList.contains('is-filtered') && !el.classList.contains('is-off') && !noPrint(el);
+    }
+    function pagesOf(kind) {
+      var L = LISTS[kind], grid = $(L.grid), lead = false, pages = 0;
+      grid.classList.toggle('is-zoned', S.zoneBreak);
+      [].slice.call(grid.querySelectorAll('.zsect')).forEach(function (sec) {
+        var n = [].slice.call(sec.querySelectorAll('.item')).filter(printable).length;
+        sec.classList.toggle('is-empty', n === 0);
+        sec.classList.toggle('is-lead', n > 0 && !lead);
+        if (n > 0) lead = true;
+        pages += Math.ceil(n / L.perPage);
+      });
+      return S.zoneBreak ? pages : Math.ceil(printableCount(kind) / L.perPage);
     }
     function shownItems(kind) {
       return items(kind).filter(function (el) { return !el.classList.contains('is-filtered'); });
@@ -1070,8 +1174,8 @@
       var all = items(kind).length, shown = shownItems(kind).length, n = printableCount(kind);
       var off = kind === 'ops' ? $(L.grid).querySelectorAll('.item.is-keyoff').length : 0;
       var nokey = kind === 'ops' ? $(L.grid).querySelectorAll('.item.is-nokey').length : 0;
-      var text = '인쇄할 ' + L.unit + ' ' + n + '장 · A4 ' + Math.ceil(n / L.perPage) + '쪽';
-      text += S.lists[kind].q ? ' · 찾은 부스 ' + shown + '곳 / 전체 ' + all + '곳' : ' · 전체 ' + all + '곳';
+      var text = '인쇄할 ' + L.unit + ' ' + n + '장 · A4 ' + pagesOf(kind) + '쪽' + (S.zoneBreak ? '(구역별 새 페이지)' : '');
+      text += (S.lists[kind].q || S.lists[kind].zone) ? ' · 찾은 부스 ' + shown + '곳 / 전체 ' + all + '곳' : ' · 전체 ' + all + '곳';
       if (nokey) text += ' · QR 미발급 ' + nokey + '곳(인쇄 안 함)';
       if (off) text += ' · 열쇠 꺼짐 ' + off + '곳(인쇄 안 함)';
       $(L.count).textContent = text;
@@ -1275,9 +1379,10 @@
         state.innerHTML = '<p>' + esc(MSG.EMPTY) + '</p>';
       } else {
         state.innerHTML = '';
-        grid.innerHTML = S.booths.map(opsItemHtml).join('');
+        grid.innerHTML = zonedHtml(S.booths, opsItemHtml);
         items('ops').forEach(drawOpsQr);
         $('ctl-ops').hidden = false;
+        renderZoneChips('ops');
         applyFilter('ops');
       }
       updatePrintBtn();
@@ -1332,11 +1437,12 @@
         state.innerHTML = '<p>' + esc(MSG.EMPTY) + '</p>';
       } else {
         state.innerHTML = '';
-        grid.innerHTML = S.booths.map(signItemHtml).join('');
+        grid.innerHTML = zonedHtml(S.booths, signItemHtml);
         items('signs').forEach(function (el) {
           makeQr(el.querySelector('[data-qr]'), visLink(el.getAttribute('data-id')));
         });
         $('ctl-signs').hidden = false;
+        renderZoneChips('signs');
         applyFilter('signs');
       }
       updatePrintBtn();
@@ -2310,6 +2416,24 @@
           var el = t.closest('.item');
           if (el) { setPicked(kind, el, t.checked); updateCount(kind); }
         });
+      });
+      // 구역 칩: 그 구역 카드만 남깁니다(다시 누르거나 '전체' 로 풂). 찾기 글과 함께 걸립니다.
+      document.addEventListener('click', function (e) {
+        var c = e.target.closest ? e.target.closest('[data-zone-f]') : null;
+        if (!c) return;
+        var kind = c.getAttribute('data-list'), z = c.getAttribute('data-zone-f');
+        S.lists[kind].zone = S.lists[kind].zone === z ? '' : z;
+        renderZoneChips(kind);
+        applyFilter(kind);
+      });
+      // 인쇄 설정
+      $('opt-zonebreak').addEventListener('change', function () {
+        S.zoneBreak = this.checked;
+        updateCount('ops');
+        updateCount('signs');
+      });
+      $('opt-printview').addEventListener('change', function () {
+        document.body.classList.toggle('is-printview', this.checked);
       });
       // 모두 선택 · 모두 해제는 지금 찾기로 보이는 카드에만 적용합니다.
       [].slice.call(document.querySelectorAll('[data-pick]')).forEach(function (btn) {
