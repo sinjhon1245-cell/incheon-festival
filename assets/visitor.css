@@ -148,6 +148,21 @@ img { display: block; max-width: 100%; height: auto; }
 }
 .sync__sq { width: 8px; height: 8px; background: #fff; flex: none; }
 .sync.is-lag .sync__sq { background: var(--lag); }
+/* 자동 갱신을 멈췄을 때만 보이는 작은 '새로고침' 단추(띠의 흰 글자와 같은 결) */
+.sync-btn {
+  flex: none;
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid rgba(255, 255, 255, .7);
+  background: transparent;
+  color: #fff;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+}
+.sync-btn:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 .band__event {
   margin-top: 2px;
   min-height: 18px;

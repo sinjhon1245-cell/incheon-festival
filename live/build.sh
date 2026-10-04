@@ -249,12 +249,12 @@ tr -d '\r' < "$FN_CFG" | grep -qxF "export const supabaseAnonKey = '$SB_KEY';" |
   fail "$FN_CFG 의 supabaseAnonKey 가 assets/config.js 와 다릅니다. 같은 공개용 키로 맞춰 주세요."
 
 # 숫자가 없으면 화면 쪽 기본값과 같은 값을 씁니다.
-[ -n "$POLL_MS" ] || POLL_MS=20000
+[ -n "$POLL_MS" ] || POLL_MS=60000
 [ -n "$FRESH_MIN" ] || FRESH_MIN=30
 
 # 너무 짧은 간격은 관람객 휴대폰 수만큼 요청을 늘려 행사 날 Supabase 를
 # 막을 수 있습니다. 숫자 읽기가 맞아도 값 자체가 너무 작으면 멈춥니다.
-[ "$POLL_MS" -ge 15000 ] || fail "pollingIntervalMs 가 너무 작습니다: $POLL_MS (15000 이상, 권장 20000)"
+[ "$POLL_MS" -ge 15000 ] || fail "pollingIntervalMs 가 너무 작습니다: $POLL_MS (15000 이상, 권장 60000)"
 [ "$FRESH_MIN" -ge 5 ] || fail "freshnessThresholdMinutes 가 너무 작습니다: $FRESH_MIN (5 이상, 권장 30)"
 
 rm -rf dist
@@ -291,6 +291,24 @@ cp example/index.html example/example.css dist/example/
 } > dist/assets/config.js
 
 printf 'User-agent: *\nDisallow: /\n' > dist/robots.txt
+
+# 정적 파일 이름에 내용 지문을 붙입니다(assets/visitor.css → assets/visitor.1234567890.css).
+# 두 화면(HTML)은 열 때마다 새로 확인하고(no-cache), 지문이 붙은 파일은 브라우저가 1년 동안 다시
+# 묻지 않게 합니다(live/vercel.json 의 /assets/ 머리). 내용이 바뀌면 이름도 바뀌므로 새 HTML 은 새
+# 파일을 부르고, 배포 뒤에 옛 HTML 과 새 파일이 섞이지 않습니다. 관람객이 다시 열 때마다 파일
+# 네 개를 다시 확인하던 요청(무료 플랜에서는 한 번이 Vercel 요청 1건)을 없애려는 것입니다.
+# 지문은 POSIX cksum 입니다 — 보안용이 아니라 내용이 바뀌었는지만 가립니다.
+# HTML 이 부르는 모양은 "assets/이름.확장자" 하나뿐입니다(아래 MISSING 검사가 남은 옛 이름을 잡습니다).
+for _f in dist/assets/*.js dist/assets/*.css; do
+  _base=${_f##*/}
+  _ext=${_base##*.}
+  _sum=$(cksum < "$_f" | awk '{print $1}')
+  _new="${_base%.*}.$_sum.$_ext"
+  mv "$_f" "dist/assets/$_new"
+  for _h in dist/index.html dist/booth-ctrl.html; do
+    sed "s|\"assets/$_base\"|\"assets/$_new\"|g" "$_h" > "$_h.tmp" && mv "$_h.tmp" "$_h"
+  done
+done
 
 # 두 화면이 부르는 이 사이트 안의 파일(src · href)이 배포본에 모두 있는지 봅니다.
 # 누가 화면에 새 스크립트나 스타일을 더하고 위 복사 목록에 빠뜨리면, 운영자

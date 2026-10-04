@@ -4,7 +4,7 @@
 
      node scripts/loadtest/preview-load.mjs <Preview 주소> <관람객 수> <초> [쿠키]
 
-   관람객 한 명 = 처음 0~20초 사이 아무 때나 한 번, 그 뒤 20초 ±4초마다 한 번
+   관람객 한 명 = 처음 0~60초 사이 아무 때나 한 번, 그 뒤 60초 ±10초(normal)마다 한 번
    (visitor.html 과 같은 간격). 결과로 상태 코드 · x-vercel-cache(HIT/MISS/STALE …) ·
    지연 p50/p95/p99 · 서로 다른 generatedAt 개수(= 함수가 Supabase 를 새로 읽은 횟수의
    상한)를 냅니다.
@@ -26,6 +26,7 @@ if (host === 'incheon-live.vercel.app' || host.endsWith('supabase.co') || !host.
 }
 const URL_ = new URL('/api/live-snapshot', base).href;
 const USERS = Number(usersArg), SECS = Number(secsArg || 60);
+const POLL_S = Number(process.env.POLL_S || 60); // 받는 간격(초). conserve 를 보려면 POLL_S=120
 const headers = { Accept: 'application/json' };
 if (cookie) headers.Cookie = cookie;
 
@@ -53,9 +54,9 @@ async function one() {
 function user() {
   const loop = () => {
     if (Date.now() >= end) return Promise.resolve();
-    return one().then(() => new Promise((r) => setTimeout(r, 16000 + Math.random() * 8000))).then(loop);
+    return one().then(() => new Promise((r) => setTimeout(r, POLL_S * 1000 * (5 / 6 + Math.random() / 3)))).then(loop);
   };
-  return new Promise((r) => setTimeout(r, Math.random() * 20000)).then(loop);
+  return new Promise((r) => setTimeout(r, Math.random() * POLL_S * 1000)).then(loop);
 }
 
 await Promise.all(Array.from({ length: USERS }, user));

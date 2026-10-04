@@ -37,6 +37,13 @@ const TIMEOUT_MS = 4 * 1000;       // Supabase 읽기 하나의 시간 초과
 const CDN_OK = 'max-age=10, stale-while-revalidate=30, stale-if-error=600';
 const CDN_ERR = 'max-age=5';
 
+// 관람객 화면의 받기 방식. Vercel → Settings → Environment Variables 의 VISITOR_TRAFFIC_MODE 로 정합니다
+// (normal 60초 · conserve 120초 · manual 자동 없음). 값을 바꾼 뒤 Redeploy 하면 관람객 화면이 다음
+// 받기부터 따릅니다. 코드 · DB 는 그대로이고, QR · PIN · 운영자 저장 · 관리 화면에는 영향이 없습니다.
+// 모르는 값이거나 비어 있으면 normal 입니다.
+const MODE = /^(normal|conserve|manual)$/.test(String(process.env.VISITOR_TRAFFIC_MODE || '').trim().toLowerCase())
+  ? String(process.env.VISITOR_TRAFFIC_MODE).trim().toLowerCase() : 'normal';
+
 const KST_MS = 9 * 60 * 60 * 1000;
 const SAMPLE_RE = /^\s*\[예시\]/;
 
@@ -96,6 +103,7 @@ function compose(m, liveRows, now) {
   return {
     version: 1,
     generatedAt: new Date(now).toISOString(),
+    mode: MODE,
     liveReady: liveRows !== null,
     event: {
       title: str(s.event_title), venue: str(s.venue), dateLabel: str(s.date_label), timeLabel: str(s.time_label),

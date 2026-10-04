@@ -62,8 +62,8 @@ const ASSUME = {
 
 // ── B: Phase 2 구조 (live/api/live-snapshot.mjs · visitor.html 과 같은 값) ──
 const CDN = {
-  pollS: 20, jitterS: 4,    // visitor.html POLL_MS ± JITTER_MS — 스냅샷 1개
-  backoffS: [40, 80, 120],  // 실패가 이어질 때(POLL × 2, × 4, 상한 120초, ±20%)
+  pollS: 60, jitterS: 10,   // visitor.html POLL_MS(설정 60000) ± 1/6 — 스냅샷 1개 (normal)
+  backoffS: [90, 120, 180], // 실패가 이어질 때(±15%, 지금 간격보다 짧아지지 않음)
   ttl: 10, swr: 30, sie: 600,          // Vercel-CDN-Cache-Control
   fnLiveS: 5, fnMasterS: 60,           // 함수 인스턴스 안 memo: booth_live 5초, settings · zones · booths 60초
   fnKeepS: 600, fnPauseS: 5,           // Supabase 실패 때 last-good 유지 · 다시 묻지 않는 시간
@@ -375,7 +375,7 @@ say(table(['동시 관람객', 'browser→CDN RPS (전체)', '그중 스냅샷 R
 say();
 say(`- 관람객 몫 Supabase 요청은 관람객 수와 무관하게 최대 ${f2(cdnModel(100000, sizes).sbWorst)} RPS 에서 멈춥니다(함수 memo). ` +
   `CDN 이 최악으로 움직여도 늘어나는 것은 함수 호출이지 Supabase 요청이 아닙니다.`);
-say(`- origin 증폭 = 관람객 몫 Supabase 요청 ÷ (관람객 수 ÷ 20초). Phase 1 은 1.26배(정상) ~ 8.5배(붕괴)였습니다.`);
+say(`- origin 증폭 = 관람객 몫 Supabase 요청 ÷ (관람객 수 ÷ ${CDN.pollS}초). Phase 1 은 1.26배(정상) ~ 8.5배(붕괴)였습니다.`);
 say(`- 429 · 5xx · timeout 0 은 'Vercel 엣지가 이 RPS 를 받는다' 는 가정입니다. 요금제 한도(사용량 초과 시 프로젝트 일시 정지) · ` +
   `DDoS 완화 · 방화벽 규칙이 행사장 공유 IP 에 걸리는지는 따로 확인해야 합니다(README '확인할 것').`);
 say();
@@ -386,17 +386,84 @@ const fRows = [];
 for (const N of STAGES) {
   const b = cdnModel(N, sizes);
   fRows.push([f0(N), f1(b.dataRps), f1(N * backoffRate * 1.0), pct(100 * (1 - N * backoffRate / b.dataRps)),
-    f2(CDN.instances / CDN.fnPauseS * 4), '0', `≤ ${CDN.fnPauseS + CDN.ttl + CDN.pollS + CDN.jitterS}초`, `≤ ${Math.round(CDN.backoffS[CDN.backoffS.length - 1] * 1.2)}초`]);
+    f2(CDN.instances / CDN.fnPauseS * 4), '0', `≤ ${CDN.fnPauseS + CDN.ttl + CDN.pollS + CDN.jitterS}초`, `≤ ${Math.round(CDN.backoffS[CDN.backoffS.length - 1] * 1.15)}초`]);
 }
-say(table(['동시 관람객', '정상 스냅샷 RPS', 'CDN·함수 장애 중 browser RPS (백오프 120초)', '장애 중 요청 감소',
+say(table(['동시 관람객', '정상 스냅샷 RPS', `CDN·함수 장애 중 browser RPS (백오프 ${CDN.backoffS[CDN.backoffS.length - 1]}초)`, '장애 중 요청 감소',
   'Supabase 장애 중 Supabase GET RPS (최악, 시도당 GET 4개)', 'Supabase 10분 장애 중 관람객 오류', 'Supabase 회복 → 관람객 화면 반영', 'CDN·함수 회복 → 관람객 다시 받음'], fRows));
 say();
 say(`- Supabase 장애: 함수가 마지막 정상본을 ${CDN.fnKeepS / 60}분까지 200 으로 주고, CDN 도 stale-if-error ${CDN.sie}초 동안 마지막 사본을 줍니다. ` +
-  `그동안 관람객은 오류 없이 마지막 값을 보고, 새 스냅샷이 90초 넘게 없으면 '현황 연결이 잠시 지연되고 있습니다.' 한 줄만 봅니다. ` +
+  `그동안 관람객은 오류 없이 마지막 값을 보고, 새 스냅샷이 180초 넘게 없으면 '현황 연결이 잠시 지연되고 있습니다.' 한 줄만 봅니다. ` +
   `함수는 실패 뒤 ${CDN.fnPauseS}초 동안 Supabase 에 다시 묻지 않으므로 Supabase 시도는 인스턴스당 ${CDN.fnPauseS}초에 1번 이하입니다.`);
-say(`- CDN · 함수 장애: 관람객은 Supabase 로 돌아가지 않습니다(그 길이 없음). 40 → 80 → 120초로 늦추며 같은 주소를 다시 받고, 화면은 마지막 값을 둡니다. ` +
+say(`- CDN · 함수 장애: 관람객은 Supabase 로 돌아가지 않습니다(그 길이 없음). 90 → 120 → 180초로 늦추며 같은 주소를 다시 받고, 화면은 마지막 값을 둡니다. ` +
   `Supabase 에 닿는 관람객 요청은 0 입니다.`);
 say(`- 회복: 쌓인 재시도가 없고 Supabase 부하가 관람객 수에 비례하지 않으므로, 관람객 수가 줄기를 기다릴 필요 없이 원인이 사라지면 곧바로 돌아옵니다(Phase 1 의 이력 현상 없음).`);
+say();
+
+/* ── Hobby(무료) 운영: Vercel 요청 수 ─────────────────────────────────
+   무료 플랜에서 먼저 닳는 것은 Supabase 가 아니라 Vercel 의 월 CDN 요청 100만 건입니다(캐시 HIT 도 1건).
+   그래서 여기서는 캐시 비율이 아니라 관람객이 보내는 요청 '개수' 를 셉니다.
+   받기 방식
+     A 20초   Phase 2 첫 판(정적 파일을 열 때마다 다시 확인 · /favicon.ico 요청 있음)
+     B 60초   normal(지금) — 정적 파일은 이름에 지문 + 1년 캐시, 빈 아이콘
+     C 120초  conserve
+     D 수동   manual — 자동으로 받지 않음(열 때 · 화면에 돌아올 때 · '새로고침')
+   페이지를 열 때: HTML 1 + 스냅샷 1 + 정적 파일 4(처음 방문만 받음 · A 는 매번 다시 확인) (+ A 는 아이콘 1). */
+const HOBBY = {
+  limit: 1e6,
+  modes: [
+    { key: 'A', label: '20초', pollS: 20, staticEveryOpen: true },
+    { key: 'B', label: '60초', pollS: 60, staticEveryOpen: false },
+    { key: 'C', label: '120초', pollS: 120, staticEveryOpen: false },
+    { key: 'D', label: '수동', pollS: 0, staticEveryOpen: false }
+  ],
+  stages: [100, 500, 1000, 3000, 5000, 10000, 30000, 100000],
+  // '켜 두기' 모델: 동시 관람객 한 명이 한 시간 동안 — 10분마다 다시 열고(새 관람객 포함, 그중 절반은 처음 방문),
+  // 10분마다 한 번 다른 앱에 갔다 돌아옴(곧바로 1건)
+  opensPerHour: 6, firstShare: 0.5, returnsPerHour: 6,
+  // '잠깐 보기' 모델: 관람객 한 명이 하루 동안 — 두 번 열고(처음 + 한 번 더), 쓰는 5분마다 한 번 다른 앱에 갔다 돌아옴
+  visits: [3000, 5000, 10000, 30000], minutes: [3, 5, 10, 20], opensPerVisitor: 2, returnEveryMin: 5,
+  eventMinutes: 7 * 60 * 2
+};
+const openCost = (m, first) => 2 + (first || m.staticEveryOpen ? 4 : 0) + (m.staticEveryOpen && first ? 1 : 0);
+function perVisitorHour(m) {
+  const opens = HOBBY.opensPerHour * (HOBBY.firstShare * openCost(m, true) + (1 - HOBBY.firstShare) * openCost(m, false));
+  return opens + HOBBY.returnsPerHour + (m.pollS ? 3600 / m.pollS : 0);
+}
+function perVisit(m, minutes) {
+  const opens = openCost(m, true) + (HOBBY.opensPerVisitor - 1) * openCost(m, false);
+  return opens + minutes / HOBBY.returnEveryMin + (m.pollS ? minutes * 60 / m.pollS : 0);
+}
+const dur = (h) => (h >= 48 ? f0(h / 24) + '일' : h >= 1 ? f1(h) + '시간' : f0(h * 60) + '분');
+
+say(`## Hobby(무료) 운영 — Vercel 요청 수 (월 100만 건)`);
+say();
+say(`관람객 한 번 읽기 = Vercel 요청 1건(캐시 HIT 포함). 받기 방식: A 20초(Phase 2 첫 판) · B 60초(normal) · C 120초(conserve) · D 수동(manual).`);
+say();
+say(`### '켜 두기' 모델 — 동시 관람객이 행사 시간 내내 화면을 켜 둠(가장 나쁜 경우)`);
+say();
+say(`관람객 한 명의 시간당 요청: ` + HOBBY.modes.map((m) => `${m.key} ${f1(perVisitorHour(m))}건`).join(' · ') +
+  ` (10분마다 다시 열기 · 10분마다 다른 앱에 갔다 돌아오기 포함).`);
+say();
+say(table(['동시 관람객', ...HOBBY.modes.map((m) => `${m.key} ${m.label}: RPS · 요청/시간`)],
+  HOBBY.stages.map((N) => [f0(N), ...HOBBY.modes.map((m) => { const h = N * perVisitorHour(m); return `${f1(h / 3600)} · ${f0(h)}`; })])));
+say();
+say(table(['동시 관람객', ...HOBBY.modes.map((m) => `${m.key} ${m.label}: 7시간 · 14시간(2일)`)],
+  HOBBY.stages.map((N) => [f0(N), ...HOBBY.modes.map((m) => { const h = N * perVisitorHour(m); return `${f0(h * 7)} · ${f0(h * 14)}`; })])));
+say();
+say(table(['동시 관람객', ...HOBBY.modes.map((m) => `${m.key} ${m.label}: 100만 건 소진`)],
+  HOBBY.stages.map((N) => [f0(N), ...HOBBY.modes.map((m) => dur(HOBBY.limit / (N * perVisitorHour(m))))])));
+say();
+say(`### '잠깐 보기' 모델 — 행사 이틀 동안 전체 방문자가 각자 몇 분씩만 봄`);
+say();
+say(`방문자 한 명: 두 번 열기(처음은 정적 파일까지) + 보는 동안 자동 받기 + 5분마다 한 번 다른 앱에 갔다 돌아오기. ` +
+  `평균 동시 관람객 = 방문자 × 분 ÷ ${HOBBY.eventMinutes}분(이틀 행사 시간).`);
+say();
+const rows = [];
+for (const V of HOBBY.visits) for (const U of HOBBY.minutes) {
+  rows.push([f0(V), U + '분', f0(V * U / HOBBY.eventMinutes),
+    ...HOBBY.modes.map((m) => { const t = V * perVisit(m, U); return `${f0(t)} (${(100 * t / HOBBY.limit).toFixed(t < 1e5 ? 1 : 0)}%)`; })]);
+}
+say(table(['전체 방문자', '한 명당 보는 시간', '평균 동시', ...HOBBY.modes.map((m) => `${m.key} ${m.label}: 이틀 합계 (한도 대비)`)], rows));
 say();
 
 say(`## 운영자 · 관리자 (관람객과 분리한 부하)`);

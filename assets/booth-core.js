@@ -64,11 +64,13 @@
      refreshLive()  → Promise<booths>  booth_live 만 다시 읽어 기억해 둔 부스에 합칩니다.
                       아직 load() 가 한 번도 성공하지 않았으면 load() 를 대신 부릅니다.
      normalize(boothRows, liveRows, zones, now?) → booths   (위 정리를 직접 할 때)
-     getLiveSnapshot() → Promise<{settings, zones, booths, liveReady, generatedAt}>
+     getLiveSnapshot() → Promise<{settings, zones, booths, liveReady, generatedAt, mode}>
                       관람객 화면 전용. Supabase 대신 같은 사이트의 /api/live-snapshot 하나를
                       읽습니다(CDN 캐시). 실패해도 Supabase 로 돌아가지 않고 err.offline 으로
                       끝납니다. 성공하면 snapshot() 이 읽는 마지막 결과도 바꿉니다.
                       generatedAt 은 서버가 만든 시각 — 화면에 보여 주지 않고 '새 값이 오는가' 만 봅니다.
+                      mode 는 서버가 정한 받기 방식 'normal' | 'conserve' | 'manual'(모르는 값은 'normal').
+                      시연 모드는 주소의 ?mode= 로 미리 볼 수 있습니다.
 
      정리된 부스 하나:
        { id, no, code, zone_key, zone_name, name, org, program,
@@ -932,7 +934,8 @@
       zones: sortZones((d.zones || []).map(function (z) { return { key: z.key, label: z.label, sort_order: z.order }; })),
       boothRows: boothRows,
       liveRows: d.liveReady === false ? null : liveRows,
-      generatedAt: d.generatedAt || null
+      generatedAt: d.generatedAt || null,
+      mode: /^(normal|conserve|manual)$/.test(String(d.mode || '')) ? d.mode : 'normal'
     };
   }
 
@@ -940,6 +943,10 @@
     if (isMock) {
       return load().then(function (p) {
         p.generatedAt = new Date().toISOString();
+        // 시연에서 받기 방식을 미리 볼 수 있게 주소의 ?mode=conserve · manual 을 받습니다(서버 대신).
+        var m = '';
+        try { m = new URLSearchParams(window.location.search).get('mode') || ''; } catch (e) { m = ''; }
+        p.mode = /^(normal|conserve|manual)$/.test(m) ? m : 'normal';
         return p;
       });
     }
@@ -954,7 +961,8 @@
         zones: s.zones,
         booths: normalize(s.boothRows, s.liveRows, s.zones),
         liveReady: s.liveRows !== null,
-        generatedAt: s.generatedAt
+        generatedAt: s.generatedAt,
+        mode: s.mode
       };
     });
   }
