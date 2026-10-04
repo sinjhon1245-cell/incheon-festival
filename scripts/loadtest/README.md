@@ -8,7 +8,21 @@ Production 에 부하를 걸지 않고 **계산으로** 본 결과입니다. 숫
 node scripts/loadtest/model.mjs > scripts/loadtest/RESULTS.md
 ```
 
-## 결론
+## Phase 2 (이 브랜치) — 관람객 → Vercel CDN → `/api/live-snapshot` → Supabase
+
+Phase 1 감사(아래)의 B 구조를 만들었습니다. Production 에는 아직 반영하지 않았습니다.
+
+| 층 | 무엇 | 값 | 코드 |
+|---|---|---|---|
+| 브라우저 | 스냅샷 1개를 20초 ±4초마다. 가려지면 멈춤, 보이면 곧바로. 겹쳐 보내지 않음. 실패하면 40 → 80 → 120초(±20%), 성공하면 20초로. 마지막 값 유지. **Supabase fallback 없음** | `Cache-Control: no-store` | [visitor.html](../../visitor.html) `refresh` · `schedule` · `resume`, [booth-core.js](../../assets/booth-core.js) `getLiveSnapshot` |
+| Vercel CDN | 같은 주소 하나를 캐시. 질의 문자열이 붙으면 400 | `Vercel-CDN-Cache-Control: max-age=10, stale-while-revalidate=30, stale-if-error=600` | [live/api/live-snapshot.mjs](../../live/api/live-snapshot.mjs) |
+| 함수 | 인스턴스 memo(booth_live 5초 · 목록 60초), single-flight, Supabase 실패 때 last-good 10분 · 5초 쉼 | | 같은 파일 |
+| Supabase | 공개용 키 · RLS 그대로. 관람객 몫은 관람객 수와 무관하게 최대 약 0.75 RPS | | |
+
+확인된 사실(2026-10-04): Supabase 프로젝트는 **Free 플랜 · ap-south-1(뭄바이)** 입니다.
+한국에서 REST 첫 바이트까지 0.56~1.3초(서버 처리 18ms)라, CDN 이 받아 주는 효과가 지연에서도 큽니다.
+
+## Phase 1 감사 결론 (이전 구조)
 
 1. **지금 구조는 목표를 만족하지 않습니다.** 관람객 화면이 Supabase REST 를 직접 부르고
    (`cache: 'no-store'`), 그 사이에 CDN 이 없습니다. 관람객 요청이 **100% Supabase 에 닿습니다**
@@ -25,9 +39,9 @@ node scripts/loadtest/model.mjs > scripts/loadtest/RESULTS.md
 5. **목표 구조(B)**는 관람객 polling 을 Vercel CDN 이 받고(짧은 s-maxage + stale-while-revalidate +
    stale-if-error), Supabase 에는 엣지 리전당 만료마다 한 번만 갑니다. 이렇게 하면 관람객 origin 부하가
    **약 0.4 RPS(최선)에서 157 RPS(최악, 100,000명)** 가 되어 Supabase 한도 아래에 머뭅니다.
-   이 구조는 아직 만들지 않았습니다(아래 'B 구조 설계').
+   이 구조는 Phase 2 에서 만들었습니다(위).
 
-## 지금 관람객 화면이 보내는 요청 (코드 근거)
+## Phase 1 관람객 화면이 보내던 요청 (코드 근거 · 줄 번호는 41ef96b 기준)
 
 | 무엇 | 값 | 어디 |
 |---|---|---|
@@ -57,7 +71,9 @@ node scripts/loadtest/model.mjs > scripts/loadtest/RESULTS.md
 | B: stale-while-revalidate / stale-if-error | 25초 / 86,400초 | 행사 하루 동안 마지막 정상본 유지 |
 | B: 엣지 리전 | 2곳 (icn1 · hnd1 가정) | |
 
-## 단계별 요약 (Supabase 한도 400 RPS)
+## 단계별 요약 (Phase 1 감사 때 계산 · Supabase 한도 400 RPS)
+
+B 열은 감사 때의 제안 값(5초 · 60초 두 경로)입니다. Phase 2 에서 실제로 만든 값으로 다시 계산한 표는 [RESULTS.md](RESULTS.md) 의 B 절입니다.
 
 전체 열(browser/CDN RPS, p50/p95/p99, 5xx, timeout, 증폭, egress)은 [RESULTS.md](RESULTS.md) 에 있습니다.
 
@@ -99,7 +115,7 @@ node scripts/loadtest/model.mjs > scripts/loadtest/RESULTS.md
 A 에서 한 번 무너진 뒤 회복하는 현실적인 방법은 관람객이 페이지를 닫는 것뿐입니다
 (다시 열어도 GET 4개로 시작합니다).
 
-## B 구조 설계 (아직 만들지 않음)
+## B 구조 설계 (Phase 1 감사 때 제안 — Phase 2 에서 구현, 실제 값은 맨 위 Phase 2 표)
 
 1. **관람객 데이터를 같은 출처의 캐시 경로로 옮깁니다.** `live/vercel.json` 에 외부 rewrite 를 둡니다. 예:
    `/data/live` → Supabase `booth_live`(또는 `generated_at` 을 함께 주는 읽기 전용 RPC), `/data/master` →

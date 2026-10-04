@@ -5,12 +5,13 @@
    Production 에 부하를 걸지 않고, 관람객 화면 코드의 되풀이 규칙을
    그대로 흉내 내어 단계별(100 … 100,000명) 요청량과 오류를 셉니다.
 
-     A  지금 구조   관람객 브라우저 → Supabase REST 를 바로 부름
-                    (booth-core.js request() 가 cache:'no-store', CDN 없음)
-                    → 관람객 하나하나를 흉내 내는 시뮬레이션
-     B  목표 구조   관람객 브라우저 → Vercel CDN(짧은 s-maxage + SWR +
-                    stale-if-error) → Supabase. 운영자 · 관리자는 지금처럼 직접.
-                    → 식으로 계산(origin 요청이 관람객 수와 무관해짐)
+     A  Phase 1(이전)  관람객 브라우저 → Supabase REST 를 바로 부름
+                       (cache:'no-store', CDN 없음, 실패 뒤 10초 고정 재시도)
+                       → 관람객 하나하나를 흉내 내는 시뮬레이션
+     B  Phase 2(지금)  관람객 브라우저 → Vercel CDN → /api/live-snapshot 함수 → Supabase
+                       (live/api/live-snapshot.mjs · visitor.html 의 값 그대로)
+                       → 식으로 계산(Supabase 요청이 관람객 수와 무관해짐)
+                       운영자 · 관리자는 두 구조 모두 Supabase 직접.
 
    숫자는 모두 '가정' 위에 서 있습니다. 가장 큰 가정은 Supabase 가 오류 없이
    받아 내는 초당 요청 수(--capacity, 기본 400)입니다. 스테이징(복제 프로젝트)에서
@@ -59,14 +60,16 @@ const ASSUME = {
   serviceMs: 60                     // 대기열이 찰 때 늘어나는 지연의 단위
 };
 
-// ── 목표 구조 B ──
+// ── B: Phase 2 구조 (live/api/live-snapshot.mjs · visitor.html 과 같은 값) ──
 const CDN = {
-  ttlLive: 5,       // live 스냅샷 s-maxage
-  ttlMaster: 60,    // 부스 목록 · 설정 스냅샷 s-maxage
-  swr: 25,          // stale-while-revalidate
-  sie: 86400,       // stale-if-error — 행사 하루 동안 마지막 정상본을 엣지에 둠
-  regions: 2,       // 한국 관람객을 받는 엣지 리전 수(icn1 · hnd1 가정)
-  originLatS: 0.15  // 엣지 → Supabase 한 번 다녀오는 시간
+  pollS: 20, jitterS: 4,    // visitor.html POLL_MS ± JITTER_MS — 스냅샷 1개
+  backoffS: [40, 80, 120],  // 실패가 이어질 때(POLL × 2, × 4, 상한 120초, ±20%)
+  ttl: 10, swr: 30, sie: 600,          // Vercel-CDN-Cache-Control
+  fnLiveS: 5, fnMasterS: 60,           // 함수 인스턴스 안 memo: booth_live 5초, settings · zones · booths 60초
+  fnKeepS: 600, fnPauseS: 5,           // Supabase 실패 때 last-good 유지 · 다시 묻지 않는 시간
+  regions: num('regions', 2),          // 가정: 한국 관람객을 받는 엣지 리전 수(icn1 · hnd1)
+  instances: num('instances', 3),      // 가정: 함수 인스턴스 수(Fluid compute 가 재사용 — 최악 쪽에 씀)
+  fnLatS: 0.6                          // 가정: 함수 → Supabase 왕복(한국 → Supabase 실측 TTFB 0.56~1.3초)
 };
 
 // ── 운영자 · 관리자 (관람객과 따로 셈) ──
@@ -99,10 +102,18 @@ function payloadSizes(nBooths) {
   const live = booths.map((b, i) => ({ booth_id: b.id, congestion: ['여유', '보통', '혼잡'][i % 3], wait_minutes: (i * 5) % 60, updated_at: '2026-11-07T0' + (i % 8) + ':1' + (i % 6) + ':33.123456+00:00' }));
   const settings = [{ event_title: '2026 인천 AI미래채움 교육페스티벌', venue: '송도컨벤시아', date_label: '2026. 11. 7.(토) ~ 8.(일)', time_label: '10:00 ~ 17:00', event_start: '2026-11-07T01:00:00+00:00', event_end: '2026-11-08T08:00:00+00:00', booth_map_url: 'https://example.invalid/map.png', booth_map_alt: '부스 배치도' }];
   const gz = (o) => gzipSync(Buffer.from(JSON.stringify(o))).length + 400; // + 응답 머리 대략
+  // Phase 2 스냅샷 모양(live/api/live-snapshot.mjs compose())
+  const s = settings[0];
+  const snapshot = {
+    version: 1, generatedAt: '2026-11-07T01:00:00.000Z', liveReady: true,
+    event: { title: s.event_title, venue: s.venue, dateLabel: s.date_label, timeLabel: s.time_label, start: s.event_start, end: s.event_end, mapUrl: s.booth_map_url, mapAlt: s.booth_map_alt },
+    zones: zones.map((z) => ({ key: z.key, label: z.label, order: z.sort_order })),
+    booths: booths.map((b, i) => ({ id: b.id, no: b.no, code: b.code, zone: b.zone_key, name: b.name, org: b.org, program: b.program,
+      status: live[i].congestion, waitMinutes: live[i].wait_minutes, updatedAt: live[i].updated_at }))
+  };
   return {
     settings: gz(settings), zones: gz(zones), booths: gz(booths), live: gz(live),
-    master: gz({ generated_at: '2026-11-07T01:00:00Z', settings: settings[0], zones, booths }),
-    liveSnap: gz({ generated_at: '2026-11-07T01:00:00Z', live })
+    snapshot: gz(snapshot), snapshotRaw: JSON.stringify(snapshot).length
   };
 }
 
@@ -245,29 +256,36 @@ function simulateDirect({ nAt, totalS, measureFrom, cap, staff = STAFF_MAX, seed
 
 const steady = (N, cap, seed = 1) => simulateDirect({ nAt: () => N, totalS: 1500, measureFrom: 900, cap, seed });
 
-/* ── B — 목표 구조(CDN) 계산 ── */
+/* ── B — Phase 2 구조(CDN 스냅샷) 계산 ──
+   세 층을 따로 셉니다.
+     browser → CDN      관람객 수에 비례(20초마다 1개 + 열 때 1개 + 정적 파일)
+     CDN → 함수         최선: 리전마다 만료(10초)당 1번(SWR 백그라운드 갱신 · 묶음 요청)
+                        최악: 만료 순간 함수 왕복 동안 들어온 요청이 모두 MISS
+     함수 → Supabase    인스턴스마다 booth_live 는 5초에 1번 이하, 목록 3개는 60초에 1번
+                        → 최악이어도 instances × (1/5 + 3/60) 를 넘지 않음 */
 function cdnModel(N, sizes) {
-  const live = N / CLIENT.pollS;                          // 20초마다 live 스냅샷 1개
-  const master = N / CLIENT.fullS + N / ASSUME.openS;     // 열 때 + 5분마다 master 1개
-  const open = N / ASSUME.openS;                          // 열 때 live 1개 더
-  const data = live + master + open;
+  const data = N / CDN.pollS + N / ASSUME.openS;
   const staticRps = N / ASSUME.openS * STATIC.files;
-  const per = (ttl) => CDN.regions / ttl;
-  const best = per(CDN.ttlLive) + per(CDN.ttlMaster);
-  // 묶음 요청(collapsing)이 없을 때 최악: 만료 순간 origin 왕복 동안 들어온 요청이 모두 MISS
-  const worst = per(CDN.ttlLive) * (1 + (live + open) / CDN.regions * CDN.originLatS) +
-                per(CDN.ttlMaster) * (1 + master / CDN.regions * CDN.originLatS);
-  const bytes = (live + open) * sizes.liveSnap + master * sizes.master +
+  const fnBest = Math.min(data, CDN.regions / CDN.ttl);
+  const fnWorst = Math.min(data, CDN.regions / CDN.ttl * (1 + data / CDN.regions * CDN.fnLatS));
+  const sbFor = (fn, inst) => Math.min(fn, inst / CDN.fnLiveS) + inst * 3 / CDN.fnMasterS;
+  const sbBest = sbFor(fnBest, 1);
+  const sbWorst = sbFor(fnWorst, CDN.instances);
+  const vercelBytes = data * sizes.snapshot +
     N / ASSUME.openS * (STATIC.firstShare * STATIC.firstVisitBytes + (1 - STATIC.firstShare) * STATIC.revalidateBytes);
+  const sbBytes = (b) => (Math.min(b, CDN.instances / CDN.fnLiveS)) * sizes.live + CDN.instances / CDN.fnMasterS * (sizes.settings + sizes.zones + sizes.booths);
   return {
     browserRps: data + staticRps, dataRps: data, staticRps,
-    originBest: Math.min(best, data), originWorst: Math.min(worst, data),
-    hitBest: 100 * (1 - Math.min(best, data) / data), hitWorst: 100 * (1 - Math.min(worst, data) / data),
+    fnBest, fnWorst, sbBest, sbWorst,
+    hitBest: 100 * (1 - fnBest / data), hitWorst: 100 * (1 - fnWorst / data),
     p50: cdnLatency(0.5), p95: cdnLatency(0.95), p99: cdnLatency(0.99),
-    ampBest: Math.min(best, data) / (N / CLIENT.pollS), ampWorst: Math.min(worst, data) / (N / CLIENT.pollS),
-    mbps: bytes * 8 / 1e6, gbPerHour: bytes * 3600 / 1e9
+    ampBest: sbBest / (N / CDN.pollS), ampWorst: sbWorst / (N / CDN.pollS),
+    gbPerHour: vercelBytes * 3600 / 1e9, sbMbPerHour: sbBytes(sbWorst) * 3600 / 1e6
   };
 }
+
+// 장애 때(관람객 1명 기준). 실패가 이어지면 40 → 80 → 120초 → 120초 … 로 받습니다.
+const backoffRate = 1 / CDN.backoffS[CDN.backoffS.length - 1];
 
 /* ── 임계점 찾기 ── */
 // 정상에서 출발해 오류가 1% 를 넘기 시작하는 동시 관람객 수
@@ -311,10 +329,10 @@ say(`모델 계산값입니다(측정값 아님). Supabase 처리 한도 가정 
   `운영자 200명 + 관리자 20명이 함께 씀(${f1(STAFF_MAX)} RPS). 같은 인자로 돌리면 같은 표가 나옵니다.`);
 say();
 say(`응답 크기(gzip + 머리 400B): settings ${f0(sizes.settings)}B · zones ${f0(sizes.zones)}B · booths ${f0(sizes.booths)}B · ` +
-  `booth_live ${f0(sizes.live)}B · (B) master ${f0(sizes.master)}B · live 스냅샷 ${f0(sizes.liveSnap)}B`);
+  `booth_live ${f0(sizes.live)}B · (B) 스냅샷 ${f0(sizes.snapshot)}B (압축 전 ${f0(sizes.snapshotRaw)}B)`);
 say();
 
-say(`## A. 지금 구조 — 관람객이 Supabase 를 직접 polling`);
+say(`## A. Phase 1(이전) 구조 — 관람객이 Supabase 를 직접 polling`);
 say();
 const aRows = [];
 const aRes = {};
@@ -336,27 +354,49 @@ say(`- 429 는 0 으로 둡니다: Supabase REST 에는 기본 요청 한도가 
 say(`- 운영자 저장 성공 = 같은 Supabase 를 쓰는 부스 운영자 · 관리자 요청이 성공할 확률. 관람객 과부하가 운영자 입력을 함께 막습니다.`);
 say();
 
-say(`## B. 목표 구조 — Vercel CDN 이 관람객 polling 을 흡수`);
+say(`## B. Phase 2(이 브랜치) 구조 — /api/live-snapshot + Vercel CDN`);
 say();
-say(`가정: live 스냅샷 s-maxage=${CDN.ttlLive}s, master s-maxage=${CDN.ttlMaster}s, stale-while-revalidate=${CDN.swr}s, ` +
-  `stale-if-error=${CDN.sie}s, 엣지 리전 ${CDN.regions}곳, 엣지→Supabase ${CDN.originLatS * 1000}ms. ` +
-  `'최선' = 리전마다 만료당 1번만 origin 에 감(request collapsing · SWR 백그라운드 갱신), ` +
-  `'최악' = 만료 순간 origin 왕복 동안 들어온 요청이 모두 MISS.`);
+say(`값: 관람객 ${CDN.pollS}±${CDN.jitterS}초마다 스냅샷 1개, CDN max-age=${CDN.ttl}s · stale-while-revalidate=${CDN.swr}s · ` +
+  `stale-if-error=${CDN.sie}s, 함수 memo booth_live ${CDN.fnLiveS}s · 목록 ${CDN.fnMasterS}s. ` +
+  `가정: 엣지 리전 ${CDN.regions}곳, 함수 인스턴스 최선 1 · 최악 ${CDN.instances}, 함수→Supabase ${CDN.fnLatS * 1000}ms. ` +
+  `'최선' = 리전마다 만료당 1번만 함수에 감(SWR 백그라운드 갱신 · 묶음 요청), '최악' = 만료 순간 함수 왕복 동안 들어온 요청이 모두 MISS.`);
 say();
 const bRows = [];
 for (const N of STAGES) {
   const b = cdnModel(N, sizes);
-  bRows.push([f0(N), f1(b.browserRps), f1(b.dataRps), f2(b.originBest) + ' / ' + f1(b.originWorst), f1(b.originBest + STAFF_MAX) + ' / ' + f1(b.originWorst + STAFF_MAX),
+  bRows.push([f0(N), f1(b.browserRps), f1(b.dataRps), f2(b.fnBest) + ' / ' + f1(b.fnWorst),
+    f2(b.sbBest) + ' / ' + f2(b.sbWorst), f1(b.sbBest + STAFF_MAX) + ' / ' + f1(b.sbWorst + STAFF_MAX),
     pct(b.hitBest) + ' / ' + pct(b.hitWorst), f0(b.p50), f0(b.p95), f0(b.p99), '0', '0', '0',
-    f2(b.ampBest) + '× / ' + f2(b.ampWorst) + '×', '100%', f1(b.gbPerHour)]);
+    f2(b.ampBest) + '× / ' + f2(b.ampWorst) + '×', '100%', f1(b.gbPerHour), f1(b.sbMbPerHour)]);
 }
-say(table(['동시 관람객', 'browser→CDN RPS (전체)', '그중 데이터 RPS', '관람객 origin RPS 최선/최악', 'origin(Supabase) 합계 RPS 최선/최악',
-  '데이터 cache hit 최선/최악', 'p50 ms', 'p95 ms', 'p99 ms', '429', '5xx', 'timeout', 'origin 증폭 최선/최악', '운영자 저장 성공', 'Vercel 전송량 GB/h'], bRows));
+say(table(['동시 관람객', 'browser→CDN RPS (전체)', '그중 스냅샷 RPS', 'CDN→함수 RPS 최선/최악', '관람객 몫 Supabase RPS 최선/최악',
+  'Supabase 합계 RPS (운영자 포함)', 'CDN cache hit 최선/최악', 'p50 ms', 'p95 ms', 'p99 ms', '429', '5xx', 'timeout',
+  'origin 증폭 최선/최악', '운영자 저장 성공', 'Vercel 전송량 GB/h', 'Supabase egress MB/h (관람객 몫)'], bRows));
 say();
-say(`- 관람객 origin RPS 는 관람객 수와 거의 무관합니다(최선 ${f2(CDN.regions / CDN.ttlLive + CDN.regions / CDN.ttlMaster)} RPS 에서 멈춤). 최악에도 Supabase 한도 ${f0(cap)} RPS 의 ` +
-  `${pct(100 * (cdnModel(100000, sizes).originWorst + STAFF_MAX) / cap)} 입니다(100,000명).`);
+say(`- 관람객 몫 Supabase 요청은 관람객 수와 무관하게 최대 ${f2(cdnModel(100000, sizes).sbWorst)} RPS 에서 멈춥니다(함수 memo). ` +
+  `CDN 이 최악으로 움직여도 늘어나는 것은 함수 호출이지 Supabase 요청이 아닙니다.`);
+say(`- origin 증폭 = 관람객 몫 Supabase 요청 ÷ (관람객 수 ÷ 20초). Phase 1 은 1.26배(정상) ~ 8.5배(붕괴)였습니다.`);
 say(`- 429 · 5xx · timeout 0 은 'Vercel 엣지가 이 RPS 를 받는다' 는 가정입니다. 요금제 한도(사용량 초과 시 프로젝트 일시 정지) · ` +
-  `DDoS 완화 · 방화벽 규칙이 행사장 공유 IP 에 걸리는지는 스테이징에서 확인해야 합니다(README '확인할 것').`);
+  `DDoS 완화 · 방화벽 규칙이 행사장 공유 IP 에 걸리는지는 따로 확인해야 합니다(README '확인할 것').`);
+say();
+
+say(`### B 구조 장애 · 회복 (단계별)`);
+say();
+const fRows = [];
+for (const N of STAGES) {
+  const b = cdnModel(N, sizes);
+  fRows.push([f0(N), f1(b.dataRps), f1(N * backoffRate * 1.0), pct(100 * (1 - N * backoffRate / b.dataRps)),
+    f2(CDN.instances / CDN.fnPauseS * 4), '0', `≤ ${CDN.fnPauseS + CDN.ttl + CDN.pollS + CDN.jitterS}초`, `≤ ${Math.round(CDN.backoffS[CDN.backoffS.length - 1] * 1.2)}초`]);
+}
+say(table(['동시 관람객', '정상 스냅샷 RPS', 'CDN·함수 장애 중 browser RPS (백오프 120초)', '장애 중 요청 감소',
+  'Supabase 장애 중 Supabase GET RPS (최악, 시도당 GET 4개)', 'Supabase 10분 장애 중 관람객 오류', 'Supabase 회복 → 관람객 화면 반영', 'CDN·함수 회복 → 관람객 다시 받음'], fRows));
+say();
+say(`- Supabase 장애: 함수가 마지막 정상본을 ${CDN.fnKeepS / 60}분까지 200 으로 주고, CDN 도 stale-if-error ${CDN.sie}초 동안 마지막 사본을 줍니다. ` +
+  `그동안 관람객은 오류 없이 마지막 값을 보고, 새 스냅샷이 3분 넘게 없으면 '현황 연결이 잠시 지연되고 있습니다.' 한 줄만 봅니다. ` +
+  `함수는 실패 뒤 ${CDN.fnPauseS}초 동안 Supabase 에 다시 묻지 않으므로 Supabase 시도는 인스턴스당 ${CDN.fnPauseS}초에 1번 이하입니다.`);
+say(`- CDN · 함수 장애: 관람객은 Supabase 로 돌아가지 않습니다(그 길이 없음). 40 → 80 → 120초로 늦추며 같은 주소를 다시 받고, 화면은 마지막 값을 둡니다. ` +
+  `Supabase 에 닿는 관람객 요청은 0 입니다.`);
+say(`- 회복: 쌓인 재시도가 없고 Supabase 부하가 관람객 수에 비례하지 않으므로, 관람객 수가 줄기를 기다릴 필요 없이 원인이 사라지면 곧바로 돌아옵니다(Phase 1 의 이력 현상 없음).`);
 say();
 
 say(`## 운영자 · 관리자 (관람객과 분리한 부하)`);
@@ -398,12 +438,10 @@ if (!opt.quick) {
   say(`### B 구조 (100,000명)`);
   say();
   const b = cdnModel(100000, sizes);
-  say(`- 붕괴 여부: 관람객 origin 요청이 최선 ${f2(b.originBest)} RPS(관람객 수와 무관), 최악 ${f1(b.originWorst)} RPS(관람객 수에 비례하지만 ` +
-    `Supabase 한도 ${f0(cap)} RPS 아래) → 이 가정에서는 Supabase 가 무너지지 않음. 어느 쪽인지는 스테이징에서 x-vercel-cache 로 잼.`);
-  say(`- CDN 의 origin 보호: cache hit 최선 ${pct(b.hitBest)}, 최악 ${pct(b.hitWorst)}.`);
-  say(`- Supabase 장애 10분: stale-if-error(${CDN.sie}s) 동안 엣지가 마지막 정상본을 계속 줌 → 관람객 오류 0, 화면은 스냅샷의 generated_at 으로 '몇 분 전 기준' 을 표시.`);
-  say(`- 엣지까지 실패할 때: 클라이언트 지수 백오프(20→40→80→120초, 전체 흩뜨림)로 browser→CDN 요청이 최대 ${pct(100 * (1 - CLIENT.pollS / 120))} 줄고, localStorage 의 last-good snapshot 으로 계속 그림.`);
-  say(`- 자동 회복: origin 부하가 관람객 수에 비례하지 않으므로 쌓인 재시도가 없음 → Supabase 가 돌아온 다음 갱신(≤${CDN.ttlLive}s)에 회복.`);
+  say(`- 붕괴 여부: 관람객 몫 Supabase 요청이 최선 ${f2(b.sbBest)} RPS, 최악 ${f2(b.sbWorst)} RPS → Supabase 는 관람객 수로 무너지지 않음. ` +
+    `CDN→함수 호출은 최선 ${f2(b.fnBest)} · 최악 ${f1(b.fnWorst)} RPS(함수 비용 · 동시 실행 한도 쪽 위험).`);
+  say(`- CDN 의 origin 보호: cache hit 최선 ${pct(b.hitBest)}, 최악 ${pct(b.hitWorst)}. 함수 memo 가 그 뒤를 한 번 더 막음.`);
+  say(`- 오류 시 backoff · last-good · 자동 회복은 위 '장애 · 회복' 표와 같음. 남는 위험은 Vercel 쪽입니다: 초당 ${f0(b.browserRps)}건, 시간당 ${f1(b.gbPerHour)}GB 를 요금제가 받는가.`);
   say();
 }
 
