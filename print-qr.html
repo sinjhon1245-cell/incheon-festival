@@ -467,7 +467,7 @@
       <p class="lead" id="lead-ops">
         A4 한 장에 4장. 부스 담당 선생님에게만 나눠 주세요 — 이 QR을 찍으면 그 부스의 대기 시간을 바꿀 수 있어요.
         QR은 ‘운영자 QR 발급’을 눌러야 만들어져요. 부스를 공개하기 전에도 발급 · 인쇄할 수 있지만, 그 QR로 운영은 공개한 뒤에만 돼요.
-        카드를 잃어버렸거나 휴대폰을 바꿀 때는 새로 뽑지 말고 ‘QR 크게 보기’를 찍게 하세요.
+        카드를 잃어버렸거나 기기를 바꿀 때는 새로 뽑지 말고 ‘QR 크게 보기’를 찍게 하세요.
         ‘열쇠 바꾸기’는 카드 사진이 단체방에 올라가는 등 유출됐을 때만 누르세요.
         부스가 일찍 철수했거나 누가 값을 엉뚱하게 바꾸면 ‘열쇠 끄기’로 멈추고, 값은 ‘대기 값 직접 고치기’로 바로잡을 수 있어요.
         <span class="to" id="to-ops"></span>
@@ -552,7 +552,7 @@
     </section>
   </main>
 
-  <!-- QR 크게 보기: 카드를 잃어버렸거나 휴대폰을 바꿀 때, 열쇠는 그대로 두고 이 화면을 찍게 합니다 -->
+  <!-- QR 크게 보기: 카드를 잃어버렸거나 기기를 바꿀 때, 열쇠는 그대로 두고 이 화면을 찍게 합니다 -->
   <div class="ov" id="ov" role="dialog" aria-modal="true" aria-labelledby="ov-code" hidden>
     <div class="ov__in">
       <div class="ov__top">
@@ -610,7 +610,7 @@
       DB: 'DB 설정(supabase/migration-booth-live.sql)을 먼저 적용하세요.',
       EMPTY: '구역 · 번호가 정해진 부스가 없어요. 관리자 → 부스에서 구역과 번호를 정하세요.',
       OP_EMPTY: 'config.js 의 staffSiteUrl 에 부스 Live 사이트 주소를 넣어 주세요. 운영자 화면(booth-ctrl.html)은 부스 Live 사이트에 있어요.',
-      OP_BLOCK: '이 주소로 만든 QR은 현장 휴대폰에서 열리지 않습니다. config.js 의 staffSiteUrl 에 부스 Live 사이트 주소(https)를 넣어 주세요.',
+      OP_BLOCK: '이 주소로 만든 QR은 현장 기기에서 열리지 않습니다. config.js 의 staffSiteUrl 에 부스 Live 사이트 주소(https)를 넣어 주세요.',
       OP_HINT: 'config.js 의 staffSiteUrl 에 부스 Live 사이트 주소를 넣고 새로 고침하면 카드가 나와요.',
       VIS_BLOCK: 'config.js 의 visitorSiteUrl 에 부스 Live 사이트 첫 화면 주소(https)를 넣어 주세요 — 운영 포털 주소가 종이에 찍히면 관람객이 운영 포털을 알게 되고, 거둬들일 방법도 없어요.',
       OP_MISSING: '이 주소에는 운영자 화면(booth-ctrl.html)이 없어요. config.js 의 staffSiteUrl 에 부스 Live 사이트 주소를 넣었는지 확인하세요.',
@@ -734,7 +734,7 @@
       if (!raw) { why = '지금 값: 비어 있음'; msg = MSG.OP_EMPTY; }
       else if (!base) why = '지금 값을 주소로 읽지 못했어요: ' + raw;
       else if (base.protocol !== 'https:') why = 'https 주소가 아니에요.';
-      else if (isLocalHost(base.hostname)) why = '이 컴퓨터나 내부망(사설 IP · 사내 이름)에서만 열리는 주소예요. 현장 휴대폰에서는 열리지 않아요.';
+      else if (isLocalHost(base.hostname)) why = '이 컴퓨터나 내부망(사설 IP · 사내 이름)에서만 열리는 주소예요. 현장 기기에서는 열리지 않아요.';
       // 알려진 운영 포털인데 폴더까지 틀리면 그 주소에는 아무 화면도 없습니다. 다른 사이트라
       // checkOpPage 로 물어볼 수 없으니(CORS) 여기서 막습니다. 같은 사이트면 checkOpPage 의 답을 따릅니다.
       else if (expect && base.origin !== here && base.pathname !== expect) {
@@ -760,7 +760,7 @@
       if (!raw) why = '지금 값: 비어 있음';
       else if (!u) why = '지금 값을 주소로 읽지 못했어요: ' + raw;
       else if (u.protocol !== 'https:') why = 'https 주소가 아니에요: ' + raw;
-      else if (isLocalHost(u.hostname)) why = '이 컴퓨터나 내부망(사설 IP · 사내 이름)에서만 열리는 주소예요. 현장 휴대폰에서는 열리지 않아요: ' + raw;
+      else if (isLocalHost(u.hostname)) why = '이 컴퓨터나 내부망(사설 IP · 사내 이름)에서만 열리는 주소예요. 현장 기기에서는 열리지 않아요: ' + raw;
       else if (isStaffHost(u.hostname)) why = '운영 포털(Netlify · GitHub Pages) 주소예요: ' + raw;
       else if (u.origin === here) why = '지금 이 인쇄 화면이 열린 사이트(운영 포털)와 같은 주소예요: ' + raw;
       // 부스 Live 사이트의 관람객 화면은 live/build.sh 가 첫 화면(index.html)으로 둡니다.

@@ -152,7 +152,7 @@ button {
 .btn--outline:hover { border-color: var(--muted); }
 .btn--solid { background: var(--ink); border-color: var(--ink); color: var(--on); }
 .btn--sm { width: auto; min-height: 44px; padding: 0 14px; font-size: 14.5px; }
-/* 글자 단추(예시 부스 바로 열기 · 이 휴대폰에서 나가기) */
+/* 글자 단추(예시 부스 바로 열기 · 이 기기에서 나가기) */
 .btn--quiet { min-height: 44px; border-color: transparent; background: transparent; color: var(--accent-d); font-size: 15px; }
 .btn--quiet:hover { background: var(--accent-t); }
 .btn:active { transform: scale(0.98); }

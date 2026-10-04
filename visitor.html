@@ -172,7 +172,7 @@
     // 잡았으면(흔들림 ±20% 포함 최대 2분 24초) 정상인데도 '연결이 불안정해요' 가 뜨지 않도록 두 배로 늘립니다.
     var LAG_MS = Math.max(2 * 60 * 1000, POLL_MS * 2);
     var WAKE_GRACE_MS = 8000;        // 화면이 다시 켜진 직후에는 새로 받는 중이라 늦었다고 하지 않습니다
-    var TICK_MS = 15000;             // '몇 분 전' · 오래됨 · 운영 시간을 다시 따지는 간격
+    var TICK_MS = 15000;             // 오래됨 · 운영 시간을 다시 따지는 간격
 
     var COUNT_KEYS = ['여유', '보통', '혼잡', 'off'];
     var COUNT_CLS = { '여유': 'free', '보통': 'normal', '혼잡': 'busy', 'off': 'off', 'unknown': 'unknown' };
@@ -225,12 +225,6 @@
       var t = String(s === null || s === undefined ? '' : s);
       if (typeof t.normalize === 'function') t = t.normalize('NFC');
       return t.toLowerCase().replace(/\s+/g, '');
-    }
-    function durText(min) {
-      if (min === null || min === undefined) return '';
-      if (min < 60) return min + '분';
-      var h = Math.floor(min / 60), m = min % 60;
-      return h + '시간' + (m ? ' ' + m + '분' : '');
     }
     function lastTime() { return S.lastOk || S.snapAt; }
     function clearLive(b) {
@@ -438,14 +432,13 @@
     }
 
     /* ── 상태 글자 ───────────────────────────────────────────── */
+    // 관람객에게는 마지막 입력 시각('방금' · 'N분 전' · 'HH:MM에 입력')을 보여 주지 않고 지금 상태만
+    // 말합니다. 오래된 값(isStale)은 그대로 따져 숫자를 흐리게 하고 '확인 필요' 로만 알립니다.
     function ageLine(b) {
       if (!liveOn()) return { text: '', stale: false };
       if (!b.congestion) return { text: '아직 대기 시간이 입력되지 않았어요', stale: false };
-      var at = b.congestion_updated_at;
-      if (core.isStale(b)) {
-        return { text: durText(core.ageMinutes(at)) + ' 동안 바뀌지 않았어요 · 현장에서 확인해 주세요', stale: true };
-      }
-      return { text: core.formatClock(at) + '에 입력 · ' + core.formatAgo(at), stale: false };
+      if (core.isStale(b)) return { text: '대기 시간이 한동안 바뀌지 않았어요 · 현장에서 확인해 주세요', stale: true };
+      return { text: '', stale: false };
     }
 
     function waitNum(b) { return Number(b.wait_minutes) || 0; }
@@ -458,14 +451,14 @@
       if (b.congestion === '마감') return '오늘 마감';
       var stale = core.isStale(b);
       var s = b.congestion === '중단' ? '잠시 중단' : (isNow(b) ? '바로 체험 가능' : '대기 ' + waitNum(b) + '분, ' + b.congestion);
-      return stale ? s + ', ' + core.formatAgo(b.congestion_updated_at) + ' 정보라 확인 필요' : s;
+      return stale ? s + ', 확인 필요' : s;
     }
 
     // 목록 줄 오른쪽: 위는 숫자(또는 낱말), 아래는 네모 + 상태
     function rightHtml(b) {
       if (!liveOn()) return '';
       var c = b.congestion, stale = core.isStale(b), f = stale ? ' is-faint' : '';
-      var staleSt = '<span class="st st--stale">' + esc(core.formatAgo(b.congestion_updated_at)) + '</span>';
+      var staleSt = '<span class="st st--stale">확인 필요</span>';
       if (!c) return '<span class="st st--unknown">정보 없음</span>';
       if (c === '마감') return '<span class="v v--word">마감</span>';
       if (c === '중단') {
@@ -487,14 +480,14 @@
       if (c === '마감') return '<span class="bigv bigv--word">마감</span>';
       if (c === '중단') {
         return '<span class="bigv bigv--word' + f + '">잠시 중단</span>' +
-          (stale ? '<span class="st st--stale">' + esc(core.formatAgo(b.congestion_updated_at)) + '</span>' : '');
+          (stale ? '<span class="st st--stale">확인 필요</span>' : '');
       }
       var m = core.meta(c);
       var val = isNow(b)
         ? '<span class="bigv bigv--now' + f + '">바로</span>'
         : '<span class="bigv' + f + '"><b class="bigv__n">' + waitNum(b) + '</b><span class="bigv__u">분</span></span>';
       return val + (stale
-        ? '<span class="st st--stale">' + esc(core.formatAgo(b.congestion_updated_at)) + '</span>'
+        ? '<span class="st st--stale">확인 필요</span>'
         : '<span class="st st--' + m.key + '"><i class="sq" aria-hidden="true"></i>' + esc(m.label) + '</span>');
     }
 
@@ -1520,7 +1513,7 @@
       }
       refresh(true);
       core.poll(function () { return refresh(false); }, POLL_MS);
-      // '몇 분 전' · 오래됨 · 운영 시간은 받지 않아도 시간이 흐르며 바뀝니다.
+      // 오래됨 · 운영 시간은 받지 않아도 시간이 흐르며 바뀝니다.
       setInterval(function () { if (!document.hidden) render(false); }, TICK_MS);
       // 시연: 다른 탭(부스 운영자 화면)에서 값을 바꾸면 바로 다시 읽습니다.
       core.onDemoChange(function () { refresh(false); });

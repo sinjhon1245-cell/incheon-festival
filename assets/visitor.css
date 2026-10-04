@@ -820,7 +820,7 @@ html.is-demo .row { scroll-margin-top: calc(56px + var(--demo-h) + env(safe-area
 .v--word { font-size: 17px; font-weight: 700; letter-spacing: -0.02em; color: var(--st-off); }
 .v.is-faint { color: var(--faint); }
 /* --faint 는 큰 글자(3:1)에만 씁니다. 작은 '분' 과 17px '중단' 은 4.5:1 이 필요해 --muted 로
-   둡니다. 오래된 값이라는 것은 아래 'N분 전' 줄이 알려 줍니다. */
+   둡니다. 오래된 값이라는 것은 아래 '확인 필요' 줄이 알려 줍니다. */
 .v.is-faint .v__u,
 .v.v--word.is-faint { color: var(--muted); }
 

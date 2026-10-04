@@ -402,7 +402,7 @@
           '<p class="pinshow__pin" id="pin-once">' + esc(pin.slice(0, 3) + ' ' + pin.slice(3)) + '</p>' +
           '<button class="btn btn--ghost btn--sm" type="button" id="pin-copy">복사</button>' +
           '<p class="pinshow__warn">이 PIN은 다시 확인할 수 없습니다. 분실하면 새 PIN을 발급해 주세요.</p>' +
-          (revoked ? '<p class="pinshow__note">예전 PIN으로 연 휴대폰 ' + revoked + '대는 로그아웃됐습니다.</p>' : '') +
+          (revoked ? '<p class="pinshow__note">예전 PIN으로 연 기기 ' + revoked + '대는 로그아웃됐습니다.</p>' : '') +
           '<p class="pinshow__note">운영자에게 알려 줄 것: ' + esc(opSite()) + ' → “부스 번호와 PIN으로 시작” → 구역 → 부스 → PIN 6자리. ' +
             'QR 카드는 그대로 쓸 수 있습니다.</p>' +
         '</div>',
@@ -429,7 +429,7 @@
       '로 되걸어 확인한 뒤 알려 주세요.';
     var o = c.pin_state === 'on'
       ? { title: 'PIN을 재발급할까요?', label: 'PIN 재발급', danger: true,
-          message: '“' + label + '”의 지금 PIN이 바로 실패하고, 그 PIN으로 연 휴대폰 ' + (c.pin_sessions || 0) +
+          message: '“' + label + '”의 지금 PIN이 바로 실패하고, 그 PIN으로 연 기기 ' + (c.pin_sessions || 0) +
             '대가 로그아웃됩니다. QR은 그대로입니다.' }
       : c.pin_state === 'off'
       ? { title: '새 PIN으로 다시 켤까요?', label: '새 PIN 만들기', danger: false,
@@ -457,7 +457,7 @@
     var c = credOf(row) || { pin_sessions: 0 };
     return UI.confirm({
       title: 'PIN 로그인을 끌까요?',
-      message: '“' + boothSlot(row) + ' ' + (row.name || '') + '”의 PIN 로그인이 바로 막히고, PIN으로 연 휴대폰 ' +
+      message: '“' + boothSlot(row) + ' ' + (row.name || '') + '”의 PIN 로그인이 바로 막히고, PIN으로 연 기기 ' +
         (c.pin_sessions || 0) + '대가 로그아웃됩니다. QR은 그대로입니다. 다시 켜려면 새 PIN을 발급합니다.',
       confirmLabel: 'PIN 끄기', danger: true
     }).then(function (yes) {
@@ -468,7 +468,7 @@
         return loadCreds().then(function () {
           renderPanel();
           reopenMore(row.id);
-          toast('PIN 로그인을 껐습니다.' + (n ? ' 휴대폰 ' + n + '대가 로그아웃됐습니다.' : '') + ' QR은 그대로입니다.');
+          toast('PIN 로그인을 껐습니다.' + (n ? ' 기기 ' + n + '대가 로그아웃됐습니다.' : '') + ' QR은 그대로입니다.');
         });
       }).catch(function (e) {
         console.error('[admin] PIN 끄기 실패', e && (e.code || e.message));
@@ -1890,10 +1890,10 @@
     var c = AD.pinOf(row.id);
     var o = op === 'off'
       ? { title: 'PIN 로그인을 끌까요?', label: 'PIN 끄기', danger: true,
-          message: '“' + label + '”의 PIN 로그인이 막히고 PIN으로 연 휴대폰 ' + c.sessions + '대가 로그아웃됩니다(협의용 예시). QR은 그대로입니다.' }
+          message: '“' + label + '”의 PIN 로그인이 막히고 PIN으로 연 기기 ' + c.sessions + '대가 로그아웃됩니다(협의용 예시). QR은 그대로입니다.' }
       : c.state === 'on'
       ? { title: 'PIN을 재발급할까요?', label: 'PIN 재발급', danger: true,
-          message: '실제로는 지금 PIN이 바로 실패하고 그 PIN으로 연 휴대폰 ' + c.sessions + '대가 로그아웃됩니다. ' +
+          message: '실제로는 지금 PIN이 바로 실패하고 그 PIN으로 연 기기 ' + c.sessions + '대가 로그아웃됩니다. ' +
             '협의용 예시에서는 상태만 바뀌고 예시 PIN 값은 그대로입니다. QR은 그대로입니다.' }
       : { title: '운영자 PIN을 발급할까요?', label: c.state === 'off' ? '새 PIN 만들기' : 'PIN 발급', danger: false,
           message: '“' + label + '”의 운영자 PIN을 만듭니다(협의용 예시). 다음 창에서 예시 PIN을 보여 드려요.' };
