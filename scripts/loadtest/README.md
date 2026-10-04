@@ -22,6 +22,28 @@ Phase 1 감사(아래)의 B 구조를 만들었습니다. Production 에는 아�
 확인된 사실(2026-10-04): Supabase 프로젝트는 **Free 플랜 · ap-south-1(뭄바이)** 입니다.
 한국에서 REST 첫 바이트까지 0.56~1.3초(서버 처리 18ms)라, CDN 이 받아 주는 효과가 지연에서도 큽니다.
 
+### Preview 실측 (2026-10-04, 커밋 8eb0f82, 부하 시험 아님)
+
+Preview 배포(`incheon-live-4nhddw0kv-jin-jin2.vercel.app`, Vercel 인증 뒤)에서 브라우저 한 개로 잰 값입니다.
+경로는 엣지 icn1(서울) → 함수 iad1(미국 동부) → Supabase(뭄바이)입니다(`x-vercel-id`).
+Preview 는 Production Supabase 를 공개용 키로 **읽기만** 합니다.
+
+| 시험 | 결과 |
+|---|---|
+| 48초 쉬고 첫 요청 | `x-vercel-cache: MISS`, 992ms (함수 안 Supabase 734ms, `Server-Timing`) |
+| 곧바로 5번 | 모두 `HIT`, 43~59ms, `generatedAt` 같음(함수가 다시 만들지 않음) |
+| 만료(10초) 뒤 | `STALE` 68ms(기다리지 않음) → 뒤에서 1번 갱신 → 다음부터 새 `generatedAt` 으로 `HIT` |
+| 초당 2건 · 40초(79건) | MISS 0 · HIT 71 · STALE 8, 새 스냅샷 4개(약 11초에 1번), p50 49ms · p95 71ms |
+| 만료 순간 동시 20건 | 20건 모두 `STALE`, 그 뒤 새 스냅샷 1개(갱신이 하나로 묶임) |
+| 같은 구간 Supabase 기록 | 함수(IAD · `node`)의 REST 요청: 13:29:10~13:30:00 UTC 에 booth_live 4 + 목록 3 = **7건**(브라우저 79건). 시험 전체에서 분당 최대 8건 |
+| 요청 머리 `Cache-Control: no-cache`(fetch `cache:'no-store'`) | `STALE`·`HIT` — CDN 을 우회하지 못함 |
+| `?t=…` 붙인 요청 · POST | 400 · 405 |
+| 응답 머리 | 브라우저 `Cache-Control: no-store`, `Vercel-CDN-Cache-Control` 은 밖으로 나오지 않음, `br` 압축(3,235B 압축 전) |
+| 공개 값 점검 | 최상위 `version, generatedAt, liveReady, event, zones, booths`, 부스 `id, no, code, zone, name, org, program, status, waitMinutes, updatedAt`. token · pin · session · phone · manager · memo · private · email · `[예시]` · 키 문자열 0건 |
+| 관람객 화면 | 12개 부스 정상, 요청은 `/api/live-snapshot` 뿐(supabase.co 0건) |
+| 간격 · 숨김 · 묶음 | 20초 ±4초(18.4~23.0초). 창이 실제로 가려진 48초 동안 0건, 숨김 흉내 30초 0건, 보이면 0~2ms 안에 1건. 받는 중 16번 깨워도 1건 |
+| 실패(응답을 503 으로 바꿔치기) | 35.4 → 87.7 → 101.3초로 늦춤, 목록 그대로, 3분 뒤 '현황 연결이 잠시 지연되고 있습니다.' 한 줄. 실패 동안 다른 주소 · Supabase 요청 0건. 풀리자 다음 시도에서 회복 → 23.0 · 22.7초 간격으로 돌아옴 |
+
 ## Phase 1 감사 결론 (이전 구조)
 
 1. **지금 구조는 목표를 만족하지 않습니다.** 관람객 화면이 Supabase REST 를 직접 부르고
