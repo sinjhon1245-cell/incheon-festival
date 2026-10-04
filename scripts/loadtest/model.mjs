@@ -392,7 +392,7 @@ say(table(['동시 관람객', '정상 스냅샷 RPS', 'CDN·함수 장애 중 b
   'Supabase 장애 중 Supabase GET RPS (최악, 시도당 GET 4개)', 'Supabase 10분 장애 중 관람객 오류', 'Supabase 회복 → 관람객 화면 반영', 'CDN·함수 회복 → 관람객 다시 받음'], fRows));
 say();
 say(`- Supabase 장애: 함수가 마지막 정상본을 ${CDN.fnKeepS / 60}분까지 200 으로 주고, CDN 도 stale-if-error ${CDN.sie}초 동안 마지막 사본을 줍니다. ` +
-  `그동안 관람객은 오류 없이 마지막 값을 보고, 새 스냅샷이 3분 넘게 없으면 '현황 연결이 잠시 지연되고 있습니다.' 한 줄만 봅니다. ` +
+  `그동안 관람객은 오류 없이 마지막 값을 보고, 새 스냅샷이 90초 넘게 없으면 '현황 연결이 잠시 지연되고 있습니다.' 한 줄만 봅니다. ` +
   `함수는 실패 뒤 ${CDN.fnPauseS}초 동안 Supabase 에 다시 묻지 않으므로 Supabase 시도는 인스턴스당 ${CDN.fnPauseS}초에 1번 이하입니다.`);
 say(`- CDN · 함수 장애: 관람객은 Supabase 로 돌아가지 않습니다(그 길이 없음). 40 → 80 → 120초로 늦추며 같은 주소를 다시 받고, 화면은 마지막 값을 둡니다. ` +
   `Supabase 에 닿는 관람객 요청은 0 입니다.`);
@@ -410,6 +410,59 @@ say(table(['부스 운영자', '관리자', '운영자 읽기 RPS', '운영자 �
 say();
 say(`운영자 · 관리자 요청은 토큰 · 세션 · 로그인이 붙어 캐시할 수 없습니다(POST rpc · 인증 select). 양은 작지만 ` +
   `A 구조에서는 관람객과 같은 Supabase 를 나눠 쓰므로, 관람객이 몰리면 위 '운영자 저장 성공' 만큼만 저장됩니다.`);
+say();
+
+/* ── B 보수 시나리오: CDN POP 수 × 함수 memo ──────────────────────────
+   위 B 표의 '최선' 은 POP 하나에서 만료당 한 번만 함수에 가는 경우(Preview 에서 실제로 그랬음)에
+   가깝습니다. 여기서는 그것을 보장으로 보지 않습니다.
+     · CDN 캐시는 POP(엣지 지역)마다 따로 있습니다. 관람객은 POP 들에 고르게 나뉜다고 봅니다.
+     · POP 안에서도 묶음 요청이 없다고 봅니다: 만료마다 함수가 다시 만드는 동안(fnWallS) 들어온
+       요청이 모두 함수로 갑니다.
+     · 함수는 한 리전에서 돌고, 동시에 처리 중인 호출 하나마다 인스턴스가 하나씩 따로 뜬다고
+       봅니다(Fluid compute 의 인스턴스 재사용을 빼고 셈).
+     · memo 정상: 인스턴스마다 booth_live 5초 · 목록 3개 60초에 한 번.
+       memo 무효: 호출마다 GET 4개(차가운 인스턴스가 매번 뜨는 경우와 같음). */
+const SENS = { pops: [1, 3, 5, 10], stages: [5000, 10000, 30000, 50000, 100000], fnWallS: 1.0, eventHours: 7 * 2 };
+function sensitivity(N, pops, memo) {
+  const data = N / CDN.pollS + N / ASSUME.openS;
+  const perPop = data / pops;
+  const fn = pops * Math.min(perPop, (1 / CDN.ttl) * (1 + perPop * SENS.fnWallS));
+  const inst = Math.max(1, Math.ceil(fn * SENS.fnWallS));
+  const sb = memo ? Math.min(fn, inst / CDN.fnLiveS) + inst * 3 / CDN.fnMasterS : fn * 4;
+  return { fn, inst, sb };
+}
+
+say(`## B 보수 시나리오 — CDN POP 수 × 함수 memo`);
+say();
+say(`가정: POP 마다 캐시가 따로 있고 POP 안 묶음 요청은 없음(만료마다 함수 ${SENS.fnWallS}초 동안 들어온 요청이 모두 함수로), ` +
+  `함수 호출 하나 = 인스턴스 하나. memo 무효 = 호출마다 Supabase GET 4개. Preview 실측(POP 하나에서 만료당 갱신 1번)보다 훨씬 나쁘게 잡은 값입니다.`);
+say();
+say(`### 관람객 수만으로 정해지는 값 (POP · memo 와 무관)`);
+say();
+const hobbyReq = 1e6, hobbyGb = 100;
+say(table(['동시 관람객', 'CDN RPS', 'CDN 요청/시간', 'Vercel 전송 GB/시간', `행사 ${SENS.eventHours}시간 내내 이 수준이면 CDN 요청`, `같은 경우 전송 GB`, 'Hobby 월 100만 건이 바닥나는 시간', 'Hobby 월 100GB 가 바닥나는 시간'],
+  SENS.stages.map((N) => {
+    const b = cdnModel(N, sizes);
+    const perHour = b.browserRps * 3600;
+    return [f0(N), f0(b.browserRps), f0(perHour), f1(b.gbPerHour), f0(perHour * SENS.eventHours), f0(b.gbPerHour * SENS.eventHours),
+      f0(hobbyReq / perHour * 60) + '분', f1(hobbyGb / b.gbPerHour) + '시간'];
+  })));
+say();
+for (const memo of [true, false]) {
+  say(`### Supabase origin RPS · 요청/시간 — 함수 memo ${memo ? '정상' : '무효'}`);
+  say();
+  say(table(['동시 관람객', ...SENS.pops.map((p) => `POP ${p}: RPS (요청/시간)`)],
+    SENS.stages.map((N) => [f0(N), ...SENS.pops.map((p) => { const s = sensitivity(N, p, memo); return `${f1(s.sb)} (${f0(s.sb * 3600)})`; })])));
+  say();
+}
+say(`### 함수 호출 · 동시 인스턴스 (memo 와 무관)`);
+say();
+say(table(['동시 관람객', ...SENS.pops.map((p) => `POP ${p}: 호출 RPS · 인스턴스 · 호출/시간`)],
+  SENS.stages.map((N) => [f0(N), ...SENS.pops.map((p) => { const s = sensitivity(N, p, true); return `${f1(s.fn)} · ${f0(s.inst)} · ${f0(s.fn * 3600)}`; })])));
+say();
+say(`- Preview 실측(POP 하나에서 만료당 갱신 1번)이 그대로 성립하면 함수 호출은 POP 수 × 0.1 RPS, Supabase 는 memo 정상일 때 ` +
+  `POP 10곳이어도 약 ${f2(Math.min(10 / CDN.ttl, 1 / CDN.fnLiveS) + 3 / CDN.fnMasterS)}~${f2(10 / CDN.ttl * 4)} RPS 입니다.`);
+say(`- 보수 시나리오에서 Supabase 부하를 키우는 것은 'POP 안 묶음 요청 없음 × 인스턴스 재사용 없음' 의 조합입니다. 둘 다 Preview 에서는 일어나지 않았지만 보장은 아닙니다.`);
 say();
 
 if (!opt.quick) {
