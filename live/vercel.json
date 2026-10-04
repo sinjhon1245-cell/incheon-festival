@@ -6,6 +6,7 @@
   "outputDirectory": "dist",
   "ignoreCommand": "[ -n \"$VERCEL_GIT_PREVIOUS_SHA\" ] && [ \"$VERCEL_GIT_PREVIOUS_SHA\" != \"$VERCEL_GIT_COMMIT_SHA\" ] && git diff --quiet \"$VERCEL_GIT_PREVIOUS_SHA\" \"$VERCEL_GIT_COMMIT_SHA\" -- . ../visitor.html ../booth-ctrl.html ../assets",
   "cleanUrls": false,
+  "regions": ["bom1"],
   "functions": {
     "api/live-snapshot.mjs": { "maxDuration": 10 }
   },
