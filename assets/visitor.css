@@ -30,17 +30,18 @@
   --line-2:  #F5F6FA;
   --accent:  #5B45E0;   /* 흰 글자를 얹어도 6.2:1 */
 
-  /* 상태 — 관람객이 한눈에 가르도록 여유 초록 · 보통 샛노랑 · 혼잡 빨강 · 중단 · 마감 푸른 회색.
-     글자 색은 모두 흰 바탕에서 4.5:1 을 넘습니다(5.64 · 5.58 · 4.83 · 5.42). 초록 · 빨강 칸에는
-     흰 글자를 얹습니다(같은 대비).
-     보통의 샛노랑(--st-normal-accent)은 흰 바탕에서 1.3:1 이라 글자에는 쓰지 않고 네모 · 막대 · 칸 바탕처럼
-     칠하는 곳에만 씁니다. 그 위의 글자는 --ink(12.5:1), '보통' 글자 · 흰 바탕의 숫자는 진한 올리브(--st-normal).
+  /* 상태 — 멀리서도 초록 · 노랑 · 빨강 · 푸른 회색으로 갈리게. 색은 '칠' 에만 씁니다:
+     상태 칩 · 네모 · 분포 막대 · 한눈에 칸. 대기 분 숫자 · 상태 글자 · 범례 글자는 남색(--ink)으로 두어
+     숫자가 먼저 읽히고, 색이 숫자보다 시끄럽지 않게 합니다.
+       칠 위의 글자   여유 칸 · 혼잡 칸은 흰 글자(5.64 · 4.55:1), 보통 칸(샛노랑)은 남색 글자(12.3:1).
+       샛노랑         흰 바탕 위 글자로는 쓰지 않습니다(1.3:1). 흰 바탕의 작은 네모에는 --st-edge 한 줄을 둡니다.
+     예전처럼 노랑을 진하게(올리브 · 머스터드) 만들어 대비를 맞추지 않습니다 — 그러면 '노랑' 으로 안 보입니다.
      색만으로 말하지 않고 늘 '여유' · '보통' · '혼잡' · '잠시 중단' · '마감' 글자와 함께 둡니다.
      상태를 정하는 것은 서버(대기 분 → 여유 · 보통 · 혼잡)이고 여기서는 색만 입힙니다. */
   --st-free:     #08773F;
-  --st-normal:   #6E6B00;   /* 보통의 글자 */
-  --st-normal-accent: #F2E600;   /* 보통의 칠(네모 · 막대 · 칸). 글자에는 쓰지 않습니다 */
-  --st-busy:     #DC2626;
+  --st-normal:   #F2E600;   /* 샛노랑. 칠 전용 */
+  --st-busy:     #E52521;
+  --st-edge:     rgba(22, 32, 60, .28);   /* 흰 바탕의 샛노랑 네모 가장자리 */
   --st-off:      #5A6B85;   /* 중단 · 마감의 글자와 칠 */
   --st-off-mark: #8A93AB;   /* 네모 · 테두리 전용(3.07:1). 작은 글자로 쓰면 대비가 모자랍니다 */
   --faint:       #8A93AB;   /* 장식(타일의 '—') — 큰 글자(3:1 기준)에만 */
@@ -121,10 +122,9 @@ img { display: block; max-width: 100%; height: auto; }
 }
 .sq--hollow { background: none; border: 1.5px solid var(--st-off-mark); }
 .sq--off    { background: var(--st-off-mark); }
-/* 샛노랑 네모는 흰 바탕에서 가장자리가 흐려 안쪽에 진한 테두리 한 줄을 둡니다 */
-.st--normal .sq,
+/* 샛노랑 네모는 흰 바탕에서 가장자리가 흐려 안쪽에 옅은 남색 테두리 한 줄을 둡니다 */
 .count--normal .sq,
-.strip__t .sq { background: var(--st-normal-accent); box-shadow: inset 0 0 0 1px var(--st-normal); }
+.strip__t .sq { background: var(--st-normal); box-shadow: inset 0 0 0 1px var(--st-edge); }
 
 /* ── 1. 보라 띠 ─────────────────────────────────────────────── */
 .band { background: var(--accent); color: #fff; }
@@ -354,7 +354,7 @@ html.is-demo .row { scroll-margin-top: calc(56px + var(--demo-h) + env(safe-area
 }
 .bigv__n { font-size: 48px; font-weight: 800; letter-spacing: -0.045em; }
 .bigv__u { font-size: 16px; font-weight: 700; color: var(--ink-2); }
-.bigv--now  { font-size: 36px; font-weight: 800; letter-spacing: -0.03em; color: var(--st-free); }
+.bigv--now  { font-size: 36px; font-weight: 800; letter-spacing: -0.03em; }
 .bigv--word { font-size: 26px; font-weight: 800; letter-spacing: -0.03em; color: var(--st-off); }
 .bigv--none { font-size: 15px; font-weight: 600; color: var(--muted-2); line-height: 1.4; }
 
@@ -435,7 +435,7 @@ html.is-demo .row { scroll-margin-top: calc(56px + var(--demo-h) + env(safe-area
 .notfound {
   margin-top: 20px;
   padding: 1px 0 1px 10px;
-  border-left: 2px solid var(--st-normal);
+  border-left: 2px solid var(--st-off-mark);
   font-size: 14px;
   color: var(--ink-2);
 }
@@ -489,7 +489,7 @@ html.is-demo .row { scroll-margin-top: calc(56px + var(--demo-h) + env(safe-area
 }
 .dist__s { flex: 0 1 0; min-width: 4px; }
 .dist__s--free    { background: var(--st-free); }
-.dist__s--normal  { background: var(--st-normal-accent); }
+.dist__s--normal  { background: var(--st-normal); }
 .dist__s--busy    { background: var(--st-busy); }
 .dist__s--off     { background: var(--st-off-mark); }
 .dist__s--unknown { background: var(--line); }
@@ -524,10 +524,10 @@ html.is-demo .row { scroll-margin-top: calc(56px + var(--demo-h) + env(safe-area
   line-height: 1.2;
   white-space: nowrap;
 }
-.count--free .count__w   { color: var(--st-free); }
-.count--normal .count__w { color: var(--st-normal); }
-.count--busy .count__w   { color: var(--st-busy); }
-.count--off .count__w    { color: var(--st-off); }
+/* 범례 글자는 남색, 색은 네모(10px)가 맡습니다 */
+.count .sq               { width: 10px; height: 10px; }
+.count--free .sq         { background: var(--st-free); }
+.count--busy .sq         { background: var(--st-busy); }
 .count--off .sq          { background: var(--st-off-mark); }
 .count__n {
   font-size: 24px;
@@ -835,30 +835,29 @@ html.is-demo .row { scroll-margin-top: calc(56px + var(--demo-h) + env(safe-area
   white-space: nowrap;
 }
 .v__n { font-size: 28px; font-weight: 800; letter-spacing: -0.04em; }
-/* 대기 분 숫자도 상태 색으로(목록 줄의 is-* · 큰 값의 is-*). '분' 은 그대로 둡니다. */
-.row.is-free .v__n,   .bigv.is-free .bigv__n   { color: var(--st-free); }
-.row.is-normal .v__n, .bigv.is-normal .bigv__n { color: var(--st-normal); }
-.row.is-busy .v__n,   .bigv.is-busy .bigv__n   { color: var(--st-busy); }
 .v__u { font-size: 13px; font-weight: 600; color: var(--ink-2); }
-.v--now  { font-size: 20px; font-weight: 800; letter-spacing: -0.02em; color: var(--st-free); }
+.v--now  { font-size: 20px; font-weight: 800; letter-spacing: -0.02em; }
 .v--word { font-size: 17px; font-weight: 700; letter-spacing: -0.02em; color: var(--st-off); }
 
+/* 상태 칩 — 한눈에 칸과 같은 칠(여유 초록 · 보통 샛노랑 · 혼잡 빨강 · 중단 흰 바탕 + 회색 테두리).
+   작게(12px · 모서리 4px) 두어 대기 분 숫자보다 앞서지 않게 합니다. '정보 없음' 은 칩이 아닌 옅은 글자입니다. */
 .st {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  padding: 3px 7px;
+  border-radius: 4px;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 700;
   line-height: 1.2;
   white-space: nowrap;
 }
-.st .sq { width: 7px; height: 7px; }
-.st--free    { color: var(--st-free); }
-.st--normal  { color: var(--st-normal); }
-.st--busy    { color: var(--st-busy); }
+.st .sq { display: none; }   /* 칩 자체가 표시라 네모는 감춥니다(마크업은 그대로) */
+.st--free    { background: var(--st-free);   color: #fff; }
+.st--normal  { background: var(--st-normal); color: var(--ink); }
+.st--busy    { background: var(--st-busy);   color: #fff; }
 .st--pause,
-.st--closed  { color: var(--st-off); }
-.st--unknown { color: var(--muted-2); }
+.st--closed  { background: #fff; box-shadow: inset 0 0 0 1px var(--st-off-mark); color: var(--st-off); }
+.st--unknown { padding: 0; font-weight: 600; color: var(--muted-2); }
 
 /* 펼친 내용 — 이름 단과 줄을 맞춥니다(44px + 12px) */
 .row__more {
@@ -977,7 +976,7 @@ html.is-demo .row { scroll-margin-top: calc(56px + var(--demo-h) + env(safe-area
   white-space: nowrap;
 }
 .tile.is-free   { background: var(--st-free);   color: #fff; }
-.tile.is-normal { background: var(--st-normal-accent); color: var(--ink); }
+.tile.is-normal { background: var(--st-normal); color: var(--ink); }
 .tile.is-busy   { background: var(--st-busy);   color: #fff; }
 .tile.is-pause,
 .tile.is-closed { background: #fff; border: 1px solid var(--st-off-mark); color: var(--st-off); }
