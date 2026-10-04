@@ -10,8 +10,10 @@
 로그인하면 같은 브라우저의 포털에 처리 단추가 나타납니다.
 운영 내용을 **편집하는 것은 관리자**이고, 관리자만 로그인합니다.
 
-- 운영 포털: https://incheon-aisw-festival.netlify.app/
-- 관리자: `/admin` (관리자 계정 로그인 필요)
+- 운영 포털: https://sinjhon1245-cell.github.io/incheon-festival/ (GitHub Pages · `main`)
+- 관리자: https://sinjhon1245-cell.github.io/incheon-festival/admin.html (관리자 계정 로그인 필요)
+- 부스 Live 사이트(관람객 · 부스 운영자): https://incheon-live.vercel.app/ (Vercel · `booth-live`)
+- 배포 구조는 아래 ‘배포’ 를 보세요. Netlify 는 지금 쓰지 않습니다.
 
 > 이 구조는 “링크를 아는 사람 = 관계자”로 보는 시연·운영용 설계입니다.
 > 링크가 밖으로 전달되면 운영정보도 함께 보입니다. 검색엔진에는
@@ -29,8 +31,9 @@ visitor.html          관람객용 부스 대기 현황 (부스 Live 사이트�
 booth-ctrl.html       부스 운영자 대기 시간 입력 화면 (부스 Live 사이트 · 운영자 카드 QR 로만 열림)
 print-qr.html         운영자 카드 · 부스 앞 안내 · 입구 포스터 QR 인쇄 (운영 포털 · 관리자 로그인)
 booth-admin.html      행사 당일 부스 운영 현황 · 관리자 긴급 수정 (운영 포털 · 관리자 로그인 · Live 사이트에는 없음)
-live/                 부스 Live 사이트 배포 설정 · build.sh (Netlify 두 번째 사이트 또는 Vercel 프로젝트)
-netlify.toml          Netlify 에 올렸을 때의 배포 설정 · 보안 헤더 · /admin 경로
+live/                 부스 Live 사이트 배포 설정 · build.sh (Vercel 프로젝트 incheon-live · netlify.toml 은 예비)
+_config.yml           GitHub Pages(운영 포털) 배포본에서 뺄 파일 목록
+netlify.toml          (예비 · 현재 미사용) Netlify 로 올릴 때의 배포 설정 · 보안 헤더 · /admin 경로
 robots.txt            검색엔진 수집 차단
 
 assets/
@@ -176,7 +179,8 @@ window.FESTIVAL_CONFIG = {
 > publishable 키는 브라우저에 노출되도록 설계된 공개 키이고,
 > 실제 권한은 데이터베이스의 RLS 정책이 막습니다.
 
-이 파일은 저장소에 커밋되어 Netlify 배포본에도 함께 올라갑니다.
+이 파일은 저장소에 커밋되어 GitHub Pages 배포본(운영 포털)에도 함께 올라갑니다.
+(부스 Live 사이트에는 `live/build.sh` 가 필요한 값만 옮긴 설정 파일이 올라갑니다.)
 `.gitignore` 에 넣으면 배포본에서 “서버에 연결할 수 없습니다”가 뜹니다.
 
 ### 2. 스키마 실행
@@ -496,13 +500,13 @@ node dev-server.js
 열쇠**로 다시 만들었습니다.
 
 **사이트는 둘입니다.** 같은 저장소를 사이트 두 개로 배포합니다. 운영 포털은
-Netlify, 부스 Live 사이트는 Netlify 두 번째 사이트나 Vercel 프로젝트 중 하나입니다
-(`live/` 에 두 설정이 모두 있습니다).
+GitHub Pages(`main`), 부스 Live 사이트는 Vercel 프로젝트 `incheon-live`(`booth-live`)입니다
+(아래 ‘배포’ 참고. `live/` 의 Netlify 설정은 예비입니다).
 
 | 사이트 | 올라가는 화면 | 누가 여나 |
 |---|---|---|
-| **운영 포털** (지금 이 사이트) | 포털 `index.html` · 관리자 `admin.html` · QR 인쇄 `print-qr.html` | 관계자 · 운영본부 |
-| **부스 Live 사이트** (Netlify 두 번째 사이트 또는 Vercel 프로젝트, `live/`) | 관람객 화면(사이트 첫 화면, 원본은 `visitor.html`) · 부스 운영자 화면 `booth-ctrl.html` | 관람객 · 부스 담당 선생님 |
+| **운영 포털** (GitHub Pages) | 포털 `index.html` · 관리자 `admin.html` · 부스 운영 현황 `booth-admin.html` · QR 인쇄 `print-qr.html` | 관계자 · 운영본부 |
+| **부스 Live 사이트** (Vercel 프로젝트 `incheon-live`, `live/`) | 관람객 화면(사이트 첫 화면, 원본은 `visitor.html`) · 부스 운영자 화면 `booth-ctrl.html` | 관람객 · 부스 담당 선생님 |
 
 종이에 찍히는 QR 은 관람객용이든 운영자 카드든 **모두 부스 Live 사이트**를
 가리킵니다. 관람객도 부스 선생님도 운영 포털 주소를 받지 않습니다. QR 인쇄만
@@ -515,7 +519,7 @@ Netlify, 부스 Live 사이트는 Netlify 두 번째 사이트나 Vercel 프로�
 |---|---|---|---|
 | 관람객 화면 (`visitor.html`) | 관람객 | **부스 Live 사이트의 첫 화면**. 입구 포스터 · 부스 앞 안내 QR | 부스별 대기 시간과 여유 · 보통 · 혼잡, 구역 탭 · 검색, ‘한눈에’ 칸 보기. 20초마다 다시 읽음. 부스 번호는 늘 전체(`A-07`)로 보이고, 구역 탭은 짧은 이름(‘A 스쿨존 20’), 구역이 7개 넘으면 [전체] + [구역 선택], 부스가 20곳 넘으면 위에 검색칸이 나옴. 검색 순서는 부스 번호 → 이름 → 체험 내용 → 운영기관 → 구역 이름. 부스 앞 QR(`?b=부스`)로 열면 그 부스와 같은 구역의 여유 부스를 맨 위에 보여 줌 |
 | 부스 운영자 화면 (`booth-ctrl.html`) | 부스 담당 선생님 | **부스 Live 사이트**. 부스별 **운영자 카드의 QR**(`#k=열쇠`)로만 열림 | 바로 · 5 · 10 · 15 · 20 · 30 · 45 · 60분 이상 중 하나를 누름. 잠시 중단 · 오늘 마감. 처음 열 때 “이 부스를 운영하시나요?” 확인 |
-| QR 인쇄 (`print-qr.html`) | 운영본부 (관리자 로그인) | **운영 포털의 Netlify https 주소**. 관리자 → 부스 화면 위 ‘부스 QR 인쇄’ | ① 부스 운영자용 카드(A4 한 장에 4개) ② 부스 앞 안내(A4 한 장에 2개) ③ 입구 포스터. ① 카드마다 화면에만 보이는 관리 단추: QR 크게 보기 · 열쇠 끄기 · 대기 값 직접 고치기 · 열쇠 바꾸기. 실시간 값 모두 지우기. 화면을 연다고 열쇠가 생기지 않습니다 — ‘QR 미발급’ 카드의 [운영자 QR 발급] 이나 [배정 완료 부스 QR 일괄 발급] 으로 만듭니다(구역 · 번호가 있는 부스만, 공개 전에도 가능 · 공개 전에는 QR 이 동작하지 않음). 부스가 많을 때: 구역 단추로 그 구역만 고르기 · **[구역별로 새 페이지에서 시작]**(구역이 바뀌면 새 장부터) · **[인쇄 화면으로 보기]**(관리 단추 · 경고를 숨기고 종이에 찍힐 카드만). 카드 크기(운영자 카드 QR 42mm · 부스 앞 안내 QR 78mm)는 그대로입니다 |
+| QR 인쇄 (`print-qr.html`) | 운영본부 (관리자 로그인) | **운영 포털(GitHub Pages) 주소**. 관리자 → 부스 화면 위 ‘부스 QR 인쇄’ | ① 부스 운영자용 카드(A4 한 장에 4개) ② 부스 앞 안내(A4 한 장에 2개) ③ 입구 포스터. ① 카드마다 화면에만 보이는 관리 단추: QR 크게 보기 · 열쇠 끄기 · 대기 값 직접 고치기 · 열쇠 바꾸기. 실시간 값 모두 지우기. 화면을 연다고 열쇠가 생기지 않습니다 — ‘QR 미발급’ 카드의 [운영자 QR 발급] 이나 [배정 완료 부스 QR 일괄 발급] 으로 만듭니다(구역 · 번호가 있는 부스만, 공개 전에도 가능 · 공개 전에는 QR 이 동작하지 않음). 부스가 많을 때: 구역 단추로 그 구역만 고르기 · **[구역별로 새 페이지에서 시작]**(구역이 바뀌면 새 장부터) · **[인쇄 화면으로 보기]**(관리 단추 · 경고를 숨기고 종이에 찍힐 카드만). 카드 크기(운영자 카드 QR 42mm · 부스 앞 안내 QR 78mm)는 그대로입니다 |
 | 포털 **부스 현황** | 관계자 | 운영 포털 | 부스 카드 · 상세에 지금 대기 상태. 맨 위 ‘부스 대기 입력’ 줄(입력 중 · 30분 넘게 그대로 · 아직 없음)을 펼치면 입력이 오래된 부스부터 보임. 부스 화면을 보는 동안 1분마다 다시 읽음 |
 
 혼잡도는 선생님이 고르지 않습니다. 대기 시간만 누르면 데이터베이스 함수가
@@ -583,7 +587,30 @@ Netlify, 부스 Live 사이트는 Netlify 두 번째 사이트나 Vercel 프로�
    > `authenticated_security_definer_function_executable` 경고도 같습니다 —
    > 함수 안의 `is_admin()` 이 막고, 권한을 거두면 인쇄 화면이 멈춥니다.
 
-2. **부스 Live 사이트** — Netlify 에서 *Add new site → Import an existing project*
+2. **부스 Live 사이트** — 지금은 **Vercel 프로젝트 `incheon-live`** 입니다
+   (Production Branch `booth-live` → `https://incheon-live.vercel.app/`).
+   새로 만들 때는 *Add New… → Project* 에서 이 저장소를 Import 합니다. 빌드 명령 · 배포 폴더 · 헤더 · 빌드를 건너뛸 조건은
+   `live/vercel.json` 이 정하므로, 대시보드에서는 아래만 맞춥니다.
+
+   | Vercel 설정 | 값 |
+   |---|---|
+   | Framework Preset | `Other` |
+   | Root Directory | `live` |
+   | ↳ Include files outside the root directory in the Build Step | **켬** — 두 화면 원본이 `live/` 밖에 있습니다. 꺼져 있으면 `빌드 중단: ../assets/config.js 가 없습니다` 로 멈춥니다 |
+   | ↳ Skip deployments when there are no changes to the root directory … | **끔** — 켜 두면 `visitor.html` 만 고친 push 가 배포되지 않을 수 있습니다 |
+   | Build / Output / Install Command | 그대로(Override 끔). `vercel.json` 이 `sh build.sh` · `dist` · 설치 없음으로 정합니다 |
+   | Settings → Environments → Production → Branch | `booth-live` (지금 설정. `main` push 는 미리 보기로만 배포됩니다) |
+   | Environment Variables | 없음 |
+
+   Import 직후 첫 배포는 기본 브랜치(`main`)로 돕니다. 그 브랜치에 `live/` 가 없으면
+   `Error` 로 끝나는 것이 정상입니다. Production Branch 를 바꾼 뒤 그 브랜치에
+   push 하거나 Deployments 에서 그 브랜치로 새로 배포합니다. 주소는
+   `https://프로젝트이름.vercel.app/` 입니다(**QR 인쇄 뒤에는 바꿀 수
+   없으니** 프로젝트 이름을 행사 내내 쓸 이름으로 정합니다). Production 이 아닌
+   브랜치의 미리 보기 배포는 Vercel 로그인이 있어야 열리므로(Deployment
+   Protection) 관람객 주소로 쓰지 않습니다.
+
+   **(예비 · 현재 미사용) Netlify 로 옮길 때** — Netlify 에서 *Add new site → Import an existing project*
    로 이 저장소를 한 번 더 고르고, **Branch 는 `main`, Base directory 는 `live`**
    로 지정합니다. 빌드 명령(`sh build.sh`) · 배포 폴더(`dist`) · 헤더 · 빌드를
    건너뛸 조건은 `live/netlify.toml` 이 정합니다. 두 화면과 관계없는 파일만 바뀐
@@ -599,28 +626,6 @@ Netlify, 부스 Live 사이트는 Netlify 두 번째 사이트나 Vercel 프로�
    (Netlify 는 빌드 훅으로 부른 빌드에는 건너뛰기 조건을 적용하지 않습니다).
    그냥 ‘Deploy site’ 는 건너뛰기 조건을 그대로 따르니 해결책이 아닙니다.
    `Failed` 이고 로그에 `빌드 중단: …` 이 있으면 아래 ‘문제가 생겼을 때’ 를 보세요.
-
-   **Vercel 로 올릴 때**(Netlify 대신) — *Add New… → Project* 에서 이 저장소를
-   Import 합니다. 빌드 명령 · 배포 폴더 · 헤더 · 빌드를 건너뛸 조건은
-   `live/vercel.json` 이 정하므로, 대시보드에서는 아래만 맞춥니다.
-
-   | Vercel 설정 | 값 |
-   |---|---|
-   | Framework Preset | `Other` |
-   | Root Directory | `live` |
-   | ↳ Include files outside the root directory in the Build Step | **켬** — 두 화면 원본이 `live/` 밖에 있습니다. 꺼져 있으면 `빌드 중단: ../assets/config.js 가 없습니다` 로 멈춥니다 |
-   | ↳ Skip deployments when there are no changes to the root directory … | **끔** — 켜 두면 `visitor.html` 만 고친 push 가 배포되지 않을 수 있습니다 |
-   | Build / Output / Install Command | 그대로(Override 끔). `vercel.json` 이 `sh build.sh` · `dist` · 설치 없음으로 정합니다 |
-   | Settings → Environments → Production → Branch | Netlify 와 같은 `main`. `live/` 가 아직 `main` 에 합쳐지지 않았으면 `booth-live` |
-   | Environment Variables | 없음 |
-
-   Import 직후 첫 배포는 `main` 으로 돌기 때문에, `main` 에 `live/` 가 없으면
-   `Error` 로 끝나는 것이 정상입니다. Production Branch 를 바꾼 뒤 그 브랜치에
-   push 하거나 Deployments 에서 그 브랜치로 새로 배포합니다. 주소는
-   `https://프로젝트이름.vercel.app/` 입니다(Netlify 처럼 **QR 인쇄 뒤에는 바꿀 수
-   없으니** 프로젝트 이름을 행사 내내 쓸 이름으로 정합니다). Production 이 아닌
-   브랜치의 미리 보기 배포는 Vercel 로그인이 있어야 열리므로(Deployment
-   Protection) 관람객 주소로 쓰지 않습니다.
 
    **확인:** 휴대폰으로 그 https 주소의 첫 화면(관람객 화면)과
    `…/booth-ctrl.html?demo`(협의용 예시 운영자 화면)가 열리는지 봅니다.
@@ -644,7 +649,7 @@ Netlify, 부스 Live 사이트는 Netlify 두 번째 사이트나 Vercel 프로�
 
 4. **부스 등록** — 관리자 → 부스 구역 → 부스. 인쇄 전에 끝냅니다
    (아래 ‘주의’ 의 첫째 줄).
-5. **인쇄** — **운영 포털의 Netlify 주소(https)에서 관리자로 로그인한 채로**
+5. **인쇄** — **운영 포털 주소(https://sinjhon1245-cell.github.io/incheon-festival/)에서 관리자로 로그인한 채로**
    `print-qr.html` 을 엽니다(관리자 → 부스 화면 위 ‘부스 QR 인쇄’). ① 운영자
    카드를 열 때 부스마다 열쇠가 처음 만들어집니다. 모든 QR 아래에 가리키는
    주소가 작게 찍힙니다. 부스 Live 사이트 주소인지 보고, 한 장 먼저 뽑아
@@ -983,25 +988,49 @@ select coalesce(nullif(b.code, ''),
 >   숨겨지지 않으니, 로그인 없이 읽히는 표에는 공개돼도 되는 내용만 둔다는
 >   원칙은 그대로입니다.
 > - GitHub 무료 플랜에서는 저장소를 비공개로 돌리면 GitHub Pages 판이 내려갑니다.
->   Netlify 배포는 그대로 됩니다.
+>   **지금 운영 포털(관리자 · 부스 운영 현황 · QR 인쇄)이 GitHub Pages 이므로 함께 내려갑니다.**
+>   비공개로 돌리려면 먼저 운영 포털을 옮길 곳을 정해야 합니다.
 
 ## 배포
 
-운영 포털은 빌드 도구가 없는 정적 사이트라, 저장소 파일을 그대로 올리는
-호스팅이면 어디서든 동작합니다. 빌드 명령도 환경변수 설정도 없고, Supabase
-연결 정보는 `assets/config.js` 로 함께 배포됩니다.
+**지금 쓰는 배포처는 둘입니다.** 같은 저장소를 브랜치로 나눠 씁니다
+(2026-10-04 GitHub Actions 실행 기록 · Vercel 배포 목록으로 확인).
 
-**Netlify 에는 사이트가 둘입니다.** 같은 저장소를 씁니다.
+| 사이트 | 호스팅 | 배포하는 브랜치 | 주소 | 올라가는 것 |
+|---|---|---|---|---|
+| 운영 포털 (포털 · 관리자 · 부스 운영 현황 · QR 인쇄) | **GitHub Pages** (Deploy from a branch · Jekyll) | `main` (저장소 뿌리) | https://sinjhon1245-cell.github.io/incheon-festival/ · `…/admin.html` · `…/booth-admin.html` · `…/print-qr.html` | 저장소 뿌리 파일에서 `_config.yml` 의 `exclude` 와 점(.)으로 시작하는 것을 뺀 나머지 |
+| 부스 Live 사이트 (관람객 화면 · 부스 운영자 화면) | **Vercel** 프로젝트 `incheon-live` (Root Directory `live`) | Production = `booth-live` | https://incheon-live.vercel.app/ · `…/booth-ctrl` · `…/example` | `live/build.sh` 가 만든 `live/dist` |
 
-| 사이트 | Base directory | 빌드 | 설정 |
-|---|---|---|---|
-| 운영 포털 (포털 · 관리자 · QR 인쇄) | (비움) | 없음 | 뿌리의 `netlify.toml` |
-| 부스 Live 사이트 (관람객 화면 · 부스 운영자 화면) | `live` | `sh build.sh` → `live/dist` | `live/netlify.toml` |
+- **GitHub Pages** 는 저장소 설정(Settings → Pages)의 ‘Deploy from a branch’ 로 돌고, Actions 에는
+  GitHub 가 만든 `pages build and deployment` 하나만 보입니다(`.github/workflows` 파일은 없습니다).
+  `main` 에 push 하면 몇 십 초 뒤 새 판이 올라갑니다. 빌드 명령 · 환경변수는 없고 Supabase 연결
+  정보는 `assets/config.js` 로 함께 올라갑니다. 빠지는 것: `scripts` · `supabase` · `design` ·
+  `live` · `TASK.md` · `README.md` · `dev-server.*` · `netlify.toml` 과 `.claude` · `.mcp.json` 같은
+  점 파일. `visitor.html` · `booth-ctrl.html` 도 함께 올라가지만 `?demo` 미리 보기용 사본이고, 종이
+  QR 은 그쪽을 가리키지 않습니다.
+- **Vercel** 은 `booth-live` push 를 Production 으로, 그 밖의 브랜치(`main` 포함) push 를 미리 보기
+  (Preview) 로 배포합니다. 미리 보기 주소는 Vercel 로그인이 있어야 열리므로 관람객 주소로 쓰지
+  않습니다. **부스 Live 사이트를 바꾸려면 `booth-live` 에 push** 해야 합니다(`main` 만 올리면 운영
+  포털만 바뀝니다). 지금은 두 브랜치를 같은 커밋으로 맞춰 둡니다.
+- **Netlify 는 지금 배포처가 아닙니다.** 저장소의 `netlify.toml` · `live/netlify.toml` 은 처음
+  Netlify 로 올리던 때의 설정을 예비로 남긴 것입니다. GitHub Pages 와 Vercel 은 이 두 파일을 읽지
+  않으므로(Pages 배포본에서는 `_config.yml` 이 빼고, Vercel 은 `live/vercel.json` 만 읽음) 있어도
+  지금 배포에 영향이 없습니다. 예전 주소 `incheon-aisw-festival.netlify.app` 도 운영에 쓰지 않습니다
+  (Netlify 계정에 예전 사이트가 남아 저장소와 이어져 있는지는 이 저장소에서 알 수 없으니 Netlify
+  대시보드에서 확인합니다. `print-qr.html` 은 그 주소도 운영 포털로 보고 QR 주소로 쓰지 못하게 막습니다).
 
-부스 Live 사이트를 **Vercel** 에 올릴 때는 Root Directory 를 `live` 로 두고
-`live/vercel.json` 이 같은 일을 합니다(만드는 법은 켜는 순서 2번). 두 설정은 함께
-둡니다 — 어느 쪽으로든 되돌릴 수 있게 하려는 것이고, 각 서비스는 자기 파일만 읽습니다.
-`vercel.json` 은 JSON 이라 설명을 적을 수 없어 여기 적어 둡니다.
+GitHub Pages 에는 `netlify.toml` 의 헤더 · 다시쓰기가 붙지 않습니다. 그래서 운영 포털에서는
+
+- `/admin` 다시쓰기가 없습니다 → 관리자 화면은 `…/admin.html` 로 엽니다
+- `X-Robots-Tag` 헤더가 붙지 않습니다 → 검색 차단은 `robots.txt` 와
+  각 페이지의 `<meta name="robots" content="noindex, nofollow">` 가 맡습니다
+- `admin.html` · `booth-admin.html` · `print-qr.html` 에 저장 금지(no-store) 헤더가 붙지 않습니다 →
+  세 화면은 뒤로가기 캐시(bfcache)에서 되살아나면 스스로 새로 고쳐 로그인부터 다시 확인합니다
+  (`pageshow` 처리). 그래도 인쇄를 마치면 로그아웃하고 창을 닫습니다
+
+부스 Live 사이트의 헤더 · 다시쓰기 · 빌드를 건너뛸 조건은 `live/vercel.json` 이 정합니다.
+`live/netlify.toml` 은 같은 일을 하는 예비 판입니다. `vercel.json` 은 JSON 이라 설명을 적을 수
+없어 두 파일을 견준 표를 여기 둡니다.
 
 | `live/netlify.toml` | `live/vercel.json` | 다른 점 |
 |---|---|---|
@@ -1019,22 +1048,6 @@ select coalesce(nullif(b.code, ''),
 push 는 건너뜁니다(`Canceled`). 만드는 순서는 ‘부스 실시간 대기 현황 → 켜는 순서’
 2번에 있습니다.
 
-`main` 브랜치에 push 하면 **연결해 둔 호스팅이 알아서 새로 배포**합니다
-(무엇을 연결했는지는 그 서비스 설정에 있고, 이 저장소에는 자동 배포
-워크플로가 없습니다).
-
-`netlify.toml` 은 **Netlify 에 올렸을 때만** 읽힙니다. 여기서 publish
-경로와 보안 헤더(noindex 포함), `/admin` → `/admin.html` 다시쓰기를
-정합니다. GitHub Pages 처럼 다른 정적 호스팅에 올리면 이 파일은 무시되고
-세 가지가 달라집니다.
-
-- `/admin` 주소가 이어지지 않습니다 → `/admin.html` 로 들어갑니다
-- `X-Robots-Tag` 헤더가 붙지 않습니다 → 검색 차단은 `robots.txt` 와
-  각 페이지의 `<meta name="robots" content="noindex, nofollow">` 가 맡습니다
-- `print-qr.html` 에 저장 금지(no-store) 헤더가 붙지 않습니다 → 자리를 비운
-  사이 뒤로가기로 운영자 QR 이 되살아날 수 있습니다. **QR 인쇄는 Netlify
-  주소에서 합니다**(켜는 순서 5번도 Netlify https 주소를 씁니다)
-
 ## 문제가 생겼을 때
 
 | 증상 | 확인할 곳 |
@@ -1051,8 +1064,9 @@ push 는 건너뜁니다(`Canceled`). 만드는 순서는 ‘부스 실시간 �
 | 관리자 로그인 후 “권한 없음” | `staff_profiles.role` 이 `admin` 인지 |
 | 아이디로 “아이디 또는 비밀번호가 맞지 않습니다” | `config.js` 의 `adminIdDomain` 과 계정 이메일 도메인이 같은지 |
 | 저장·삭제가 “0건” | 로그인 만료 → 재로그인 |
-| 배포본만 옛 화면 | 쓰고 있는 호스팅의 최신 배포 로그와 캐시 확인 |
-| 부스 Live 사이트가 안 바뀜 · 배포가 `Canceled` | 관람객 화면 · 운영자 화면과 관계없는 파일만 바뀌면 건너뛰는 것이 정상입니다. 바뀌어야 하는데 `Canceled` 면 부스 Live 사이트의 Deploys → Trigger deploy → **Clear cache and deploy site**(캐시 없는 빌드는 건너뛰지 않음), 그래도 안 되면 빌드 훅으로 부릅니다(켜는 순서 2번) |
+| 배포본만 옛 화면 | 운영 포털: GitHub Actions 의 `pages build and deployment` 실행 결과 · 부스 Live 사이트: Vercel Deployments 의 Production(`booth-live`) 배포 |
+| 부스 Live 사이트가 안 바뀜 | 먼저 `booth-live` 에 push 했는지 봅니다(`main` 만 올리면 Vercel 은 미리 보기만 만들고 운영 주소는 그대로입니다) |
+| (예비 · Netlify) 부스 Live 사이트 배포가 `Canceled` | 관람객 화면 · 운영자 화면과 관계없는 파일만 바뀌면 건너뛰는 것이 정상입니다. 바뀌어야 하는데 `Canceled` 면 Deploys → Trigger deploy → **Clear cache and deploy site**(캐시 없는 빌드는 건너뛰지 않음), 그래도 안 되면 빌드 훅으로 부릅니다(켜는 순서 2번) |
 | (Vercel) 부스 Live 사이트 배포가 `Canceled` | 위와 같이 건너뛴 것입니다. 바뀌어야 하는데 건너뛰었으면 Deployments 에서 그 배포의 **Redeploy** 를 누르고 *Use project's Ignore Build Step* 을 끕니다(켜 둬도 같은 커밋을 다시 배포하면 건너뛰지 않습니다) |
 | (Vercel) 빌드 로그에 `빌드 중단: ../assets/config.js 가 없습니다` | Root Directory 의 *Include files outside the root directory in the Build Step* 이 꺼져 있습니다. 켜고 다시 배포합니다(켜는 순서 2번) |
 | (Vercel) 배포가 `Error` · Root Directory 가 없다고 나옴 | 그 브랜치에 `live/` 가 없는 것입니다(아직 `main` 에 합치기 전). Production Branch 를 `booth-live` 로 둡니다. 합치기 전까지 `main` push 의 미리 보기 배포는 계속 이렇게 끝나지만, 부스 Live 사이트 주소에는 영향이 없습니다 |

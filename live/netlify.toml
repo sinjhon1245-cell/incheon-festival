@@ -1,5 +1,8 @@
 # ===================================================================
-# 부스 Live 사이트 (Netlify 의 두 번째 사이트)
+# 부스 Live 사이트 — Netlify 판 (예비 · 현재 미사용)
+#   지금 부스 Live 사이트는 Vercel 프로젝트 incheon-live(live/vercel.json,
+#   Production Branch booth-live)입니다. 이 파일은 Netlify 로 옮길 때를 위해 남겨 둡니다.
+#
 #   관람객 화면(index.html) + 부스 운영자 화면(booth-ctrl.html)
 #
 # 운영 포털과 같은 저장소를 쓰되, Netlify 에서 사이트를 하나 더 만들고

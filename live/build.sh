@@ -21,8 +21,8 @@
 # 공통 엔진이나 두 화면에 운영 포털 이야기를 적어 넣어도 그대로 관람객에게
 # 나가지 않게 하는 마지막 그물입니다.
 #
-# Netlify(live/netlify.toml) · Vercel(live/vercel.json) 이 배포할 때 자동으로
-# 돌립니다. 둘 다 이 폴더(live)를 사이트의 뿌리로 두고 sh build.sh → dist 입니다.
+# Vercel(live/vercel.json · 지금 쓰는 곳, Production Branch booth-live) · Netlify(live/netlify.toml · 예비)가
+# 배포할 때 자동으로 돌립니다. 둘 다 이 폴더(live)를 사이트의 뿌리로 두고 sh build.sh → dist 입니다.
 # 손으로 확인하려면:  sh live/build.sh   →  live/dist/index.html
 # (live/dist 는 .gitignore 에 걸려 있습니다. 확인한 뒤 지워도 됩니다.)
 #

@@ -36,14 +36,14 @@ exclude:
   - dev-server.js
   - dev-server.ps1
 
-  # 관람객 사이트(Netlify 두 번째 사이트)의 빌드 설정.
+  # 부스 Live 사이트(Vercel 프로젝트 incheon-live)의 빌드 설정.
   - live
 
   # 동료가 보낸 이식 패키지 원본. .gitignore 에도 걸려 있어 올라가지
   # 않지만, 실수로 커밋돼도 예전 PIN 방식 화면이 열리지 않게 한 번 더 뺍니다.
   - 이식 폴더
 
-  # Netlify 설정. GitHub Pages 에서는 읽히지도 않습니다.
+  # (예비 · 현재 미사용) Netlify 설정. GitHub Pages 에서는 읽히지도 않습니다.
   # (저장소에는 남습니다 — 나중에 Netlify 로 돌아갈 수 있습니다.)
   - netlify.toml
 

@@ -6,7 +6,7 @@
 #
 #   실행: powershell -ExecutionPolicy Bypass -File dev-server.ps1 [포트]
 #
-# 배포에는 필요 없습니다. Netlify 는 파일을 그대로 서빙합니다.
+# 배포에는 필요 없습니다. GitHub Pages 는 파일을 그대로 서빙합니다.
 # ===================================================================
 param([int]$Port = 8321)
 
@@ -48,7 +48,7 @@ while ($listener.IsListening) {
     $path = [System.Uri]::UnescapeDataString($ctx.Request.Url.AbsolutePath)
 
     if ($path -eq '/') { $path = '/index.html' }
-    # netlify.toml 의 /admin 리라이트와 똑같이 맞춰 둡니다.
+    # (예비) netlify.toml 의 /admin 리라이트와 똑같이 맞춰 둡니다.
     if ($path -eq '/admin') { $path = '/admin.html' }
 
     $file = Join-Path $root ($path.TrimStart('/') -replace '/', '\')
