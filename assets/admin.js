@@ -215,7 +215,7 @@
   // 이 글자로만 알아봅니다(관람객 화면의 예시 안내 · BoothCore.isSample · 서버의 공통 PIN 조건과 같은 규칙).
   function isSampleBooth(b) { return /^\s*\[예시\]/.test(String((b && b.org) || '')); }
   // 목록에 보일 기관 이름: 앞의 '[예시]' 만 떼어 냅니다(BoothCore.displayOrganization 과 같은 규칙).
-  // 고치기 칸에는 원래 값을 그대로 넣습니다 — 여기서 뗀 값이 저장되면 공통 PIN · 예시 현황 채우기 · 초기화 대상에서 빠집니다.
+  // 고치기 칸에는 원래 값을 그대로 넣습니다 — 여기서 뗀 값이 저장되면 공통 PIN · 예시 현황 채우기 · 비우기 대상에서 빠집니다.
   function displayOrganization(org) { return String(org == null ? '' : org).replace(/^\s*\[예시\]\s*/, ''); }
   // 화면 설명은 글이거나(대부분) 지금 상태에 따라 바뀌는 함수입니다(부스 — 예시 부스 규칙 안내).
   function descOf(d) { return typeof d === 'function' ? d() : (d || ''); }
@@ -720,7 +720,7 @@
           '공개한 부스(공개한 구역 안)만 관람객 · 부스 운영자에게 보입니다.' +
           // 예시 부스 규칙 설명은 이 한 곳에만 둡니다(기본정보 스위치 설명 · 다른 화면에 되풀이하지 않음).
           ((cache.booths || []).some(isSampleBooth)
-            ? ' [예시] 표시가 있는 운영기관은 준비 기간 공통 PIN 및 예시 현황 채우기 · 초기화 대상입니다.' : '');
+            ? ' [예시] 표시가 있는 운영기관은 준비 기간 공통 PIN 및 예시 현황 채우기 · 비우기 대상입니다.' : '');
       },
       blank: function () {
         return { zone_key: '', no: null, name: '', org: '', status: '준비 전', is_published: false };
