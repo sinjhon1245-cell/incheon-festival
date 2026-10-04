@@ -586,8 +586,8 @@
     if (!exampleTargets(rowsNow()).length) { toast('초기화할 예시 부스가 없습니다.', true); return; }
     UI.confirm({
       title: '예시 현황을 초기화할까요?',
-      message: '현재 공개된 운영 준비용 예시 부스의 대기 상태를 시연용 초기값으로 다시 설정합니다.\n\n' +
-        '[예시] 부스에만 적용되며 실제 부스 정보에는 영향을 주지 않습니다.',
+      message: '현재 공개된 [예시] 부스의 대기 상태를 초기값으로 다시 설정합니다.\n\n' +
+        '[예시] 표시가 없는 부스에는 적용되지 않습니다.',
       confirmLabel: '초기화'
     }).then(function (ok) {
       if (!ok) return;
