@@ -1284,11 +1284,18 @@
         if (!w.next || S.mode === 'manual') return;
         var wait = w.next - now + Math.random() * 60000;
         // 아주 먼 때는 바로 잡지 않고 6시간 뒤에 다시 따집니다(setTimeout 의 32비트 한도 · 기기 잠자기).
-        timer = wait > 6 * 3600000 ? setTimeout(schedule, 6 * 3600000) : setTimeout(refresh, wait);
+        timer = wait > 6 * 3600000 ? setTimeout(schedule, 6 * 3600000) : setTimeout(tick, wait);
         return;
       }
       var base = waitBase(f), spread = fails ? base * 0.15 : base / 6;
-      timer = setTimeout(refresh, base - spread + Math.random() * 2 * spread);
+      timer = setTimeout(tick, base - spread + Math.random() * 2 * spread);
+    }
+    // 잡아 둔 차례가 왔을 때. 그 사이 자동으로 받는 시간대가 끝났으면(예: 17:29 에 잡은 차례가 17:30 뒤에 옴)
+    // 받지 않고 다음 행사 날 시작으로 다시 잡습니다.
+    function tick() {
+      timer = null;
+      if (!autoFactor(Date.now())) { schedule(); return; }
+      refresh();
     }
     // 다음 받기까지의 기본 간격(흩뜨리기 전). 실패가 이어지면 BACKOFF_MS 와 지금 간격 중 긴 쪽.
     function waitBase(f) {
