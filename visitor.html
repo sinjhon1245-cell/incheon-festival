@@ -502,7 +502,7 @@
       var m = core.meta(c);
       var val = isNow(b)
         ? '<span class="bigv bigv--now">바로</span>'
-        : '<span class="bigv"><b class="bigv__n">' + waitNum(b) + '</b><span class="bigv__u">분</span></span>';
+        : '<span class="bigv is-' + m.key + '"><b class="bigv__n">' + waitNum(b) + '</b><span class="bigv__u">분</span></span>';
       return val + '<span class="st st--' + m.key + '"><i class="sq" aria-hidden="true"></i>' + esc(m.label) + '</span>';
     }
 

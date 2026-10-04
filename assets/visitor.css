@@ -30,14 +30,16 @@
   --line-2:  #F5F6FA;
   --accent:  #5B45E0;   /* 흰 글자를 얹어도 6.2:1 */
 
-  /* 상태 — 앞의 셋은 portal.css 의 --ok / --warn / --danger 와 같은 값입니다.
-     운영진 화면과 관람객 화면이 같은 상태를 같은 색으로 보여 줍니다.
-     넷 모두 흰 바탕의 글자로도, 흰 글자를 얹는 바탕으로도 4.5:1 을 넘습니다. */
-  --st-free:     #0F7A57;
-  --st-normal:   #9A6206;
-  --st-busy:     #B32B3E;
-  --st-off:      #5E6782;   /* 중단 · 마감의 글자와 칠 */
-  --st-off-mark: #8A93AB;   /* 네모 · 테두리 전용. 작은 글자로 쓰면 대비가 모자랍니다 */
+  /* 상태 — 관람객이 한눈에 가르도록 운영진 화면(portal.css 의 --ok / --warn / --danger)과 같은
+     계열에서 한 단계 더 분명한 색을 씁니다: 여유 초록 · 보통 주황(amber) · 혼잡 빨강 · 중단 · 마감
+     푸른 회색. 넷 모두 흰 바탕의 글자로도, 흰 글자를 얹는 바탕으로도 4.5:1 을 넘습니다
+     (5.64 · 5.02 · 5.62 · 5.42). 색만으로 말하지 않고 늘 '여유' · '보통' · '혼잡' · '잠시 중단' · '마감'
+     글자와 함께 둡니다. 상태를 정하는 것은 서버(대기 분 → 여유 · 보통 · 혼잡)이고 여기서는 색만 입힙니다. */
+  --st-free:     #08773F;
+  --st-normal:   #B45309;
+  --st-busy:     #C62828;
+  --st-off:      #5A6B85;   /* 중단 · 마감의 글자와 칠 */
+  --st-off-mark: #8A93AB;   /* 네모 · 테두리 전용(3.07:1). 작은 글자로 쓰면 대비가 모자랍니다 */
   --faint:       #8A93AB;   /* 장식(타일의 '—') — 큰 글자(3:1 기준)에만 */
   --lag:         #FFC857;   /* 보라 띠 위 '오래된 정보' 네모. 장식이라 글자에는 쓰지 않습니다 */
 
@@ -826,6 +828,10 @@ html.is-demo .row { scroll-margin-top: calc(56px + var(--demo-h) + env(safe-area
   white-space: nowrap;
 }
 .v__n { font-size: 28px; font-weight: 800; letter-spacing: -0.04em; }
+/* 대기 분 숫자도 상태 색으로(목록 줄의 is-* · 큰 값의 is-*). '분' 은 그대로 둡니다. */
+.row.is-free .v__n,   .bigv.is-free .bigv__n   { color: var(--st-free); }
+.row.is-normal .v__n, .bigv.is-normal .bigv__n { color: var(--st-normal); }
+.row.is-busy .v__n,   .bigv.is-busy .bigv__n   { color: var(--st-busy); }
 .v__u { font-size: 13px; font-weight: 600; color: var(--ink-2); }
 .v--now  { font-size: 20px; font-weight: 800; letter-spacing: -0.02em; color: var(--st-free); }
 .v--word { font-size: 17px; font-weight: 700; letter-spacing: -0.02em; color: var(--st-off); }

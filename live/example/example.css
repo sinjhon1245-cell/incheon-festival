@@ -33,10 +33,11 @@
   --accent-d: #4634BE;
   --on:       #FFFFFF;
 
-  --free:     #0F7A57;
-  --normal:   #9A6206;
-  --busy:     #B32B3E;
-  --off:      #5E6782;
+  /* 관람객 화면(assets/visitor.css 의 --st-*)과 같은 값 — 바꿀 때 함께 바꿉니다 */
+  --free:     #08773F;
+  --normal:   #B45309;
+  --busy:     #C62828;
+  --off:      #5A6B85;
   --off-mark: #8A93AB;   /* 네모 · 테두리 전용 */
 
   --r-card: 16px;
