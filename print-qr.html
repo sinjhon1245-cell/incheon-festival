@@ -933,7 +933,8 @@
       S.ops.now[id] = n;
       return true;
     }
-    function orgZone(b) { return [b.org, b.zone_name].filter(Boolean).join(' · '); }
+    // 종이 · 화면의 기관 이름에는 '[예시]' 표시를 찍지 않습니다(DB 값 · 판별은 그대로).
+    function orgZone(b) { return [BC.displayOrganization(b.org), b.zone_name].filter(Boolean).join(' · '); }
     function norm(s) {
       s = String(s == null ? '' : s);
       if (s.normalize) s = s.normalize('NFC');
@@ -1089,7 +1090,7 @@
     function matches(b, q) {
       if (!q) return true;
       var code = norm(b.code), m = /^([a-z]+)-?0*(\d+)$/.exec(code);
-      var hay = [code, code.replace(/-/g, ''), m ? m[1] + m[2] + ' ' + m[1] + '-' + m[2] : '', norm(b.name), norm(b.program), norm(b.org), norm(b.zone_name)].join(' ');
+      var hay = [code, code.replace(/-/g, ''), m ? m[1] + m[2] + ' ' + m[1] + '-' + m[2] : '', norm(b.name), norm(b.program), norm(BC.displayOrganization(b.org)), norm(b.zone_name)].join(' ');
       return hay.indexOf(q) >= 0 || hay.replace(/\s+/g, '').indexOf(q.replace(/\s+/g, '')) >= 0;
     }
     function applyFilter(kind) {

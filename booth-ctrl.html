@@ -180,10 +180,8 @@
             <div class="pinslots" id="pin-slots" aria-hidden="true"></div>
             <input class="pinbox" id="pin-input" type="text" inputmode="numeric" pattern="[0-9]*"
                    maxlength="6" autocomplete="one-time-code" enterkeyhint="go"
-                   autocapitalize="off" autocorrect="off" spellcheck="false" aria-describedby="pin-input-hint pin-sub pin-err" />
+                   autocapitalize="off" autocorrect="off" spellcheck="false" aria-describedby="pin-input-hint pin-err" />
           </div>
-          <!-- 운영 준비용 예시 부스에서 공통 PIN 을 안내할 때만: 실제 행사에서는 부스별 PIN 으로 바뀐다는 한 줄 -->
-          <p class="pinsub" id="pin-sub" hidden></p>
           <p class="pinerr" id="pin-err" role="alert" hidden></p>
           <button type="submit" class="btn btn--primary pinfield__go" id="pin-go" disabled>운영 시작</button>
         </div>
@@ -890,13 +888,6 @@
         }
         var p = pin.pre;
         var hit = p && booths.filter(function (b) { return b.id === p.booth_id; })[0];
-        // 운영 준비용 예시 부스('[예시]' 기관)가 공개돼 있으면 고르기 화면에 작게 알립니다.
-        // 협의용 예시(?demo)는 이 자리에 따로 안내가 있어 건드리지 않습니다.
-        if (!isMock) {
-          var ex = booths.some(core.isSample);
-          $('pin-s1-text').textContent = ex ? '지금은 운영 준비용 예시 부스가 공개돼 있어요. 실제 부스 정보는 추후 바뀝니다.' : '';
-          $('pin-s1-text').hidden = !ex;
-        }
         if (hit) { pin.zone = hit.zone_key; pickBooth(hit.id); return; }
         renderZones();
         pinStep(1);
@@ -995,14 +986,12 @@
     var COMMON_PIN_HINT = '123456';
     function pinTexts(b) {
       var common = !isMock && pin.common && core.isSample(b);
-      $('pin-input-label').textContent = common ? '운영 준비용 PIN' : pinText.label;
+      $('pin-input-label').textContent = common ? '운영자 PIN' : pinText.label;
       if (common) {
-        $('pin-input-hint').innerHTML = '현재 예시 부스의 공통 PIN은 <b class="pinhint__v">' + esc(COMMON_PIN_HINT) + '</b>입니다.';
+        $('pin-input-hint').innerHTML = '현재 부스의 PIN은 <b class="pinhint__v">' + esc(COMMON_PIN_HINT) + '</b>입니다.';
       } else {
         $('pin-input-hint').textContent = pinText.hint;
       }
-      $('pin-sub').textContent = common ? '실제 행사 운영 시에는 부스별 운영자 PIN으로 변경됩니다.' : '';
-      $('pin-sub').hidden = !common;
     }
     function pinBack() {
       if (!$('pin-s3').hidden) { if (pin.zone) pickZone(pin.zone); else pinStep(1); return; }
@@ -1208,7 +1197,7 @@
       $('cf-code').textContent = b.code || '';
       $('cf-code').className = 'who__code num';
       $('cf-name').textContent = b.name || '';
-      $('cf-org').textContent = [b.org, b.zone_name].filter(Boolean).join(' · ');
+      $('cf-org').textContent = [core.displayOrganization(b.org), b.zone_name].filter(Boolean).join(' · ');
       $('cf-help').textContent = HELP;
       $('cf-ask').hidden = false;
       $('cf-wrong').hidden = true;
@@ -1802,7 +1791,8 @@
         if (beforeOpen(b, info)) return head + '\n문 열기 전 값이라 관람객 화면에는 아직 안 보여요.';
         return head + '\n관람객 화면에도 곧 표시됩니다.';
       }
-      if (samplePreview(info, b)) return head + '\n예시 부스라 관람객 화면에 미리 표시됩니다.';
+      // 행사 전의 예시 부스('[예시]' 기관) 값은 관람객 화면에 미리 보이므로 운영 중과 같은 말을 씁니다.
+      if (samplePreview(info, b)) return head + '\n관람객 화면에도 곧 표시됩니다.';
       if (info.phase === 'before') return head + '\n연습 값이라 관람객 화면에는 안 보여요.';
       if (info.phase === 'preopen') {
         return head + '\n문을 연 뒤' + (info.openTime ? '(' + info.openTime + ')' : '') + ' 한 번 더 눌러 주세요.';
@@ -1815,7 +1805,7 @@
 
     function phaseNote(info) {
       if (!info) return '';
-      if (samplePreview(info)) return '운영 준비용 예시 부스예요. 행사 전이지만 지금 누른 값이 관람객 화면에 미리 보여요.';
+      if (samplePreview(info)) return '';   // 예시 부스는 따로 알리지 않습니다(값은 관람객 화면에 미리 보임)
       if (info.phase === 'before' && info.nextOpenLabel) {
         return '지금 누른 값은 연습이에요. 관람객 화면에는 ' + info.nextOpenLabel + '부터 보여요.';
       }
@@ -1834,7 +1824,7 @@
       $('h-code').className = 'head__code num';
       $('h-name').textContent = h ? (h.name || '') : '부스 정보를 불러오는 중';
       $('h-name').className = 'head__name' + (h ? '' : ' is-muted');
-      $('h-org').textContent = h ? [h.org, h.zone_name].filter(Boolean).join(' · ') : '';
+      $('h-org').textContent = h ? [core.displayOrganization(h.org), h.zone_name].filter(Boolean).join(' · ') : '';
       $('h-org').hidden = !$('h-org').textContent;
 
       if (sess) {

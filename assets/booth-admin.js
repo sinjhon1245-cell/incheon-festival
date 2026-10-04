@@ -258,7 +258,7 @@
   function moreHtml(r) {
     function row(k, v) { return v ? '<div><dt>' + esc(k) + '</dt><dd>' + esc(v) + '</dd></div>' : ''; }
     return '<dl class="lvd">' +
-        row('운영기관', r.org) + row('프로그램', r.program) + row('구역', r.zone_label) +
+        row('운영기관', BC.displayOrganization(r.org)) + row('프로그램', r.program) + row('구역', r.zone_label) +
         row('접속', credText(r)) +
         row('마지막 입력', r.at ? BC.formatClock(r.at) + ' · ' + BC.formatAgo(r.at) + (r.by && BY[r.by] ? ' · ' + BY[r.by] : '') : '입력 없음') +
       '</dl>' +
@@ -318,7 +318,7 @@
       if (!inQuick(r, ui.quick)) return false;
       if (ui.zone && r.zone_key !== ui.zone) return false;
       if (!q) return true;
-      return [codeHay(r.code), r.name, r.org, r.program, r.zone_label].join(' ').toLowerCase().indexOf(q) >= 0;
+      return [codeHay(r.code), r.name, BC.displayOrganization(r.org), r.program, r.zone_label].join(' ').toLowerCase().indexOf(q) >= 0;
     }).sort(sorter(ui.sort));
   }
   function summaryHtml(all) {

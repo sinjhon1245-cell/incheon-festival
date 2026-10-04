@@ -214,6 +214,9 @@
   // 운영 준비용 예시 부스 — 운영기관 이름이 '[예시]' 로 시작합니다. 표에 칸을 따로 두지 않고
   // 이 글자로만 알아봅니다(관람객 화면의 예시 안내 · BoothCore.isSample · 서버의 공통 PIN 조건과 같은 규칙).
   function isSampleBooth(b) { return /^\s*\[예시\]/.test(String((b && b.org) || '')); }
+  // 목록에 보일 기관 이름: 앞의 '[예시]' 만 떼어 냅니다(BoothCore.displayOrganization 과 같은 규칙).
+  // 고치기 칸에는 원래 값을 그대로 넣습니다 — 여기서 뗀 값이 저장되면 공통 PIN · 예시 현황 초기화 대상에서 빠집니다.
+  function displayOrganization(org) { return String(org == null ? '' : org).replace(/^\s*\[예시\]\s*/, ''); }
   // 화면 설명은 글이거나(대부분) 지금 상태에 따라 바뀌는 함수입니다(부스 — 공통 PIN 안내).
   function descOf(d) { return typeof d === 'function' ? d() : (d || ''); }
   // 운영 준비용 공통 PIN 이 지금 켜져 있는가(PIN 보조 로그인 · 공통 PIN 스위치 둘 다). 공개 예시 부스만 대상입니다.
@@ -721,7 +724,7 @@
         return '부스 정보와 운영기관을 관리합니다. 구역 · 번호가 정해지기 전에도 미배정으로 먼저 등록할 수 있고, ' +
           '공개한 부스(공개한 구역 안)만 관람객 · 부스 운영자에게 보입니다.' +
           (commonPinOn() && (cache.booths || []).some(isSampleBooth)
-            ? ' 예시 부스([예시] 기관)는 운영 준비 기간 동안 공통 PIN을 사용합니다(기본정보 → 부스 운영자 PIN 에서 끕니다).' : '');
+            ? ' 운영기관 이름이 [예시] 로 시작하는 부스는 공통 PIN으로 운영자 화면을 엽니다(기본정보 → 부스 운영자 PIN 에서 끕니다).' : '');
       },
       blank: function () {
         return { zone_key: '', no: null, name: '', org: '', status: '준비 전', is_published: false };
@@ -731,13 +734,13 @@
       metaHtml: true,
       meta: function (r) {
         var p = privateOf('booths', r.id);
-        return (r.org ? esc(r.org) : '<span class="muted">운영기관 미정</span>') +
+        var org = displayOrganization(r.org);
+        return (org ? esc(org) : '<span class="muted">운영기관 미정</span>') +
           ' · ' + esc(zoneLabel(r.zone_key)) +
           (p && p.manager ? '<span class="listrow__sub"> · 담당 ' + esc(p.manager) + '</span>' : '');
       },
       tags: function (r) {
-        return (isSampleBooth(r) ? tag('운영 준비용 예시') + (commonPinOn() && boothShown(r) ? tag('공통 PIN 사용 중') : '') : '') +
-          badge(publishState(r)) + (r.org_type ? tag(r.org_type) : '') + badge(r.status || '준비 전') +
+        return badge(publishState(r)) + (r.org_type ? tag(r.org_type) : '') + badge(r.status || '준비 전') +
           (r.needs_power ? '<span class="badge badge--plain badge--need">전기</span>' : '') +
           (r.needs_network ? '<span class="badge badge--plain badge--need">네트워크</span>' : '') +
           credTags(r) + (DEMO ? demoLiveTag(r) : '') + (isStaleRow(r) ? badge('확인 필요') : '');

@@ -1772,6 +1772,8 @@
   var ORG_TYPES = ['초등', '중등', '고등', '기관', '기업', '기타'];
   var ORG_TONE  = { '초등': 'el', '중등': 'mid', '고등': 'high', '기관': 'org', '기업': 'biz', '기타': 'etc' };
 
+  // 화면에 보일 기관 이름: 앞의 '[예시]' 표시만 뗍니다(BoothCore.displayOrganization 과 같은 규칙, DB 값은 그대로).
+  function displayOrganization(org) { return String(org == null ? '' : org).replace(/^\s*\[예시\]\s*/, ''); }
   function orgType(b) {
     if (b.org_type && ORG_TYPES.indexOf(b.org_type) >= 0) return b.org_type;
     var o = String(b.org || '').replace(/\s+/g, '');
@@ -1806,7 +1808,7 @@
   function boothItems() {
     return S.booths.map(function (b) {
       return { id: b.id, sample: !!b.sample, code: b.code || (b.zone_key + '-' + b.no), type: orgType(b),
-        zone: b.zone_key || '', name: b.name, org: b.org || '운영기관 미정',
+        zone: b.zone_key || '', name: b.name, org: displayOrganization(b.org) || '운영기관 미정',
         foot: [zoneName(b.zone_key), b.program].filter(Boolean).join(' · '),
         find: (b.program || '') + ' ' + zoneName(b.zone_key) };
     });

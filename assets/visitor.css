@@ -268,33 +268,6 @@ html.is-demo .row { scroll-margin-top: calc(56px + var(--demo-h) + env(safe-area
   .demoexit .line-btn { width: 100%; justify-content: center; }
 }
 
-/* 운영 준비용 예시 안내 — 경고가 아니라 알림이라 상태 색 · 보라를 쓰지 않고 옅은 회색으로 둡니다 */
-.samplenote {
-  margin-top: 16px;
-  padding: 10px 12px;
-  background: var(--line-2);
-  border: 1px solid var(--line);
-  font-size: 13.5px;
-  line-height: 1.6;
-  color: var(--ink-2);
-  word-break: keep-all;
-  overflow-wrap: anywhere;
-}
-.samplenote[hidden] { display: none; }
-/* 표는 글 앞에 붙여 두고, 글은 그 뒤로 이어서 줄바꿈합니다(좁은 화면에서 표 옆에 글이 좁게 끼지 않게) */
-.samplenote__tag {
-  display: inline-block;
-  margin-right: 2px;
-  padding: 0 6px;
-  border: 1px solid var(--muted-2);
-  color: var(--ink-2);
-  font-size: 12px;
-  font-weight: 700;
-  line-height: 1.6;
-  vertical-align: 1px;
-  white-space: nowrap;
-}
-
 /* ── 4. '지금 계신 부스' (?b=) ───────────────────────────────── */
 .here {
   margin-top: 20px;
