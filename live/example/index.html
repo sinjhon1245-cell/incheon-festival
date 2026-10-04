@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>부스 대기 현황 · 화면 안내</title>
+  <meta name="description" content="관람객 화면과 부스 운영자 화면을 안내합니다." />
+  <meta name="robots" content="noindex, nofollow" />
+  <meta name="theme-color" content="#F2F4F9" />
+  <meta name="color-scheme" content="light" />
+  <meta name="format-detection" content="telephone=no" />
+
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" />
+  <!-- 주소가 /example(끝에 / 없음)이어도 찾도록 절대 경로로 부릅니다 -->
+  <link rel="stylesheet" href="/example/example.css" />
+</head>
+<body>
+  <!-- 화면 안내 페이지. 데이터를 읽지 않는 정적 페이지라 스크립트가 없습니다.
+       아래 두 미리보기는 실제 화면을 줄여 그린 그림이고, 값은 고정입니다.
+       운영 포털 · 관리자 화면으로 가는 링크나 주소는 두지 않습니다
+       (live/build.sh 가 그런 흔적을 찾으면 배포를 멈춥니다). -->
+  <div class="wrap">
+    <header class="top">
+      <p class="top__event">2026 인천 AI미래채움 교육페스티벌</p>
+      <h1 class="top__title">부스 대기 현황</h1>
+      <p class="top__lead">관람객 화면과 부스 운영자 화면을 아래에서 각각 확인하실 수 있습니다.</p>
+    </header>
+
+    <main>
+      <div class="cards">
+        <section class="card" aria-labelledby="visitor-who visitor-title">
+          <p class="card__who" id="visitor-who">관람객</p>
+          <h2 class="card__title" id="visitor-title">부스 대기 현황 확인</h2>
+          <p class="card__text">행사장을 방문한 학생·교사·학부모가 부스별 대기시간과 현재 운영 상태를 확인하는 화면입니다.</p>
+
+          <div class="card__pv vp" role="img" aria-label="관람객 화면 미리보기. 부스마다 번호, 이름, 대기시간과 상태(여유, 보통, 혼잡, 잠시 중단, 마감)를 한 줄씩 보여 줍니다.">
+            <div class="vp__band">
+              <p class="vp__title">부스 대기 현황</p>
+              <p class="vp__event">2026 인천 AI미래채움 교육페스티벌 · 인천 상상플랫폼</p>
+            </div>
+            <ul class="vp__rows">
+              <li class="vr">
+                <span class="vr__code">A-01</span>
+                <span class="vr__name">AI 그림책 만들기</span>
+                <span class="vr__right"><span class="v"><b class="v__n">5</b><span class="v__u">분</span></span><span class="st st--free"><i class="sq"></i>여유</span></span>
+              </li>
+              <li class="vr">
+                <span class="vr__code">A-03</span>
+                <span class="vr__name">생성형 AI 음악 놀이터</span>
+                <span class="vr__right"><span class="v"><b class="v__n">15</b><span class="v__u">분</span></span><span class="st st--normal"><i class="sq"></i>보통</span></span>
+              </li>
+              <li class="vr">
+                <span class="vr__code">B-04</span>
+                <span class="vr__name">자율주행 미니카 체험</span>
+                <span class="vr__right"><span class="v"><b class="v__n">30</b><span class="v__u">분</span></span><span class="st st--busy"><i class="sq"></i>혼잡</span></span>
+              </li>
+              <li class="vr">
+                <span class="vr__code">C-03</span>
+                <span class="vr__name">미래교실 체험관</span>
+                <span class="vr__right"><span class="st st--pause"><i class="sq sq--hollow"></i>잠시 중단</span></span>
+              </li>
+              <li class="vr is-closed">
+                <span class="vr__code">C-04</span>
+                <span class="vr__name">AI로 해결하는 우리 동네 문제</span>
+                <span class="vr__right"><span class="v v--word">마감</span></span>
+              </li>
+            </ul>
+          </div>
+
+          <div class="card__foot">
+            <a class="cta" href="/" target="_blank" rel="noopener noreferrer">관람객 화면 보기<span aria-hidden="true">&#x2197;&#xFE0E;</span><span class="sr-only"> (새 탭에서 열림)</span></a>
+            <dl class="facts">
+              <div class="facts__row"><dt>주소</dt><dd>incheon-live.vercel.app</dd></div>
+              <div class="facts__row"><dt>로그인</dt><dd>필요 없음</dd></div>
+            </dl>
+          </div>
+        </section>
+
+        <section class="card" aria-labelledby="ctrl-who ctrl-title">
+          <p class="card__who" id="ctrl-who">부스 운영자</p>
+          <h2 class="card__title" id="ctrl-title">대기시간 입력</h2>
+          <p class="card__text">각 부스 담당자가 QR 또는 PIN으로 접속해 현재 대기시간을 직접 입력하는 화면입니다.</p>
+
+          <div class="card__pv cp" role="img" aria-label="부스 운영자 화면 미리보기. 대기시간 단추(바로, 5분부터 60분 이상까지)와 운영 상태 단추(잠시 중단, 오늘 운영 마감)가 있고, 지금 저장된 값(5분)이 보라색으로 표시됩니다.">
+            <p class="cp__eyebrow"><span class="cp__code">A-01</span><span class="cp__role">부스 운영자</span></p>
+            <p class="cp__name">AI 그림책 만들기</p>
+
+            <div class="cp__pad">
+              <div class="cp__padhead">
+                <p class="cp__padtitle">대기시간</p>
+                <span class="cp__hint">누르면 바로 저장돼요</span>
+              </div>
+              <div class="waits">
+                <span class="w w--free"><span class="w__v">바로</span><span class="w__hint"><i class="sq"></i>여유</span></span>
+                <span class="w w--free is-on"><span class="w__v">5분</span><span class="w__hint"><i class="sq"></i>여유</span></span>
+                <span class="w w--free"><span class="w__v">10분</span><span class="w__hint"><i class="sq"></i>여유</span></span>
+                <span class="w w--normal"><span class="w__v">15분</span><span class="w__hint"><i class="sq"></i>보통</span></span>
+                <span class="w w--normal"><span class="w__v">20분</span><span class="w__hint"><i class="sq"></i>보통</span></span>
+                <span class="w w--busy"><span class="w__v">30분</span><span class="w__hint"><i class="sq"></i>혼잡</span></span>
+                <span class="w w--busy"><span class="w__v">45분</span><span class="w__hint"><i class="sq"></i>혼잡</span></span>
+                <span class="w w--busy"><span class="w__v">60분<span class="w__more">이상</span></span><span class="w__hint"><i class="sq"></i>혼잡</span></span>
+              </div>
+            </div>
+
+            <div class="cp__offs">
+              <p class="cp__offstitle">운영 상태</p>
+              <div class="offs">
+                <span class="off"><span class="off__t">잠시 중단</span><span class="off__s">점심·재료 준비·회차 사이</span></span>
+                <span class="off off--closed"><span class="off__t">오늘 운영 마감</span><span class="off__s">재료 소진·운영 끝</span></span>
+              </div>
+            </div>
+          </div>
+
+          <div class="card__foot">
+            <a class="cta" href="/booth-ctrl" target="_blank" rel="noopener noreferrer">부스 운영자 화면 보기<span aria-hidden="true">&#x2197;&#xFE0E;</span><span class="sr-only"> (새 탭에서 열림)</span></a>
+            <dl class="facts">
+              <div class="facts__row"><dt>주소</dt><dd>incheon-live.vercel.app/booth-ctrl</dd></div>
+              <div class="facts__row"><dt>확인용 PIN</dt><dd class="facts__pin">123456</dd></div>
+            </dl>
+          </div>
+        </section>
+      </div>
+
+      <section class="flow" aria-labelledby="flow-title">
+        <div>
+          <h2 class="flow__title" id="flow-title">이렇게 연결됩니다</h2>
+          <p class="flow__text">부스 운영자가 입력한 대기시간은 관람객 화면에 반영됩니다.</p>
+        </div>
+        <ol class="steps">
+          <li class="step"><span class="step__who">부스 운영자</span><span class="step__what">대기시간 입력</span></li>
+          <li class="step"><span class="step__who">관람객</span><span class="step__what">대기 현황 확인</span></li>
+        </ol>
+      </section>
+    </main>
+  </div>
+</body>
+</html>

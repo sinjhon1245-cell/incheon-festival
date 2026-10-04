@@ -1,0 +1,410 @@
+/* ===================================================================
+   부스 대기 현황 — 화면 안내 (/example)
+
+   관람객 화면과 부스 운영자 화면을 한 주소에서 소개하고, 실제 두 화면으로
+   보내는 정적 페이지입니다. 데이터를 읽지 않고 스크립트도 쓰지 않습니다.
+
+   두 화면의 CSS(visitor.css · booth-ctrl.css)를 불러오지 않고 이 파일만
+   씁니다. 두 화면을 고쳐도 이 페이지가, 이 페이지를 고쳐도 두 화면이 바뀌지
+   않게 하려는 것입니다. 대신 색 · 글꼴 · 치수는 두 파일의 값을 그대로 옮겼습니다.
+
+     바탕 · 카드 · 단추     부스 운영자 화면 (회백 바탕 · 16px 카드 · 12px 단추)
+     관람객 미리보기        관람객 화면 (보라 띠 · 모서리 없음 · 네모 상태 표시)
+     운영자 미리보기        부스 운영자 화면 (대기시간 단추 · 운영 상태 단추)
+
+   상태 색은 두 화면과 같은 셋(여유 초록 · 보통 갈색 · 혼잡 빨강)과
+   중단 · 마감의 회색뿐이고, 늘 낱말과 함께 씁니다. 대기시간 → 상태 규칙도
+   두 화면과 같습니다(10분 이하 여유 · 25분 이하 보통 · 그 위 혼잡).
+   =================================================================== */
+
+:root {
+  color-scheme: light;
+
+  --bg:       #F2F4F9;
+  --panel:    #FFFFFF;
+  --sink:     #F7F8FB;
+  --line:     #E3E6EE;
+  --line-2:   #D5DCE9;
+  --ink:      #16203C;
+  --ink-2:    #38456B;
+  --muted:    #5C6989;
+  --muted-2:  #6B7490;
+  --accent:   #5B45E0;
+  --accent-d: #4634BE;
+  --on:       #FFFFFF;
+
+  --free:     #0F7A57;
+  --normal:   #9A6206;
+  --busy:     #B32B3E;
+  --off:      #5E6782;
+  --off-mark: #8A93AB;   /* 네모 · 테두리 전용 */
+
+  --r-card: 16px;
+  --r-btn:  12px;
+
+  --gutter: 16px;
+  --sans: 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, system-ui,
+          'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', sans-serif;
+}
+@media (min-width: 600px) {
+  :root { --gutter: 24px; }
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  background: var(--bg);
+}
+body {
+  margin: 0;
+  min-width: 320px;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 16px;
+  line-height: 1.5;
+  letter-spacing: -0.01em;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+p, h1, h2, ul, ol, dl, dd { margin: 0; }
+ul, ol { padding: 0; list-style: none; }
+
+:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+}
+
+/* ── 바깥 틀 ───────────────────────────────────────────────────── */
+.wrap {
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 24px var(--gutter) 40px;
+}
+@supports (padding: max(1px, 2px)) {
+  .wrap {
+    padding:
+      calc(24px + env(safe-area-inset-top))
+      max(var(--gutter), env(safe-area-inset-right))
+      calc(40px + env(safe-area-inset-bottom))
+      max(var(--gutter), env(safe-area-inset-left));
+  }
+}
+@media (min-width: 860px) {
+  .wrap { padding-top: 40px; }
+}
+
+/* ── 머리 ──────────────────────────────────────────────────────── */
+.top { padding-bottom: 20px; }
+.top__event { font-size: 13px; font-weight: 700; color: var(--muted); }
+.top__title {
+  margin-top: 6px;
+  font-size: clamp(24px, 5vw, 28px);
+  font-weight: 800;
+  line-height: 1.3;
+  letter-spacing: -0.03em;
+}
+.top__lead { margin-top: 6px; font-size: 15px; line-height: 1.6; color: var(--muted); }
+
+/* ── 두 화면 카드 ──────────────────────────────────────────────── */
+.cards { display: grid; gap: 16px; }
+@media (min-width: 860px) {
+  .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+}
+.card {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 20px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  background: var(--panel);
+}
+@media (min-width: 600px) {
+  .card { padding: 24px; }
+}
+.card__who { font-size: 14px; font-weight: 700; color: var(--accent-d); }
+.card__title {
+  margin-top: 2px;
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1.3;
+  letter-spacing: -0.03em;
+}
+.card__text { margin-top: 8px; font-size: 15px; line-height: 1.6; color: var(--ink-2); }
+.card__pv { margin-top: 20px; }
+/* 미리보기 높이가 달라도 두 카드의 단추 · 안내 줄이 같은 높이에 오게 아래로 붙입니다 */
+.card__foot { margin-top: auto; padding-top: 20px; }
+
+.cta {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 52px;
+  padding: 0 18px;
+  border: 1px solid var(--accent);
+  border-radius: var(--r-btn);
+  background: var(--accent);
+  color: var(--on);
+  font-size: 16px;
+  font-weight: 700;
+  text-align: center;
+  text-decoration: none;
+}
+.cta:hover { background: var(--accent-d); border-color: var(--accent-d); }
+
+.facts {
+  display: grid;
+  gap: 2px;
+  margin-top: 14px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+.facts__row { display: flex; align-items: baseline; gap: 12px; min-height: 28px; }
+.facts dt { flex: none; width: 5.6em; font-size: 13px; font-weight: 700; color: var(--muted); }
+.facts dd { min-width: 0; font-size: 14px; color: var(--ink-2); }
+/* PIN 숫자 — 운영자 화면의 PIN 글자 규칙(700 · 남색 · 비례 숫자 · 자간 조금)을 글줄 크기로 */
+.facts__pin {
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  font-variant-numeric: normal;
+  color: var(--ink);
+}
+
+/* ── 관람객 미리보기 — visitor.css 의 띠 · 목록 줄을 줄인 것 ──────── */
+.vp {
+  border: 1px solid var(--line);
+  background: #fff;
+  font-variant-numeric: tabular-nums;
+}
+.vp__band { padding: 12px 16px 13px; background: var(--accent); color: #fff; }
+.vp__title { font-size: 17px; font-weight: 700; line-height: 24px; letter-spacing: -0.03em; }
+.vp__event {
+  font-size: 12px;
+  line-height: 17px;
+  color: rgba(255, 255, 255, .85);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.vp__rows { padding: 0 14px; }
+@media (min-width: 600px) {
+  .vp__rows { padding: 0 16px; }
+}
+.vr {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr) 76px;
+  column-gap: 12px;
+  align-items: center;
+  min-height: 64px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+}
+.vr:last-child { border-bottom: 0; }
+.vr__code { font-size: 13px; font-weight: 600; line-height: 1.3; color: var(--muted-2); white-space: nowrap; }
+.vr__name {
+  font-size: 15.5px;
+  font-weight: 600;
+  line-height: 1.38;
+  letter-spacing: -0.02em;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.vr.is-closed .vr__name { color: var(--off); }
+.vr__right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 5px;
+  min-height: 40px;
+  text-align: right;
+}
+.v { display: flex; align-items: baseline; gap: 1px; line-height: .9; white-space: nowrap; }
+.v__n { font-size: 28px; font-weight: 800; letter-spacing: -0.04em; }
+.v__u { font-size: 13px; font-weight: 600; color: var(--ink-2); }
+.v--word { font-size: 17px; font-weight: 700; letter-spacing: -0.02em; color: var(--off); }
+.st {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+.st--free   { color: var(--free); }
+.st--normal { color: var(--normal); }
+.st--busy   { color: var(--busy); }
+.st--pause  { color: var(--off); }
+/* 관람객 화면의 상태 표시는 작은 네모입니다 */
+.vp .sq { display: inline-block; flex: none; width: 7px; height: 7px; background: currentColor; }
+.vp .sq--hollow { background: none; border: 1.5px solid var(--off-mark); }
+
+/* ── 운영자 미리보기 — booth-ctrl.css 의 머리 · 대기시간 · 운영 상태 ── */
+.cp {
+  padding: 16px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  background: var(--bg);
+}
+@media (min-width: 600px) {
+  .cp { padding: 16px; }
+}
+.cp__eyebrow { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 8px; }
+.cp__code { font-size: 15px; font-weight: 700; color: var(--accent-d); font-variant-numeric: tabular-nums; }
+.cp__role { font-size: 13px; font-weight: 600; color: var(--muted); }
+.cp__role::before { content: '·'; margin-right: 8px; color: var(--line-2); }
+.cp__name { margin-top: 2px; font-size: 20px; font-weight: 800; line-height: 1.3; letter-spacing: -0.03em; }
+
+.cp__pad { margin-top: 16px; }
+.cp__padhead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 2px 10px;
+  margin-bottom: 8px;
+}
+.cp__padtitle { font-size: 17px; font-weight: 800; letter-spacing: -0.02em; }
+.cp__hint { font-size: 13px; color: var(--muted); }
+
+.waits { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+@media (min-width: 400px) {
+  .waits { gap: 8px; }
+}
+.w {
+  --c: var(--off);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 0;
+  min-height: 64px;
+  padding: 8px 2px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-btn);
+  background: var(--panel);
+  color: var(--ink);
+  text-align: center;
+}
+.w--free   { --c: var(--free); }
+.w--normal { --c: var(--normal); }
+.w--busy   { --c: var(--busy); }
+.w__v {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 2px;
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.w__more { font-size: 12px; font-weight: 700; color: var(--muted); }
+.w__hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--c);
+}
+/* 운영자 화면의 상태 표시는 작은 둥근 점입니다 */
+.w .sq { display: inline-block; flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--c); }
+/* 저장된 값: 보라(선택). 상태 낱말은 흰 글자로 그대로 둡니다 */
+.w.is-on { background: var(--accent); border-color: var(--accent); color: var(--on); }
+.w.is-on .w__more, .w.is-on .w__hint { color: var(--on); }
+.w.is-on .sq { background: var(--on); }
+
+.cp__offs { margin-top: 16px; }
+.cp__offstitle { margin-bottom: 8px; font-size: 13px; font-weight: 700; color: var(--muted); }
+.offs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.off {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 2px;
+  min-width: 0;
+  min-height: 64px;
+  padding: 10px 14px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-btn);
+  background: var(--panel);
+}
+.off__t { font-size: 16px; font-weight: 800; letter-spacing: -0.02em; }
+.off--closed .off__t { color: var(--busy); }
+.off__s { font-size: 12.5px; line-height: 1.4; color: var(--muted); }
+
+/* ── 연결 설명 ─────────────────────────────────────────────────── */
+.flow {
+  display: grid;
+  gap: 16px;
+  margin-top: 16px;
+  padding: 20px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  background: var(--panel);
+}
+@media (min-width: 600px) {
+  .flow { padding: 24px; }
+}
+@media (min-width: 860px) {
+  .flow { grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); align-items: center; gap: 24px; margin-top: 20px; }
+}
+.flow__title { font-size: 17px; font-weight: 800; letter-spacing: -0.02em; }
+.flow__text { margin-top: 4px; font-size: 15px; line-height: 1.6; color: var(--ink-2); }
+
+.steps { display: grid; row-gap: 28px; }
+@media (min-width: 600px) {
+  .steps { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 44px; }
+}
+.step {
+  position: relative;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-btn);
+  background: var(--sink);
+}
+.step__who { display: block; font-size: 13px; font-weight: 700; color: var(--muted); }
+.step__what { display: block; font-size: 16px; font-weight: 800; letter-spacing: -0.02em; }
+/* 두 칸 사이 화살표. 뜻은 목록 순서와 위 문장이 전하므로 화면 낭독기에는 읽히지 않게 합니다 */
+.step + .step::before {
+  content: '\2193';
+  content: '\2193' / '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -28px;
+  height: 28px;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 28px;
+  text-align: center;
+  color: var(--muted);
+}
+@media (min-width: 600px) {
+  .step + .step::before {
+    content: '\2192';
+    content: '\2192' / '';
+    left: -44px;
+    right: auto;
+    top: 50%;
+    width: 44px;
+    margin-top: -14px;
+  }
+}

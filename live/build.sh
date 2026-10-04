@@ -5,6 +5,7 @@
 # 저장소 뿌리의 두 화면과 그 화면들이 쓰는 파일만 live/dist 로 복사합니다.
 #   visitor.html     → index.html       관람객 화면 (사이트 첫 화면)
 #   booth-ctrl.html  → booth-ctrl.html  부스 운영자 화면 (운영자 카드 QR 의 #k=열쇠)
+#   live/example/    → example/         화면 안내 (/example · 정적 · 스크립트 없음)
 # 운영 포털 · 관리자 화면 · QR 인쇄 화면은 넣지 않습니다 — 이 사이트 주소에서
 # 뒤를 지우거나 이름을 짐작해 쳐도 운영 포털이 나오지 않게 하려는 것입니다.
 # QR 인쇄 화면(print-qr.html)은 관리자 화면(admin.html)과 같은 사이트의
@@ -249,6 +250,11 @@ mkdir -p dist/assets
 cp ../visitor.html dist/index.html
 cp ../booth-ctrl.html dist/booth-ctrl.html
 cp ../assets/booth-core.js ../assets/mock-data.js ../assets/visitor.css ../assets/booth-ctrl.css dist/assets/
+
+# 화면 안내(/example): 두 화면을 소개하고 각 화면으로 보내는 정적 페이지.
+# 스크립트 · 데이터 요청이 없고, 이 폴더(live/example) 안의 두 파일만 씁니다.
+mkdir -p dist/example
+cp example/index.html example/example.css dist/example/
 
 # Live 사이트용 설정 파일. 운영 포털 설정에서 두 화면이 쓰는 값만 옮깁니다.
 # visitorSiteUrl 은 운영자 화면의 '관람객 화면' 링크입니다. 관람객 화면이

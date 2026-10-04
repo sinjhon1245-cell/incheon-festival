@@ -8,7 +8,8 @@
   "cleanUrls": false,
   "rewrites": [
     { "source": "/visitor.html", "destination": "/index.html" },
-    { "source": "/booth-ctrl", "destination": "/booth-ctrl.html" }
+    { "source": "/booth-ctrl", "destination": "/booth-ctrl.html" },
+    { "source": "/example", "destination": "/example/index.html" }
   ],
   "headers": [
     {
