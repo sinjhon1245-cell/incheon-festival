@@ -248,6 +248,9 @@
     .kst .is-no { color: var(--muted); }
     .kst .is-off, .kst .is-warn { color: var(--warn); }
     .kst__hint { margin: 2px 0 0; font-size: 13px; line-height: 1.5; color: var(--muted); }
+    /* 예시 부스 표 — 관리 화면에만(.kst 는 인쇄 · 인쇄 화면에서 숨음). 테두리만, 상태 글보다 약하게 */
+    .kst__ex { display: inline-block; padding: 0 7px; border: 1px solid var(--line); border-radius: 999px;
+      font-size: 12px; font-weight: 600; line-height: 1.6; color: var(--ink-2); }
     .unassigned { margin: 0 0 14px; font-size: 14px; line-height: 1.55; color: var(--ink-2); }
     .unassigned:empty { display: none; }
     .issue { margin: -6px 0 18px; }
@@ -1179,6 +1182,9 @@
       text += (S.lists[kind].q || S.lists[kind].zone) ? ' · 찾은 부스 ' + shown + '곳 / 전체 ' + all + '곳' : ' · 전체 ' + all + '곳';
       if (nokey) text += ' · QR 미발급 ' + nokey + '곳(인쇄 안 함)';
       if (off) text += ' · 열쇠 꺼짐 ' + off + '곳(인쇄 안 함)';
+      // 인쇄할 장 가운데 예시 부스가 섞여 있으면 알려 줍니다(실제 최종 카드로 오인하지 않게 — 화면에만).
+      var ex = shownItems(kind).filter(function (el) { return el.classList.contains('is-sample') && printable(el); }).length;
+      if (ex) text += ' · 예시 부스 ' + ex + '장 포함';
       $(L.count).textContent = text;
       if (kind === 'ops') paintIssueAll();
       updatePrintBtn();
@@ -1227,9 +1233,12 @@
       return ['비공개', 'is-no'];
     }
     function shownToPublic(b) { return !!(b.is_published && b.zone_published); }
+    // 예시 부스('[예시]' 기관): 관리 화면에만 작은 '예시' 표를 둡니다(.kst 는 인쇄 · 인쇄 화면에서 숨음 — 종이는 그대로).
+    // 기관에서 '[예시]' 를 지우면 이 표도 저절로 사라집니다.
+    function exTag(b) { return BC.isSample(b) ? '<span class="kst__ex">예시</span>' : ''; }
     function kstHtml(b) {
       var k = keyState(S.ops.access[b.id]), p = pubState(b);
-      return '<p class="kst" data-kst>' +
+      return '<p class="kst" data-kst>' + exTag(b) +
           '<span>운영자 QR <b class="' + k[1] + '">' + esc(k[0]) + '</b></span>' +
           '<span>행사 공개 <b class="' + p[1] + '">' + esc(p[0]) + '</b></span>' +
         '</p>' +
@@ -1244,7 +1253,7 @@
       // 바꾸기 · 끄기가 아직 도는 중에 카드가 다시 그려져도 두 '예' 단추는 계속 잠가 둡니다.
       var busyAttr = S.ops.busy[b.id] ? ' disabled' : '';
       var cls = off ? ' is-keyoff' : (noKey ? ' is-nokey' : (S.lists.ops.off[b.id] ? ' is-off' : ''));
-      return '<div class="item item--ops' + cls + '" data-id="' + esc(b.id) + '">' +
+      return '<div class="item item--ops' + cls + (BC.isSample(b) ? ' is-sample' : '') + '" data-id="' + esc(b.id) + '">' +
         '<article class="card" aria-label="' + esc(b.code + (off ? ' 운영자 카드 (열쇠 꺼짐)' : noKey ? ' 운영자 카드 (QR 미발급)' : ' 운영자 카드')) + '">' +
           '<div class="card__band">' + (off ? '부스 운영자용 · 열쇠 꺼짐' : noKey ? '부스 운영자용 · QR 미발급' : '부스 운영자용 · 관람객용 아님') + '</div>' +
           (isMock ? '<span class="stamp">' + esc(MSG.STAMP) + '</span>' : '') +
@@ -1405,7 +1414,7 @@
     /* ── ② 부스 앞 안내 ────────────────────────────────────────────── */
     function signItemHtml(b) {
       var title = S.settings.event_title || '';
-      return '<div class="item item--sign' + (S.lists.signs.off[b.id] ? ' is-off' : '') + '" data-id="' + esc(b.id) + '">' +
+      return '<div class="item item--sign' + (S.lists.signs.off[b.id] ? ' is-off' : '') + (BC.isSample(b) ? ' is-sample' : '') + '" data-id="' + esc(b.id) + '">' +
         '<article class="sign" aria-label="' + esc(b.code + ' 부스 앞 안내') + '">' +
           (isMock ? '<span class="stamp">' + esc(MSG.STAMP) + '</span>' : '') +
           '<div class="sign__code">' + esc(b.code) + '</div>' +
@@ -1418,7 +1427,8 @@
         '</article>' +
         '<div class="acts">' + pickHtml('signs', b.id) + '</div>' +
         // 화면에만: 공개 전 부스의 안내문은 인쇄할 수 있지만 찍어도 아직 열리지 않습니다.
-        (shownToPublic(b) ? '' : '<p class="kst"><span>행사 공개 <b class="' + pubState(b)[1] + '">' +
+        (shownToPublic(b) ? (exTag(b) ? '<p class="kst">' + exTag(b) + '</p>' : '')
+          : '<p class="kst">' + exTag(b) + '<span>행사 공개 <b class="' + pubState(b)[1] + '">' +
           esc(pubState(b)[0]) + '</b></span></p><p class="kst__hint">' + esc(MSG.SIGN_NOT_SHOWN) + '</p>') +
       '</div>';
     }

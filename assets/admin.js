@@ -217,13 +217,8 @@
   // 목록에 보일 기관 이름: 앞의 '[예시]' 만 떼어 냅니다(BoothCore.displayOrganization 과 같은 규칙).
   // 고치기 칸에는 원래 값을 그대로 넣습니다 — 여기서 뗀 값이 저장되면 공통 PIN · 예시 현황 초기화 대상에서 빠집니다.
   function displayOrganization(org) { return String(org == null ? '' : org).replace(/^\s*\[예시\]\s*/, ''); }
-  // 화면 설명은 글이거나(대부분) 지금 상태에 따라 바뀌는 함수입니다(부스 — 공통 PIN 안내).
+  // 화면 설명은 글이거나(대부분) 지금 상태에 따라 바뀌는 함수입니다(부스 — 예시 부스 규칙 안내).
   function descOf(d) { return typeof d === 'function' ? d() : (d || ''); }
-  // 운영 준비용 공통 PIN 이 지금 켜져 있는가(PIN 보조 로그인 · 공통 PIN 스위치 둘 다). 공개 예시 부스만 대상입니다.
-  function commonPinOn() {
-    var s = (cache.settings || [])[0] || {};
-    return s.booth_pin_enabled === true && s.booth_sample_common_pin_enabled === true;
-  }
   // 목록 · 걸러 보기에 쓰는 공개 상태 한 낱말.
   function publishState(b) {
     if (!hasSlot(b)) return '미배정';
@@ -723,8 +718,9 @@
       desc: function () {
         return '부스 정보와 운영기관을 관리합니다. 구역 · 번호가 정해지기 전에도 미배정으로 먼저 등록할 수 있고, ' +
           '공개한 부스(공개한 구역 안)만 관람객 · 부스 운영자에게 보입니다.' +
-          (commonPinOn() && (cache.booths || []).some(isSampleBooth)
-            ? ' [예시] 표시가 있는 운영기관은 준비 기간 공통 PIN 대상입니다.' : '');
+          // 예시 부스 규칙 설명은 이 한 곳에만 둡니다(기본정보 스위치 설명 · 다른 화면에 되풀이하지 않음).
+          ((cache.booths || []).some(isSampleBooth)
+            ? ' [예시] 표시가 있는 운영기관은 준비 기간 공통 PIN 및 예시 현황 초기화 대상입니다.' : '');
       },
       blank: function () {
         return { zone_key: '', no: null, name: '', org: '', status: '준비 전', is_published: false };
@@ -740,7 +736,9 @@
           (p && p.manager ? '<span class="listrow__sub"> · 담당 ' + esc(p.manager) + '</span>' : '');
       },
       tags: function (r) {
-        return badge(publishState(r)) + (r.org_type ? tag(r.org_type) : '') + badge(r.status || '준비 전') +
+        // 예시 부스는 짧은 '예시' 표 하나로만 알립니다(기관명에는 '[예시]' 를 붙이지 않음 — displayOrganization).
+        return (isSampleBooth(r) ? '<span class="badge badge--plain badge--sample">예시</span>' : '') +
+          badge(publishState(r)) + (r.org_type ? tag(r.org_type) : '') + badge(r.status || '준비 전') +
           (r.needs_power ? '<span class="badge badge--plain badge--need">전기</span>' : '') +
           (r.needs_network ? '<span class="badge badge--plain badge--need">네트워크</span>' : '') +
           credTags(r) + (DEMO ? demoLiveTag(r) : '') + (isStaleRow(r) ? badge('확인 필요') : '');

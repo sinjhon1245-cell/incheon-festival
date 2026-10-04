@@ -273,11 +273,13 @@
     var attn = attention(r);
     var name = (r.code ? r.code + ' ' : '') + (r.name || '(이름 없음)');
     var hiddenTag = r.shown ? '' : '<span class="badge badge--' + (r.slot ? 'off' : 'warn') + '">' + (r.slot ? '비공개' : '미배정') + '</span>';
+    // 예시 부스('[예시]' 기관)는 이름 뒤 작은 테두리 표 하나로만 알립니다 — 운영 상태보다 앞서 읽히지 않게.
+    var sampleTag = BC.isSample(r.b) ? '<span class="badge badge--plain badge--sample lv__ex">예시</span>' : '';
     return '<article class="lv lv--' + tone(r) + (r.stale ? ' is-stale' : '') + (attn ? ' is-attn' : '') + (open ? ' is-open' : '') +
         (r.shown ? '' : ' is-hidden') + '" data-id="' + esc(r.id) + '">' +
       '<div class="lv__booth">' +
         '<span class="lv__code">' + esc(r.code || '번호 미정') + '</span>' +
-        '<span class="lv__name">' + esc(r.name || '(이름 없음)') + '</span>' + hiddenTag +
+        '<span class="lv__name">' + esc(r.name || '(이름 없음)') + '</span>' + sampleTag + hiddenTag +
       '</div>' +
       '<div class="lv__meta">' +
         '<span class="lv__state"><i class="lv__dot" aria-hidden="true"></i>' + esc(stateText(r)) + '</span>' +
