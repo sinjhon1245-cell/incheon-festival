@@ -1898,7 +1898,8 @@
         else { when = core.formatClock(pending.tappedAt) + '에 누름 · 아직 저장 안 됨'; warn = true; }
       } else if (s) {
         when = '마지막 입력 · ' + core.formatAgo(s.at) + ' (' + core.formatClock(s.at) + ')';
-        if (seen && core.isStale(booth)) { when += ' · 관람객 화면에 흐리게 보여요'; warn = true; }
+        // 관람객 화면은 오래된 값을 흐리게 하지 않으므로(그대로 보임), 운영자가 다시 누르도록 알립니다.
+        if (seen && core.isStale(booth)) { when += ' · 지금 대기 시간을 다시 눌러 주세요'; warn = true; }
       } else if (loaded) {
         when = '아래에서 지금 대기 시간을 눌러 주세요';
       } else if (connBad) {

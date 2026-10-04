@@ -64,6 +64,11 @@
      refreshLive()  → Promise<booths>  booth_live 만 다시 읽어 기억해 둔 부스에 합칩니다.
                       아직 load() 가 한 번도 성공하지 않았으면 load() 를 대신 부릅니다.
      normalize(boothRows, liveRows, zones, now?) → booths   (위 정리를 직접 할 때)
+     getLiveSnapshot() → Promise<{settings, zones, booths, liveReady, generatedAt}>
+                      관람객 화면 전용. Supabase 대신 같은 사이트의 /api/live-snapshot 하나를
+                      읽습니다(CDN 캐시). 실패해도 Supabase 로 돌아가지 않고 err.offline 으로
+                      끝납니다. 성공하면 snapshot() 이 읽는 마지막 결과도 바꿉니다.
+                      generatedAt 은 서버가 만든 시각 — 화면에 보여 주지 않고 '새 값이 오는가' 만 봅니다.
 
      정리된 부스 하나:
        { id, no, code, zone_key, zone_name, name, org, program,
@@ -161,7 +166,10 @@
   try { isMock = new URLSearchParams(window.location.search).has('demo'); } catch (e) { isMock = false; }
   var hasConfig = !!(cfg.supabaseUrl && cfg.supabaseAnonKey);
 
-  var SNAPSHOT_KEY = 'aisw-visitor-snapshot-v1';
+  // v2: 관람객 화면이 /api/live-snapshot 으로 받은 값(기관 이름의 '[예시]' 를 떼고, 행사 전에는
+  // 예시 부스 값만 둠)을 남깁니다. v1 은 Supabase 에서 바로 받은 원래 값이라 새로 쓸 때 지웁니다.
+  var SNAPSHOT_KEY = 'aisw-visitor-snapshot-v2';
+  var SNAPSHOT_KEY_OLD = 'aisw-visitor-snapshot-v1';
   // v3: 아직 누르지 않은 시연 부스의 시각을 '지금 - age_min' 으로 그때그때 셈합니다.
   // v2 로 저장된 값에는 age_min · touched 칸이 없어 모든 부스가 '방금' 이 되므로
   // 이름을 바꿔 새로 펼치게 합니다. 남은 v2 값은 새로 펼칠 때 지웁니다.
@@ -820,6 +828,7 @@
         liveRows: mem.liveRows
       }));
     } catch (e) { /* 저장소가 꽉 찼거나 막힘 — 없어도 화면은 돕니다 */ }
+    try { window.localStorage.removeItem(SNAPSHOT_KEY_OLD); } catch (e) { /* 무시 */ }
   }
 
   function snapshot() {
@@ -865,6 +874,88 @@
       BoothCore.lastOkAt = new Date();
       saveSnapshot();
       return normalize(mem.boothRows, liveRows, mem.zones);
+    });
+  }
+
+  /* ── 관람객 스냅샷 (관람객 화면 전용) ───────────────────────────────
+     관람객 화면은 Supabase 를 부르지 않고 같은 사이트의 /api/live-snapshot 하나만
+     읽습니다. Vercel CDN 이 그 응답을 캐시해 관람객 수가 Supabase 로 번지지 않게
+     합니다(live/api/live-snapshot.mjs). 실패해도 Supabase 로 돌아가 읽지 않습니다 —
+     CDN 이 흔들릴 때 수천 대가 한꺼번에 Supabase 로 몰리는 길을 만들지 않으려는
+     것입니다. 마지막 정상본은 화면이 그대로 두고, 다시 시도는 화면이 늦춰 가며 합니다.
+     주소에 시각 · 난수를 붙이지 않습니다(캐시 주소가 하나여야 CDN 이 막아 줍니다).
+     시연 모드는 서버를 읽지 않고 load() 의 예시 값을 같은 모양으로 돌려줍니다. */
+  var SNAPSHOT_URL = '/api/live-snapshot';
+
+  function fetchSnapshot() {
+    return new Promise(function (resolve, reject) {
+      var ctrl = null;
+      try { ctrl = new AbortController(); } catch (e) { ctrl = null; }
+      var timer = setTimeout(function () {
+        if (ctrl) { try { ctrl.abort(); } catch (e) { /* 이미 끝남 */ } }
+        reject(offlineError('timeout'));
+      }, TIMEOUT_MS);
+      var init = { method: 'GET', headers: { Accept: 'application/json' }, credentials: 'same-origin' };
+      if (ctrl) init.signal = ctrl.signal;
+      var p;
+      try { p = window.fetch(SNAPSHOT_URL, init); } catch (e) { clearTimeout(timer); reject(offlineError(e)); return; }
+      p.then(function (res) {
+        return res.text().then(function (text) {
+          clearTimeout(timer);
+          var data = null;
+          try { data = JSON.parse(text); } catch (e) { data = null; }
+          // 와이파이 로그인 화면(HTML) · 5xx · 모양이 다른 응답은 모두 '연결 불안정' 으로 봅니다.
+          if (!res.ok || !data || data.version !== 1 || Object.prototype.toString.call(data.booths) !== '[object Array]') {
+            reject(offlineError('snapshot ' + res.status));
+            return;
+          }
+          resolve(data);
+        });
+      }).catch(function (e) { clearTimeout(timer); reject(offlineError(e)); });
+    });
+  }
+
+  // 스냅샷(서버 모양)을 이 파일의 표 모양(settings · zones · boothRows · liveRows)으로 바꿉니다.
+  function fromSnapshot(d) {
+    var e = d.event || {};
+    var boothRows = [], liveRows = [];
+    d.booths.forEach(function (b) {
+      if (!b || !b.id) return;
+      boothRows.push({ id: b.id, no: b.no, code: b.code, zone_key: b.zone, name: b.name, org: b.org, program: b.program });
+      if (b.status) liveRows.push({ booth_id: b.id, congestion: b.status, wait_minutes: b.waitMinutes, updated_at: b.updatedAt });
+    });
+    return {
+      settings: {
+        event_title: e.title || '', venue: e.venue || '', date_label: e.dateLabel || '', time_label: e.timeLabel || '',
+        event_start: e.start || null, event_end: e.end || null, booth_map_url: e.mapUrl || '', booth_map_alt: e.mapAlt || ''
+      },
+      zones: sortZones((d.zones || []).map(function (z) { return { key: z.key, label: z.label, sort_order: z.order }; })),
+      boothRows: boothRows,
+      liveRows: d.liveReady === false ? null : liveRows,
+      generatedAt: d.generatedAt || null
+    };
+  }
+
+  function getLiveSnapshot() {
+    if (isMock) {
+      return load().then(function (p) {
+        p.generatedAt = new Date().toISOString();
+        return p;
+      });
+    }
+    return fetchSnapshot().then(function (d) {
+      var s = fromSnapshot(d);
+      mem = { settings: s.settings, zones: s.zones, boothRows: s.boothRows, liveRows: s.liveRows };
+      BoothCore.liveReady = s.liveRows !== null;
+      BoothCore.lastOkAt = new Date();
+      saveSnapshot();
+      return {
+        settings: s.settings,
+        zones: s.zones,
+        booths: normalize(s.boothRows, s.liveRows, s.zones),
+        liveReady: s.liveRows !== null,
+        generatedAt: s.generatedAt
+      };
     });
   }
 
@@ -1153,6 +1244,7 @@
   BoothCore.load = load;
   BoothCore.snapshot = snapshot;
   BoothCore.refreshLive = refreshLive;
+  BoothCore.getLiveSnapshot = getLiveSnapshot;
   BoothCore.normalize = normalize;
 
   BoothCore.poll = poll;

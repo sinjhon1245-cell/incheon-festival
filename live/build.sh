@@ -6,6 +6,9 @@
 #   visitor.html     → index.html       관람객 화면 (사이트 첫 화면)
 #   booth-ctrl.html  → booth-ctrl.html  부스 운영자 화면 (운영자 카드 QR 의 #k=열쇠)
 #   live/example/    → example/         화면 안내 (/example · 정적 · 스크립트 없음)
+# 관람객 화면이 읽는 /api/live-snapshot 은 Vercel 이 live/api/ 를 함수로 따로 올립니다
+# (dist 에 들어가지 않음). 그 함수가 쓰는 연결 값(live/lib/public-config.mjs)이 설정 파일과
+# 같은지는 아래에서 확인합니다.
 # 운영 포털 · 관리자 화면 · QR 인쇄 화면은 넣지 않습니다 — 이 사이트 주소에서
 # 뒤를 지우거나 이름을 짐작해 쳐도 운영 포털이 나오지 않게 하려는 것입니다.
 # QR 인쇄 화면(print-qr.html)은 관리자 화면(admin.html)과 같은 사이트의
@@ -234,6 +237,16 @@ esac
 case "$SB_URL$SB_KEY" in
   *\\*) fail "supabaseUrl · supabaseAnonKey 에 역슬래시(\\)가 있습니다. 대시보드에서 값을 다시 복사해 넣으세요." ;;
 esac
+
+# 관람객 스냅샷 함수(api/live-snapshot.mjs)는 이 빌드와 따로 묶여 위 설정 파일을 읽지
+# 못하므로 lib/public-config.mjs 에 같은 두 값을 적어 둡니다. 다르면 관람객 화면만 다른
+# Supabase 를 보게 되니 멈춥니다. 메시지에 키 값은 찍지 않습니다.
+FN_CFG=lib/public-config.mjs
+[ -f "$FN_CFG" ] || fail "$FN_CFG 가 없습니다. 관람객 스냅샷 함수가 Supabase 주소를 모릅니다."
+tr -d '\r' < "$FN_CFG" | grep -qxF "export const supabaseUrl = '$SB_URL';" ||
+  fail "$FN_CFG 의 supabaseUrl 이 assets/config.js 와 다릅니다. 같은 값으로 맞춰 주세요."
+tr -d '\r' < "$FN_CFG" | grep -qxF "export const supabaseAnonKey = '$SB_KEY';" ||
+  fail "$FN_CFG 의 supabaseAnonKey 가 assets/config.js 와 다릅니다. 같은 공개용 키로 맞춰 주세요."
 
 # 숫자가 없으면 화면 쪽 기본값과 같은 값을 씁니다.
 [ -n "$POLL_MS" ] || POLL_MS=20000

@@ -9,11 +9,10 @@
   <meta name="color-scheme" content="light" />
   <meta name="format-detection" content="telephone=no" />
 
-  <!-- 글꼴과 데이터 서버에 미리 연결해 둡니다. 행사장 LTE 에서는 새 서버와
-       처음 인사하는 데만 수백 ms 가 걸립니다. 데이터 서버 주소는 HTML 이
-       config.js 를 읽을 수 없어 여기 적어 둡니다(공개 주소입니다). -->
+  <!-- 글꼴 서버에 미리 연결해 둡니다. 행사장 LTE 에서는 새 서버와 처음 인사하는 데만
+       수백 ms 가 걸립니다. 대기 현황은 같은 사이트(/api/live-snapshot)에서 받으므로
+       데이터 서버(Supabase)에는 연결하지 않습니다. -->
   <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
-  <link rel="preconnect" href="https://ynixjjqozkbzxjmishbe.supabase.co" crossorigin />
 
   <!-- 글꼴은 화면을 막지 않고 받습니다. 받기 전에는 기기 글꼴로 먼저 그립니다. -->
   <link rel="preload" as="style" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" onload="this.onload=null;this.rel='stylesheet'" />
@@ -107,7 +106,7 @@
 
   <footer class="foot">
     <div class="col foot__in">
-      <p id="foot-text">대기 시간은 각 부스 선생님이 현장에서 직접 입력해요. 실제와 조금 다를 수 있어요. 30분 넘게 바뀌지 않은 부스는 숫자를 흐리게 보여 줘요.</p>
+      <p id="foot-text">대기 시간은 각 부스 선생님이 현장에서 직접 입력해요. 실제와 조금 다를 수 있어요.</p>
     </div>
   </footer>
 
@@ -133,15 +132,21 @@
   /* ===================================================================
      관람객 화면 그리기
 
-     데이터는 모두 BoothCore(assets/booth-core.js)가 가져옵니다. 이 화면은
-     받은 것을 그리기만 합니다.
+     데이터는 모두 BoothCore.getLiveSnapshot()(assets/booth-core.js)이 같은
+     사이트의 /api/live-snapshot 하나에서 가져옵니다. 이 화면은 Supabase 를
+     부르지 않고, 받은 것을 그리기만 합니다.
 
        처음 열 때   지난번에 받아 둔 결과(snapshot)가 있으면 그것부터 바로
-                    그리고, 없으면 빈 줄 여섯 개를 둡니다. 그다음 서버에서
-                    전부(load) 받습니다.
-       그 뒤        대기 현황(booth_live)만 20초 안팎마다 다시 받고, 부스 이름 ·
-                    구역은 5분마다 전부 다시 받습니다.
-       실패하면     마지막으로 받은 것을 그대로 두고 10초마다 다시 시도합니다.
+                    그리고, 없으면 빈 줄 여섯 개를 둡니다. 그다음 스냅샷을 받습니다.
+       그 뒤        20초 ±4초마다 스냅샷 하나를 다시 받습니다. 받는 중이면 겹쳐
+                    보내지 않습니다. 화면이 가려지면 멈추고, 다시 보이면 바로 받습니다.
+       실패하면     마지막으로 받은 것을 그대로 두고 40초 → 80초 → 120초로 늦춰 가며
+                    같은 주소를 다시 받습니다(Supabase 로 돌아가지 않음). 성공하면 20초로.
+
+     관람객에게는 입력 시각 · 'N분 전' · 오래됨(흐린 숫자 · '확인 필요')을 보여 주지
+     않습니다. 지금 상태만 말합니다. 오래된 값 관리는 부스 운영자 화면과 관리
+     화면의 몫입니다. 스냅샷을 오래 새로 받지 못했을 때만 '현황 연결이 잠시
+     지연되고 있습니다.' 한 줄을 띄웁니다.
 
      새로 받을 때 목록을 통째로 다시 만들지 않습니다. 이미 있는 줄의 숫자와
      글자만 바꿉니다. 펼쳐 둔 줄이 접히거나, 누르려던 단추가 손가락 밑에서
@@ -149,7 +154,7 @@
      상태 · 정렬 · 검색 · 보기 방식을 바꿨을 때 등) 다시 만들고, 그때도
      펼친 줄과 초점은 되살립니다.
 
-     큰 숫자 · 막대 · 상태별 숫자 · 거르기는 모두 BoothCore.bucket() 하나로
+     큰 숫자 · 막대 · 상태별 숫자 · 거르기는 모두 bucketOf() 하나로
      셉니다. "보통 4" 를 눌렀는데 목록이 5곳이면 이 화면을 믿지 않게 됩니다.
      =================================================================== */
   (function () {
@@ -166,13 +171,14 @@
     // 위로는 2분에서 멈춥니다. 설정 오타로 아주 큰 값이 들어오면 setTimeout 이 32비트를 넘겨
     // 곧바로 실행되고, 그러면 쉬지 않고 연달아 받게 됩니다. 2분보다 느리면 '실시간' 이 아니기도 합니다.
     var POLL_MS = Math.min(2 * 60 * 1000, Math.max(15000, Number(cfg.pollingIntervalMs) || 20000));
-    var FULL_MS = 5 * 60 * 1000;     // 부스 이름 · 구역까지 다시 받는 간격
-    var RETRY_MS = 10000;            // 실패한 뒤 다시 시도하는 간격
-    // 이보다 오래 못 받았으면 '기준' 시각으로 바꿔 보여 줍니다. 기본은 2분이고, 받는 간격을 길게
-    // 잡았으면(흔들림 ±20% 포함 최대 2분 24초) 정상인데도 '연결이 불안정해요' 가 뜨지 않도록 두 배로 늘립니다.
-    var LAG_MS = Math.max(2 * 60 * 1000, POLL_MS * 2);
+    var JITTER_MS = 4000;            // 정상 간격의 흔들림(±). 휴대폰 수천 대가 같은 순간에 받지 않게
+    var BACKOFF_MAX_MS = 2 * 60 * 1000; // 실패가 이어질 때 늦추는 상한(POLL_MS × 2, × 4 … 여기서 멈춤)
+    var MIN_GAP_MS = 5000;           // 다시 보임 · 인터넷 복귀로 바로 받을 때, 이보다 가까운 시도 뒤면 기다림
+    // 서버가 만든 새 스냅샷(generatedAt 이 바뀐 것)을 이만큼 못 받았으면 '연결 지연' 한 줄을 띄웁니다.
+    // CDN 이 낡은 사본을 주는 동안(최대 40초)과 실패 뒤 늦춘 간격을 넘는 진짜 장애에만 뜨도록 넉넉히 둡니다.
+    var LAG_MS = Math.max(3 * 60 * 1000, POLL_MS * 3);
     var WAKE_GRACE_MS = 8000;        // 화면이 다시 켜진 직후에는 새로 받는 중이라 늦었다고 하지 않습니다
-    var TICK_MS = 15000;             // 오래됨 · 운영 시간을 다시 따지는 간격
+    var TICK_MS = 15000;             // 운영 시간 · 연결 지연을 다시 따지는 간격
 
     var COUNT_KEYS = ['여유', '보통', '혼잡', 'off'];
     var COUNT_CLS = { '여유': 'free', '보통': 'normal', '혼잡': 'busy', 'off': 'off', 'unknown': 'unknown' };
@@ -194,11 +200,10 @@
       info: null,       // BoothCore.eventInfo()
       hasData: false,   // 그릴 것이 있는가(지난번 결과 포함)
       fresh: false,     // 이번에 연 뒤 서버에서 한 번이라도 받았는가
-      snapAt: null,     // 지난번 결과를 받은 시각
-      lastOk: null,     // 서버에서 마지막으로 받은 시각
-      lastFull: 0,
+      openedAt: Date.now(),
+      genAt: null,      // 마지막으로 받은 스냅샷의 generatedAt(서버 시각 · 화면에 보이지 않음)
+      movedAt: 0,       // generatedAt 이 바뀐 스냅샷을 받은 때(이 기기 시각). 연결 지연 판단에만 씁니다
       failed: false,
-      errCode: null,
       navOffline: false,
       visibleSince: Date.now(),
       ui: { zone: '', count: '', sort: 'code', view: 'list', q: '', search: false },
@@ -226,7 +231,6 @@
       if (typeof t.normalize === 'function') t = t.normalize('NFC');
       return t.toLowerCase().replace(/\s+/g, '');
     }
-    function lastTime() { return S.lastOk || S.snapAt; }
     function clearLive(b) {
       var c = {};
       for (var k in b) if (Object.prototype.hasOwnProperty.call(b, k)) c[k] = b[k];
@@ -247,24 +251,34 @@
     function derive() {
       S.info = core.eventInfo(S.settings, Date.now());
       var list = S.raw || [];
-      S.preview = list.some(core.isSample) && S.info.phase === 'before';
+      // 행사 전에는 스냅샷이 예시 부스의 값만 담아 옵니다(live/api/live-snapshot.mjs 가 '[예시]' 로
+      // 가려 냄 — 그 표시는 관람객에게 보내지 않습니다). 그래서 값이 있는 부스가 곧 미리 보기 부스입니다.
+      S.preview = S.info.phase === 'before' && list.some(function (b) { return !!b.congestion; });
       if (S.info.phase === 'open') {
         // 오늘 문 열기 전에 넣은 값(리허설 · 아침 준비)은 '지금 대기' 가 아닙니다.
         list = core.applyOpenRule(list, S.info);
-      } else {
+      } else if (S.info.phase !== 'before') {
         // 운영 시간 밖에는 남아 있는 값을 쓰지 않습니다. 숫자 · 정렬 · 거르기가
         // 모두 '정보 없음' 으로 같게 움직이도록 아예 비웁니다.
-        // 행사 전의 예시 부스만은 협의 · 리허설용으로 값을 둡니다(core.samplePreview).
-        list = list.map(function (b) { return core.samplePreview(S.info, b) ? b : clearLive(b); });
+        list = list.map(clearLive);
       }
       S.booths = list;
       S.byId = {};
       list.forEach(function (b) { S.byId[b.id] = b; });
     }
 
+    // 화면의 숫자 · 막대 · 거르기가 모두 쓰는 칸. BoothCore.bucket() 과 같되 '오래됨' 을 따지지 않습니다
+    // (입력이 오래됐다고 관람객 화면에서 '정보 없음' 으로 돌리지 않음 — 그 관리는 운영자 · 관리 화면이 합니다).
+    function bucketOf(b) {
+      var c = b && b.congestion;
+      if (c === '여유' || c === '보통' || c === '혼잡') return c;
+      if (c === '중단' || c === '마감') return 'off';
+      return 'unknown';
+    }
+
     function counts() {
       var c = { '여유': 0, '보통': 0, '혼잡': 0, 'off': 0, 'unknown': 0 };
-      S.booths.forEach(function (b) { c[core.bucket(b)]++; });
+      S.booths.forEach(function (b) { c[bucketOf(b)]++; });
       return c;
     }
 
@@ -283,7 +297,8 @@
 
     function searching() { return !!searchTest(); }
 
-    // 화면 · 검색에 쓰는 기관 이름: '[예시]' 표시는 떼어 냅니다(판별은 core.isSample 이 원래 값으로).
+    // 화면 · 검색에 쓰는 기관 이름: '[예시]' 표시는 떼어 냅니다. 스냅샷은 이미 뗀 이름을 주지만,
+    // 이 기기에 남아 있던 예전 값에도 표시가 보이지 않게 한 번 더 거릅니다.
     function orgText(b) { return core.displayOrganization(b.org); }
     function hay(b) {
       return norm([b.code, String(b.code || '').replace(/-/g, ''), looseCode(b), looseCode(b, '-'), b.name, orgText(b), b.program, b.zone_name].join(' '));
@@ -359,12 +374,11 @@
     }
 
     function waitRank(b) {
-      var k = core.bucket(b);
-      if (k === '여유' || k === '보통' || k === '혼잡') return 0;     // 지금 정보
-      if (b.congestion && b.congestion !== '중단' && b.congestion !== '마감') return 1; // 오래된 정보
-      if (b.congestion === '중단') return 2;
-      if (!b.congestion) return 3;
-      return 4;                                                         // 오늘 마감
+      var k = bucketOf(b);
+      if (k === '여유' || k === '보통' || k === '혼잡') return 0;     // 대기 시간이 있음
+      if (b.congestion === '중단') return 1;
+      if (!b.congestion) return 2;
+      return 3;                                                         // 오늘 마감
     }
 
     // 붙박이 줄이 검색칸으로 바뀌어 구역 탭이 숨어 있는가(renderBar 의 searchMode 와 같은 조건).
@@ -380,7 +394,7 @@
         // 목록이 고른 구역 하나와 전체 구역 사이를 오갑니다. 검색칸을 닫으면 고른 구역으로 돌아갑니다.
         if (!searchOpen() && u.zone && b.zone_key !== u.zone) return false;
         // 상태 고름과 검색은 함께 걸리지 않습니다(bind() 의 숫자 단추 · 검색칸 처리 참고).
-        if (u.count && core.bucket(b) !== u.count) return false;
+        if (u.count && bucketOf(b) !== u.count) return false;
         if (q && !q(hay(b))) return false;
         return true;
       });
@@ -432,13 +446,11 @@
     }
 
     /* ── 상태 글자 ───────────────────────────────────────────── */
-    // 관람객에게는 마지막 입력 시각('방금' · 'N분 전' · 'HH:MM에 입력')을 보여 주지 않고 지금 상태만
-    // 말합니다. 오래된 값(isStale)은 그대로 따져 숫자를 흐리게 하고 '확인 필요' 로만 알립니다.
+    // 관람객에게는 마지막 입력 시각('방금' · 'N분 전' · 'HH:MM에 입력')도, 오래됨(흐린 숫자 ·
+    // '확인 필요')도 보여 주지 않고 지금 상태만 말합니다. 아직 입력이 없을 때만 한 줄을 둡니다.
     function ageLine(b) {
-      if (!liveOn()) return { text: '', stale: false };
-      if (!b.congestion) return { text: '아직 대기 시간이 입력되지 않았어요', stale: false };
-      if (core.isStale(b)) return { text: '대기 시간이 한동안 바뀌지 않았어요 · 현장에서 확인해 주세요', stale: true };
-      return { text: '', stale: false };
+      if (!liveOn() || b.congestion) return '';
+      return '아직 대기 시간이 입력되지 않았어요';
     }
 
     function waitNum(b) { return Number(b.wait_minutes) || 0; }
@@ -449,53 +461,39 @@
       if (!liveOn()) return '';
       if (!b.congestion) return '정보 없음';
       if (b.congestion === '마감') return '오늘 마감';
-      var stale = core.isStale(b);
-      var s = b.congestion === '중단' ? '잠시 중단' : (isNow(b) ? '바로 체험 가능' : '대기 ' + waitNum(b) + '분, ' + b.congestion);
-      return stale ? s + ', 확인 필요' : s;
+      return b.congestion === '중단' ? '잠시 중단' : (isNow(b) ? '바로 체험 가능' : '대기 ' + waitNum(b) + '분, ' + b.congestion);
     }
 
     // 목록 줄 오른쪽: 위는 숫자(또는 낱말), 아래는 네모 + 상태
     function rightHtml(b) {
       if (!liveOn()) return '';
-      var c = b.congestion, stale = core.isStale(b), f = stale ? ' is-faint' : '';
-      var staleSt = '<span class="st st--stale">확인 필요</span>';
+      var c = b.congestion;
       if (!c) return '<span class="st st--unknown">정보 없음</span>';
       if (c === '마감') return '<span class="v v--word">마감</span>';
-      if (c === '중단') {
-        if (stale) return '<span class="v v--word is-faint">중단</span>' + staleSt;
-        return '<span class="st st--pause"><i class="sq sq--hollow" aria-hidden="true"></i>잠시 중단</span>';
-      }
+      if (c === '중단') return '<span class="st st--pause"><i class="sq sq--hollow" aria-hidden="true"></i>잠시 중단</span>';
       var m = core.meta(c);
       var val = isNow(b)
-        ? '<span class="v v--now' + f + '">바로</span>'
-        : '<span class="v' + f + '"><b class="v__n">' + waitNum(b) + '</b><span class="v__u">분</span></span>';
-      return val + (stale ? staleSt : '<span class="st st--' + m.key + '"><i class="sq" aria-hidden="true"></i>' + esc(m.label) + '</span>');
+        ? '<span class="v v--now">바로</span>'
+        : '<span class="v"><b class="v__n">' + waitNum(b) + '</b><span class="v__u">분</span></span>';
+      return val + '<span class="st st--' + m.key + '"><i class="sq" aria-hidden="true"></i>' + esc(m.label) + '</span>';
     }
 
     // 큰 값(지금 계신 부스 · 한눈에 상세)
     function bigHtml(b) {
       if (!liveOn()) return '';
-      var c = b.congestion, stale = core.isStale(b), f = stale ? ' is-faint' : '';
+      var c = b.congestion;
       if (!c) return '<span class="bigv bigv--none">정보 없음</span>';
       if (c === '마감') return '<span class="bigv bigv--word">마감</span>';
-      if (c === '중단') {
-        return '<span class="bigv bigv--word' + f + '">잠시 중단</span>' +
-          (stale ? '<span class="st st--stale">확인 필요</span>' : '');
-      }
+      if (c === '중단') return '<span class="bigv bigv--word">잠시 중단</span>';
       var m = core.meta(c);
       var val = isNow(b)
-        ? '<span class="bigv bigv--now' + f + '">바로</span>'
-        : '<span class="bigv' + f + '"><b class="bigv__n">' + waitNum(b) + '</b><span class="bigv__u">분</span></span>';
-      return val + (stale
-        ? '<span class="st st--stale">확인 필요</span>'
-        : '<span class="st st--' + m.key + '"><i class="sq" aria-hidden="true"></i>' + esc(m.label) + '</span>');
+        ? '<span class="bigv bigv--now">바로</span>'
+        : '<span class="bigv"><b class="bigv__n">' + waitNum(b) + '</b><span class="bigv__u">분</span></span>';
+      return val + '<span class="st st--' + m.key + '"><i class="sq" aria-hidden="true"></i>' + esc(m.label) + '</span>';
     }
 
     function rowCls(b) {
-      if (!liveOn()) return 'row';
-      var cls = 'row is-' + core.meta(b.congestion).key;
-      if (core.isStale(b)) cls += ' is-stale';
-      return cls;
+      return liveOn() ? 'row is-' + core.meta(b.congestion).key : 'row';
     }
 
     // 줄 앞의 부스 번호는 늘 전체 번호(A-07)입니다. 구역 제목이 화면 위로 지나간 뒤에도
@@ -507,49 +505,41 @@
     }
 
     /* ── 1 · 2 · 3. 띠 ─────────────────────────────────────────── */
+    // 서버가 새로 만든 스냅샷(generatedAt 이 바뀐 것)을 오래 받지 못했는가. 한 번 실패했다고 바로
+    // 알리지 않습니다(곧 다시 받음). CDN 이 낡은 사본만 계속 주는 경우도 여기서 잡힙니다.
+    // 시각은 화면에 보여 주지 않고 이 판단에만 씁니다.
     function isLagging() {
-      if (S.navOffline || S.failed) return true;
-      var t = lastTime();
-      if (!t) return false;
+      if (S.navOffline) return true;
       var now = Date.now();
-      return now - t.getTime() > LAG_MS && now - S.visibleSince > WAKE_GRACE_MS;
+      if (now - S.visibleSince <= WAKE_GRACE_MS) return false;
+      return now - (S.movedAt || S.openedAt) > LAG_MS;
     }
 
     function renderBand() {
       var s = S.settings || {};
       var line = [s.event_title, s.venue].filter(Boolean).join(' · ');
-      var t = lastTime(), lag = isLagging(), text = '', show = true;
+      var lag = isLagging(), bad = false, text = '', show = true;
       if (S.info && S.info.phase === 'after') show = false;
-      else if (!t) text = S.failed ? '연결 안 됨' : '불러오는 중';
-      else if (lag || !S.fresh) text = core.formatClock(t) + ' 기준';
-      else text = '자동 갱신 · ' + core.formatClock(t);
-      var key = [line, show, text, lag || (!t && S.failed)].join('|');
+      else if (!S.hasData) { text = S.failed ? '연결 안 됨' : '불러오는 중'; bad = S.failed; }
+      else if (lag) { text = '연결 지연'; bad = true; }
+      else text = S.fresh ? '자동 갱신' : '불러오는 중';
+      var key = [line, show, text, bad].join('|');
       if (key === S.keys.band) return;
       S.keys.band = key;
       $('band-event').textContent = line;
       $('sync').hidden = !show;
-      $('sync').className = 'sync' + ((lag || (!t && S.failed)) ? ' is-lag' : '');
+      $('sync').className = 'sync' + (bad ? ' is-lag' : '');
       $('sync-text').textContent = text;
       if (s.event_title) document.title = '부스 대기 현황 · ' + s.event_title;
     }
 
     function renderStrip() {
-      var text = '', btn = '다시 불러오기';
-      if (S.errCode === 'NO_CONFIG') {
-        text = '연결 설정을 불러오지 못했습니다. 새로 고침해 주세요.';
-        btn = '새로 고침';
-      } else if (isLagging()) {
-        var t = lastTime();
-        text = t
-          ? '인터넷 연결이 불안정해요. ' + core.formatClock(t) + ' 정보를 보여 드리고 있어요.'
-          : '인터넷 연결이 불안정해요. 연결되면 바로 불러올게요.';
-      }
-      var key = text + '|' + btn;
-      if (key === S.keys.strip) return;
-      S.keys.strip = key;
+      // 보여 줄 것이 있을 때만 띠를 씁니다. 아무것도 없으면 목록 자리(failHtml)가 안내합니다.
+      var text = S.hasData && isLagging() ? '현황 연결이 잠시 지연되고 있습니다.' : '';
+      if (text === S.keys.strip) return;
+      S.keys.strip = text;
       $('strip').hidden = !text;
       $('strip-text').textContent = text;
-      $('retry').textContent = btn;
     }
 
     /* ── 4. 지금 계신 부스 (?b=) ──────────────────────────────── */
@@ -572,7 +562,7 @@
     }
 
     function alternatives(b) {
-      var free = S.booths.filter(function (x) { return x.id !== b.id && core.bucket(x) === '여유'; });
+      var free = S.booths.filter(function (x) { return x.id !== b.id && bucketOf(x) === '여유'; });
       free.sort(function (x, y) { return (waitNum(x) - waitNum(y)) || core.compareCode(x.code, y.code); });
       var same = free.filter(function (x) { return x.zone_key === b.zone_key; });
       if (same.length) return { scope: 'zone', list: same.slice(0, 3) };
@@ -590,12 +580,12 @@
           '<div class="here__val">' + bigHtml(b) + '</div>' +
         '</div>';
       if (mode === 'live') {
-        if (age.text) html += '<p class="here__age' + (age.stale ? ' is-stale' : '') + '">' + esc(age.text) + '</p>';
+        if (age) html += '<p class="here__age">' + esc(age) + '</p>';
       } else {
         html += '<p class="here__age">' + esc(offHint(mode)) + '</p>';
       }
 
-      var k = core.bucket(b);
+      var k = bucketOf(b);
       if (mode === 'live' && (k === '보통' || k === '혼잡' || k === 'off')) {
         var alt = alternatives(b);
         html += '<div class="here__alts">';
@@ -897,7 +887,7 @@
       var meta = [orgText(b), b.zone_name].filter(Boolean).join(' · ');
       return (meta ? '<p class="more__meta">' + esc(meta) + '</p>' : '') +
         (b.program ? '<p class="more__prog">' + esc(b.program) + '</p>' : '') +
-        (age.text ? '<p class="more__age' + (age.stale ? ' is-stale' : '') + '">' + esc(age.text) + '</p>' : '');
+        (age ? '<p class="more__age">' + esc(age) + '</p>' : '');
     }
 
     function rowHtml(b, grouped) {
@@ -914,13 +904,12 @@
 
     function tileParts(b) {
       if (!liveOn()) return { cls: 'is-idle', v: '', w: '' };
-      var c = b.congestion, stale = core.isStale(b);
+      var c = b.congestion;
       if (!c) return { cls: 'is-unknown', v: '—', w: '정보 없음' };
       if (c === '마감') return { cls: 'is-closed', v: '마감', w: '' };
-      if (c === '중단') return stale ? { cls: 'is-stale is-stale-off', v: '중단', w: '확인 필요' } : { cls: 'is-pause', v: '중단', w: '' };
-      var k = core.meta(c).key;
+      if (c === '중단') return { cls: 'is-pause', v: '중단', w: '' };
       var v = isNow(b) ? '바로' : waitNum(b) + '<span class="tile__u">분</span>';
-      return stale ? { cls: 'is-stale is-stale-' + k, v: v, w: '확인 필요' } : { cls: 'is-' + k, v: v, w: c };
+      return { cls: 'is-' + core.meta(c).key, v: v, w: c };
     }
 
     function tileInner(b) {
@@ -1017,11 +1006,9 @@
     // 한 번도 받지 못했을 때(지난번 결과도 없음) 빈 줄 대신 두는 안내와 다시 시도 단추.
     // 큰 숫자 자리는 '정보를 불러오지 못했어요' 만 말하고, 무엇을 하면 되는지는 여기서 말합니다.
     function failHtml() {
-      var noCfg = S.errCode === 'NO_CONFIG';
-      var d = noCfg ? '연결 설정이 없어요. 잠시 뒤 새로 고침해 주세요.'
-        : '연결되면 자동으로 다시 불러와요. 지금 바로 다시 시도할 수도 있어요.';
+      var d = '연결되면 자동으로 다시 불러와요. 지금 바로 다시 시도할 수도 있어요.';
       // 누른 단추가 먹었는지 보이도록, 받는 중에는 단추 글자를 바꿉니다(단추는 그대로 두어 초점 유지).
-      var btn = noCfg ? '새로 고침' : (busy ? '다시 불러오는 중…' : '다시 불러오기');
+      var btn = busy ? '다시 불러오는 중…' : '다시 불러오기';
       return '<div class="empty empty--none empty--fail"><p class="empty__d">' + esc(d) + '</p>' +
         '<button type="button" class="line-btn" data-act="retry">' + esc(btn) + '</button></div>';
     }
@@ -1131,7 +1118,7 @@
         (meta ? '<p class="sheet__meta">' + esc(meta) + '</p>' : '') +
         (b.program ? '<p class="sheet__prog">' + esc(b.program) + '</p>' : '') +
         '<div class="sheet__live"><div class="sheet__val">' + bigHtml(b) + '</div>' +
-          (age.text ? '<p class="sheet__age' + (age.stale ? ' is-stale' : '') + '">' + esc(age.text) + '</p>' : '') +
+          (age ? '<p class="sheet__age">' + esc(age) + '</p>' : '') +
         '</div>';
     }
 
@@ -1161,9 +1148,8 @@
       var key = [c['여유'], c['보통'], c['혼잡'], c.off].join('|');
       if (key === S.keys.sum) return;
       S.keys.sum = key;
-      var t = lastTime(), p = t ? core.kstParts(t) : null;
       $('sr-summary').textContent = '여유 ' + c['여유'] + '곳, 보통 ' + c['보통'] + '곳, 혼잡 ' + c['혼잡'] +
-        '곳, 중단·마감 ' + c.off + '곳.' + (p ? ' ' + p.hh + '시 ' + p.mi + '분 기준' : '');
+        '곳, 중단·마감 ' + c.off + '곳.';
     }
 
     /* ── 한꺼번에 ─────────────────────────────────────────────── */
@@ -1200,54 +1186,60 @@
       S.hasData = true;
     }
 
-    function succeeded() {
-      S.fresh = true;
-      S.failed = false;
-      S.errCode = null;
-      S.lastOk = core.lastOkAt || new Date();
-      clearTimeout(retryT);
-    }
+    var busy = false;   // 받는 중(single-flight)
+    var timer = null;   // 다음 받기
+    var fails = 0;      // 이어진 실패 수(성공하면 0)
+    var lastTry = 0;
 
-    var busy = false, retryT = null;
-
-    function refresh(full) {
-      if (busy) return Promise.resolve();
+    // 스냅샷 하나를 받습니다. 받는 중이면 겹쳐 보내지 않고, 끝나면(성공이든 실패든) 다음 받기를 잡습니다.
+    // 실패해도 화면의 값은 그대로 둡니다(마지막 정상본). Supabase 로 돌아가 읽는 길은 없습니다.
+    function refresh() {
+      if (busy) return;
       busy = true;
-      clearTimeout(retryT);
-      var all = full || !S.fresh || (Date.now() - S.lastFull > FULL_MS);
-      var p = all ? core.load() : core.refreshLive();
-      return p.then(function (data) {
+      lastTry = Date.now();
+      clearTimeout(timer);
+      timer = null;
+      core.getLiveSnapshot().then(function (data) {
         busy = false;
-        if (all) {
-          S.settings = data.settings || {};
-          S.zones = data.zones || [];
-          S.liveReady = data.liveReady;
-          S.lastFull = Date.now();
-          take(data.booths);
-        } else {
-          S.liveReady = core.liveReady === false ? false : true;
-          take(data);
-        }
-        succeeded();
+        fails = 0;
+        S.settings = data.settings || {};
+        S.zones = data.zones || [];
+        S.liveReady = data.liveReady;
+        take(data.booths);
+        // 서버가 새로 만든 스냅샷일 때만 '새로 받음' 으로 셉니다. CDN 은 같은 사본을 몇 번 더 줄 수 있습니다.
+        if (!S.movedAt || data.generatedAt !== S.genAt) { S.genAt = data.generatedAt; S.movedAt = Date.now(); }
+        S.fresh = true;
+        S.failed = false;
         render(false);
+        schedule();
       }, function (err) {
         busy = false;
-        failed(err);
+        fails++;
+        // 끊긴 동안 같은 경고가 쌓이지 않게, 처음 실패했을 때만 남깁니다.
+        if (!S.failed && window.console) console.warn('[부스 대기 현황] 받지 못했어요', err);
+        S.failed = true;
+        render(false);
+        schedule();
       });
     }
 
-    function failed(err) {
-      // 끊긴 동안 10초마다 같은 경고가 쌓이지 않게, 처음 실패했을 때만 남깁니다.
-      if (!S.failed && window.console) console.warn('[부스 대기 현황] 받지 못했어요', err);
-      S.failed = true;
-      S.errCode = (err && err.code) || null;
-      render(false);
-      if (S.errCode === 'NO_CONFIG') return; // 설정이 없으면 다시 해도 같습니다
-      clearTimeout(retryT);
-      retryT = setTimeout(function retry() {
-        if (document.hidden) { retryT = setTimeout(retry, RETRY_MS); return; }
-        refresh(false);
-      }, RETRY_MS);
+    // 다음 받기를 잡습니다. 정상이면 POLL_MS ± JITTER_MS, 실패가 이어지면 POLL_MS × 2, × 4 …
+    // (BACKOFF_MAX_MS 에서 멈춤, ±20%). 화면이 가려져 있으면 잡지 않습니다 — 다시 보일 때 resume() 이 받습니다.
+    function schedule() {
+      clearTimeout(timer);
+      timer = null;
+      if (document.hidden) return;
+      var base = fails ? Math.min(BACKOFF_MAX_MS, POLL_MS * Math.pow(2, fails)) : POLL_MS;
+      var spread = fails ? base * 0.2 : JITTER_MS;
+      timer = setTimeout(refresh, base - spread + Math.random() * 2 * spread);
+    }
+
+    // 다시 보임 · 인터넷 복귀 · '다시 불러오기' 때 곧바로 받습니다. now 가 아니면 방금(MIN_GAP_MS 안)
+    // 시도한 뒤에는 잡아 둔 차례를 기다립니다 — 탭을 빠르게 오가도 요청이 몰리지 않게.
+    function resume(now) {
+      if (document.hidden || busy) return;
+      if (!now && Date.now() - lastTry < MIN_GAP_MS) { if (!timer) schedule(); return; }
+      refresh();
     }
 
     /* ── 손가락 ───────────────────────────────────────────────── */
@@ -1431,10 +1423,9 @@
             location.replace(location.pathname);
             break;
           case 'retry':
-            if (S.errCode === 'NO_CONFIG') { location.reload(); break; }
-            refresh(!S.fresh);
+            resume(true);
             // 받는 동안 목록 자리의 단추를 '다시 불러오는 중…' 으로 바꿉니다(failHtml 이 busy 를 봅니다).
-            // 끝나면 성공은 목록으로, 실패는 failed() 의 render 로 '다시 불러오기' 로 돌아옵니다.
+            // 끝나면 성공은 목록으로, 실패는 refresh() 의 render 로 '다시 불러오기' 로 돌아옵니다.
             if (!S.hasData) render(false);
             break;
         }
@@ -1468,11 +1459,17 @@
         if (S.ui.search && document.activeElement === $('q')) closeSearch(true);
       });
 
+      // 가려지면 받기를 멈추고(잡아 둔 차례를 지움), 다시 보이면 곧바로 받습니다.
       document.addEventListener('visibilitychange', function () {
-        if (!document.hidden) { S.visibleSince = Date.now(); render(false); }
+        if (document.hidden) { clearTimeout(timer); timer = null; return; }
+        S.visibleSince = Date.now();
+        render(false);
+        resume(false);
       });
+      // 뒤로 가기 캐시(bfcache)에서 되살아난 페이지는 멈춰 있던 차례가 없으니 다시 받습니다.
+      window.addEventListener('pageshow', function (e) { if (e.persisted) { S.visibleSince = Date.now(); resume(false); } });
       window.addEventListener('offline', function () { S.navOffline = true; render(false); });
-      window.addEventListener('online', function () { S.navOffline = false; render(false); });
+      window.addEventListener('online', function () { S.navOffline = false; render(false); resume(false); });
     }
 
     /* ── 시작 ─────────────────────────────────────────────────── */
@@ -1490,33 +1487,22 @@
         $('demoinfo').hidden = false;
         $('demoexit').hidden = false;
       }
-      $('foot-text').textContent = '대기 시간은 각 부스 선생님이 현장에서 직접 입력해요. 실제와 조금 다를 수 있어요. ' +
-        core.staleMinutes() + '분 넘게 바뀌지 않은 부스는 숫자를 흐리게 보여 줘요.';
-
       // 지난번에 받은 결과가 있으면 서버를 기다리지 않고 먼저 그립니다(꾸며낸 값이 아닌 실제로 받았던 값).
       var snap = core.snapshot();
       if (snap) {
         S.settings = snap.settings || {};
         S.zones = snap.zones || [];
         S.liveReady = snap.liveReady;
-        S.snapAt = snap.savedAt ? new Date(snap.savedAt) : null;
-        if (S.snapAt && isNaN(S.snapAt.getTime())) S.snapAt = null;
         take(snap.booths);
       }
 
       bind();
       render(true);
-      if (!core.isMock && !core.hasConfig) {
-        // 연결 설정이 없으면 몇 번을 다시 해도 같습니다. 안내만 하고 멈춥니다.
-        failed({ code: 'NO_CONFIG' });
-        return;
-      }
-      refresh(true);
-      core.poll(function () { return refresh(false); }, POLL_MS);
-      // 오래됨 · 운영 시간은 받지 않아도 시간이 흐르며 바뀝니다.
+      refresh();
+      // 운영 시간 · 연결 지연은 받지 않아도 시간이 흐르며 바뀝니다.
       setInterval(function () { if (!document.hidden) render(false); }, TICK_MS);
       // 시연: 다른 탭(부스 운영자 화면)에서 값을 바꾸면 바로 다시 읽습니다.
-      core.onDemoChange(function () { refresh(false); });
+      core.onDemoChange(function () { resume(true); });
     }
 
     start();

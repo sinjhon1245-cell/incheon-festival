@@ -38,7 +38,7 @@
   --st-busy:     #B32B3E;
   --st-off:      #5E6782;   /* 중단 · 마감의 글자와 칠 */
   --st-off-mark: #8A93AB;   /* 네모 · 테두리 전용. 작은 글자로 쓰면 대비가 모자랍니다 */
-  --faint:       #8A93AB;   /* 오래된 숫자 — 큰 글자(3:1 기준)에만 */
+  --faint:       #8A93AB;   /* 장식(타일의 '—') — 큰 글자(3:1 기준)에만 */
   --lag:         #FFC857;   /* 보라 띠 위 '오래된 정보' 네모. 장식이라 글자에는 쓰지 않습니다 */
 
   --gutter: 20px;
@@ -319,7 +319,6 @@ html.is-demo .row { scroll-margin-top: calc(56px + var(--demo-h) + env(safe-area
   font-size: 13px;
   color: var(--muted);
 }
-.here__age.is-stale { color: var(--st-normal); font-weight: 600; }
 
 /* 큰 값 (지금 계신 부스 · 한눈에 상세에서 함께 씀) */
 .bigv {
@@ -334,9 +333,6 @@ html.is-demo .row { scroll-margin-top: calc(56px + var(--demo-h) + env(safe-area
 .bigv--now  { font-size: 36px; font-weight: 800; letter-spacing: -0.03em; color: var(--st-free); }
 .bigv--word { font-size: 26px; font-weight: 800; letter-spacing: -0.03em; color: var(--st-off); }
 .bigv--none { font-size: 15px; font-weight: 600; color: var(--muted-2); line-height: 1.4; }
-.bigv.is-faint { color: var(--faint); }
-/* 16px '분' 은 큰 글자가 아니라 --faint(3:1)로는 모자랍니다 */
-.bigv.is-faint .bigv__u { color: var(--muted); }
 
 .here__alts {
   margin-top: 16px;
@@ -818,11 +814,6 @@ html.is-demo .row { scroll-margin-top: calc(56px + var(--demo-h) + env(safe-area
 .v__u { font-size: 13px; font-weight: 600; color: var(--ink-2); }
 .v--now  { font-size: 20px; font-weight: 800; letter-spacing: -0.02em; color: var(--st-free); }
 .v--word { font-size: 17px; font-weight: 700; letter-spacing: -0.02em; color: var(--st-off); }
-.v.is-faint { color: var(--faint); }
-/* --faint 는 큰 글자(3:1)에만 씁니다. 작은 '분' 과 17px '중단' 은 4.5:1 이 필요해 --muted 로
-   둡니다. 오래된 값이라는 것은 아래 '확인 필요' 줄이 알려 줍니다. */
-.v.is-faint .v__u,
-.v.v--word.is-faint { color: var(--muted); }
 
 .st {
   display: inline-flex;
@@ -840,7 +831,6 @@ html.is-demo .row { scroll-margin-top: calc(56px + var(--demo-h) + env(safe-area
 .st--pause,
 .st--closed  { color: var(--st-off); }
 .st--unknown { color: var(--muted-2); }
-.st--stale   { color: var(--st-normal); }
 
 /* 펼친 내용 — 이름 단과 줄을 맞춥니다(44px + 12px) */
 .row__more {
@@ -858,7 +848,6 @@ html.is-demo .row { scroll-margin-top: calc(56px + var(--demo-h) + env(safe-area
   font-size: 13px;
   color: var(--muted);
 }
-.more__age.is-stale { color: var(--st-normal); font-weight: 600; }
 
 /* 값이 바뀐 줄을 잠깐 표시합니다. 움직임을 줄여 달라고 한 기기에서는 하지 않습니다. */
 @media (prefers-reduced-motion: no-preference) {
@@ -965,17 +954,7 @@ html.is-demo .row { scroll-margin-top: calc(56px + var(--demo-h) + env(safe-area
 .tile.is-pause,
 .tile.is-closed { background: #fff; border: 1px solid var(--st-off-mark); color: var(--st-off); }
 .tile.is-pause .tile__v,
-.tile.is-closed .tile__v,
-.tile.is-stale-off .tile__v { font-size: 15px; font-weight: 700; letter-spacing: -0.02em; }
-.tile.is-stale  { background: #fff; border: 2px solid var(--st-off-mark); color: var(--ink-2); }
-.tile.is-stale-free   { border-color: var(--st-free); }
-.tile.is-stale-normal { border-color: var(--st-normal); }
-.tile.is-stale-busy   { border-color: var(--st-busy); }
-.tile.is-stale .tile__v { color: var(--faint); }
-/* 22px 숫자만 큰 글자라 --faint 가 됩니다. 11px '분' 과 15px '중단' 은 4.5:1 이 필요합니다. */
-.tile.is-stale .tile__u,
-.tile.is-stale.is-stale-off .tile__v { color: var(--muted); }
-.tile.is-stale .tile__w { color: var(--st-normal); }
+.tile.is-closed .tile__v { font-size: 15px; font-weight: 700; letter-spacing: -0.02em; }
 /* 회색 바탕(--line-2) 위의 작은 번호 · '정보 없음' 은 --muted-2 로는 4.3:1 이라 한 단계 진하게 */
 .tile.is-unknown { color: var(--muted); }
 .tile.is-unknown .tile__v { color: var(--faint); }   /* '—' 는 장식. 뜻은 '정보 없음' 이 전합니다 */
@@ -1048,7 +1027,6 @@ html.is-demo .row { scroll-margin-top: calc(56px + var(--demo-h) + env(safe-area
 }
 .sheet__live .bigv__n { font-size: 40px; }
 .sheet__age { font-size: 13px; color: var(--muted); text-align: right; }
-.sheet__age.is-stale { color: var(--st-normal); font-weight: 600; }
 
 /* ── 10. 바닥글 ─────────────────────────────────────────────── */
 .foot {
