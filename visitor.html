@@ -109,7 +109,7 @@
 
   <footer class="foot">
     <div class="col foot__in">
-      <p id="foot-text">대기 시간은 각 부스 선생님이 현장에서 직접 입력해요. 실제와 조금 다를 수 있어요.</p>
+      <p id="foot-text">대기 시간은 각 부스 운영자가 현장에서 직접 입력해요. 실제 현장 상황과 조금 다를 수 있어요.</p>
     </div>
   </footer>
 
@@ -768,7 +768,7 @@
       var fresh = c['여유'] + c['보통'] + c['혼잡'] + c.off;
       $('h-free').textContent = c['여유'];
       $('h-total').textContent = S.booths.length;
-      $('h-sub').textContent = fresh ? '입력한 ' + fresh + '곳 기준' : '아직 대기 시간을 입력한 부스가 없어요';
+      $('h-sub').textContent = fresh ? '현재 대기 정보가 입력된 ' + fresh + '곳 기준' : '아직 대기 시간을 입력한 부스가 없어요';
       $('h-dist').hidden = !fresh;
       each($('h-dist').children, function (seg) {
         var k = seg.getAttribute('data-seg');
