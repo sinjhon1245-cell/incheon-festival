@@ -988,6 +988,65 @@ html.is-demo .row { scroll-margin-top: calc(56px + var(--demo-h) + env(safe-area
 .tile.is-idle { color: var(--ink-2); }
 .tile.is-sel { outline: 2px solid var(--ink); outline-offset: 2px; z-index: 1; }
 
+/* 구역별 현황 — 전체 + 한눈에에서 부스가 많을 때(visitor.html 의 overviewOn). 목록 줄처럼 흰 바탕에 얇은 선,
+   구역마다 이름 · 부스 수 · 분포 막대(맨 위 막대와 같은 칠) · 상태별 수. 줄 전체가 단추입니다. */
+.zov__list { display: grid; grid-template-columns: minmax(0, 1fr); column-gap: 24px; }
+@media (min-width: 561px) {
+  /* 넓은 화면은 두 줄로 나란히(본문 폭이 560px 이라 셋은 좁습니다). 상태별 수가 한 줄에 들도록 조금 작게 */
+  .zov__list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+.zov__btn {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  padding: 14px 0 13px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: none;
+  color: inherit;
+  text-align: left;
+}
+.zov__btn:focus-visible { outline-offset: -2px; }
+.zov__top { display: flex; align-items: baseline; gap: 8px; }
+.zov__name {
+  flex: 1;
+  min-width: 0;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.zov__n { font-size: 13px; font-weight: 600; color: var(--muted-2); white-space: nowrap; }
+.zov__go { font-size: 18px; font-weight: 600; line-height: 1; color: var(--muted-2); }
+.zov__btn:hover .zov__go { color: var(--ink); }
+.zov__bar { margin-top: 10px; }
+.zov__counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin-top: 9px;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--ink-2);
+}
+.zov__c { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.zov__c b { font-weight: 800; color: var(--ink); }
+.zov__c .sq { width: 8px; height: 8px; }
+.zov__c.is-zero,
+.zov__c.is-zero b,
+.zov__c--unknown,
+.zov__c--unknown b { color: var(--muted-2); font-weight: 600; }
+.sq--free   { background: var(--st-free); }
+.sq--normal { background: var(--st-normal); box-shadow: inset 0 0 0 1px var(--st-edge); }
+.sq--busy   { background: var(--st-busy); }
+@media (min-width: 561px) {
+  .zov__counts { gap: 4px 10px; font-size: 12px; }
+  .zov__c { gap: 4px; }
+}
+
 /* 타일을 누르면 아래에서 붙는 상세 */
 .sheet {
   position: fixed;

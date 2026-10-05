@@ -918,14 +918,57 @@
     }
 
     /* ── 8 · 9. 목록 · 한눈에 ──────────────────────────────────── */
-    function zoneHead(g, n) {
-      // 구역 글자가 이름에 이미 들어 있으면('A구역' · '예시 구역 A') 앞에 또 붙이지 않습니다.
+    // 구역 글자가 이름에 이미 들어 있으면('A구역' · '예시 구역 A') 앞에 또 붙이지 않습니다.
+    function zoneKeyShown(g) {
       var label = String(g.label);
-      var showKey = /^[A-Za-z0-9]{1,3}$/.test(g.key) && label.indexOf(g.key) !== 0 &&
-        label.split(/\s+/).indexOf(g.key) < 0;
+      return /^[A-Za-z0-9]{1,3}$/.test(g.key) && label.indexOf(g.key) !== 0 && label.split(/\s+/).indexOf(g.key) < 0;
+    }
+    function zoneNameHtml(g) {
+      return (zoneKeyShown(g) ? '<span class="zone__key">' + esc(g.key) + '</span>' : '') + esc(g.label);
+    }
+    function zoneHead(g, n) {
       return '<h2 class="zone" id="zone-' + esc(String(g.key).replace(/\s+/g, '_')) + '">' +
-        '<span class="zone__label">' + (showKey ? '<span class="zone__key">' + esc(g.key) + '</span>' : '') + esc(g.label) + '</span>' +
+        '<span class="zone__label">' + zoneNameHtml(g) + '</span>' +
         '<span class="zone__n">' + n + '곳</span></h2>';
+    }
+
+    /* 구역별 현황 — 전체 + 한눈에에서 부스가 많을 때(ZONE_OVERVIEW_OVER 곳 초과) 타일을 모두 펼치지 않고
+       구역마다 한 줄(이름 · 부스 수 · 분포 막대 · 상태별 수)로 줄여 구역끼리 견주게 합니다. 줄을 누르면
+       그 구역이 골라지고(구역 탭과 같은 S.ui.zone) 한눈에는 그대로라 그 구역의 타일이 나옵니다.
+       구역을 고르거나 · 검색어가 있거나 · 위의 상태 숫자로 거르면 결과가 적으니 타일을 바로 보여 줍니다.
+       맨 위 요약은 행사 전체, 여기는 구역별, 구역을 고르면 부스별 — 같은 숫자를 되풀이하지 않습니다. */
+    var ZONE_OVERVIEW_OVER = 30;
+    function overviewOn() {
+      return effView() === 'grid' && !S.ui.zone && !searching() && !S.ui.count &&
+        S.booths.length > ZONE_OVERVIEW_OVER && zoneList().length >= 2;
+    }
+    function overviewHtml() {
+      var zs = zoneList(), by = {};
+      S.booths.forEach(function (b) {
+        var c = by[b.zone_key] || (by[b.zone_key] = { '여유': 0, '보통': 0, '혼잡': 0, 'off': 0, 'unknown': 0 });
+        c[bucketOf(b)]++;
+      });
+      return '<section class="group zov" aria-labelledby="zov-h">' +
+        '<h2 class="zone" id="zov-h"><span class="zone__label">구역별 현황</span><span class="zone__n">' + zs.length + '개 구역</span></h2>' +
+        '<ul class="zov__list">' + zs.map(function (z) {
+          var c = by[z.key];
+          var segs = COUNT_KEYS.concat('unknown').map(function (k) {
+            return c[k] ? '<i class="dist__s dist__s--' + COUNT_CLS[k] + '" style="flex-grow:' + c[k] + '"></i>' : '';
+          }).join('');
+          var nums = COUNT_KEYS.map(function (k) {
+            return '<span class="zov__c' + (c[k] ? '' : ' is-zero') + '"><i class="sq sq--' + COUNT_CLS[k] + '"></i>' +
+              COUNT_WORD[k] + ' <b>' + c[k] + '</b></span>';
+          }).join('') + (c.unknown ? '<span class="zov__c zov__c--unknown">정보 없음 <b>' + c.unknown + '</b></span>' : '');
+          var speech = [(zoneKeyShown(z) ? z.key + ' ' : '') + z.label, '전체 ' + z.n + '곳']
+            .concat(COUNT_KEYS.map(function (k) { return COUNT_WORD[k] + ' ' + c[k] + '곳'; }))
+            .concat(c.unknown ? ['정보 없음 ' + c.unknown + '곳'] : []).join(', ') + '. 이 구역 부스 보기';
+          return '<li><button type="button" class="zov__btn" data-zone-go="' + esc(z.key) + '" aria-label="' + esc(speech) + '">' +
+            '<span class="zov__top"><span class="zov__name">' + zoneNameHtml(z) + '</span>' +
+              '<span class="zov__n">' + z.n + '곳</span><span class="zov__go" aria-hidden="true">›</span></span>' +
+            '<span class="dist zov__bar" aria-hidden="true">' + segs + '</span>' +
+            '<span class="zov__counts" aria-hidden="true">' + nums + '</span>' +
+          '</button></li>';
+        }).join('') + '</ul></section>';
     }
 
     function moreHtml(b) {
@@ -1029,7 +1072,7 @@
     function focusKey(root) {
       var ae = document.activeElement;
       if (!ae || ae === document.body || !root.contains(ae)) return null;
-      var attrs = ['data-id', 'data-count', 'data-zone', 'data-go', 'data-act'];
+      var attrs = ['data-id', 'data-count', 'data-zone', 'data-zone-go', 'data-go', 'data-act'];
       for (var i = 0; i < attrs.length; i++) {
         var host = ae.closest('[' + attrs[i] + ']');
         if (host && root.contains(host)) {
@@ -1083,6 +1126,17 @@
       }
 
       var view = effView(), grouped = view === 'grid' ? true : isGrouped();
+      if (overviewOn()) {
+        // 숫자가 바뀌면 통째로 다시 만듭니다(열 줄 남짓이라 가볍고, 초점은 data-zone-go 로 이어집니다).
+        var ov = mapHtml() + overviewHtml();
+        if (force || S.keys.list !== 'ov|' + ov) {
+          var restoreOv = focusKey(box);
+          box.innerHTML = ov;
+          S.keys.list = 'ov|' + ov;
+          restoreFocus(box, restoreOv);
+        }
+        return;
+      }
       // patch() 는 상태 칸만 고칩니다. 그래서 이름 · 번호 · 구역 이름이 바뀌면(5분마다 전부
       // 다시 받을 때 관리자가 고친 값) 줄을 새로 만들어야 합니다. 펼침(S.open)과 초점은
       // 새로 만들어도 이어집니다. 한눈에 타일은 code 대신 no 를 보여 주니 no 도 넣습니다.
@@ -1170,7 +1224,7 @@
 
     function renderSheet(items) {
       var sh = $('sheet');
-      var b = (S.sel && effView() === 'grid') ? S.byId[S.sel] : null;
+      var b = (S.sel && effView() === 'grid' && !overviewOn()) ? S.byId[S.sel] : null;
       if (b && !items.some(function (x) { return x.id === b.id; })) b = null; // 걸러져 안 보이면 닫습니다
       if (!b) {
         S.sel = null;
@@ -1425,6 +1479,21 @@
           render(false);
           revealTab();
           showResults(true);
+          return;
+        }
+        if (t.hasAttribute('data-zone-go')) {
+          // 구역별 현황의 한 줄: 한눈에는 그대로 두고 그 구역의 타일로. 검색칸이 (검색어 없이) 열려 있으면
+          // 닫습니다 — 검색칸이 열린 동안에는 구역 고름이 걸리지 않습니다(visible()).
+          if (S.ui.search || S.ui.q) { S.ui.search = false; S.ui.q = ''; $('q').value = ''; }
+          S.ui.zone = t.getAttribute('data-zone-go');
+          S.ui.count = '';
+          S.sel = null;
+          render(false);
+          revealTab();
+          showResults(true);
+          // 누른 줄은 사라졌으니 초점을 그 구역의 첫 타일로 옮깁니다(키보드 · 화면 읽기).
+          var first = $('list').querySelector('.tile');
+          if (first) { try { first.focus({ preventScroll: true }); } catch (err) { first.focus(); } }
           return;
         }
         if (t.hasAttribute('data-view')) {
