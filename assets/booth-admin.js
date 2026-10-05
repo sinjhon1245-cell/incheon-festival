@@ -555,35 +555,59 @@
      이미 예시로 판별되는 부스(기관이 '[예시]' 로 시작)의 지금 대기 값만 한 번에 넣거나 비웁니다.
      부스를 예시로 만들거나 '[예시]' 를 붙이고 떼는 기능이 아닙니다 — 예시 여부는 DB 의 기관 이름이 정하고,
      부스 정보 · 공개 여부 · QR · PIN · 세션 · 공통 PIN 은 건드리지 않습니다(booth_live 한 줄만).
-       · 채우기 — 아래 표의 값을 넣어 여유 3 · 보통 4 · 혼잡 3 · 잠시 중단 1 · 오늘 마감 1 이 한 화면에 보이게.
+       · 채우기 — 예시 부스가 몇 곳이든 아래 비율(EXAMPLE_MIX)로 나눠 여유 · 보통 · 혼잡 · 잠시 중단 · 오늘 마감이
+         고르게 섞여 보이게. 50곳이면 여유 19 · 보통 15 · 혼잡 10 · 잠시 중단 3 · 오늘 마감 3.
+         다시 눌러도 같은 부스에 같은 값이 들어갑니다(부스 UUID 순서로 나눔 — A-01 같은 표시 번호와 무관).
        · 비우기 — 값을 지워 입력 전('정보 없음')으로. 다른 예시 값을 넣지 않습니다.
          (화면 이름은 '비우기'. 코드 안의 kind 는 서버 함수의 모드 이름을 따라 'clear' 그대로입니다.)
      30분 '확인 필요' · 자정 초기화 같은 실제 규칙은 그대로 두고, 값을 넣고 빼는 도구일 뿐입니다.
      새 쓰기 함수 없이 부스마다 관리자 긴급 수정과 같은 admin_set_booth_live 를 부릅니다(비우기는 그 함수의
      'clear' — '값 지우기' 단추와 같은 길). 모든 부스를 지우는 admin_reset_booth_live 는 실제 부스까지
      지우므로 쓰지 않습니다.
-     대상: 누르는 순간 서버에서 다시 읽은 부스 중 기관이 '[예시]' 로 시작하고(BoothCore.isSample), 공개 · 구역 공개 ·
-     번호가 있는 곳만(채우기는 아래 표에 그 번호가 있는 곳만). '[예시]' 를 지운 실제 부스는 같은 번호여도
-     건드리지 않고, 부스마다 UUID(r.id)로 보냅니다. 값은 대기 시간 단추(WAIT_CHOICES) · 중단 · 마감만 씁니다.
+     대상: 서버에서 다시 읽은 부스 중 기관이 '[예시]' 로 시작하고(BoothCore.isSample), 공개 · 구역 공개 ·
+     번호가 있는 곳만. 확인창의 숫자도 누르는 순간 다시 읽은 값이고, 실행 직전에 한 번 더 읽어 그 사이
+     '[예시]' 를 지운 부스는 빠집니다. 부스마다 UUID(r.id)로 보냅니다. 값은 대기 시간 단추(WAIT_CHOICES) ·
+     중단 · 마감만 씁니다.
      혼잡도는 늘 서버가 대기 시간으로 정합니다(10분 이하 여유 · 25분 이하 보통 · 그 위 혼잡) — 아래 값은
      그 규칙에 맞춰 고른 것이고, 여기서 혼잡도를 따로 정하지 않습니다.
      관람객 · 운영자 화면에는 '예시' 라는 말이 나가지 않습니다(관람객 화면은 기관 이름 앞 '[예시]' 를 떼고 보여 줍니다). */
-  var EXAMPLE_PRESET = {
-    'A-01': ['open', 0],  'A-02': ['open', 15], 'A-03': ['open', 30], 'A-04': ['open', 5],
-    'B-01': ['open', 20], 'B-02': ['open', 45], 'B-03': ['open', 10], 'B-04': ['open', 15],
-    'C-01': ['open', 30], 'C-02': ['open', 20], 'C-03': ['pause'],    'C-04': ['closed']
-  };
-  var exampleBusy = '';   // '' | 'fill' | 'clear'
-  function presetOf(r) {
-    var p = Object.prototype.hasOwnProperty.call(EXAMPLE_PRESET, r.code) ? EXAMPLE_PRESET[r.code] : null;
-    if (!p) return null;
-    if (p[0] === 'open' && (BC.WAIT_CHOICES || []).indexOf(p[1]) < 0) return null;
-    return p;
-  }
-  function exampleTargets(rows, kind) {
-    return rows.filter(function (r) {
-      return r.shown && BC.isSample(r.b) && (kind === 'clear' || !!presetOf(r));
+  // 채우기 비율(몇 곳이든 이 비율로 나눔). share 는 50곳일 때의 곳 수, waits 는 그 상태 안에서 돌려 쓰는 대기 분.
+  // 혼잡도는 서버가 대기 분으로 정하므로(10분 이하 여유 · 25분 이하 보통 · 그 위 혼잡) 그 칸에 맞는 값만 둡니다.
+  var EXAMPLE_MIX = [
+    { mode: 'open',   share: 19, waits: [5, 0, 10] },         // 여유 — 바로 · 5 · 10분
+    { mode: 'open',   share: 15, waits: [15, 20] },           // 보통 — 15 · 20분
+    { mode: 'open',   share: 10, waits: [30, 45, 30, 60] },   // 혼잡 — 30 · 45 · 60분
+    { mode: 'pause',  share: 3 },                             // 잠시 중단
+    { mode: 'closed', share: 3 }                              // 오늘 마감
+  ];
+  var EXAMPLE_POOL = 4;   // 동시에 보내는 요청 수(50곳을 하나씩 보내면 10초 넘게 걸려서)
+  var exampleBusy = '';   // '' | 'check'(확인창 전 다시 읽는 중) | 'fill' | 'clear'
+  var exampleProg = '';   // 단추에 붙는 '12/50'
+
+  /* 채우기 계획: 대상 n 곳 → 부스마다 [모드, 대기 분].
+     1) 곳 수 — 비율대로 내림하고 남는 자리는 나머지가 큰 상태부터(50곳이면 19 · 15 · 10 · 3 · 3 그대로).
+     2) 순서 — 가중 라운드 로빈으로 섞어 같은 상태가 줄줄이 붙지 않게.
+     3) 부스 — UUID 순서로 줄 세워 차례로 받습니다(표시 번호를 바꿔도 같은 부스는 같은 값). */
+  function examplePlan(targets) {
+    var n = targets.length, total = 0;
+    EXAMPLE_MIX.forEach(function (m) { total += m.share; });
+    var cnt = EXAMPLE_MIX.map(function (m) { return Math.floor(n * m.share / total); });
+    var left = n - cnt.reduce(function (a, b) { return a + b; }, 0);
+    EXAMPLE_MIX.map(function (m, i) { return { i: i, rem: n * m.share / total - cnt[i] }; })
+      .sort(function (a, b) { return b.rem - a.rem || a.i - b.i; })
+      .slice(0, left).forEach(function (x) { cnt[x.i]++; });
+    var cur = cnt.map(function () { return 0; }), used = cnt.map(function () { return 0; });
+    var order = targets.slice().sort(function (a, b) { return a.id < b.id ? -1 : a.id > b.id ? 1 : 0; });
+    return order.map(function (r) {
+      var k = 0;
+      cur.forEach(function (c, i) { cur[i] += cnt[i]; if (cur[i] > cur[k]) k = i; });
+      cur[k] -= n;
+      var m = EXAMPLE_MIX[k], j = used[k]++;
+      return { r: r, s: m.mode === 'open' ? ['open', m.waits[j % m.waits.length]] : [m.mode] };
     });
+  }
+  function exampleTargets(rows) {
+    return rows.filter(function (r) { return r.shown && BC.isSample(r.b); });
   }
   function paintExampleBtn(all) {
     var rows = all || rowsNow();
@@ -591,58 +615,88 @@
      ['#lv-example-clear', 'clear', '예시 현황 비우기', '비우는 중…']].forEach(function (d) {
       var b = $(d[0]);
       if (!b) return;
-      b.hidden = DEMO || !exampleTargets(rows, d[1]).length;
+      b.hidden = DEMO || !exampleTargets(rows).length;
       b.disabled = !!exampleBusy;
-      b.textContent = exampleBusy === d[1] ? d[3] : d[2];
+      b.textContent = exampleBusy === d[1] ? d[3] + (exampleProg ? ' ' + exampleProg : '') : d[2];
     });
+  }
+  // 부스 코드 목록은 길면 앞의 몇 곳만(토스트 한 줄에 들어가게).
+  function codeList(codes) {
+    return codes.length > 5 ? codes.slice(0, 5).join(', ') + ' 외 ' + (codes.length - 5) + '곳' : codes.join(', ');
   }
   function runExamples(kind) {
     if (DEMO || exampleBusy) return;
     var fill = kind === 'fill';
-    var n = exampleTargets(rowsNow(), kind).length;
-    if (!n) { toast('예시 부스가 없습니다.', true); return; }
-    UI.confirm({
-      title: fill ? '예시 현황을 채울까요?' : '예시 현황을 비울까요?',
-      message: (fill
-        ? '현재 공개된 예시 부스 ' + n + '곳에 다양한 대기 상태를 입력합니다.'
-        : '현재 공개된 예시 부스 ' + n + '곳의 대기 상태를 모두 미입력으로 되돌립니다.') +
-        '\n실제 부스에는 적용되지 않습니다.',
-      confirmLabel: fill ? '채우기' : '비우기'
-    }).then(function (ok) {
-      if (!ok) return;
-      exampleBusy = kind;
+    // 확인창의 숫자가 지금 서버의 대상 수가 되도록 먼저 다시 읽습니다.
+    exampleBusy = 'check';
+    paintExampleBtn();
+    loadMaster().then(function () {
+      exampleBusy = '';
       paintExampleBtn();
-      var done = [], failed = [];
-      // 누르는 순간의 부스 정보로 다시 고릅니다(그 사이 다른 화면에서 '[예시]' 를 지웠을 수 있음).
-      loadMaster().then(function () {
-        var targets = exampleTargets(rowsNow(), kind);
-        // 하나씩 차례로 보내 성공 · 실패를 부스마다 정확히 셉니다.
-        return targets.reduce(function (p, r) {
-          return p.then(function () {
-            var s = fill ? presetOf(r) : ['clear'];
-            return C.rpc('admin_set_booth_live', { p_booth_id: r.id, p_mode: s[0], p_wait_minutes: s[0] === 'open' ? s[1] : null })
-              .then(function () { done.push(r.code); }, function (e) {
-                failed.push(r.code);
-                console.warn('[booth-admin] 예시 현황 ' + (fill ? '채우기' : '비우기') + ' 실패', r.code, e && e.code);
-              });
-          });
-        }, Promise.resolve());
-      }).then(function () {
-        exampleBusy = '';
-        // 결과를 기다리지 않고 바로 다시 읽어 요약 · 카드를 새 값으로 그립니다.
-        return refreshMaster().then(function () {
-          if (!failed.length) {
-            toast(fill ? '예시 부스 ' + done.length + '곳에 현황을 채웠습니다.' : '예시 부스 ' + done.length + '곳의 현황을 비웠습니다.');
-            return;
-          }
-          toast('성공 ' + done.length + '곳 · 실패 ' + failed.length + '곳 (' + failed.join(', ') + ')', true);
-        });
-      }, function (e) {
-        exampleBusy = '';
+      var n = exampleTargets(rowsNow()).length;
+      if (!n) { toast('예시 부스가 없습니다.', true); return; }
+      return UI.confirm({
+        title: fill ? '예시 현황을 채울까요?' : '예시 현황을 비울까요?',
+        message: (fill
+          ? '현재 공개된 예시 부스 ' + n + '곳에 다양한 대기 상태를 입력합니다.'
+          : '현재 공개된 예시 부스 ' + n + '곳의 대기 상태를 모두 미입력으로 되돌립니다.') +
+          '\n실제 부스에는 적용되지 않습니다.',
+        confirmLabel: fill ? '채우기' : '비우기'
+      }).then(function (ok) { if (ok) sendExamples(kind); });
+    }, function (e) {
+      exampleBusy = '';
+      paintExampleBtn();
+      console.warn('[booth-admin] 예시 현황 — 부스 목록을 읽지 못했습니다', e && (e.code || e.message));
+      toast(C.dataMessage(e), true);
+    });
+  }
+  function sendExamples(kind) {
+    var fill = kind === 'fill';
+    exampleBusy = kind;
+    exampleProg = '';
+    paintExampleBtn();
+    var done = [], failed = [];
+    // 실행 직전에 한 번 더 고릅니다(확인창을 보는 사이 다른 화면에서 '[예시]' 를 지웠을 수 있음).
+    loadMaster().then(function () {
+      var targets = exampleTargets(rowsNow());
+      var jobs = fill ? examplePlan(targets) : targets.map(function (r) { return { r: r, s: ['clear'] }; });
+      var next = 0;
+      function tick() {
+        exampleProg = (done.length + failed.length) + '/' + jobs.length;
         paintExampleBtn();
-        console.warn('[booth-admin] 예시 현황 — 부스 목록을 읽지 못했습니다', e && (e.code || e.message));
-        toast(C.dataMessage(e), true);
+      }
+      // 몇 개씩 나눠 보내되 부스마다 결과를 따로 셉니다.
+      function worker() {
+        if (next >= jobs.length) return Promise.resolve();
+        var j = jobs[next++];
+        return C.rpc('admin_set_booth_live', { p_booth_id: j.r.id, p_mode: j.s[0], p_wait_minutes: j.s[0] === 'open' ? j.s[1] : null })
+          .then(function () { done.push(j.r.code); }, function (e) {
+            failed.push(j.r.code);
+            console.warn('[booth-admin] 예시 현황 ' + (fill ? '채우기' : '비우기') + ' 실패', j.r.code, e && e.code);
+          })
+          .then(function () { tick(); return worker(); });
+      }
+      tick();
+      var pool = [];
+      for (var i = 0; i < Math.min(EXAMPLE_POOL, jobs.length); i++) pool.push(worker());
+      return Promise.all(pool);
+    }).then(function () {
+      exampleBusy = '';
+      exampleProg = '';
+      // 결과를 기다리지 않고 바로 다시 읽어 요약 · 카드를 새 값으로 그립니다.
+      return refreshMaster().then(function () {
+        if (!failed.length) {
+          toast(fill ? '예시 부스 ' + done.length + '곳에 현황을 채웠습니다.' : '예시 부스 ' + done.length + '곳의 현황을 비웠습니다.');
+          return;
+        }
+        toast('성공 ' + done.length + '곳 · 실패 ' + failed.length + '곳 (' + codeList(failed) + ')', true);
       });
+    }, function (e) {
+      exampleBusy = '';
+      exampleProg = '';
+      paintExampleBtn();
+      console.warn('[booth-admin] 예시 현황 — 부스 목록을 읽지 못했습니다', e && (e.code || e.message));
+      toast(C.dataMessage(e), true);
     });
   }
 
