@@ -102,7 +102,11 @@
 }
 .lv:last-child { border-bottom: 0; }
 .lv--free    { --c: var(--ok); }
-.lv--normal  { --c: var(--warn); }
+/* 보통은 관람객 화면과 같은 샛노랑(왼쪽 띠 · 점). 노랑은 흰 바탕 글자로 읽히지 않아 숫자 · '보통' 은 남색입니다.
+   주황(--warn)은 경고(확인 필요 · 미입력 · PIN)에만 남겨 한 색이 두 뜻을 갖지 않게 합니다. */
+.lv--normal  { --c: #F2E600; }
+.lv--normal .lv__num, .lv--normal .lv__cong { color: var(--ink); }
+.lv--normal .lv__dot { box-shadow: inset 0 0 0 1px rgba(22, 32, 60, .28); }
 .lv--busy    { --c: var(--danger); }
 .lv--pause, .lv--closed { --c: var(--off); }
 .lv--missing { --c: var(--line-3, #C9D1E0); }
@@ -144,11 +148,15 @@
 .lv__word { font-size: 14px; font-weight: 800; color: var(--ink-2); white-space: nowrap; }
 .lv__dash { display: none; color: var(--muted-2); font-size: 18px; font-weight: 700; }
 
+/* 관리(조작) — 상태색(초록 · 노랑 · 빨강 · 회색)과 섞이지 않게 보라 계열만 씁니다.
+   '수정' 은 흰 바탕 + 보라 테두리 · 글자, '입력' 은 연한 보라, '확인·수정' 은 진한 보라. 데스크톱은 아래에서 옅은 보라 칸으로 묶습니다. */
+.lvpage { --mg-rail: #F8F7FF; --mg-line: #E4DFFB; --mg-edge: #CFC7F7; }
 .lv__act { grid-area: act; display: flex; align-items: center; }
 .lv__act .btn { position: relative; z-index: 2; min-width: 64px; min-height: 44px; padding: 0 12px; }
-.lv__act .btn--ghost { color: var(--ink-2); }
+.lv__act .btn--ghost { color: var(--primary); border-color: var(--mg-edge); }
+.lv__act .btn--ghost:hover { background: var(--primary-t); }
 /* 미입력 — 확인 필요보다 한 단계 옅게(연한 보라 바탕 · 보라 글자) */
-.btn--soft { background: var(--primary-t); color: var(--primary); border-color: transparent; }
+.btn--soft { background: var(--primary-t); color: var(--primary); border-color: var(--mg-edge, transparent); }
 .btn--soft:hover { background: #E6E1FD; }
 /* 휴대폰: 줄의 왼쪽 전체를 덮는 투명 단추(자세히 펼치기). 수정 단추 · 펼친 칸은 그 위에 있습니다. */
 .lv__morebtn {
@@ -205,6 +213,7 @@
     grid-template-areas:
       "booth state wait ago flags act"
       "more  more  more more more  more";
+    grid-template-rows: 1fr auto;   /* 남는 높이는 첫 줄이 받습니다(관리 칸 띠가 줄 끝까지 닿게) */
     gap: 0 12px;
     min-height: 60px;
     padding: 8px 12px 8px 16px;
@@ -221,8 +230,15 @@
   .lv__word { display: none; }
   .lv__dash { display: inline; }
   .lv--missing .lv__cong { display: none; }   /* '운영상태' 칸이 '현황 미입력' 이라고 이미 말합니다 */
-  .lv__act { justify-content: flex-end; gap: 6px; }
+  /* 관리 칸: 줄 높이 전체를 덮는 옅은 보라 띠 + 왼쪽 가는 선. 줄 오른쪽 여백(12px)까지 채웁니다. */
+  .lv__act {
+    justify-content: flex-end; gap: 6px;
+    align-self: stretch; margin: -8px -12px -8px 0; padding: 0 12px;
+    background: var(--mg-rail); border-left: 1px solid var(--mg-line);
+  }
   .lv__act .btn { min-height: 36px; min-width: 76px; }
+  .lvhead > span:last-child { margin: -2px -13px 0 0; padding: 2px 13px 0 12px; background: var(--mg-rail);
+    border-left: 1px solid var(--mg-line); color: var(--primary); text-align: right; }
   .lv__morebtn {
     position: static; z-index: auto; height: 36px; width: 36px; border-radius: 8px;
     color: var(--ink-2); font-size: 18px; line-height: 1;

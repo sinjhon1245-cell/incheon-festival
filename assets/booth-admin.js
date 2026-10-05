@@ -5,13 +5,13 @@
    공개 · 기관 · 담당자 · QR · PIN)은 관리자 화면(admin.html)이 맡고, 이 화면은
    대기 시간 · 혼잡 · 마지막 입력 · 미입력 · 확인 필요 · 중단 · 마감을 봅니다.
    고칠 수 있는 것은 하나뿐입니다 — 관리자 긴급 수정(admin_set_booth_live, 기록에 'admin').
-   시연 전 '예시 현황 초기화' 도 같은 함수를 [예시] 부스마다 부를 뿐입니다(아래 resetExamples).
+   준비 기간 '예시 현황 채우기 · 비우기' 도 같은 함수를 [예시] 부스마다 부를 뿐입니다(아래 runExamples).
 
    보안: 관리자 화면과 같은 로그인 · 같은 문지기(staff_profiles.role = 'admin').
    이 파일에는 권한이 없습니다. 읽기는 관리자 RLS, 쓰기는 함수 안의 is_admin() 이 막습니다.
 
    읽는 것 (실제 모드)
-     · booth_live            15초마다(±20%, 화면이 가려지면 쉼) — 관람객 화면(20초)보다 조금 빠르게
+     · booth_live            15초마다(±20%, 화면이 가려지면 쉼) — 관람객 화면(60초)보다 빠르게
      · zones · booths · admin_booth_credentials()   60초마다 — 관리자가 부스를 고칠 수 있어
        관람객 화면(5분)보다 자주. QR · PIN 은 '상태' 만 받습니다(열쇠 · PIN · 해시 없음).
      Realtime 은 쓰지 않습니다(관람객 · 운영자 화면과 같은 까닭 — booth-core.js 머리말).
@@ -385,7 +385,8 @@
           '부스 정보 · QR · PIN 설정은 관리자 화면에서 합니다.</p></div>' +
           '<div class="page__actions">' +
             // 운영 준비용 예시 부스가 공개돼 있을 때만 보입니다(paintExampleBtn). 협의용 예시(?demo)에는 없습니다.
-            '<button class="btn btn--ghost btn--sm" type="button" id="lv-example" data-example-reset hidden>↻ 예시 현황 초기화</button>' +
+            '<button class="btn btn--ghost btn--sm" type="button" id="lv-example-fill" data-example="fill" hidden>예시 현황 채우기</button>' +
+            '<button class="btn btn--ghost btn--sm" type="button" id="lv-example-clear" data-example="clear" hidden>예시 현황 비우기</button>' +
             '<button class="btn btn--ghost btn--sm" type="button" data-refresh>새로 고침</button>' +
             '<a class="btn btn--ghost btn--sm" href="admin.html' + (DEMO ? '?demo=1' : '') + '#booths">부스 정보 관리</a>' +
           '</div></div>' +
@@ -550,78 +551,96 @@
       });
   }
 
-  /* ── 시연 전 예시 현황 초기화 ──────────────────────────────────────
-     운영 준비용 예시 부스(기관이 '[예시]' 로 시작)의 대기 값을 시연용 처음 값으로 다시 넣습니다.
-     30분 '확인 필요' · 자정 초기화 같은 실제 규칙은 그대로 두고, 시연 직전에 값을 새로 넣는 도구일 뿐입니다.
-     새 쓰기 함수 없이 부스마다 관리자 긴급 수정과 같은 admin_set_booth_live 를 부릅니다(미입력으로 둘 부스가
-     생기면 그 함수의 'clear' — '값 지우기' 단추와 같은 길). 모든 부스를 지우는 admin_reset_booth_live 는
-     실제 부스까지 지우므로 쓰지 않습니다.
+  /* ── 준비 기간 예시 현황: 채우기 · 비우기 ───────────────────────────
+     이미 예시로 판별되는 부스(기관이 '[예시]' 로 시작)의 지금 대기 값만 한 번에 넣거나 비웁니다.
+     부스를 예시로 만들거나 '[예시]' 를 붙이고 떼는 기능이 아닙니다 — 예시 여부는 DB 의 기관 이름이 정하고,
+     부스 정보 · 공개 여부 · QR · PIN · 세션 · 공통 PIN 은 건드리지 않습니다(booth_live 한 줄만).
+       · 채우기 — 아래 표의 값을 넣어 여유 3 · 보통 4 · 혼잡 3 · 잠시 중단 1 · 오늘 마감 1 이 한 화면에 보이게.
+       · 비우기 — 값을 지워 입력 전('정보 없음')으로. 다른 예시 값을 넣지 않습니다.
+         (화면 이름은 '비우기'. 코드 안의 kind 는 서버 함수의 모드 이름을 따라 'clear' 그대로입니다.)
+     30분 '확인 필요' · 자정 초기화 같은 실제 규칙은 그대로 두고, 값을 넣고 빼는 도구일 뿐입니다.
+     새 쓰기 함수 없이 부스마다 관리자 긴급 수정과 같은 admin_set_booth_live 를 부릅니다(비우기는 그 함수의
+     'clear' — '값 지우기' 단추와 같은 길). 모든 부스를 지우는 admin_reset_booth_live 는 실제 부스까지
+     지우므로 쓰지 않습니다.
      대상: 누르는 순간 서버에서 다시 읽은 부스 중 기관이 '[예시]' 로 시작하고(BoothCore.isSample), 공개 · 구역 공개 ·
-     번호가 있으며, 아래 표에 그 부스 번호가 있는 곳만. '[예시]' 를 지운 실제 부스는 같은 번호여도 건드리지 않고,
-     부스마다 UUID(r.id)로 보냅니다. 값은 대기 시간 단추(WAIT_CHOICES) · 중단 · 마감만 씁니다.
-     열자마자 여유(10분 이하) · 보통(25분 이하) · 혼잡 · 잠시 중단 · 오늘 마감이 한 화면에 고루 보이게,
-     12곳 모두 값을 채웁니다(미입력 없음). 혼잡도는 늘 서버가 대기 시간으로 정합니다. */
+     번호가 있는 곳만(채우기는 아래 표에 그 번호가 있는 곳만). '[예시]' 를 지운 실제 부스는 같은 번호여도
+     건드리지 않고, 부스마다 UUID(r.id)로 보냅니다. 값은 대기 시간 단추(WAIT_CHOICES) · 중단 · 마감만 씁니다.
+     혼잡도는 늘 서버가 대기 시간으로 정합니다(10분 이하 여유 · 25분 이하 보통 · 그 위 혼잡) — 아래 값은
+     그 규칙에 맞춰 고른 것이고, 여기서 혼잡도를 따로 정하지 않습니다.
+     관람객 · 운영자 화면에는 '예시' 라는 말이 나가지 않습니다(관람객 화면은 기관 이름 앞 '[예시]' 를 떼고 보여 줍니다). */
   var EXAMPLE_PRESET = {
-    'A-01': ['open', 5],  'A-02': ['open', 10], 'A-03': ['open', 15], 'A-04': ['open', 20],
-    'B-01': ['open', 5],  'B-02': ['open', 10], 'B-03': ['open', 20], 'B-04': ['open', 30],
-    'C-01': ['open', 5],  'C-02': ['open', 15], 'C-03': ['pause'],    'C-04': ['closed']
+    'A-01': ['open', 0],  'A-02': ['open', 15], 'A-03': ['open', 30], 'A-04': ['open', 5],
+    'B-01': ['open', 20], 'B-02': ['open', 45], 'B-03': ['open', 10], 'B-04': ['open', 15],
+    'C-01': ['open', 30], 'C-02': ['open', 20], 'C-03': ['pause'],    'C-04': ['closed']
   };
-  var exampleBusy = false;
+  var exampleBusy = '';   // '' | 'fill' | 'clear'
   function presetOf(r) {
     var p = Object.prototype.hasOwnProperty.call(EXAMPLE_PRESET, r.code) ? EXAMPLE_PRESET[r.code] : null;
     if (!p) return null;
     if (p[0] === 'open' && (BC.WAIT_CHOICES || []).indexOf(p[1]) < 0) return null;
     return p;
   }
-  function exampleTargets(rows) {
-    return rows.filter(function (r) { return r.shown && BC.isSample(r.b) && !!presetOf(r); });
+  function exampleTargets(rows, kind) {
+    return rows.filter(function (r) {
+      return r.shown && BC.isSample(r.b) && (kind === 'clear' || !!presetOf(r));
+    });
   }
   function paintExampleBtn(all) {
-    var b = $('#lv-example');
-    if (!b) return;
-    b.hidden = DEMO || !exampleTargets(all || rowsNow()).length;
-    b.disabled = exampleBusy;
-    b.textContent = exampleBusy ? '초기화하는 중…' : '↻ 예시 현황 초기화';
+    var rows = all || rowsNow();
+    [['#lv-example-fill', 'fill', '예시 현황 채우기', '채우는 중…'],
+     ['#lv-example-clear', 'clear', '예시 현황 비우기', '비우는 중…']].forEach(function (d) {
+      var b = $(d[0]);
+      if (!b) return;
+      b.hidden = DEMO || !exampleTargets(rows, d[1]).length;
+      b.disabled = !!exampleBusy;
+      b.textContent = exampleBusy === d[1] ? d[3] : d[2];
+    });
   }
-  function resetExamples() {
+  function runExamples(kind) {
     if (DEMO || exampleBusy) return;
-    if (!exampleTargets(rowsNow()).length) { toast('초기화할 예시 부스가 없습니다.', true); return; }
+    var fill = kind === 'fill';
+    var n = exampleTargets(rowsNow(), kind).length;
+    if (!n) { toast('예시 부스가 없습니다.', true); return; }
     UI.confirm({
-      title: '예시 현황을 초기화할까요?',
-      message: '현재 공개된 [예시] 부스의 대기 상태를 초기값으로 다시 설정합니다.\n\n' +
-        '[예시] 표시가 없는 부스에는 적용되지 않습니다.',
-      confirmLabel: '초기화'
+      title: fill ? '예시 현황을 채울까요?' : '예시 현황을 비울까요?',
+      message: (fill
+        ? '현재 공개된 예시 부스 ' + n + '곳에 다양한 대기 상태를 입력합니다.'
+        : '현재 공개된 예시 부스 ' + n + '곳의 대기 상태를 모두 미입력으로 되돌립니다.') +
+        '\n실제 부스에는 적용되지 않습니다.',
+      confirmLabel: fill ? '채우기' : '비우기'
     }).then(function (ok) {
       if (!ok) return;
-      exampleBusy = true;
+      exampleBusy = kind;
       paintExampleBtn();
       var done = [], failed = [];
       // 누르는 순간의 부스 정보로 다시 고릅니다(그 사이 다른 화면에서 '[예시]' 를 지웠을 수 있음).
       loadMaster().then(function () {
-        var targets = exampleTargets(rowsNow());
+        var targets = exampleTargets(rowsNow(), kind);
         // 하나씩 차례로 보내 성공 · 실패를 부스마다 정확히 셉니다.
         return targets.reduce(function (p, r) {
           return p.then(function () {
-            var s = presetOf(r);
+            var s = fill ? presetOf(r) : ['clear'];
             return C.rpc('admin_set_booth_live', { p_booth_id: r.id, p_mode: s[0], p_wait_minutes: s[0] === 'open' ? s[1] : null })
               .then(function () { done.push(r.code); }, function (e) {
                 failed.push(r.code);
-                console.warn('[booth-admin] 예시 현황 초기화 실패', r.code, e && e.code);
+                console.warn('[booth-admin] 예시 현황 ' + (fill ? '채우기' : '비우기') + ' 실패', r.code, e && e.code);
               });
           });
         }, Promise.resolve());
       }).then(function () {
-        exampleBusy = false;
+        exampleBusy = '';
         // 결과를 기다리지 않고 바로 다시 읽어 요약 · 카드를 새 값으로 그립니다.
         return refreshMaster().then(function () {
-          if (!failed.length) { toast('예시 부스 ' + done.length + '곳의 현황을 초기화했어요.'); return; }
-          toast((done.length ? done.length + '곳 완료 · ' : '') + failed.length + '곳 실패 — ' +
-            failed.join(', ') + ' 현황을 변경하지 못했습니다.', true);
+          if (!failed.length) {
+            toast(fill ? '예시 부스 ' + done.length + '곳에 현황을 채웠습니다.' : '예시 부스 ' + done.length + '곳의 현황을 비웠습니다.');
+            return;
+          }
+          toast('성공 ' + done.length + '곳 · 실패 ' + failed.length + '곳 (' + failed.join(', ') + ')', true);
         });
       }, function (e) {
-        exampleBusy = false;
+        exampleBusy = '';
         paintExampleBtn();
-        console.warn('[booth-admin] 예시 현황 초기화 — 부스 목록을 읽지 못했습니다', e && (e.code || e.message));
+        console.warn('[booth-admin] 예시 현황 — 부스 목록을 읽지 못했습니다', e && (e.code || e.message));
         toast(C.dataMessage(e), true);
       });
     });
@@ -706,7 +725,8 @@
       if (t.closest('[data-open-sheet]')) { $('#sheet').hidden = false; document.body.style.overflow = 'hidden'; return; }
       if (t.closest('[data-close-sheet]')) { $('#sheet').hidden = true; document.body.style.overflow = ''; return; }
       if (t.closest('[data-refresh]')) { refreshMaster().then(function () { toast('새로 읽었습니다.'); }); return; }
-      if (t.closest('[data-example-reset]')) { resetExamples(); return; }
+      var ex = t.closest('[data-example]');
+      if (ex) { runExamples(ex.getAttribute('data-example')); return; }
       if (t.closest('#lv-hidden')) { ui.hidden = !ui.hidden; paintLive(); return; }
       if (t.closest('[data-reset]')) { ui.quick = 'all'; ui.zone = ''; ui.q = ''; var qi = $('#lv-q'); if (qi) qi.value = ''; paint(); return; }
       var qb = t.closest('[data-quick]');

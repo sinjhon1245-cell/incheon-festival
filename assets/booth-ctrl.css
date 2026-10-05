@@ -533,22 +533,6 @@ button {
 }
 .head__name.is-muted { color: var(--muted); font-weight: 600; }
 .head__org { margin-top: 2px; font-size: 13.5px; color: var(--muted); }
-.head__link {
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  min-height: 44px;
-  padding: 0 12px;
-  border: 1px solid var(--line-2);
-  border-radius: var(--r-btn);
-  background: var(--panel);
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--ink-2);
-  text-decoration: none;
-  white-space: nowrap;
-}
-.head__link:hover { border-color: var(--muted); }
 
 /* 예시임을 알리는 한 줄 — 위쪽 띠가 이미 말하므로 작게 */
 .note { margin-top: 6px; font-size: 12.5px; line-height: 1.5; color: var(--muted); }
