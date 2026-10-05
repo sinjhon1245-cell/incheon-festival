@@ -1440,13 +1440,24 @@
     // 포털 · 관람객 화면은 '공개' 부스만 봅니다. 등록만 하고 공개하지 않았으면 예시가 그대로 보입니다.
     var nShown = (cache.booths || []).filter(boothShown).length;
     var nUnassigned = (cache.booths || []).filter(function (b) { return !hasSlot(b); }).length;
+    // 운영 준비용 예시 부스('[예시]' 기관). 준비 기간에는 정상이라 경고가 아니라 부스 설명의 한 조각입니다.
+    var nSample = (cache.booths || []).filter(isSampleBooth).length;
+    // 부스 한 줄 설명: 공개 N곳(늘) · 미배정 · 예시(있을 때만) · 공개 0 이면 포털 예시 안내.
+    // 좁은 칸에서 '예시 / 4곳' 처럼 갈라지지 않게 조각 안의 띄어쓰기는 줄바꿈 없는 공백으로 둡니다.
+    var boothSub = ['공개 ' + nShown + '곳',
+      nUnassigned ? '미배정 ' + nUnassigned + '곳' : '',
+      nSample ? '예시 ' + nSample + '곳' : '',
+      nShown ? '' : '포털에 협의용 예시 표시 중'
+    ].filter(Boolean).map(function (s) { return s.replace(/ /g, '\u00a0'); }).join(' · ');
 
     /* 관리자 대시보드는 전시장이 아니라 출발점입니다.
          1. 지금 손봐야 할 것(요청 · 업무 · 배부 · 긴급 공지) — 숫자가 있으면 색이 붙습니다
          2. 등록 현황(일정 · 부스 · 공지 · 운영 인력) — 한 줄 요약
-         3. 자주 하는 일 단추
+         3. 자주 하는 일 단추(+ 부스 운영 현황 페이지로 가는 길)
        일정 · 부스가 0건이면 공개 포털이 협의용 예시를 보여 주는 중이라는
-       것을 함께 적어 둡니다 — 실제 등록을 시작하면 예시가 사라진다는 뜻입니다. */
+       것을 함께 적어 둡니다 — 실제 등록을 시작하면 예시가 사라진다는 뜻입니다.
+       부스가 있으면 그중 '[예시]' 부스 수(예시 N곳)를 따로 적습니다 — 등록된 부스가
+       실제 부스인지 운영 준비용 예시인지 첫 화면에서 알 수 있게. 0 이면 적지 않습니다. */
     var act = [
       { n: openReq.length, l: '미처리 운영 요청', go: 'operation_requests',
         sub: urgentReq ? '긴급 ' + urgentReq + '건 포함' : (openReq.length ? '확인이 필요합니다' : '모두 처리됨'),
@@ -1461,9 +1472,7 @@
     var reg = [
       { n: nSched, l: '일정', go: 'schedule_items', sub: nSched ? '' : '포털에 협의용 예시 표시 중' },
       { n: nBooth, l: '부스', go: 'booths',
-        sub: !nBooth ? '포털에 협의용 예시 표시 중'
-          : '공개 ' + nShown + '곳' + (nUnassigned ? ' · 미배정 ' + nUnassigned + '곳' : '') +
-            (nShown ? '' : ' · 포털에 협의용 예시 표시 중') },
+        sub: nBooth ? boothSub : '포털에 협의용 예시 표시 중' },
       { n: (cache.notices || []).length, l: '공지', go: 'notices' },
       { n: (cache.contacts || []).length, l: '운영 인력', go: 'contacts' }
     ];
@@ -1472,11 +1481,14 @@
       // 구역이 아직 없어도 부스는 미배정으로 먼저 등록할 수 있습니다.
       { l: '+ 부스 추가', go: 'booths', add: true },
       { l: '+ 공지 작성', go: 'notices', add: true },
-      { l: '운영 요청 확인', go: 'operation_requests' }
+      { l: '운영 요청 확인', go: 'operation_requests' },
+      // 행사 당일 콘솔은 따로 된 페이지 — 메뉴 끝 '행사 당일' 링크처럼 이 탭에서 엽니다.
+      // ↗ 는 위쪽 '포털 ↗' 처럼 '다른 페이지로' 라는 표시입니다(새 탭 아님).
+      { l: ENTITIES.booths.liveLink[1] + ' ↗', href: ENTITIES.booths.liveLink[0] + (DEMO ? '?demo=1' : '') }
     ];
     return '<div class="page"><div class="page__head"><div>' +
       '<h1 class="page__title">관리자</h1>' +
-      '<p class="page__desc">바꾼 내용은 관계자 포털에 바로 반영됩니다.</p></div></div>' +
+      '<p class="page__desc">저장한 내용은 관계자 포털과 관련 운영 화면에 반영됩니다.</p></div></div>' +
       '<section class="ovsec" aria-labelledby="ov-act"><h2 class="fgroup__t" id="ov-act">지금 확인할 일</h2>' +
       '<div class="statgrid statgrid--4">' + act.map(function (c) {
         return '<button class="adminstat' + (c.tone ? ' adminstat--' + c.tone : '') +
@@ -1493,6 +1505,7 @@
       }).join('') + '</div></section>' +
       '<section class="qbox"><h2 class="fgroup__t">빠른 관리</h2>' +
       '<div class="qrow">' + quick.map(function (q) {
+        if (q.href) return '<a class="btn btn--ghost" href="' + esc(q.href) + '">' + esc(q.l) + '</a>';
         return '<button class="btn ' + (q.add ? 'btn--primary' : 'btn--ghost') + '" type="button" ' +
           'data-go="' + q.go + '"' + (q.add ? ' data-goadd="1"' : '') + '>' + esc(q.l) + '</button>';
       }).join('') + '</div></section></div>';
