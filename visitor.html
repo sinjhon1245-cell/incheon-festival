@@ -82,6 +82,8 @@
           <button type="button" class="bar__cancel" id="search-cancel">취소</button>
         </form>
       </div>
+      <!-- 구역이 많을 때의 '구역 선택' 패널(renderPick). 붙박이 줄 바로 아래에 펼쳐집니다. -->
+      <div class="zpick" id="zone-panel" role="group" aria-label="구역 선택" hidden></div>
     </div>
 
     <div class="col">
@@ -225,7 +227,8 @@
       mapOpen: false,
       prevSig: null,    // 바뀐 줄을 찾으려고 기억해 둔 값
       changed: {},
-      keys: { hero: '', tabs: '', list: '', here: '', sheet: '', sum: '', band: '', strip: '' },
+      keys: { hero: '', tabs: '', list: '', here: '', sheet: '', sum: '', band: '', strip: '', pick: '' },
+      zpick: false,     // '구역 선택' 패널이 열려 있는가
       hereParam: null,
       hereGone: false,
       mode: 'normal',   // 서버가 스냅샷에 실어 보내는 받기 방식(normal · conserve · manual). 화면에 이름을 보이지 않습니다
@@ -820,7 +823,7 @@
       var tabs = $('tabs');
       var restore = focusKey(tabs);
       // 탭에는 짧은 이름(A 스쿨존)만 둡니다. 전체 이름은 목록의 구역 제목 · 탭의 title 에 있습니다.
-      // 구역이 ZONE_SELECT_MIN 곳 이상이면 탭을 늘어놓지 않고 [전체] · [고른 구역] · [구역 선택 ▾](기기 기본 고르기 창)으로 줄입니다.
+      // 구역이 ZONE_SELECT_MIN 곳 이상이면 탭을 늘어놓지 않고 [전체] · [고른 구역] · [구역 선택 ▾](아래 패널 — renderPick)으로 줄입니다.
       function tabHtml(z) {
         var on = S.ui.zone === z.key;
         var full = z.key ? z.label + ' · 부스 ' + z.n + '곳' : '전체 부스 ' + z.n + '곳';
@@ -832,14 +835,8 @@
       if (zs.length >= ZONE_SELECT_MIN) {
         var cur = zs.filter(function (z) { return z.key === S.ui.zone; })[0];
         tabs.innerHTML = tabHtml(all) + (cur ? tabHtml(cur) : '') +
-          '<label class="tab tab--sel"><span class="tab__t">구역 선택</span><span class="tab__caret" aria-hidden="true">▾</span>' +
-            '<select id="zone-sel" class="tab__select" aria-label="구역 선택">' +
-              '<option value="">전체 구역 · ' + S.booths.length + '곳</option>' +
-              zs.map(function (z) {
-                return '<option value="' + esc(z.key) + '"' + (z.key === S.ui.zone ? ' selected' : '') + '>' +
-                  esc(z.key + ' · ' + z.label + ' · ' + z.n + '곳') + '</option>';
-              }).join('') +
-            '</select></label>';
+          '<button type="button" class="tab tab--sel" id="zone-pick" data-act="zone-pick" aria-expanded="' + S.zpick + '" aria-controls="zone-panel">' +
+            '<span class="tab__t">구역 선택</span><span class="tab__caret" aria-hidden="true">▾</span></button>';
       } else {
         tabs.innerHTML = [all].concat(zs).map(tabHtml).join('');
       }
@@ -849,6 +846,73 @@
       // 남아 아무 탭도 골라지지 않은 것처럼 보입니다. 새로 만들 때만 눌린 탭을 보이게 합니다.
       // (탭 줄이 숨어 있으면 폭이 0 이라 잴 수 없으니, 다시 보일 때 위에서 맞춥니다.)
       if (!searchMode) revealTab();
+    }
+
+    /* '구역 선택' 패널 — 구역이 ZONE_SELECT_MIN 곳 이상일 때. 줄마다 구역 글자 · 이름 · 부스 수(구역별 현황과 같은 순서),
+       고른 줄은 옅은 보라 바탕 + 왼쪽 보라 선 + 체크(aria-pressed). 상태색(초록 · 노랑 · 빨강)은 쓰지 않습니다.
+       줄은 구역 탭과 같은 data-zone 단추라 고르는 동작은 탭과 같습니다(bind()). */
+    var CHECK_SVG = '<svg class="zpick__chk" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="square" aria-hidden="true" focusable="false"><path d="M5 12.5 10 17.5 19 7.5" /></svg>';
+    function pickRowHtml(key, keyHtml, name, n) {
+      var on = S.ui.zone === key;
+      return '<button type="button" class="zpick__row" data-zone="' + esc(key) + '" aria-pressed="' + on + '">' +
+        '<span class="zpick__key">' + keyHtml + '</span><span class="zpick__name">' + esc(name) + '</span>' +
+        '<span class="zpick__n">' + n + '곳</span>' + CHECK_SVG + '</button>';
+    }
+    function renderPick() {
+      var panel = $('zone-panel');
+      var zs = zoneList();
+      var can = !$('bar').hidden && !$('bar-tabs').hidden && zs.length >= ZONE_SELECT_MIN;
+      if (!can) S.zpick = false;
+      var btn = $('zone-pick');
+      if (btn) btn.setAttribute('aria-expanded', S.zpick ? 'true' : 'false');
+      if (!S.zpick) {
+        if (!panel.hidden) { panel.hidden = true; panel.innerHTML = ''; S.keys.pick = ''; }
+        return;
+      }
+      var html = '<div class="col"><div class="zpick__box">' +
+        pickRowHtml('', '', '전체 구역', S.booths.length) +
+        zs.map(function (z) {
+          var shown = zoneKeyShown(z);
+          return pickRowHtml(z.key, shown ? esc(z.key) : '', z.label, z.n);
+        }).join('') + '</div></div>';
+      if (S.keys.pick !== html) {
+        var restore = focusKey(panel);
+        panel.innerHTML = html;
+        S.keys.pick = html;
+        restoreFocus(panel, restore);
+      }
+      panel.hidden = false;
+    }
+    // 패널 높이: 붙박이 줄 아래 남은 화면만큼(넘치면 패널 안에서 넘김). 남은 자리가 좁으면 먼저
+    // 붙박이 줄이 맨 위에 붙도록 페이지를 올립니다 — 패널이 화면 밖으로 내려가 페이지를 밀지 않게.
+    function fitPick() {
+      var box = $('zone-panel').querySelector('.zpick__box');
+      if (!box) return;
+      var room = window.innerHeight - $('bar').getBoundingClientRect().bottom - 12;
+      box.style.maxHeight = Math.max(200, Math.min(640, room)) + 'px';
+    }
+    function openPick() {
+      var bar = $('bar'), r = bar.getBoundingClientRect();
+      if (window.innerHeight - r.bottom < 360) {
+        var stick = parseFloat(window.getComputedStyle(bar).top) || 0;
+        if (r.top > stick + 1) window.scrollTo({ top: window.pageYOffset + r.top - stick, behavior: 'auto' });
+      }
+      S.zpick = true;
+      renderPick();
+      fitPick();
+      var box = $('zone-panel').querySelector('.zpick__box');
+      var on = box && (box.querySelector('[aria-pressed="true"]') || box.querySelector('.zpick__row'));
+      if (on) {
+        // 고른 줄이 패널 아래쪽이면 보이게 하고, 그 줄에 초점을 둡니다(화살표로 위아래 이동).
+        box.scrollTop = Math.max(0, on.offsetTop - box.clientHeight / 2 + on.offsetHeight / 2);
+        try { on.focus({ preventScroll: true }); } catch (e) { on.focus(); }
+      }
+    }
+    function closePick(refocus) {
+      if (!S.zpick) return;
+      S.zpick = false;
+      renderPick();
+      if (refocus) { var b = $('zone-pick'); if (b) b.focus(); }
     }
 
     // 구역 탭의 짧은 이름. 관리자가 적은 구역 이름은 길 수 있어('피지컬 AI · 로봇 메이커존') 탭에는
@@ -1264,6 +1328,7 @@
       renderHere();
       renderHero(c);
       renderBar();
+      renderPick();
       renderControls(items);
       renderList(items, force);
       renderSheet(items);
@@ -1439,15 +1504,12 @@
     }
 
     function bind() {
-      // 구역이 많을 때의 '구역 선택' 고르기 창(renderBar). 탭을 누른 것과 같게 움직입니다.
-      document.addEventListener('change', function (e) {
-        if (!e.target || e.target.id !== 'zone-sel') return;
-        S.ui.zone = e.target.value;
-        S.ui.count = '';
-        render(false);
-        revealTab();
-        showResults(true);
-      });
+      // '구역 선택' 패널 밖을 누르면 닫습니다(패널을 여는 단추는 아래 click 에서 열고 닫음).
+      document.addEventListener('click', function (e) {
+        if (!S.zpick) return;
+        if (e.target.closest && (e.target.closest('#zone-panel') || e.target.closest('#zone-pick'))) return;
+        closePick(false);
+      }, true);
       document.addEventListener('click', function (e) {
         var t = e.target.closest('button, [data-act]');
         if (!t) return;
@@ -1472,6 +1534,8 @@
           return;
         }
         if (t.hasAttribute('data-zone')) {
+          var fromPick = !!t.closest('#zone-panel');
+          if (fromPick) S.zpick = false;
           S.ui.zone = t.getAttribute('data-zone');
           // 여유 · 보통 같은 고름은 전체 구역의 숫자입니다. 구역과 겹쳐 걸면 눌린 '여유 4' 옆에
           // 3곳이 보여 숫자가 어긋나니, 위의 숫자 단추가 구역을 풀듯 구역 탭은 숫자 고름을 풉니다.
@@ -1479,6 +1543,11 @@
           render(false);
           revealTab();
           showResults(true);
+          if (fromPick) {
+            // 패널의 줄은 사라졌으니 초점을 고른 탭으로(전체를 골랐으면 '전체' 탭).
+            var pressed = $('tabs').querySelector('[aria-pressed="true"]');
+            if (pressed) { try { pressed.focus({ preventScroll: true }); } catch (err) { pressed.focus(); } }
+          }
           return;
         }
         if (t.hasAttribute('data-zone-go')) {
@@ -1552,7 +1621,10 @@
             t.setAttribute('aria-expanded', S.mapOpen ? 'true' : 'false');
             t.innerHTML = '<i class="sq" aria-hidden="true"></i>' + (S.mapOpen ? '실제 배치도 닫기' : '실제 배치도 보기');
             break;
-          case 'search-open': openSearch(); break;
+          case 'zone-pick':
+            if (S.zpick) closePick(false); else openPick();
+            break;
+          case 'search-open': closePick(false); openSearch(); break;
           case 'search-cancel':
             if (S.multi) closeSearch(true);
             else { S.ui.q = ''; $('q').value = ''; render(false); $('q').focus(); }
@@ -1594,9 +1666,21 @@
       });
       $('tabs').addEventListener('scroll', tabsFade, { passive: true });
       window.addEventListener('resize', tabsFade);
+      window.addEventListener('resize', function () { if (S.zpick) fitPick(); });
 
       document.addEventListener('keydown', function (e) {
+        if (S.zpick && /^(ArrowDown|ArrowUp|Home|End)$/.test(e.key) && document.activeElement &&
+            document.activeElement.closest && document.activeElement.closest('#zone-panel')) {
+          var rows = Array.prototype.slice.call($('zone-panel').querySelectorAll('.zpick__row'));
+          var i = rows.indexOf(document.activeElement);
+          var j = e.key === 'Home' ? 0 : e.key === 'End' ? rows.length - 1 :
+            Math.max(0, Math.min(rows.length - 1, i + (e.key === 'ArrowDown' ? 1 : -1)));
+          e.preventDefault();
+          rows[j].focus();
+          return;
+        }
         if (e.key !== 'Escape' && e.key !== 'Esc') return;
+        if (S.zpick) { closePick(true); return; }
         if (!$('sheet').hidden) { closeSheet(true); return; }
         if (S.ui.search && document.activeElement === $('q')) closeSearch(true);
       });
