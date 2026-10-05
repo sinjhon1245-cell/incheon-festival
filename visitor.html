@@ -1037,18 +1037,22 @@
 
     function moreHtml(b) {
       var age = ageLine(b);
-      var meta = [orgText(b), b.zone_name].filter(Boolean).join(' · ');
+      // 운영 학교는 접힌 줄에 이미 보이므로 펼친 내용에는 구역만 둡니다.
+      var meta = b.zone_name || '';
       return (meta ? '<p class="more__meta">' + esc(meta) + '</p>' : '') +
         (b.program ? '<p class="more__prog">' + esc(b.program) + '</p>' : '') +
         (age ? '<p class="more__age">' + esc(age) + '</p>' : '');
     }
 
+    // 줄: 번호 | 부스 이름 + 운영 학교(한 줄, 넘치면 …) | 대기 분 + 상태 칩.
+    // 학교 이름은 '운영기관:' 같은 꼬리표 없이 이름만(예시 부스의 내부 표시는 orgText 가 뗍니다).
     function rowHtml(b, grouped) {
-      var open = !!S.open[b.id], did = domId(b.id);
+      var open = !!S.open[b.id], did = domId(b.id), org = orgText(b);
       return '<li class="' + rowCls(b) + '" data-id="' + esc(b.id) + '">' +
         '<button type="button" class="row__main" aria-expanded="' + open + '" aria-controls="more-' + did + '">' +
           '<span class="row__code">' + esc(codeLabel(b)) + '</span>' +
-          '<span class="row__name">' + esc(b.name || '이름 미정') + '</span>' +
+          '<span class="row__body"><span class="row__name">' + esc(b.name || '이름 미정') + '</span>' +
+            (org ? '<span class="row__org">' + esc(org) + '</span>' : '') + '</span>' +
           '<span class="row__right">' + rightHtml(b) + '</span>' +
         '</button>' +
         '<div class="row__more" id="more-' + did + '"' + (open ? '' : ' hidden') + '>' + moreHtml(b) + '</div>' +
@@ -1201,12 +1205,12 @@
         }
         return;
       }
-      // patch() 는 상태 칸만 고칩니다. 그래서 이름 · 번호 · 구역 이름이 바뀌면(5분마다 전부
+      // patch() 는 상태 칸만 고칩니다. 그래서 이름 · 학교 · 번호 · 구역 이름이 바뀌면(5분마다 전부
       // 다시 받을 때 관리자가 고친 값) 줄을 새로 만들어야 합니다. 펼침(S.open)과 초점은
       // 새로 만들어도 이어집니다. 한눈에 타일은 code 대신 no 를 보여 주니 no 도 넣습니다.
       var key = [view, grouped ? 'g' : 'f', liveOn() ? 1 : 0, safeMapUrl(S.settings.booth_map_url),
         zoneList().map(function (z) { return z.key + ':' + z.label; }).join(','),
-        items.map(function (b) { return [b.id, b.no, b.code, b.name].join(':'); }).join(',')].join('|');
+        items.map(function (b) { return [b.id, b.no, b.code, b.name, orgText(b)].join(':'); }).join(',')].join('|');
 
       if (!force && key === S.keys.list) {
         patch(box, items, view);
