@@ -47,7 +47,8 @@
   var SORTS = [['ops', '운영 우선'], ['code', '부스번호'], ['wait', '대기시간 높은 순'], ['oldest', '최근 입력 오래된 순']];
   /* 맨 위 요약 = 걸러 보기. 행사 당일 '손이 가야 하는 부스' 중심으로만 둡니다(운영 중 수는 결과 줄과
      구역 현황이 말합니다). 빨강 = 혼잡 · 확인 필요, 주황 = 미입력(주의), 회색 = 중단 · 마감.
-     QR 문제 · PIN 확인은 해당 부스가 있을 때만 붙습니다(summaryHtml). */
+     QR 준비 필요 · PIN 확인은 해당 부스가 있을 때만 붙습니다(summaryHtml).
+     QR 준비 필요 = 공개 부스인데 쓸 수 있는 QR(미발급 · 꺼짐)도 PIN 도 없음 — 장애가 아니라 '발급할 일' 이라 주황. */
   var QUICK = [
     ['all', '전체'], ['busy', '혼잡', 'danger'], ['stale', '확인 필요', 'danger'],
     ['missing', '미입력', 'warn'], ['pause', '일시 중단'], ['closed', '운영 종료']
@@ -193,8 +194,11 @@
         return (ta - tb) || byCode(a, b);
       };
     }
+    // 같은 순위 안에서는 운영 중(긴 대기부터) → 그 밖(부스번호순). 운영 중 · 잠시 중단이 함께 있는 '확인 필요' 묶음에서도
+    // 순서가 늘 같도록(대기 비교와 번호 비교가 엇갈리지 않게) 운영 중이 아니면 대기를 -1 로 셉니다.
     return function (a, b) {
-      return (prio(a) - prio(b)) || (a.state === 'open' && b.state === 'open' ? b.wait - a.wait : 0) || byCode(a, b);
+      var wa = a.state === 'open' ? a.wait : -1, wb = b.state === 'open' ? b.wait : -1;
+      return (prio(a) - prio(b)) || (wb - wa) || byCode(a, b);
     };
   }
 
@@ -220,15 +224,15 @@
     // 중단 · 마감: 휴대폰은 이 칸에 낱말을, 데스크톱은 '운영상태' 칸이 말하므로 여기는 — 만
     return '<span class="lv__val"><span class="lv__word">' + esc(stateText(r)) + '</span><span class="lv__dash" aria-hidden="true">—</span></span>';
   }
-  // 줄에 띄울 '손이 가야 할 표시' — 정상은 쓰지 않습니다. 빨강: 확인 필요 · QR 문제 · PIN 실패 많음,
-  // 주황: QR 미발급(PIN 은 있음), 회색: PIN 미발급 · PIN 꺼짐(QR 이 기본 길이라 약하게).
+  // 줄에 띄울 '손이 가야 할 표시' — 정상은 쓰지 않습니다. 빨강: QR 꺼짐 · PIN 실패 많음,
+  // 주황: QR 미발급(발급하면 되는 준비 일), 회색: PIN 미발급 · PIN 꺼짐(QR 이 기본 길이라 약하게).
   function flag(text, kind) { return '<span class="flag flag--' + kind + '">' + esc(text) + '</span>'; }
   function credFlags(r) {
     var c = r.cred;
     if (!c) return '';
     var out = '';
     if (c.qr_state === 'off') out += flag('QR 꺼짐', 'bad');
-    else if (c.qr_state !== 'on') out += flag('QR 미발급', r.qrIssue ? 'bad' : 'warn');
+    else if (c.qr_state !== 'on') out += flag('QR 미발급', 'warn');
     if (c.pin_state === 'off') out += flag('PIN 꺼짐', 'off');
     else if (c.pin_state !== 'on') out += flag('PIN 미발급', 'off');
     if (r.pinIssue) out += flag('PIN 실패 많음', 'bad');
@@ -331,7 +335,7 @@
     });
     var qr = set.filter(function (r) { return r.qrIssue; }).length;
     var pin = set.filter(function (r) { return r.pinIssue; }).length;
-    if (qr || ui.quick === 'qr') cards.push(['qr', 'QR 문제', qr, 'danger']);
+    if (qr || ui.quick === 'qr') cards.push(['qr', 'QR 준비 필요', qr, 'warn']);
     if (pin || ui.quick === 'pin') cards.push(['pin', 'PIN 확인', pin, 'danger']);
     return cards.map(function (c) {
       var on = ui.quick === c[0];
@@ -400,7 +404,9 @@
               '<div class="search"><label class="sr-only" for="lv-q">검색</label>' +
                 '<input class="input" id="lv-q" type="search" placeholder="' + esc(searchPh()) + '" value="' + esc(ui.q) + '" /></div>' +
               '<label class="listsel"><span class="sr-only">구역</span><select class="select select--sm" id="lv-zone"></select></label>' +
-              '<label class="listsel"><span class="sr-only">정렬</span><select class="select select--sm" id="lv-sort">' +
+              // '운영 우선' 의 순서는 prio() — 고르기 칸에 마우스를 올리면 보입니다.
+              '<label class="listsel"><span class="sr-only">정렬</span><select class="select select--sm" id="lv-sort" ' +
+                'title="운영 우선: 확인 필요 → 미입력 → 혼잡(긴 대기부터) → 잠시 중단 → 운영 중(긴 대기부터) → 오늘 마감">' +
                 SORTS.map(function (s) { return '<option value="' + s[0] + '"' + (ui.sort === s[0] ? ' selected' : '') + '>' + esc(s[1]) + '</option>'; }).join('') +
               '</select></label>' +
             '</div>' +
@@ -433,7 +439,7 @@
     sel.classList.toggle('is-set', !!ui.zone);
     // 붙박이 줄의 '지금 걸러 보는 것' — 위의 요약 카드가 화면 밖으로 지나가도 무엇을 보고 있는지 알 수 있게
     var act = $('#lv-active');
-    var q = QUICK.concat([['qr', 'QR 문제'], ['pin', 'PIN 확인']]).filter(function (o) { return o[0] === ui.quick; })[0];
+    var q = QUICK.concat([['qr', 'QR 준비 필요'], ['pin', 'PIN 확인']]).filter(function (o) { return o[0] === ui.quick; })[0];
     if (ui.quick !== 'all' && q) {
       act.hidden = false;
       act.innerHTML = '<span class="lvactive__t"><b>' + esc(q[1]) + '</b>만 보는 중 · ' + rows.length + '곳</span>' +

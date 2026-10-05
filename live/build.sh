@@ -269,6 +269,9 @@ cp ../assets/booth-core.js ../assets/mock-data.js ../assets/visitor.css ../asset
 mkdir -p dist/example
 cp example/index.html example/example.css dist/example/
 
+# 공유 미리보기 그림(관람객 화면의 og:image). 원본 live/og-image.html 은 올리지 않습니다.
+cp og-image.png dist/og-image.png
+
 # Live 사이트용 설정 파일. 운영 포털 설정에서 두 화면이 쓰는 값만 옮깁니다.
 # visitorSiteUrl 은 운영자 화면의 '관람객 화면' 링크입니다. 관람객 화면이
 # 이 사이트의 첫 화면(index.html)이라 원본 값과 관계없이 './' 로 둡니다.
@@ -290,7 +293,12 @@ cp example/index.html example/example.css dist/example/
   printf '};\n'
 } > dist/assets/config.js
 
-printf 'User-agent: *\nDisallow: /\n' > dist/robots.txt
+# 검색 엔진은 막고(아래 X-Robots-Tag 와 같은 뜻), 링크를 붙였을 때 미리보기를 만드는 봇만
+# 읽게 합니다(카카오톡 · 페이스북 계열 · X/트위터 · 슬랙). 미리보기 봇이 막히면 공유한 주소가
+# 제목 · 설명 · 그림 없이 보입니다.
+printf '%s\n' \
+  'User-agent: kakaotalk-scrap' 'User-agent: facebookexternalhit' 'User-agent: Twitterbot' 'User-agent: Slackbot-LinkExpanding' \
+  'Allow: /' '' 'User-agent: *' 'Disallow: /' > dist/robots.txt
 
 # 정적 파일 이름에 내용 지문을 붙입니다(assets/visitor.css → assets/visitor.1234567890.css).
 # 두 화면(HTML)은 열 때마다 새로 확인하고(no-cache), 지문이 붙은 파일은 브라우저가 1년 동안 다시

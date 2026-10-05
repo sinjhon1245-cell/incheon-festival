@@ -3,8 +3,22 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>부스 대기 현황</title>
-  <meta name="description" content="부스별 대기 시간과 지금 바로 체험할 수 있는 부스를 보여 줍니다." />
+  <title>부스 대기 현황 | 2026 인천 AI미래채움 교육페스티벌</title>
+  <meta name="description" content="지금 바로 체험할 수 있는 부스와 대기시간을 확인하세요." />
+  <!-- 공유 미리보기(카카오톡 · 문자 · 메신저). 미리보기 봇은 스크립트를 돌리지 않으므로 여기 적은 글이 그대로 보입니다.
+       주소 · 그림은 공식 관람객 주소로 고정합니다(그림 원본: live/og-image.html → live/og-image.png).
+       미리보기는 앱마다 한동안 기억하므로, 바꾼 뒤 예전 모습이 보이면 그 앱의 캐시 문제입니다(카카오: 공유 디버거에서 초기화). -->
+  <meta property="og:type" content="website" />
+  <meta property="og:locale" content="ko_KR" />
+  <meta property="og:site_name" content="2026 인천 AI미래채움 교육페스티벌" />
+  <meta property="og:title" content="부스 대기 현황 | 2026 인천 AI미래채움 교육페스티벌" />
+  <meta property="og:description" content="지금 바로 체험할 수 있는 부스와 대기시간을 확인하세요." />
+  <meta property="og:url" content="https://incheon-live.vercel.app/" />
+  <meta property="og:image" content="https://incheon-live.vercel.app/og-image.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="2026 인천 AI미래채움 교육페스티벌 부스 대기 현황" />
+  <meta name="twitter:card" content="summary_large_image" />
   <meta name="theme-color" content="#5B45E0" />
   <meta name="color-scheme" content="light" />
   <meta name="format-detection" content="telephone=no" />
@@ -580,7 +594,7 @@
       $('sync').className = 'sync' + (bad ? ' is-lag' : '');
       $('sync-text').textContent = text;
       $('refresh').hidden = !manualBtn;
-      if (s.event_title) document.title = '부스 대기 현황 · ' + s.event_title;
+      if (s.event_title) document.title = '부스 대기 현황 | ' + s.event_title;
     }
 
     function renderStrip() {
