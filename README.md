@@ -1075,7 +1075,7 @@ GitHub Pages 에는 `netlify.toml` 의 헤더 · 다시쓰기가 붙지 않습�
 | `/*` 보안 헤더 다섯 | `/(.*)` 에 넷 + `Referrer-Policy` 는 운영자 화면 두 주소를 뺀 나머지에 | 같은 헤더를 두 규칙이 겹쳐 주지 않도록 나눴습니다. 결과는 같습니다 |
 | `/assets/*` · `/index.html` no-cache | 같은 둘 + `/` · `/visitor.html` | 관람객 QR 이 여는 `/?b=…` 와 `/visitor.html` 도 같은 캐시 헤더를 받게 했습니다(Vercel 헤더는 다시쓰기 전 주소로 붙음) |
 | `/booth-ctrl.html` · `/booth-ctrl` no-referrer · no-cache | 같음 | 없음 |
-| `ignore` (Netlify 변수 `CACHED_COMMIT_REF`) | `ignoreCommand` (Vercel 변수 `VERCEL_GIT_PREVIOUS_SHA`) | Vercel 은 256자 제한이 있어 `assets/` 의 파일 다섯 대신 `assets/` 폴더 전체와 비교합니다. 포털 스크립트만 바뀐 push 에도 한 번 더 빌드할 뿐, 빠뜨리는 쪽으로 틀리지는 않습니다 |
+| `ignore` (Netlify 변수 `CACHED_COMMIT_REF`) | `ignoreCommand` (Vercel 변수 `VERCEL_GIT_PREVIOUS_SHA`) | Vercel 은 256자 제한이 있어 `assets/` 의 파일 다섯 대신 `assets/` 폴더 전체와 비교합니다. 포털 스크립트만 바뀐 push 에도 한 번 더 빌드할 뿐, 빠뜨리는 쪽으로 틀리지는 않습니다. 마지막 성공 배포의 SHA 가 Vercel 의 얕은 clone 에 없으면(커밋이 많이 쌓인 뒤 push) 비교하지 않고 빌드합니다(`git cat-file -e` — 예전에는 여기서 exit 128 로 배포가 실패했습니다) |
 
 부스 Live 사이트는 `live/build.sh` 가 배포 때마다 `assets/config.js` 에서 필요한 값
 (연결 값 넷 · `boothHelpLine`)만 뽑아 자기 설정 파일을 만듭니다. 그래서 그 값이 읽을
