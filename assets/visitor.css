@@ -515,6 +515,7 @@ html.is-demo .row { scroll-margin-top: calc(56px + var(--demo-h) + env(safe-area
   text-align: left;
 }
 .count[aria-pressed="true"] { border-top-color: var(--ink); }
+.count[aria-pressed="true"] .count__w { font-weight: 800; }   /* 고른 상태: 윗선 남색 + 낱말 굵게 */
 .count__w {
   display: flex;
   align-items: center;
@@ -792,6 +793,10 @@ html.is-demo .row { scroll-margin-top: calc(56px + var(--demo-h) + env(safe-area
 }
 .result b { color: var(--ink); font-weight: 700; }
 .result .link { margin-left: 4px; font-size: 13px; }
+/* 상태로 거르는 중: 왼쪽 '여유 부스만 보는 중 N곳', 오른쪽 끝 '× 필터 해제'(그 고름만 풂) */
+.result__t { min-width: 0; }
+.result .result__clear { margin-left: auto; padding-left: 12px; white-space: nowrap; }
+.result__x { display: inline-block; margin-right: 3px; font-size: 15px; line-height: 1; text-decoration: none; }
 
 /* ── 8. 목록 ───────────────────────────────────────────────── */
 #list { scroll-margin-top: 56px; }

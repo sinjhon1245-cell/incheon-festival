@@ -223,6 +223,7 @@
       visibleSince: Date.now(),
       ui: { zone: '', count: '', sort: 'code', view: 'list', q: '', search: false },
       open: {},         // 펼친 줄
+      lastRow: null,    // 마지막으로 펼친 줄(뒤로 가기 기록의 '연 상세')
       sel: null,        // 한눈에 보기에서 고른 타일
       mapOpen: false,
       prevSig: null,    // 바뀐 줄을 찾으려고 기억해 둔 값
@@ -966,8 +967,13 @@
       if (!show) return;
       var html;
       if (S.ui.count && liveOn()) {
-        html = esc(COUNT_WORD[S.ui.count]) + ' 부스만 보는 중 ·' +
-          '<button type="button" class="link" data-act="clear-count">전체 보기</button>';
+        // 위의 숫자는 행사 전체 수라, 구역 안에서 거르는 중이면 구역과 실제 곳 수를 함께 알립니다.
+        // '× 필터 해제' 는 이 상태 고름만 풉니다(구역 · 보기 · 정렬은 그대로).
+        var zz = (!searchOpen() && S.ui.zone) ? zoneList().filter(function (z) { return z.key === S.ui.zone; })[0] : null;
+        var word = COUNT_WORD[S.ui.count];
+        html = '<span class="result__t">' + (zz ? esc(shortZone(zz)) + ' · ' : '') + esc(word) + ' 부스만 보는 중 <b>' + items.length + '곳</b></span>' +
+          '<button type="button" class="link result__clear" data-act="clear-count" aria-label="' + esc(word) + ' 필터 해제">' +
+            '<span class="result__x" aria-hidden="true">×</span>필터 해제</button>';
       } else if (searching()) {
         html = '검색 결과 <b>' + items.length + '곳</b>';
       } else {
@@ -1437,6 +1443,127 @@
       refresh();
     }
 
+    /* ── 뒤로 가기(휴대폰 · 브라우저) ─────────────────────────────
+       화면 안에서 고른 것(구역 · 상태 고름 · 연 상세 · 지금 계신 부스 안내)이 있으면 뒤로 가기가 그것을 한 단계씩
+       되돌리고, 기본 화면까지 오면 그다음부터는 브라우저의 원래 동작(이전 페이지 · 인앱 브라우저 닫기)입니다.
+         · 기록 한 칸에는 그 네 가지만 담습니다(nav). 단계(navDepth)가 깊어질 때만 새 칸을 쌓고(pushState),
+           같은 단계 안의 바꿈(구역 A → B, 상세 C-01 → C-02)은 지금 칸을 고쳐 씁니다(replaceState).
+         · 화면에서 직접 한 단계 위로 나가면('× 필터 해제' · 같은 숫자 다시 · ✕ · 줄 접기 · Esc · '전체' 탭) 바로 아래 칸이
+           이 페이지가 쌓은 같은 상태일 때만 history.back() 으로 그 칸을 거둡니다. 켰다 껐다 해도 칸이 쌓이지 않고,
+           이 페이지가 만들지 않은 칸으로는 가지 않습니다. 그 밖에는 지금 칸만 고칩니다.
+         · 검색어 · 정렬 · 목록/한눈에는 기록에 넣지 않습니다(글자마다 · 누를 때마다 칸이 생기지 않게).
+         · 뒤로 가기는 이미 받은 값으로 다시 그리기만 합니다(서버에 묻지 않음). 스크롤은 브라우저가 옮기지 않게 하고
+           (scrollRestoration manual) 구역 · 상태가 바뀌었을 때만 결과 줄이 보이게 맞춥니다 — 상세를 닫으면 보던 자리 그대로.
+         · ?b=(부스 앞 안내 QR)로 들어오면 기본 칸(주소에서 b 를 뗀 것) 위에 안내 칸을 하나 쌓습니다. 첫 뒤로 가기는
+           안내를 닫고 목록으로, 그다음부터 브라우저 동작입니다. 지금 칸의 주소에는 ?b= 가 그대로라 공유 · 새로 고침도 같습니다. */
+    var NAV_V = 1;
+    var NAV = { list: [], i: 0, ready: false, base: '', here: '' };
+    function openRow() {
+      var ids = Object.keys(S.open);
+      if (!ids.length) return null;
+      return { id: S.open[S.lastRow] ? S.lastRow : ids[ids.length - 1], k: 'row' };
+    }
+    function navNow() {
+      var d = S.sel ? { id: S.sel, k: 'tile' } : openRow();
+      return { v: NAV_V, n: NAV.i, zone: S.ui.zone || '', count: S.ui.count || '', d: d ? d.id : '', dk: d ? d.k : '', here: !!(S.hereParam && !S.hereGone) };
+    }
+    function navDepth(st) { return (st.zone ? 1 : 0) + (st.count ? 1 : 0) + (st.d ? 1 : 0) + (st.here ? 1 : 0); }
+    function navSame(a, b) { return !!a && !!b && a.zone === b.zone && a.count === b.count && a.d === b.d && a.here === b.here; }
+    function navUrl(st) { return st.here ? NAV.here : NAV.base; }
+    // 화면의 고름을 바꾼 뒤 부릅니다. up: 사용자가 직접 한 단계 위로 나간 경우(아래 칸을 거둘 수 있음).
+    function navCommit(up) {
+      if (!NAV.ready) return;
+      var cur = NAV.list[NAV.i], next = navNow();
+      if (navSame(cur, next)) return;
+      try {
+        var dn = navDepth(next), dc = cur ? navDepth(cur) : 0;
+        if (dn > dc) {
+          NAV.i += 1;
+          next.n = NAV.i;
+          NAV.list.length = NAV.i;   // 앞으로 가기 칸은 버립니다(브라우저와 같게)
+          NAV.list.push(next);
+          history.pushState(next, '', navUrl(next));
+        } else if (up && dn < dc && NAV.i > 0 && navSame(NAV.list[NAV.i - 1], next)) {
+          NAV.i -= 1;                // popstate 가 오기 전에 다음 고름이 와도 자리가 맞게
+          history.back();
+        } else {
+          next.n = NAV.i;
+          NAV.list[NAV.i] = next;
+          history.replaceState(next, '', navUrl(next));
+        }
+      } catch (e) { /* 기록을 쓸 수 없는 환경: 화면만 바꿉니다 */ }
+    }
+    // 기록 한 칸의 상태로 화면을 맞춥니다(받기 없음). draw: 바로 다시 그릴지(시작 전에는 false).
+    function navApply(st, draw) {
+      var moved = S.ui.zone !== (st.zone || '') || S.ui.count !== (st.count || '');
+      S.zpick = false;
+      S.ui.zone = st.zone || '';
+      S.ui.count = st.count || '';
+      // 상태 고름과 검색은 함께 걸지 않습니다(숫자 단추를 누를 때와 같게).
+      if (S.ui.count && (S.ui.q || S.ui.search)) {
+        if (document.activeElement === $('q')) $('q').blur();
+        S.ui.q = ''; S.ui.search = false; $('q').value = '';
+      }
+      if (S.hereParam) S.hereGone = !st.here;
+      S.sel = null;
+      S.open = {};
+      if (st.d) {
+        if (st.dk === 'tile') S.sel = st.d;
+        else { S.open[st.d] = true; S.lastRow = st.d; }
+      }
+      if (!draw) return;
+      render(true);
+      if (moved) showResults(true, true);
+    }
+    function navStart() {
+      try {
+        var u = new URL(location.href);
+        u.searchParams.delete('b');
+        NAV.base = u.pathname + u.search + u.hash;
+        NAV.here = location.pathname + location.search + location.hash;
+        if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+        var st = history.state;
+        if (st && st.v === NAV_V && typeof st.n === 'number') {
+          // 새로 고침 · 같은 칸으로 다시 열림: 그 칸의 상태로(그 아래 칸은 이 페이지가 모르는 것으로 둡니다).
+          NAV.i = st.n;
+          NAV.list = [];
+          NAV.list[st.n] = st;
+          navApply(st, false);
+        } else {
+          var base = { v: NAV_V, n: 0, zone: '', count: '', d: '', dk: '', here: false };
+          NAV.list = [base];
+          NAV.i = 0;
+          history.replaceState(base, '', NAV.base);
+          if (S.hereParam) {
+            var h = { v: NAV_V, n: 1, zone: '', count: '', d: '', dk: '', here: true };
+            NAV.list.push(h);
+            NAV.i = 1;
+            history.pushState(h, '', NAV.here);
+          }
+        }
+        NAV.ready = true;
+      } catch (e) { NAV.ready = false; }
+    }
+    // '× 필터 해제' · Esc: 상태 고름만 풉니다(구역 · 검색 · 보기 · 정렬은 그대로).
+    function clearCount() {
+      S.ui.count = '';
+      navCommit(true);
+      render(false);
+    }
+    // Esc 로 펼친 줄 하나를 접습니다(마지막으로 펼친 줄부터).
+    function closeRow(id) {
+      delete S.open[id];
+      if (S.lastRow === id) S.lastRow = null;
+      var li = findById($('list'), '.row', id);
+      if (li) {
+        var btn = li.querySelector('.row__main');
+        btn.setAttribute('aria-expanded', 'false');
+        li.querySelector('.row__more').hidden = true;
+        try { btn.focus({ preventScroll: true }); } catch (e) { /* 옛 브라우저 */ }
+      }
+      navCommit(true);
+    }
+
     /* ── 손가락 ───────────────────────────────────────────────── */
     // 걸러진 목록이 화면 밖에 있으면 결과 줄이 보이는 데까지만 내려 줍니다.
     // instant: 검색칸에 치는 동안처럼 곧바로 다음 그리기가 오는 경우, 부드러운 이동 없이 옮깁니다.
@@ -1475,6 +1602,8 @@
       if (S.ui.q || S.ui.search) { S.ui.q = ''; S.ui.search = false; $('q').value = ''; }
       S.sel = null;
       S.open[id] = true;
+      S.lastRow = id;
+      navCommit(false);
       render(true);
       var li = findById($('list'), '.row', id);
       if (!li) return;
@@ -1489,6 +1618,7 @@
       var prev = S.sel ? findById($('list'), '.tile', S.sel) : null;
       if (prev) { prev.classList.remove('is-sel'); prev.setAttribute('aria-expanded', 'false'); }
       S.sel = id;
+      navCommit(false);
       btn.classList.add('is-sel');
       btn.setAttribute('aria-expanded', 'true');
       renderSheet(visible());
@@ -1501,6 +1631,7 @@
     function closeSheet(refocus) {
       var id = S.sel;
       S.sel = null;
+      navCommit(true);
       var t = id ? findById($('list'), '.tile', id) : null;
       if (t) { t.classList.remove('is-sel'); t.setAttribute('aria-expanded', 'false'); }
       renderSheet([]);
@@ -1520,10 +1651,11 @@
 
         if (t.hasAttribute('data-count')) {
           var k = t.getAttribute('data-count');
-          S.ui.count = S.ui.count === k ? '' : k;
-          // 위의 숫자는 전체 구역을 센 것이라, 같은 수가 나오도록 구역 고름을 풉니다.
-          if (S.ui.count) S.ui.zone = '';
-          // 같은 까닭으로 남아 있는 검색어도 지우고 검색칸을 닫습니다. 검색과 겹쳐 걸면
+          var countOff = S.ui.count === k;
+          S.ui.count = countOff ? '' : k;
+          // 고른 구역은 그대로 두고 그 안에서 거릅니다(구역 → 여유 → 뒤로 가기 → 구역). 위의 숫자는
+          // 행사 전체 수라 구역 안의 곳 수와 다를 수 있어, 결과 줄이 구역 이름과 실제 곳 수를 함께 알립니다.
+          // 남아 있는 검색어는 지우고 검색칸을 닫습니다. 검색과 겹쳐 걸면
           // '여유 4' 를 눌렀는데 1곳만 보이고, 결과 줄에는 검색 중이라는 말도 없습니다.
           // (검색칸을 치기 시작하면 상태 고름을 푸는 것과 짝입니다. 둘 중 나중 것이 이깁니다.)
           if (S.ui.count && S.ui.q) {
@@ -1533,6 +1665,7 @@
             S.ui.search = false;
           }
           S.sel = null;
+          navCommit(countOff);
           render(false);
           showResults(false);
           return;
@@ -1541,9 +1674,8 @@
           var fromPick = !!t.closest('#zone-panel');
           if (fromPick) S.zpick = false;
           S.ui.zone = t.getAttribute('data-zone');
-          // 여유 · 보통 같은 고름은 전체 구역의 숫자입니다. 구역과 겹쳐 걸면 눌린 '여유 4' 옆에
-          // 3곳이 보여 숫자가 어긋나니, 위의 숫자 단추가 구역을 풀듯 구역 탭은 숫자 고름을 풉니다.
-          S.ui.count = '';
+          // 여유 · 보통 같은 상태 고름은 그대로 둡니다(그 구역 안에서 거름 — 결과 줄이 구역과 곳 수를 알림).
+          navCommit(!S.ui.zone);
           render(false);
           revealTab();
           showResults(true);
@@ -1561,6 +1693,7 @@
           S.ui.zone = t.getAttribute('data-zone-go');
           S.ui.count = '';
           S.sel = null;
+          navCommit(false);
           render(false);
           revealTab();
           showResults(true);
@@ -1572,6 +1705,7 @@
         if (t.hasAttribute('data-view')) {
           S.ui.view = t.getAttribute('data-view');
           render(false);
+          navCommit(false);   // 보기 바꿈은 칸을 쌓지 않습니다(한눈에 상세가 닫혔으면 지금 칸만 고침)
           return;
         }
         if (t.hasAttribute('data-sort')) {
@@ -1582,9 +1716,10 @@
         if (t.classList.contains('row__main')) {
           var li = t.closest('.row'), id = li.getAttribute('data-id');
           var open = !S.open[id];
-          if (open) S.open[id] = true; else delete S.open[id];
+          if (open) { S.open[id] = true; S.lastRow = id; } else delete S.open[id];
           t.setAttribute('aria-expanded', open ? 'true' : 'false');
           li.querySelector('.row__more').hidden = !open;
+          navCommit(!open);
           return;
         }
         if (t.classList.contains('tile')) {
@@ -1595,15 +1730,16 @@
 
         switch (t.getAttribute('data-act') || t.id) {
           case 'clear-count':
-            S.ui.count = '';
-            render(false);
+            clearCount();
             break;
           case 'here-close':
             S.hereGone = true;
-            try {
-              // 예시 화면이면 ?demo=1 은 남깁니다. 지우면 다음 새로 고침에 실제 화면으로 바뀝니다.
-              history.replaceState(null, '', location.pathname + (core.isMock ? '?demo=1' : ''));
-            } catch (err) { /* file:// 등 */ }
+            // 주소의 ?b= 를 뗍니다(뒤로 가기 기록이 있으면 그 칸을 거두고, 없으면 지금 칸만 고침).
+            // 예시 화면이면 ?demo=1 은 남깁니다. 지우면 다음 새로 고침에 실제 화면으로 바뀝니다.
+            if (NAV.ready) navCommit(true);
+            else {
+              try { history.replaceState(null, '', location.pathname + (core.isMock ? '?demo=1' : '')); } catch (err) { /* file:// 등 */ }
+            }
             render(false);
             break;
           case 'sort-wait':
@@ -1611,6 +1747,7 @@
             S.ui.view = 'list';
             S.ui.count = '';
             S.ui.zone = '';
+            navCommit(false);
             render(false);
             $('controls').scrollIntoView({ block: 'start', behavior: smooth() });
             break;
@@ -1656,7 +1793,7 @@
         // 눌러 둔 채 여유 부스 'A-01' 을 찾을 때 '찾는 부스가 없어요' 가 나오고, 결과 줄도
         // '혼잡 부스만 보는 중' 에 머물러 검색 결과 수가 보이지 않습니다. 검색칸은 목록 중간의
         // 붙박이 줄에서 열려 위의 눌린 단추가 안 보이니, 치기 시작하면 상태 고름을 풉니다.
-        if (S.ui.count && norm(this.value)) S.ui.count = '';
+        if (S.ui.count && norm(this.value)) { S.ui.count = ''; navCommit(false); }
         render(false);
         // 검색 단추는 붙박이 줄에 있어 목록 한가운데서도 열 수 있습니다. 목록이 짧아지면
         // 브라우저는 스크롤 위치만 줄여서, 결과 줄과 가장 잘 맞는 앞쪽 부스가 화면 위로
@@ -1686,7 +1823,17 @@
         if (e.key !== 'Escape' && e.key !== 'Esc') return;
         if (S.zpick) { closePick(true); return; }
         if (!$('sheet').hidden) { closeSheet(true); return; }
-        if (S.ui.search && document.activeElement === $('q')) closeSearch(true);
+        if (S.ui.search && document.activeElement === $('q')) { closeSearch(true); return; }
+        var row = openRow();
+        if (row) { closeRow(row.id); return; }
+        if (S.ui.count && liveOn()) clearCount();
+      });
+      window.addEventListener('popstate', function (e) {
+        var st = e.state;
+        if (!st || st.v !== NAV_V) return;   // 이 화면이 만든 칸이 아님(손대지 않음)
+        NAV.i = st.n;
+        NAV.list[st.n] = st;
+        navApply(st, true);
       });
 
       // 가려지면 받기를 멈추고(잡아 둔 차례를 지움), 다시 보이면 곧바로 받습니다.
@@ -1734,6 +1881,7 @@
       var go = officialUrl();
       if (go) { moveTo(go); return; }
       S.navOffline = navigator.onLine === false;
+      navStart();
       // 협의용 예시 화면: 맨 위 띠 · 안내 · 나가기 단추를 켭니다. 주소로만 정해지고 이 페이지를
       // 연 동안 바뀌지 않습니다(BoothCore.isMock). 붙박이 줄은 띠 아래로 내립니다(visitor.css).
       if (core.isMock) {
