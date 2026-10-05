@@ -219,7 +219,7 @@ ul, ol { padding: 0; list-style: none; }
 }
 .vr:last-child { border-bottom: 0; }
 .vr__code { align-self: baseline; font-size: 13px; font-weight: 600; line-height: 1.3; color: var(--muted-2); white-space: nowrap; }
-/* 부스 이름 아래 운영 학교 한 줄(관람객 화면 .row__body · .row__org 와 같은 모양) */
+/* 부스 이름 아래 운영기관(학교 · 기관) 한 줄(관람객 화면 .row__body · .row__org 와 같은 모양) */
 .vr__body { align-self: baseline; min-width: 0; }
 .vr__org {
   display: block;
