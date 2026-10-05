@@ -1334,7 +1334,7 @@
         '<button type="button" class="btn btn--danger fix__wide" data-act="set" data-mode="clear">값 지우기<small>정보 없음</small></button>';
       return '<p class="fix__head">대기 값 직접 고치기</p>' +
         '<p class="fix__cur" data-fix-cur></p>' +
-        '<p class="fix__hint">누르면 바로 저장돼 관람객 화면에 20초 안팎으로 보여요. 부스 운영자가 나중에 다시 누르면 그 값으로 바뀌어요.</p>' +
+        '<p class="fix__hint">누르면 바로 저장돼요. 대기 현황은 주기적으로 갱신되며, 실제 현장 상황과 조금 다를 수 있습니다. 부스 운영자가 나중에 다시 누르면 그 값으로 바뀌어요.</p>' +
         '<div class="fix__grid" role="group" aria-label="고칠 값">' + btns + '</div>' +
         '<p class="fix__msg" data-fix-msg role="status" aria-live="polite"></p>' +
         '<div class="fix__foot"><button type="button" class="btn" data-act="fix-close">닫기</button></div>';
@@ -2228,7 +2228,7 @@
           S.ops.now[id] = { congestion: r.congestion || null, wait_minutes: r.wait_minutes,
                             updated_at: msOf(r.updated_at), admin: true };
         }
-        doneFix(id, 'is-ok', '고쳤어요. ' + (r.demoNote || '관람객 화면에는 20초 안팎으로 보여요.'));
+        doneFix(id, 'is-ok', '고쳤어요. ' + (r.demoNote || '대기 현황은 주기적으로 갱신되며, 실제 현장 상황과 조금 다를 수 있습니다.'));
         paintNow(id);
       }, function (err) {
         if (err && err.locked) return;
