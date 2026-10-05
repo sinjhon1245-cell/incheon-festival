@@ -42,10 +42,20 @@
   --accent-t: #F0EDFE;
   --on:       #FFFFFF;   /* 보라 · 상태색 칠 위의 글자 */
 
-  --free:     #0F7A57;  --free-t:   #E4F5EE;
-  --normal:   #9A6206;  --normal-t: #FBF0DC;
-  --busy:     #B32B3E;  --busy-t:   #FCEAEC;
-  --off:      #5E6782;  --off-t:    #EEF0F5;
+  /* 상태색 — 관람객 화면(assets/visitor.css 의 --st-*)과 같은 값입니다. 같은 '여유 · 보통 · 혼잡' 이
+     관람객과 운영자에게 다른 색으로 보이지 않게. 노랑(--normal)은 흰 바탕 글자로 쓰지 않고(1.5:1)
+     점 · 글자판 바탕에만 씁니다 — 그 옆 · 위 글자는 남색(--ink). 고른 대기 단추의 보라(--accent)는
+     '운영자가 지금 고른 것' 이라 상태색과 따로입니다. */
+  --free:     #08773F;
+  --normal:   #F4D400;
+  --busy:     #E52521;
+  --off:      #5A6B85;  --off-t:    #EEF0F5;
+  --st-edge:  rgba(22, 32, 60, .28);   /* 흰 바탕의 노란 점 가장자리 */
+  /* 상태가 아닌 뜻 — 상태색과 섞지 않습니다.
+     --warn   주의(연결 끊김 · 오래된 값 · 다시 눌러 달라는 안내)
+     --danger 오류 · 되돌리기 어려운 동작(PIN 오류 · 저장 실패 · [오늘 운영 마감]) */
+  --warn:     #9A6206;  --warn-t:   #FBF0DC;
+  --danger:   #B32B3E;  --danger-t: #FCEAEC;
 
   --r-big:  20px;
   --r-card: 16px;
@@ -427,8 +437,8 @@ button {
 }
 @keyframes pincaret { 50% { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .pinslot.is-next::after { animation: none; } }
-.pinwrap.is-err .pinslot { border-color: var(--busy); }
-.pinwrap.is-err .pinslot.is-next { box-shadow: 0 0 0 3px var(--busy-t); }
+.pinwrap.is-err .pinslot { border-color: var(--danger); }
+.pinwrap.is-err .pinslot.is-next { box-shadow: 0 0 0 3px var(--danger-t); }
 .pinwrap.is-busy .pinslot { color: var(--muted); }
 /* 실제 글칸: 칸 그림 위에 겹쳐 두고 보이지 않게(누르면 숫자 자판 · 붙여넣기는 그대로) */
 .pinbox {
@@ -446,7 +456,7 @@ button {
   opacity: 0;
   cursor: text;
 }
-.pinerr { margin-top: 8px; font-size: 14.5px; font-weight: 700; line-height: 1.5; color: var(--busy); }
+.pinerr { margin-top: 8px; font-size: 14.5px; font-weight: 700; line-height: 1.5; color: var(--danger); }
 .pinfield__go { margin-top: 12px; }
 .pinnote { margin-top: 12px; font-size: 13px; line-height: 1.55; color: var(--muted); }
 
@@ -496,12 +506,12 @@ button {
   font-weight: 800;
 }
 .bar__row .bar__btn { flex: 1 1 0; }
-.bar__btn--solid { background: var(--normal); border-color: var(--normal); color: var(--on); }
-.bar--conn { background: var(--panel); border-bottom: 1px solid var(--line-2); box-shadow: inset 4px 0 0 var(--normal); color: var(--ink); }
+.bar__btn--solid { background: var(--warn); border-color: var(--warn); color: var(--on); }
+.bar--conn { background: var(--panel); border-bottom: 1px solid var(--line-2); box-shadow: inset 4px 0 0 var(--warn); color: var(--ink); }
 .bar--pending, .bar--old, .bar--conflict {
-  background: var(--normal-t);
+  background: var(--warn-t);
   border-bottom: 1px solid #E9D3A8;
-  box-shadow: inset 4px 0 0 var(--normal);
+  box-shadow: inset 4px 0 0 var(--warn);
   color: #6E4604;
 }
 .bar + .bar { border-top: 1px solid #E9D3A8; }
@@ -569,9 +579,10 @@ button {
   background: var(--panel);
   box-shadow: var(--sh);
 }
-.now--free   { --c: var(--free);   --ct: var(--free-t); }
-.now--normal { --c: var(--normal); --ct: var(--normal-t); }
-.now--busy   { --c: var(--busy);   --ct: var(--busy-t); }
+/* --c 글자 · --ct 글자판 바탕. 여유 · 보통 · 혼잡은 관람객 화면의 칩과 같은 칠(노랑 위 글자는 남색) */
+.now--free   { --c: var(--on);  --ct: var(--free); }
+.now--normal { --c: var(--ink); --ct: var(--normal); }
+.now--busy   { --c: var(--on);  --ct: var(--busy); }
 .now--pause,
 .now--closed { --c: var(--off);    --ct: var(--off-t); }
 .now--none   { --c: var(--muted);  --ct: var(--sink); }
@@ -614,10 +625,10 @@ button {
   line-height: 1.2;
   letter-spacing: -0.03em;
 }
-.now--closed .now__wait[hidden] + .now__state { color: var(--busy); }
+.now--closed .now__wait[hidden] + .now__state { color: var(--off); }   /* 마감은 상태(회청색) — 관람객 화면과 같게 */
 .now--none .now__wait[hidden] + .now__state { color: var(--muted); font-size: 24px; }
 .now__when { margin-top: 6px; font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; }
-.now__when.is-warn { color: var(--normal); font-weight: 700; }
+.now__when.is-warn { color: var(--warn); font-weight: 700; }
 .now__note { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); font-size: 13.5px; line-height: 1.5; color: var(--ink-2); }
 
 /* 20분 넘게 그대로 · 문 열기 전 값 */
@@ -629,7 +640,7 @@ button {
   padding: 10px 10px 10px 14px;
   border: 1px solid #E9D3A8;
   border-radius: var(--r-card);
-  background: var(--normal-t);
+  background: var(--warn-t);
   color: #6E4604;
 }
 .nudge__text { flex: 1; min-width: 0; font-size: 14.5px; font-weight: 700; line-height: 1.45; }
@@ -639,7 +650,7 @@ button {
   min-height: 48px;
   padding: 0 14px;
   border: 0;
-  background: var(--normal);
+  background: var(--warn);
   color: var(--on);
   font-size: 16px;
   font-weight: 800;
@@ -680,17 +691,19 @@ button {
   color: var(--ink);
   text-align: center;
 }
-.w--free   { --c: var(--free); }
-.w--normal { --c: var(--normal); }
-.w--busy   { --c: var(--busy); }
+/* --c 점(상태색) · --cx 낱말. 노랑은 글자로 읽히지 않아 '보통' 낱말은 남색, 점에는 가장자리 한 줄 */
+.w--free   { --c: var(--free);   --cx: var(--free); }
+.w--normal { --c: var(--normal); --cx: var(--ink); }
+.w--busy   { --c: var(--busy);   --cx: var(--busy); }
+.w--normal .sq { box-shadow: inset 0 0 0 1px var(--st-edge); }
 .w:hover { border-color: var(--muted); }
 .w__v { display: inline-flex; align-items: baseline; gap: 2px; font-size: 18px; font-weight: 800; line-height: 1.2; letter-spacing: -0.02em; white-space: nowrap; }
 .w__more { font-size: 12px; font-weight: 700; color: var(--muted); }
-.w__hint { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 600; line-height: 1.2; color: var(--c); }
+.w__hint { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 600; line-height: 1.2; color: var(--cx, var(--c)); }
 /* 고른 값: 보라(선택). 혼잡도 낱말은 흰 글자로 그대로 둡니다 */
 .w.is-on { background: var(--accent); border-color: var(--accent); color: var(--on); }
 .w.is-on .w__more, .w.is-on .w__hint { color: var(--on); }
-.w.is-on .sq { background: var(--on); }
+.w.is-on .sq { background: var(--on); box-shadow: none; }
 .w:active { transform: scale(0.96); }
 
 /* ── 운영 상태: 잠시 중단 · 오늘 운영 마감 (대기 단추와 떼어 둠) ─── */
@@ -713,9 +726,9 @@ button {
 }
 .off__t { font-size: 16px; font-weight: 800; letter-spacing: -0.02em; }
 .off__s { font-size: 12.5px; line-height: 1.4; color: var(--muted); }
-#btn-closed .off__t { color: var(--busy); }
+#btn-closed .off__t { color: var(--danger); }
 .off.is-on { background: var(--off-t); border-color: var(--off); }
-#btn-closed.is-on { background: var(--busy-t); border-color: var(--busy); }
+#btn-closed.is-on { background: var(--danger-t); border-color: var(--danger); }
 .off:active { transform: scale(0.98); }
 
 /* 오늘 마감 — 한 번 더 묻기 (창을 띄우지 않고 그 자리에서) */
@@ -724,12 +737,12 @@ button {
   padding: 14px;
   border: 1px solid #F0CFD4;
   border-radius: var(--r-card);
-  background: var(--busy-t);
+  background: var(--danger-t);
 }
 .ask__text { margin-bottom: 12px; font-size: 15px; font-weight: 700; line-height: 1.5; color: #7A1E2B; }
 .ask__row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .ask .btn { min-height: 48px; font-size: 15px; }
-.ask .btn--solid { background: var(--busy); border-color: var(--busy); }
+.ask .btn--solid { background: var(--danger); border-color: var(--danger); }
 
 /* ── 꼬리 ──────────────────────────────────────────────────────── */
 .foot {
@@ -778,7 +791,7 @@ button {
 }
 .toast.is-show { opacity: 1; transform: translate(-50%, 0); }
 .toast--info { background: var(--accent-d); }
-.toast--error { background: var(--busy); }
+.toast--error { background: var(--danger); }
 
 /* ── 아주 좁은 화면 (접는 휴대폰 바깥 화면 등) ───────────────── */
 @media (max-width: 299px) {
