@@ -222,11 +222,16 @@
         </div>
       </div>
 
+      <!-- 부스 식별 머리: 왼쪽 부스 번호 판(넓은 색 면) │ 오른쪽 부스 이름 + 운영기관 · 구역.
+           상태(여유 · 보통 · 혼잡 · 중단 · 마감)와 상관없이 늘 같은 모양입니다(상태는 아래 '현재 대기' 에서만). -->
       <header class="head">
+        <p class="head__code num" id="h-code"></p>
         <div class="head__id">
-          <p class="head__eyebrow"><span class="head__code num" id="h-code"></span><span class="head__role">부스 운영자</span></p>
           <h1 class="head__name" id="h-name">부스 정보를 불러오는 중</h1>
-          <p class="head__org" id="h-org"></p>
+          <p class="head__meta" id="h-meta" hidden>
+            <span class="head__org" id="h-org-w"><svg class="head__ic" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 21V5a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v16M15 9h3a2 2 0 0 1 2 2v10M2.5 21h19M8 7.5h3M8 11.5h3M8 15.5h3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span id="h-org"></span></span>
+            <span class="head__zone" id="h-zone-w"><svg class="head__ic" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 21.5s-7-6.1-7-11.6a7 7 0 0 1 14 0c0 5.5-7 11.6-7 11.6z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="12" cy="9.8" r="2.6" fill="none" stroke="currentColor" stroke-width="2"/></svg><span id="h-zone"></span></span>
+          </p>
         </div>
         <!-- 운영자 화면에는 다른 화면으로 가는 링크를 두지 않습니다(관람객 화면 · 운영 포털 · 관리자 화면 모두).
              운영자의 일은 자기 부스 확인 · 대기 상태 입력 · 마지막 입력 확인입니다. -->
@@ -1824,8 +1829,13 @@
       $('h-code').className = 'head__code num';
       $('h-name').textContent = h ? (h.name || '') : '부스 정보를 불러오는 중';
       $('h-name').className = 'head__name' + (h ? '' : ' is-muted');
-      $('h-org').textContent = h ? [core.displayOrganization(h.org), h.zone_name].filter(Boolean).join(' · ') : '';
-      $('h-org').hidden = !$('h-org').textContent;
+      // 운영기관 · 구역은 각각 아이콘과 함께 따로 둡니다(값은 전과 같음 — 기관은 '[예시]' 를 뗀 이름, 구역은 구역 이름).
+      var org = h ? core.displayOrganization(h.org) : '', zone = h ? (h.zone_name || '') : '';
+      $('h-org').textContent = org;
+      $('h-zone').textContent = zone;
+      $('h-org-w').hidden = !org;
+      $('h-zone-w').hidden = !zone;
+      $('h-meta').hidden = !org && !zone;
 
       if (sess) {
         // PIN 으로 연 화면: 열쇠 끝자리 대신 언제까지 쓸 수 있는지와 나가기 단추를 둡니다.

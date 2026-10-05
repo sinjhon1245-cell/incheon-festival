@@ -6,7 +6,8 @@
    (Pretendard)을 써서 회의에서 나란히 보여 줘도 한 서비스로 보이게 합니다.
 
    정보의 무게
-     현재 대기 시간(60px 안팎 · 800)  >  예시 PIN(32px · 700)  >  부스 이름(제목)  >  부스 번호(작은 머리글)
+     부스 식별 머리(넓은 보라 번호 판 │ 부스 이름)  >  현재 대기 시간(60px 안팎 · 800)  >  운영 상태  >  접속 · 안내
+     — 어느 부스를 만지는지가 먼저, 그다음 그 부스의 대기 시간입니다(머리 영역은 아래 '머리' 참고).
    숫자도 Pretendard 로 씁니다. 고정폭 · 전광판 글꼴은 쓰지 않습니다. 값이 바뀌어도 옆 글이
    밀리면 안 되는 숫자만 자릿수 폭을 맞추고(.num = tabular-nums), PIN 은 비례 숫자로 둡니다
    (아래 'PIN 숫자').
@@ -515,33 +516,108 @@ button {
 }
 .bar + .bar { border-top: 1px solid #E9D3A8; }
 
-/* ── 머리: 부스 번호(작게) → 부스 이름(제목) → 기관 ───────────────── */
+/* ── 머리: 부스 식별 — [부스 번호 판] │ 부스 이름 + 운영기관 · 구역 ────────
+   운영자가 글을 읽기 전에 '지금 어느 부스를 만지는지' 알게 하는 자리입니다.
+     번호 판     작은 배지가 아니라 넓은 보라 면 + 흰 글자. 판 높이에 맞춘 세로 구분선을 오른쪽에 둡니다.
+     부스 이름   이 화면에서 가장 분명한 제목(아주 진한 남색). 두 줄까지, 넘으면 말줄임.
+     기관 · 구역 이름보다 한 단계 낮은 청회색(흐리지 않게). 아이콘은 글보다 약하게.
+   크기는 화면 폭이 아니라 이 머리 칸의 폭(container query 의 cqi)을 따라 휴대폰 343px … PC 872px 를
+   clamp() 한 줄로 잇습니다 — PC 는 화면이 넓어도 칸이 872px 에서 멈추므로 1024 · 1280 · 1440 이 같습니다.
+   cqi 를 모르는 옛 브라우저는 아래 휴대폰 값(px)을 그대로 씁니다(@supports 밖의 값).
+   여유 · 보통 · 혼잡의 초록 · 노랑 · 빨강은 쓰지 않습니다 — 상태는 아래 '현재 대기' 에서만 말합니다.
+   배경 무늬는 그림 파일이 아니라 겹친 gradient 이고, 글자 대비를 해치지 않을 만큼 옅습니다. */
 .head {
+  --id-w: 100px;      /* 번호 판 최소 폭(번호 길이가 조금 달라도 판 폭이 흔들리지 않게) */
+  --id-h: 72px;       /* 번호 판 높이 */
+  --id-code: 30px;    /* 번호 글자 */
+  --id-gap: 24px;     /* 번호 판 ↔ 글. 구분선은 이 틈의 가운데 */
+  --id-title: 22px;
+  --id-meta: 13.5px;
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 8px 0 4px;
+  align-items: center;
+  margin-top: 4px;
+  padding: clamp(12px, 3.2vw, 16px) clamp(14px, 4vw, 18px);
+  border: 1px solid #E4E2F3;
+  border-radius: var(--r-big);
+  background:
+    radial-gradient(circle at 114% 150%, transparent 0 40%, rgba(91, 69, 224, .07) 40.3% 40.8%, transparent 41.1%),
+    radial-gradient(circle at 122% 165%, transparent 0 48%, rgba(64, 94, 243, .06) 48.3% 48.8%, transparent 49.1%),
+    radial-gradient(90% 150% at 100% 0%, rgba(124, 108, 240, .09), transparent 60%),
+    linear-gradient(100deg, #FFFFFF 0%, #F8F8FD 48%, #F2F1FC 100%);
+  box-shadow: var(--sh);
 }
-.head__id { min-width: 0; }
-.head__eyebrow { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 8px; }
-.head__code { font-size: 15px; font-weight: 700; color: var(--accent-d); }
-.head__code:empty { display: none; }
-.head__role { font-size: 13px; font-weight: 600; color: var(--muted); }
-.head__code:not(:empty) + .head__role::before { content: '·'; margin-right: 8px; color: var(--line-2); }
-.head__name {
-  margin-top: 2px;
-  font-size: clamp(20px, 6vw, 24px);
+@supports (width: 1cqi) {
+  .head {
+    container-type: inline-size;
+    --id-w:     clamp(96px, 15.6cqi + 49px, 180px);
+    --id-h:     clamp(68px, 8.4cqi + 43.6px, 116px);
+    --id-code:  clamp(28px, 4cqi + 17.4px, 52px);
+    --id-gap:   clamp(20px, 6cqi + 3px, 56px);
+    --id-title: clamp(21px, 4.4cqi + 8.1px, 46px);
+    --id-meta:  clamp(13px, 0.9cqi + 10.7px, 19px);
+  }
+}
+.head__code {
+  position: relative;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--id-w);
+  min-height: var(--id-h);
+  margin-right: var(--id-gap);
+  padding: 0 0.4em;
+  border-radius: calc(var(--id-h) * 0.17);
+  background: linear-gradient(135deg, var(--accent) 0%, #4560F0 100%);   /* 흰 글자 대비 5.0:1 이상 */
+  color: var(--on);
+  font-size: var(--id-code);
   font-weight: 800;
-  line-height: 1.3;
+  line-height: 1;
   letter-spacing: -0.03em;
+  white-space: nowrap;
+  box-shadow: 0 8px 18px -10px rgba(70, 80, 230, 0.55);
+}
+.head__code:empty { display: none; }
+/* 세로 구분선 — 번호 판 높이에 맞춰(위아래 조금 안쪽), 판과 글 사이 틈의 가운데 */
+.head__code::after {
+  content: '';
+  position: absolute;
+  top: 10%;
+  bottom: 10%;
+  right: calc(var(--id-gap) / -2);
+  width: 1px;
+  background: #CBC7E6;
+}
+/* 글 묶음의 눈으로 보는 가운데: 제목 글자 위쪽 여백이 기관 줄 아래 여백보다 커서 제목이 클수록(PC) 묶음이
+   조금 내려가 보입니다. 그 차이만큼 아래를 살짝 채워 번호 판 가운데에 맞춥니다(휴대폰은 거의 0). */
+.head__id { flex: 1; min-width: 0; padding-bottom: max(0px, (var(--id-title) - 1.6 * var(--id-meta)) * 0.25); }
+.head__name {
+  font-size: var(--id-title);
+  font-weight: 800;
+  line-height: 1.22;
+  letter-spacing: -0.035em;
+  color: #0B1939;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
 .head__name.is-muted { color: var(--muted); font-weight: 600; }
-.head__org { margin-top: 2px; font-size: 13.5px; color: var(--muted); }
+.head__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 1em;
+  margin-top: calc(var(--id-meta) * 0.35);
+  font-size: var(--id-meta);
+  font-weight: 600;
+  line-height: 1.4;
+  color: #445075;
+}
+/* 기관 · 구역은 아이콘(건물 · 위치)과 간격으로 나눕니다. 사이에 점을 두면 긴 기관명이 두 줄이 될 때
+   점이 줄 끝에 따로 떠서, 점 없이 둡니다. */
+.head__org, .head__zone { display: inline-flex; align-items: center; gap: 0.32em; min-width: 0; }
+.head__ic { flex: none; width: 1.05em; height: 1.05em; color: var(--accent); opacity: 0.7; }
 
 /* 예시임을 알리는 한 줄 — 위쪽 띠가 이미 말하므로 작게 */
 .note { margin-top: 6px; font-size: 12.5px; line-height: 1.5; color: var(--muted); }
@@ -796,7 +872,10 @@ button {
 @media (max-width: 299px) {
   .waits { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .offs, .ask__row, .picks { grid-template-columns: 1fr; }
-  .head { flex-wrap: wrap; }
+  /* 부스 식별 머리: 번호 판 위, 이름 · 기관 아래로 쌓습니다(구분선 없음) */
+  .head { flex-direction: column; align-items: flex-start; }
+  .head__code { margin: 0 0 10px; }
+  .head__code::after { display: none; }
 }
 
 /* ── 태블릿 · PC: 운영 화면만 두 칸, 나머지는 휴대폰 폭 그대로 ──── */
@@ -808,6 +887,7 @@ button {
   /* 왼쪽 '현재 대기' 카드를 오른쪽 첫 단추 줄(바로 · 5분 …)과 같은 선에서 시작합니다. 오른쪽 머리 줄
      (대기시간 · 누르면 바로 저장돼요)은 그 위에 따로 얹힌 제목입니다. 머리 줄 높이와 왼쪽을 내리는 만큼을
      --pad-head 하나로 묶어 둡니다(아래 간격 8px 은 .pad__head 의 margin-bottom). */
+  .head { padding: 18px 28px; }
   .main { --pad-head: 26px; }
   .pad__head { min-height: var(--pad-head); }
   .main > .col:first-child { padding-top: calc(var(--pad-head) + 8px); }
