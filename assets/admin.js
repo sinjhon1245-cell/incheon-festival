@@ -314,7 +314,7 @@
      admin_booth_credentials() 가 부스마다 '상태' 만 돌려줍니다(QR 열쇠 · PIN · 해시 없음).
      PIN 기능(supabase/migration-booth-pin.sql) 전이면 함수가 없어 상태 칸만 비웁니다 —
      목록 · 수정 · 공개는 그대로 동작합니다.
-     PIN 은 요청한 부스에만 발급합니다(행사 전 일괄 발급 금지). 원문은 발급 창에서 한 번만 보이고
+     여기(⋯)서는 한 부스씩 발급합니다. 여러 부스를 골라 발급 · 재발급하는 일은 QR · PIN 관리(print-qr.html)가 맡습니다. 원문은 발급 창에서 한 번만 보이고
      창을 닫으면 화면 · 변수에서 사라집니다 — 저장 · 기록 · 알림 · 주소 어디에도 넣지 않습니다. */
   var creds = null;          // { 부스 id: {qr_state, pin_state, pin_sessions, pin_failures_1h, …} } · null = 모름
   var PIN_FAIL_WARN = 10;    // 최근 1시간 PIN 실패가 이만큼이면 'PIN 실패 많음'
@@ -373,8 +373,8 @@
       '<p class="demomore__t">운영자 PIN · QR 카드를 쓸 수 없는 부스에만 요청을 받아 발급합니다' +
         (c.pin_sessions > 0 ? ' · 지금 PIN 로그인 ' + c.pin_sessions + '대' : '') + '</p>' +
       '<div class="demomore__acts">' + acts + '</div>' +
-      '<p class="demomore__t">운영자 QR 발급 · 끄기 · 바꾸기는 ' +
-        '<a href="print-qr.html" target="_blank" rel="noopener">부스 QR 인쇄</a> 화면에서 합니다</p></div>';
+      '<p class="demomore__t">운영자 QR 발급 · 끄기 · 바꾸기와 여러 부스의 PIN 발급 · 재발급은 ' +
+        '<a href="print-qr.html" target="_blank" rel="noopener">QR · PIN 관리</a> 화면에서 합니다</p></div>';
   }
   // 운영자에게 불러 줄 운영자 화면 주소(QR 카드와 같은 사이트).
   function opSite() {
@@ -540,7 +540,7 @@
         { type: 'group', label: '부스 운영자 PIN' },
         { k: 'booth_pin_enabled', label: 'PIN 보조 로그인 사용', type: 'bool', needsColumn: true,
           hint: '켜면 QR 카드를 쓸 수 없는 운영자가 부스 번호와 PIN으로 운영자 화면을 엽니다. 끄면 새 PIN 로그인과 ' +
-                '열려 있는 PIN 화면이 바로 멈춥니다(QR은 그대로). PIN은 부스 목록의 ⋯ 에서 요청한 부스에만 발급합니다.' },
+                '열려 있는 PIN 화면이 바로 멈춥니다(QR은 그대로). PIN은 부스 → QR · PIN 관리(여러 부스) 또는 부스 목록의 ⋯ (한 부스)에서 발급합니다.' },
         /* 운영 준비용 예시 부스 공통 PIN(supabase/migration-booth-example-pin.sql). 맞는지는 늘 서버가 정합니다. */
         { k: 'booth_sample_common_pin_enabled', label: '운영 준비용 예시 부스 공통 PIN', type: 'bool', needsColumn: true,
           // 어느 부스가 대상인지는 부스 화면 설명 한 곳에만 둡니다(같은 설명을 되풀이하지 않음).
@@ -710,9 +710,9 @@
        둡니다. booths 는 로그인 없이 읽히는 표라서, 이 넷은 booths 로 보내지 않습니다(private). */
     booths: {
       label: '부스', table: 'booths', addLabel: '+ 부스 추가',
-      // 부스 QR(운영자 카드 · 부스 앞 안내 · 입구 포스터)은 부스를 등록한 뒤
-      // 여기서 바로 뽑습니다. 새 탭으로 열어 관리 화면의 입력을 잃지 않게 합니다.
-      headLink: ['print-qr.html', '부스 QR 인쇄'],
+      // 부스 QR(운영자 카드 · 부스 앞 안내 · 입구 포스터)과 여러 부스의 운영자 PIN 발급 · 재발급은
+      // 부스를 등록한 뒤 여기서 엽니다(주소는 예전 그대로 print-qr.html). 새 탭으로 열어 관리 화면의 입력을 잃지 않게 합니다.
+      headLink: ['print-qr.html', 'QR · PIN 관리'],
       // 행사 당일 전체 현황(대기 시간 · 확인 필요 · 긴급 수정)은 따로 된 화면입니다.
       liveLink: ['booth-admin.html', '부스 운영 현황'],
       desc: function () {
