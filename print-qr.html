@@ -517,6 +517,15 @@
     .pinov__type input { display: block; width: 100%; max-width: 240px; min-height: 44px; margin-top: 6px; padding: 0 12px;
       border: 1px solid var(--line-3); border-radius: 0; font-size: 16px; }
     .pinov__acts { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+    /* 결과 창: 내려받기 · 인쇄 창을 연 것과 '확인했어요' 를 따로 둡니다 */
+    .pinov__status { flex-basis: 100%; margin: 0; font-size: 13.5px; line-height: 1.55; font-weight: 600; color: var(--ink-2); }
+    .pinov__status:empty { display: none; }
+    .pinov__ack { flex-basis: 100%; display: flex; align-items: flex-start; gap: 8px; margin: 0; padding: 10px 12px;
+      border: 1px solid var(--line-3); font-size: 14.5px; font-weight: 700; line-height: 1.45; cursor: pointer; }
+    .pinov__ack input { flex: none; width: 20px; height: 20px; margin: 0; accent-color: var(--accent); }
+    .pinov__ack.is-off { color: var(--muted); cursor: not-allowed; border-style: dashed; }
+    .pinov__ackhint { flex-basis: 100%; margin: -4px 0 0; font-size: 12.5px; color: var(--muted); }
+    .pinx__after:focus { outline: 2px solid var(--ink); outline-offset: 2px; }
     .pinov__prog { height: 10px; margin: 6px 0 10px; background: var(--line); }
     .pinov__prog i { display: block; height: 100%; background: var(--accent); }
     .pinov__now { font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; }
@@ -642,7 +651,7 @@
           </div>
           <p class="pinx__hint">검색어나 구역을 바꾸면 PIN 선택이 풀려요 — 화면에 보이지 않는 부스가 선택된 채 남지 않게 합니다.</p>
           <p class="pinx__msg" id="pinx-msg" role="status" aria-live="polite"></p>
-          <div class="pinx__after" id="pinx-after" hidden></div>
+          <div class="pinx__after" id="pinx-after" tabindex="-1" hidden></div>
           <ul class="pinx__list" id="pinx-list" aria-label="PIN 관리 부스 목록"></ul>
           <div class="pinx__bar">
             <p class="pinx__count" id="pinx-count" aria-live="polite">선택 0곳</p>
@@ -2773,14 +2782,13 @@
      위 QR 인쇄와 따로 도는 모듈입니다. 상태(P) · 이벤트 · 화면이 모두 따로라, QR 카드의
      '인쇄에 포함' · 모두 선택(S.lists.ops.off)은 여기서 읽지도 쓰지도 않습니다.
 
-     서버 함수 (migration-booth-pin.sql)
-       admin_booth_credentials()      부스마다 QR · PIN 상태만(none · on · off, 값 없음)
-       admin_issue_booth_pin(부스)     첫 발급 · 재발급 · 꺼진 PIN 다시 켜기를 조건 없이 처리 — 원문은 응답에서 한 번
-     있으면 쓰는 함수 (migration-booth-pin-checked.sql — 초안)
-       admin_issue_booth_pin_checked(부스, 기대 상태, 기대 발급 시각)
-         서버가 잠근 채 상태를 견주고 같을 때만 위 함수를 부릅니다. 없으면(PGRST202) 기존 함수로
-         보내되, 부스마다 보내기 직전에 상태를 다시 읽어 다른 곳에서 바뀐 부스는 건너뜁니다
-         (그 확인과 발급 사이의 짧은 틈은 화면만으로 닫을 수 없습니다).
+     서버 함수
+       admin_booth_credentials()      부스마다 QR · PIN 상태만(none · on · off, 값 없음) — migration-booth-pin.sql
+       admin_issue_booth_pin_checked(부스, 기대 상태, 기대 발급 시각) — migration-booth-pin-checked.sql
+         서버가 잠근 채 상태를 견주고 같을 때만 기존 admin_issue_booth_pin 을 부릅니다(원문은 응답에서 한 번).
+         **이 함수가 있을 때만** 발급 · 재발급 단추가 켜집니다. 없거나(PGRST202) 있는지 확인하지 못하면
+         단추를 잠그고, 조건 없이 발급하는 admin_issue_booth_pin 으로 바꿔 보내지 않습니다
+         (한 부스씩은 관리자 → 부스 ⋯ 메뉴가 그대로 맡습니다).
 
      지키는 약속
        · 발급(none · off)과 재발급(on)을 단추부터 나눕니다. 누를 때마다 서버 상태를 새로 읽어 대상을 다시 셉니다.
@@ -2805,6 +2813,17 @@
 
     var REFRESH_MS = 30000;
     var REISSUE_WORD = '재발급';
+    // 답이 끝내 오지 않는 요청 때문에 창이 단추 없이 멈춰 있지 않게 합니다(받아 둔 PIN 을 결과 창으로 넘기려고).
+    var WAIT_CHECK_MS = 15000;   // 누른 뒤 상태 다시 읽기
+    var WAIT_ISSUE_MS = 25000;   // 부스 하나 발급(넘기면 '결과 확인 필요' 로 두고 남은 부스를 멈춤)
+    var WAIT_VERIFY_MS = 8000;   // 끝난 뒤 상태 다시 읽기(넘기면 확인 없이 결과를 보여 줌)
+    // 시간 안에 끝나지 않으면 오류 코드 없는 오류로 거절합니다(= 답 없음). 늦게 온 답은 아무 데도 쓰이지 않습니다.
+    function withTimeout(p, ms) {
+      return new Promise(function (resolve, reject) {
+        var t = setTimeout(function () { var e = new Error('응답 시간 초과'); e.timeout = true; reject(e); }, ms);
+        p.then(function (v) { clearTimeout(t); resolve(v); }, function (e) { clearTimeout(t); reject(e); });
+      });
+    }
 
     var P = {
       open: false,
@@ -2837,6 +2856,9 @@
       CRED_FAIL: 'QR · PIN 상태를 읽지 못했어요. 상태를 모르는 채로는 발급 · 재발급할 수 없어요 — 다시 불러와 주세요.',
       RECHECK_FAIL: '최신 PIN 상태를 확인하지 못해 아무것도 바꾸지 않았어요. 연결을 확인한 뒤 다시 눌러 주세요.',
       SIGNED_OUT: '로그아웃되어 PIN 목록과 결과를 닫았어요. 저장하지 않은 PIN은 다시 볼 수 없어요 — 필요한 부스는 다시 발급하세요.',
+      BULK_OFF: '안전한 일괄 PIN 발급 기능이 준비되지 않았습니다. 관리자 설정을 확인해 주세요.',
+      BULK_UNKNOWN: '안전한 일괄 PIN 발급 기능을 확인하지 못했습니다. 관리자 설정과 연결을 확인한 뒤 다시 확인해 주세요.',
+      BULK_ONE: '한 부스씩 발급 · 재발급은 관리자 → 부스 목록의 ⋯ 에서 할 수 있어요.',
       KEEP: '이 PIN은 창을 닫은 뒤 다시 확인할 수 없습니다. 필요한 경우 지금 저장하거나 인쇄해 주세요.',
       SENSITIVE: 'PIN 목록은 운영자 배부용으로만 사용하고, 공개 폴더나 단체 대화방에 올리지 마세요.',
       VOLATILE: '이 화면은 PIN을 어디에도 저장하지 않아요. 새로 고치거나 창 · 브라우저가 닫히면 PIN을 다시 볼 수 없어요.',
@@ -2900,8 +2922,8 @@
                    common: typeof s.booth_sample_common_pin_enabled === 'boolean' ? s.booth_sample_common_pin_enabled : null };
         }, function () { return { pin: null, common: null }; });
     }
-    // 조건부 발급 함수가 있는지(부스 없이 부르면 아무것도 하지 않고 0줄). 모르면 null — 그때는 없는 것처럼 다룹니다.
-    // 페이지를 열 때가 아니라 발급 · 재발급을 처음 누를 때 한 번 묻습니다.
+    // 조건부 발급 함수가 있는지(부스 없이 부르면 아무것도 하지 않고 0줄). true 있음 · false 없음 · null 확인 못 함.
+    // true 가 아니면 발급 · 재발급 단추를 잠급니다(조건 없는 함수로 바꿔 보내지 않음).
     function probeChecked() {
       if (isMock) return Promise.resolve(null);
       return Core.rpc('admin_issue_booth_pin_checked', { p_booth_id: null, p_expect_state: null, p_expect_issued_at: null })
@@ -2937,7 +2959,7 @@
       return pSession.then(function (session) {
         if (gen !== P.gen) return;
         if (!session) { P.state = 'login'; P.cred = null; P.rows = []; render(); return; }
-        return Promise.all([readBooths(), readCreds().then(null, function (e) { return { __err: e }; }), readSwitches()])
+        return Promise.all([readBooths(), readCreds().then(null, function (e) { return { __err: e }; }), readSwitches(), probeChecked()])
           .then(function (res) {
             if (gen !== P.gen) return;
             var credRes = res[1];
@@ -2953,6 +2975,7 @@
             setRows(res[0].rows, res[0].unassigned);
             if (isMock) P.cred = demoCreds();   // 시연 상태는 목록이 정해진 뒤에 셉니다
             P.sw = res[2];
+            P.checked = res[3];
             P.loadedAt = Date.now();
             P.state = isMock ? 'demo' : 'ready';
             render();
@@ -3094,8 +3117,19 @@
             '그 부스는 공통 PIN으로도 접속할 수 있어요. 실제 행사 전에는 공통 PIN을 끄고(관리자 → 기본정보) 부스별 PIN으로 운영하세요.']);
         }
       }
-      $('pinx-notes').innerHTML = out.map(function (n) { return '<p class="pinx__note ' + n[0] + '">' + esc(n[1]) + '</p>'; }).join('');
+      var html = out.map(function (n) { return '<p class="pinx__note ' + n[0] + '">' + esc(n[1]) + '</p>'; }).join('');
+      // 조건부 발급 함수가 확인되지 않으면 단추를 잠그고 까닭을 맨 위에 적습니다(조건 없는 발급으로 바꾸지 않음).
+      if ((P.state === 'ready') && !bulkReady()) {
+        html = '<div class="pinx__note is-err" id="pinx-bulkoff" role="alert"><p style="margin:0">' +
+          esc(P.checked === false ? M.BULK_OFF : M.BULK_UNKNOWN) + '</p>' +
+          '<p style="margin:4px 0 0;font-weight:500;color:var(--ink-2)">' + esc(M.BULK_ONE) + '</p>' +
+          (P.checked === false ? '' : '<button type="button" class="btn" data-pact="reprobe" style="margin-top:8px">다시 확인</button>') +
+          '</div>' + html;
+      }
+      $('pinx-notes').innerHTML = html;
     }
+    // 여러 부스 PIN 작업을 켜도 되는가: 조건부 발급 함수가 있다고 확인됐을 때만(시연은 서버를 부르지 않으므로 늘 됨).
+    function bulkReady() { return isMock || P.checked === true; }
     function renderState() {
       var el = $('pinx-state'), html = '';
       if (P.state === 'loading' || P.state === 'idle') html = '<p>PIN 상태를 확인하는 중이에요</p>';
@@ -3162,7 +3196,7 @@
       [].slice.call(zones.querySelectorAll('[data-pzone]')).forEach(function (b) { b.disabled = P.busy; });
     }
     function renderBar() {
-      var n = countSel(), ok = (P.state === 'ready' || P.state === 'demo') && !!P.cred && !P.busy;
+      var n = countSel(), ok = (P.state === 'ready' || P.state === 'demo') && !!P.cred && !P.busy && bulkReady();
       $('pinx-count').innerHTML = '선택 ' + n.all + '곳' +
         (n.all ? '<small>발급 대상 ' + n.issue + '곳 · 재발급 대상 ' + n.reissue + '곳</small>' : '<small>발급 · 재발급할 부스를 고르세요</small>');
       var bi = $('pinx-issue'), br = $('pinx-reissue');
@@ -3227,6 +3261,29 @@
     }
 
     /* ── 창 ──────────────────────────────────────────────────────── */
+    // 창이 열려 있는 동안 뒤 화면(위 조작부 · 본문 · QR 크게 보기)은 inert 로 막습니다 — 포커스 · 클릭 · 화면 읽기가
+    // 창 밖으로 나가지 않습니다. inert 를 모르는 브라우저를 위해 Tab 순환(trapTab)도 함께 둡니다.
+    var BEHIND = ['.tb', 'main.wrap', '#ov'];
+    function setBehind(on) {
+      BEHIND.forEach(function (sel) {
+        var el = document.querySelector(sel);
+        if (!el) return;
+        if (on) el.setAttribute('inert', ''); else el.removeAttribute('inert');
+      });
+    }
+    function focusables() {
+      return [].slice.call($('pinov').querySelectorAll('button, input, a[href], [tabindex]:not([tabindex="-1"])')).filter(function (el) {
+        return !el.disabled && el.getClientRects().length;
+      });
+    }
+    function trapTab(e) {
+      var list = focusables(), ov = $('pinov');
+      if (!list.length) { e.preventDefault(); $('pinov-title').focus(); return; }
+      var first = list[0], last = list[list.length - 1], cur = document.activeElement;
+      var inside = ov.contains(cur);
+      if (e.shiftKey && (cur === first || !inside || cur === $('pinov-title'))) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && (cur === last || !inside)) { e.preventDefault(); first.focus(); }
+    }
     function openOv(danger) {
       var ov = $('pinov');
       ov.classList.toggle('is-danger', !!danger);
@@ -3234,6 +3291,7 @@
         P.back = document.activeElement;
         ov.hidden = false;
         document.body.classList.add('pinov-open');
+        setBehind(true);
       }
     }
     function fillOv(title, bodyHtml, actsHtml, focusSel) {
@@ -3252,9 +3310,12 @@
       ov.hidden = true;
       ov.classList.remove('is-danger');
       document.body.classList.remove('pinov-open');
+      setBehind(false);
+      // 연 단추로 돌아갑니다. 그 단추가 잠겼으면(보낸 뒤 고르기가 풀림) 방금 결과 요약 → 패널 머리 순으로.
       var back = P.back;
       P.back = null;
-      if (back && back.focus && document.body.contains(back) && !back.disabled) back.focus();
+      if (back && back.focus && document.body.contains(back) && !back.disabled && back.getClientRects().length) back.focus();
+      else if (!$('pinx-after').hidden) $('pinx-after').focus();
       else $('pinx-toggle').focus();
     }
 
@@ -3267,7 +3328,7 @@
 
     /* 1. 누르면: 고른 부스를 고정하고 서버 상태를 새로 읽어 할 일을 다시 셉니다 */
     function start(kind) {
-      if (P.busy || !P.cred) return;
+      if (P.busy || !P.cred || !bulkReady()) return;
       var ids = selectedIds();
       if (!ids.length) return;
       var gen = P.gen;
@@ -3279,8 +3340,12 @@
       render();
       openOv(kind === 'reissue');
       fillOv('최신 PIN 상태를 확인하는 중', '<p>선택한 ' + ids.length + '곳의 지금 상태를 서버에서 다시 읽고 있어요.</p>', '');
-      var probe = (!isMock && P.checked === null) ? probeChecked().then(function (v) { P.checked = v; }) : Promise.resolve();
-      probe.then(readCreds).then(function (cred) {
+      // 누를 때마다 조건부 발급 함수가 아직 있는지 다시 묻습니다. 없거나 확인하지 못하면 아무것도 보내지 않고 멈춥니다.
+      var probe = isMock ? Promise.resolve() : withTimeout(probeChecked(), WAIT_CHECK_MS).then(function (v) { P.checked = v; });
+      probe.then(function () {
+        if (!bulkReady()) { var e = new Error('bulk-off'); e.bulkOff = true; throw e; }
+        return withTimeout(readCreds(), WAIT_CHECK_MS);
+      }).then(function (cred) {
         if (gen !== P.gen || !P.job) return;
         P.cred = cred; P.loadedAt = Date.now();
         var plan = planOf(kind, ids, cred);
@@ -3292,6 +3357,11 @@
         if (kind === 'reissue') showConfirmReissue(ids, plan, drift); else showConfirmIssue(ids, plan, drift);
       }, function (err) {
         if (gen !== P.gen) return;
+        if (err && err.bulkOff) {
+          endJob(true);
+          setMsg('is-err', P.checked === false ? M.BULK_OFF : M.BULK_UNKNOWN);
+          return;
+        }
         if (window.console) console.warn('[print-qr PIN] 확인 전 상태를 읽지 못했습니다', err && (err.code || err.message));
         endJob(true);
         setMsg('is-err', M.RECHECK_FAIL);
@@ -3302,10 +3372,7 @@
     }
     function checkLine() {
       if (isMock) return '';
-      return P.checked === true
-        ? '<p class="pinx__hint">서버가 부스마다 발급 직전 상태를 다시 확인해요. 그 사이 다른 곳에서 바뀐 부스는 바꾸지 않고 건너뛰어요.</p>'
-        : '<p class="pinx__hint">이 화면이 부스마다 보내기 직전에 상태를 다시 읽어요. 다만 서버 쪽 동시 작업 보호(조건부 발급)가 아직 없어, ' +
-          '다른 관리자가 같은 부스의 PIN을 같은 순간에 다루면 나중 요청이 앞의 PIN을 바꿀 수 있어요. PIN 작업은 한 사람이 맡아 주세요.</p>';
+      return '<p class="pinx__hint">서버가 부스마다 발급 직전 상태를 다시 확인해요. 그 사이 다른 곳에서 바뀐 부스는 바꾸지 않고 건너뛰어요.</p>';
     }
     function showNothing(kind, ids, plan, drift) {
       P.job.phase = 'nothing';
@@ -3392,45 +3459,27 @@
         '<button type="button" class="btn" data-ov="stop"' + (P.stop ? ' disabled' : '') + '>' + (P.stop ? '멈추는 중…' : '남은 부스 멈추기') + '</button>',
         i === 0 ? '[data-ov="stop"]' : null);
     }
-    // 보내기 직전 확인(조건부 함수가 없을 때만): 다른 곳에서 상태가 바뀌었으면 보내지 않습니다.
-    function recheck(it) {
-      if (isMock || P.checked === true) return Promise.resolve(true);
-      return readCreds().then(function (cred) {
-        var c = cred[it.id];
-        P.cred = cred;
-        return !!c && c.pin_state === it.expect && (it.expect === 'none' || c.pin_issued_at === it.at);
-      });
-    }
+    // 조건부 발급 함수로만 보냅니다(시연은 화면 안 흉내). 조건 없는 admin_issue_booth_pin 으로 바꿔 보내는 길은 없습니다.
     function sendOne(job, it, gen) {
-      return recheck(it).then(function (same) {
+      var call = isMock ? demoIssue(it)
+        : Core.rpc('admin_issue_booth_pin_checked', { p_booth_id: it.id, p_expect_state: it.expect, p_expect_issued_at: it.at });
+      return withTimeout(call, WAIT_ISSUE_MS).then(function (rows) {
         if (gen !== P.gen) return;
-        if (!same) { it.status = 'skip'; it.why = 'drift'; return; }
-        var call = isMock ? demoIssue(it)
-          : P.checked === true
-            ? Core.rpc('admin_issue_booth_pin_checked', { p_booth_id: it.id, p_expect_state: it.expect, p_expect_issued_at: it.at })
-            : Core.rpc('admin_issue_booth_pin', { p_booth_id: it.id });
-        return call.then(function (rows) {
-          if (gen !== P.gen) return;
-          var r = isArr(rows) ? rows[0] : rows;
-          var pin = r && pinOk(r.pin) ? String(r.pin) : null;
-          var revoked = (r && Number(r.revoked_sessions)) || 0;
-          r = null; rows = null;
-          if (!pin) { it.status = 'unknown'; it.why = 'nopin'; P.stop = true; return; }
-          it.status = 'ok';
-          it.pin = pin;
-          pin = null;
-          it.revoked = revoked;
-          // 미발급 · 꺼진 부스였는데 PIN 세션이 끊겼다면, 그 사이 누군가 발급한 PIN 을 덮어쓴 것입니다.
-          if (it.expect !== 'on' && revoked > 0) it.anomaly = true;
-        }, function (err) {
-          if (gen !== P.gen) return;
-          classify(it, err);
-          if (window.console) console.warn('[print-qr PIN] ' + it.code + ' 처리 실패', err && (err.code || ''), err && (err.hint || ''));
-        });
+        var r = isArr(rows) ? rows[0] : rows;
+        var pin = r && pinOk(r.pin) ? String(r.pin) : null;
+        var revoked = (r && Number(r.revoked_sessions)) || 0;
+        r = null; rows = null;
+        if (!pin) { it.status = 'unknown'; it.why = 'nopin'; P.stop = true; return; }
+        it.status = 'ok';
+        it.pin = pin;
+        pin = null;
+        it.revoked = revoked;
+        // 미발급 · 꺼진 부스였는데 PIN 세션이 끊겼다면 예상 밖입니다(조건부 발급에서는 생기지 않아야 함).
+        if (it.expect !== 'on' && revoked > 0) it.anomaly = true;
       }, function (err) {
-        // 직전 상태를 읽지 못했습니다. 보내지 않았으니 바뀐 것은 없고, 연결이 나쁘니 남은 부스도 멈춥니다.
-        if (window.console) console.warn('[print-qr PIN] 직전 상태를 읽지 못했습니다', err && (err.code || err.message));
-        it.status = 'fail'; it.why = 'recheck'; P.stop = true;
+        if (gen !== P.gen) return;
+        classify(it, err);
+        if (window.console) console.warn('[print-qr PIN] ' + it.code + ' 처리 실패', err && (err.code || ''), err && (err.hint || ''));
       });
     }
     // 서버가 분명히 답한 오류(Postgres 오류 코드 있음)는 되돌려진 것이라 '실패', 답이 없으면 '결과 확인 필요'.
@@ -3440,9 +3489,12 @@
       var hint = String((err && err.hint) || ''), code = String((err && err.code) || ''), k = errKind(err);
       if (hint === 'booth_pin_state_changed_self') { it.status = 'unknown'; it.why = 'self'; P.stop = true; return; }
       if (hint === 'booth_pin_state_changed') { it.status = 'skip'; it.why = 'changed'; return; }
+      // 같은 순간 다른 곳(⋯ 메뉴 등)에서 첫 PIN 을 넣어, 서버가 이 요청을 통째로 되돌림 — 그쪽 PIN 이 남습니다.
+      if (hint === 'booth_pin_state_changed_race') { it.status = 'skip'; it.why = 'race'; return; }
       if (hint === 'booth_pin_needs_slot') { it.status = 'fail'; it.why = 'slot'; return; }
       if (k === 'login') { it.status = 'fail'; it.why = 'login'; P.stop = true; return; }
-      if (k === 'db') { it.status = 'fail'; it.why = 'db'; P.stop = true; P.checked = null; return; }
+      // 조건부 발급 함수가 사라졌습니다(되돌리기 등). 남은 부스를 멈추고 단추도 잠급니다(다음 누름에서 다시 확인).
+      if (k === 'db') { it.status = 'fail'; it.why = 'db'; P.stop = true; P.checked = false; return; }
       if (code === 'P0002') { it.status = 'fail'; it.why = 'gone'; return; }
       if (k === 'net') { it.status = 'unknown'; it.why = 'net'; P.stop = true; return; }
       it.status = 'fail'; it.why = 'server';
@@ -3452,7 +3504,7 @@
       job.items.forEach(function (it) { if (!it.status) { it.status = 'notrun'; } });
       job.phase = 'verify';
       fillOv('결과를 확인하는 중', '<p>서버의 지금 상태를 다시 읽고 있어요.</p>', '');
-      readCreds().then(function (cred) {
+      withTimeout(readCreds(), WAIT_VERIFY_MS).then(function (cred) {
         if (gen !== P.gen || P.job !== job) return;
         P.cred = cred; P.loadedAt = Date.now();
         job.items.forEach(function (it) {
@@ -3471,13 +3523,12 @@
     /* 3. 결과 */
     var WHY = {
       changed: '다른 관리자 계정이 먼저 이 부스 PIN을 바꿔 서버가 거절했어요. 이 화면은 바꾸지 않았어요 — 지금 PIN은 그 관리자에게 확인하세요.',
-      drift: '보내기 직전에 다시 확인해 보니 다른 곳에서 PIN 상태가 바뀌어 있어 보내지 않았어요. 바꾸지 않았어요.',
+      race: '같은 순간 다른 곳(다른 관리자나 ⋯ 메뉴)에서 이 부스의 첫 PIN을 발급해 서버가 이 요청을 되돌렸어요. 이 화면은 바꾸지 않았어요 — 지금 PIN은 그쪽에서 확인하세요.',
       slot: '구역 · 번호가 없어 발급할 수 없어요. 바꾸지 않았어요.',
       login: '로그인 · 관리자 권한을 확인하지 못했어요. 바꾸지 않았고 남은 부스도 멈췄어요. 새로 고친 뒤 다시 해 주세요.',
-      db: 'PIN 기능(DB 설정)을 찾지 못했어요. 바꾸지 않았고 남은 부스도 멈췄어요.',
+      db: '안전한 일괄 PIN 발급 기능(DB 설정)을 찾지 못했어요. 바꾸지 않았고 남은 부스도 멈췄어요.',
       gone: '부스를 찾지 못했어요(지워졌을 수 있음). 바꾸지 않았어요.',
       server: '서버가 거절했어요. 바꾸지 않았어요.',
-      recheck: '보내기 직전 상태를 확인하지 못해 보내지 않았어요. 바꾸지 않았고 남은 부스도 멈췄어요.',
       notrun: '앞에서 멈춰 보내지 않았어요. 바꾸지 않았어요.'
     };
     function unknownWhy(it) {
@@ -3486,7 +3537,7 @@
         : it.why === 'self'
           ? '같은 관리자 계정으로 방금 이 부스 PIN이 바뀌었다며 서버가 거절했어요. 이 화면의 앞 요청이 응답 없이 처리됐거나(연결이 끊겨 브라우저가 다시 보낸 경우), ' +
             '같은 계정을 쓰는 다른 기기에서 바꿨을 수 있어요. 이 화면은 지금 PIN을 모릅니다. 남은 부스는 보내지 않았어요.'
-          : '응답을 받지 못했어요(연결 끊김). 서버에서 PIN이 바뀌었을 수 있고, 그랬다면 그 PIN은 다시 볼 수 없어요. 남은 부스는 보내지 않았어요.';
+          : '응답을 받지 못했어요(연결 끊김 또는 응답 시간 초과). 서버에서 PIN이 바뀌었을 수 있고, 그랬다면 그 PIN은 다시 볼 수 없어요. 남은 부스는 보내지 않았어요.';
       var srv = it.serverChanged === true
         ? ' 서버 확인: 이 부스의 PIN이 바뀌어 있어요 — 이 화면은 새 PIN 원문을 받지 못했어요.'
         : it.serverChanged === false
@@ -3499,9 +3550,29 @@
       items.forEach(function (it) { t[it.status]++; });
       return t;
     }
+    /* 결과 창 아래 단추 줄. 내려받기 · 인쇄 창을 열었다고 해서 배부가 끝났다고 보지 않습니다 — 브라우저는 다운로드가
+       끝났는지, 실제로 인쇄됐는지 알려 주지 않습니다. 관리자가 파일 · 인쇄물을 직접 보고 '확인했어요' 에 체크해야
+       경고 없이 닫힙니다(체크는 내려받기나 인쇄 창을 연 뒤에만 켜짐). */
+    function resultActsHtml(job) {
+      var has = job.items.some(function (it) { return it.status === 'ok'; });
+      if (!has) return '<button type="button" class="btn btn--primary" data-ov="close">닫기</button>';
+      var started = job.csvStarted || job.printOpened;
+      return '<p class="pinov__status" id="pinov-status" role="status" aria-live="polite">' + esc(job.status || '') + '</p>' +
+        '<label class="pinov__ack' + (started ? '' : ' is-off') + '"><input type="checkbox" id="pinov-ack"' +
+          (job.ack ? ' checked' : '') + (started ? '' : ' disabled') + ' /> 내려받은 CSV 파일이나 인쇄물에서 PIN을 직접 확인했어요</label>' +
+        (started ? '' : '<p class="pinov__ackhint">CSV를 내려받거나 배부표 인쇄 창을 연 뒤 체크할 수 있어요.</p>') +
+        '<button type="button" class="btn" data-ov="csv">' + (job.csvStarted ? 'CSV 다시 내려받기' : 'CSV 내려받기') + '</button>' +
+        '<button type="button" class="btn" data-ov="print">' + (job.printOpened ? '배부표 인쇄 창 다시 열기' : 'PIN 배부표 인쇄') + '</button>' +
+        '<button type="button" class="btn btn--primary" data-ov="close">닫기</button>';
+    }
+    function paintResultActs(job, focusSel) {
+      $('pinov-acts').innerHTML = resultActsHtml(job);
+      var f = focusSel ? $('pinov-acts').querySelector(focusSel) : null;
+      if (f && !f.disabled) f.focus();
+    }
     function showResult(job) {
       job.phase = 'result';
-      job.saved = false; job.printed = false;
+      job.csvStarted = false; job.printOpened = false; job.ack = false; job.status = '';
       var t = tally(job.items), done = t.ok === job.items.length;
       var title = (job.kind === 'reissue' ? 'PIN 재발급' : 'PIN 발급') + (done ? ' 완료' : ' 결과');
       var sum = '<ul class="pinov__sum">' +
@@ -3536,31 +3607,32 @@
         (has ? '<div class="pinov__warn"><b>' + esc(M.KEEP) + '</b>' + esc(M.SENSITIVE) + '</div>' : '') +
         (has ? '<p class="pinx__hint">' + esc(M.VOLATILE) + (opSite() ? ' 운영자 안내: ' + esc(opSite()) + ' → “부스 번호와 PIN으로 시작” → 구역 → 부스 → PIN.' : '') + '</p>' : '') +
         list,
-        (has ? '<button type="button" class="btn" data-ov="csv">CSV 저장</button>' +
-               '<button type="button" class="btn" data-ov="print">PIN 배부표 인쇄</button>' : '') +
-        '<button type="button" class="btn btn--primary" data-ov="close">닫기</button>',
+        resultActsHtml(job),
         null);
     }
     function askClose() {
       var job = P.job;
       if (!job) return;
       var has = job.items.some(function (it) { return it.status === 'ok'; });
-      if (!has || job.saved || job.printed) { closeResult(); return; }
+      if (!has || job.ack) { closeResult(); return; }
       job.phase = 'closeask';
+      var started = job.csvStarted || job.printOpened;
       var acts = $('pinov-acts');
-      acts.innerHTML = '<p class="pinov__warn" style="flex-basis:100%;margin:0"><b>PIN을 저장하지 않고 닫을까요?</b>이 PIN은 다시 확인할 수 없습니다.</p>' +
+      acts.innerHTML = '<div class="pinov__warn" style="flex-basis:100%;margin:0" role="alert">' +
+          (started
+            ? '<b>PIN 확인을 마치지 않고 닫을까요?</b>이 PIN은 다시 확인할 수 없습니다. CSV 다운로드나 인쇄가 실제로 끝났는지는 ' +
+              '이 화면이 알 수 없어요 — 파일이나 인쇄물을 확인했다면 돌아가서 확인 칸에 체크해 주세요.'
+            : '<b>PIN을 저장하지 않고 닫을까요?</b>이 PIN은 다시 확인할 수 없습니다. 아직 CSV를 내려받거나 인쇄 창을 열지 않았어요.') +
+        '</div>' +
         '<button type="button" class="btn" data-ov="back">돌아가기</button>' +
-        '<button type="button" class="btn btn--danger-solid" data-ov="discard">저장하지 않고 닫기</button>';
+        '<button type="button" class="btn btn--danger-solid" data-ov="discard">확인하지 않고 닫기</button>';
       acts.querySelector('[data-ov="back"]').focus();
     }
     function backFromClose() {
       var job = P.job;
       if (!job) return;
       job.phase = 'result';
-      $('pinov-acts').innerHTML = '<button type="button" class="btn" data-ov="csv">CSV 저장</button>' +
-        '<button type="button" class="btn" data-ov="print">PIN 배부표 인쇄</button>' +
-        '<button type="button" class="btn btn--primary" data-ov="close">닫기</button>';
-      $('pinov-acts').querySelector('[data-ov="csv"]').focus();
+      paintResultActs(job, (job.csvStarted || job.printOpened) ? '#pinov-ack' : '[data-ov="csv"]');
     }
     // 결과 창을 닫습니다. PIN 원문을 담은 변수 · 화면 · 배부표를 모두 비우고, 패널에는 숫자 요약만 남깁니다.
     function closeResult() {
@@ -3584,9 +3656,9 @@
       P.busy = false;
       P.stop = false;
       $('pinsheet').innerHTML = '';
-      closeOv();
       if (!keepSel) clearSel();
-      render();
+      render();     // 먼저 그려야 closeOv 가 돌아갈 단추가 잠겼는지 바르게 봅니다
+      closeOv();
       refreshCreds();
     }
 
@@ -3619,9 +3691,10 @@
       a.click();
       setTimeout(function () { URL.revokeObjectURL(url); if (a.parentNode) a.parentNode.removeChild(a); }, 1500);
       blob = null;
-      job.saved = true;
-      var b = $('pinov-acts').querySelector('[data-ov="csv"]');
-      if (b) b.textContent = 'CSV 저장함 · 다시 저장';
+      // 내려받기를 '시작' 했을 뿐입니다. 끝났는지 · 파일이 열리는지는 관리자가 직접 확인합니다.
+      job.csvStarted = true;
+      job.status = 'CSV 다운로드를 시작했어요. 다운로드 목록에서 파일을 열어 PIN이 보이는지 확인한 뒤 아래에 체크해 주세요 — 이 화면은 저장이 끝났는지 알 수 없어요.';
+      paintResultActs(job, '[data-ov="csv"]');
     }
     function sheetHtml(items) {
       var st = kstStamp(), site = opSite();
@@ -3659,7 +3732,10 @@
         sheet.innerHTML = '';
       }
       window.addEventListener('afterprint', after);
-      job.printed = true;
+      // 인쇄 창을 '열었을' 뿐입니다. 실제로 인쇄됐는지는 브라우저가 알려 주지 않아 관리자가 인쇄물을 보고 확인합니다.
+      job.printOpened = true;
+      job.status = '인쇄 창을 열었어요. 인쇄물에 PIN이 제대로 찍혔는지 확인한 뒤 아래에 체크해 주세요 — 이 화면은 실제로 인쇄됐는지 알 수 없어요.';
+      paintResultActs(job, '[data-ov="print"]');
       window.print();
     }
 
@@ -3753,6 +3829,10 @@
         if (!t) return;
         var a = t.getAttribute('data-pact');
         if (a === 'reload') { load(); }
+        else if (a === 'reprobe') {
+          t.disabled = true;
+          probeChecked().then(function (v) { P.checked = v; render(); });
+        }
         else if (a === 'after-close') { P.last = null; renderAfter(); }
         else if (a === 'redo' && P.last && !P.busy) {
           // 실패 · 확인 필요 부스만 다시 고릅니다(거르기를 풀어 모두 보이게). 보내기 전에 늘 서버 상태를 다시 읽습니다.
@@ -3771,6 +3851,12 @@
           if (go) go.disabled = e.target.value.trim() !== REISSUE_WORD;
         }
       });
+      // '파일 · 인쇄물에서 PIN 을 확인했어요' 체크
+      $('pinov').addEventListener('change', function (e) {
+        if (!e.target || e.target.id !== 'pinov-ack' || !P.job) return;
+        P.job.ack = !!e.target.checked && !!(P.job.csvStarted || P.job.printOpened);
+        e.target.checked = P.job.ack;
+      });
       $('pinov').addEventListener('click', function (e) {
         var t = e.target.closest ? e.target.closest('[data-ov]') : null;
         if (!t || t.disabled) return;
@@ -3788,14 +3874,19 @@
         else if (a === 'back') backFromClose();
         else if (a === 'discard') closeResult();
       });
+      // 창이 열려 있는 동안: Tab · Shift+Tab 은 창 안에서만 돌고, Escape 는 단계에 맞게만 처리합니다
+      // (확인 → 취소, 결과 → 닫기 확인, 닫기 확인 → 돌아가기, 상태 확인 · 진행 · 결과 확인 중 → 아무것도 안 함).
       document.addEventListener('keydown', function (e) {
-        if (e.key !== 'Escape' || $('pinov').hidden || !P.job) return;
+        if ($('pinov').hidden) return;
+        if (e.key === 'Tab') { trapTab(e); return; }
+        if (e.key !== 'Escape' || !P.job) return;
         e.preventDefault();
+        e.stopPropagation();
         var ph = P.job.phase;
         if (ph === 'confirm' || ph === 'nothing') endJob(true);
         else if (ph === 'result') askClose();
         else if (ph === 'closeask') backFromClose();
-      });
+      }, true);
     }
 
     function init() {

@@ -6,29 +6,41 @@
 --     관리자 A 가 'PIN 미발급' 을 본 직후 관리자 B 가 같은 부스에 PIN 을 발급하면,
 --     A 의 '선택 PIN 발급' 이 B 의 PIN 을 조용히 덮어씁니다(B 가 나눠 준 PIN 이 실패하고
 --     그 PIN 으로 연 기기가 로그아웃). 화면이 직전에 다시 확인해도 그 확인과 발급 사이의
---     틈(왕복 한 번)은 화면만으로 닫을 수 없습니다.
+--     틈(왕복 한 번)은 화면만으로 닫을 수 없습니다. 그래서 print-qr.html 의 여러 부스 PIN
+--     발급 · 재발급은 이 함수가 있을 때만 켜집니다(없으면 그 단추를 잠급니다).
 --
 --   이 파일이 하는 일 (더하기만 합니다)
 --     public.admin_issue_booth_pin_checked(부스, 기대 상태, 기대 발급 시각) 하나를 만듭니다.
 --       1. 관리자인지 확인합니다(is_admin).
---       2. 부스 줄과 그 부스의 PIN 줄을 잠근 뒤 지금 상태를 읽습니다.
---          부스 줄 잠금(FOR UPDATE)은 같은 부스의 첫 발급(PIN 새 줄 — 외래 키 확인이 부스 줄을
---          KEY SHARE 로 잠금)과도 순서를 맞춥니다.
---       3. 상태('none' · 'on' · 'off')와 발급 시각(admin_booth_credentials 의 pin_issued_at)이
---          화면이 본 값과 다르면 아무것도 바꾸지 않고 멈춥니다(hint = booth_pin_state_changed).
---       4. 같으면 기존 admin_issue_booth_pin(부스) 를 그대로 부릅니다 — PIN 만들기 · 해시 ·
+--       2. 이 부스의 '조건부 발급' 자물쇠(트랜잭션 advisory lock, 키 'booth_pin:issue:' || 부스)를
+--          잡습니다. 이 함수끼리는 같은 부스에서 한 줄로 섭니다. PIN 로그인이 쓰는 자물쇠
+--          ('booth_pin:booth:' · 'dev:' · 'ip:')와 키가 달라 로그인을 막지 않습니다.
+--       3. 그 부스의 PIN 줄을 FOR UPDATE 로 잠그고 지금 상태를 읽습니다. 부스 줄(booths)은
+--          잠그지 않습니다 — 기존 함수는 PIN 줄을 먼저 잡고 나중에 보안 기록(외래 키로 부스 줄을
+--          KEY SHARE)을 쓰므로, 이 함수가 부스 줄을 먼저 잡으면 서로 기다리는 교착이 생깁니다.
+--       4. 상태('none' · 'on' · 'off')와 발급 시각(admin_booth_credentials 의 pin_issued_at)이
+--          화면이 본 값과 다르면 아무것도 바꾸지 않고 멈춥니다.
+--            hint booth_pin_state_changed       다른 계정이 바꿨거나 상태가 다름
+--            hint booth_pin_state_changed_self  같은 관리자 계정이 2분 안에 바꿈(응답을 잃은 앞 요청을
+--                                               브라우저가 다시 보낸 경우 등 — 화면은 '결과 확인 필요')
+--       5. 같으면 기존 admin_issue_booth_pin(부스) 를 그대로 부릅니다 — PIN 만들기 · 해시 ·
 --          세션 끊기 · 보안 기록은 기존 함수 그대로입니다(한 글자도 바꾸지 않습니다).
+--       6. 'none' 을 기대했는데 기존 함수가 새 줄을 넣지 않고 고쳤다면(같은 순간 다른 곳에서
+--          — 예: 관리자 ⋯ 메뉴 — 첫 PIN 을 넣은 경우) 오류를 내어 이 호출 전체를 되돌립니다.
+--          그 다른 곳의 PIN 은 그대로 남습니다. hint booth_pin_state_changed_race
+--     잠금을 오래 기다리지 않습니다(lock_timeout 5초 → 55P03, 바뀐 것 없음).
 --     p_booth_id 가 null 이면 아무것도 하지 않고 0줄을 돌려줍니다. 관리자 화면이 이 함수가
 --     있는지 알아보는 데 씁니다(없으면 PGRST202).
 --
 --   바꾸지 않는 것
 --     admin_issue_booth_pin · admin_disable_booth_pin · admin_booth_credentials · booth_pin_login ·
 --     booth_session_* · booth_ctrl_* · 표 · 칸 · 설정. 확인 표가 적용 전후 정의 md5 를 견줍니다.
---     관리자 → 부스 ⋯ 메뉴의 개별 PIN 발급은 계속 기존 함수를 씁니다.
+--     관리자 → 부스 ⋯ 메뉴의 개별 PIN 발급은 계속 기존 함수를 씁니다(같은 부스를 같은 순간 ⋯ 로도
+--     발급하면 ⋯ 쪽이 나중에 덮을 수 있습니다 — 이 함수가 남의 PIN 을 덮지는 않습니다).
 --
---   적용 전 · 후 화면
---     print-qr.html 의 '운영자 PIN 발급·관리' 는 이 함수가 있으면 이것으로, 없으면 기존 함수로
---     발급합니다(없을 때는 부스마다 직전 상태를 다시 읽어 틈을 줄이기만 합니다).
+--   동시 실행 확인 (2026-10-10, 로컬 PostgreSQL 17.10, 연결 여러 개)
+--     같은 부스 동시 신규 · 동시 재발급 · 같은 계정 두 기기 · 기존 함수와의 충돌 · 응답 유실 뒤 재전송 ·
+--     교착(앞 초안은 재현됨, 이 판은 0) · lock_timeout. 결과는 Gate 1.5 보고 참고.
 --
 -- 사용법 (승인 뒤에만): SQL Editor 또는 apply_migration 에 전체 붙여넣고 Run(한 트랜잭션).
 --   여러 번 실행해도 같은 결과입니다. 되돌리기: rollback-booth-pin-checked.sql
@@ -61,12 +73,15 @@ language plpgsql
 volatile
 security definer
 set search_path = ''
+set lock_timeout = '5s'
 as $$
 #variable_conflict use_column
 declare
   v_state text;
   v_at    timestamptz;
   v_by    uuid;
+  v_re    timestamptz;
+  r       record;
 begin
   if not public.is_admin() then
     raise exception '관리자만 PIN 을 발급할 수 있습니다.' using errcode = '42501';
@@ -78,11 +93,12 @@ begin
   if p_expect_state is null or p_expect_state not in ('none', 'on', 'off') then
     raise exception '기대 상태가 올바르지 않습니다.' using errcode = '22023', hint = 'booth_pin_bad_expect';
   end if;
-
-  perform 1 from public.booths b where b.id = p_booth_id for update;
-  if not found then
+  if not exists (select 1 from public.booths b where b.id = p_booth_id) then
     raise exception '해당 부스를 찾을 수 없습니다.' using errcode = 'P0002';
   end if;
+
+  -- 이 함수끼리 같은 부스에서 한 줄로 서게 합니다(부스 줄 · PIN 줄보다 먼저, 늘 같은 순서).
+  perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended('booth_pin:issue:' || p_booth_id::text, 0));
 
   select case when p.disabled_at is not null then 'off' else 'on' end, coalesce(p.reissued_at, p.issued_at), p.issued_by
     into v_state, v_at, v_by
@@ -97,9 +113,6 @@ begin
 
   if v_state <> p_expect_state
      or (p_expect_state <> 'none' and v_at is distinct from p_expect_issued_at) then
-    -- 같은 관리자 계정이 방금(2분 안) 바꾼 것이면 따로 알립니다. 응답을 잃은 앞 요청을 브라우저가
-    -- 저절로 다시 보낸 경우가 여기에 걸립니다 — 그때는 PIN 이 이미 바뀌었고 원문은 아무도 모릅니다.
-    -- (같은 계정을 쓰는 다른 기기일 수도 있어 화면은 '결과 확인 필요' 로만 다룹니다.)
     if v_by is not null and v_by = auth.uid() and v_at > pg_catalog.now() - interval '2 minutes' then
       raise exception '같은 관리자 계정으로 방금 이 부스의 PIN 이 바뀌었습니다. 응답을 받지 못한 앞 요청이 처리됐을 수 있습니다.'
         using errcode = 'P0001', hint = 'booth_pin_state_changed_self';
@@ -108,7 +121,19 @@ begin
       using errcode = 'P0001', hint = 'booth_pin_state_changed';
   end if;
 
-  return query select r.pin, r.issued_at, r.revoked_sessions from public.admin_issue_booth_pin(p_booth_id) r;
+  select x.pin, x.issued_at, x.revoked_sessions into r from public.admin_issue_booth_pin(p_booth_id) x;
+
+  -- 'none' 을 보고 왔는데 기존 함수가 새 줄 대신 있던 줄을 고쳤다면(reissued_at 이 채워짐),
+  -- 같은 순간 다른 곳에서 첫 PIN 을 넣은 것입니다. 이 호출을 통째로 되돌려 그쪽 PIN 을 지킵니다.
+  if p_expect_state = 'none' then
+    select p.reissued_at into v_re from public.booth_pin p where p.booth_id = p_booth_id;
+    if v_re is not null then
+      raise exception '같은 순간 다른 곳에서 이 부스의 첫 PIN 을 발급했습니다. 이 요청은 되돌렸습니다.'
+        using errcode = 'P0001', hint = 'booth_pin_state_changed_race';
+    end if;
+  end if;
+
+  return query select r.pin, r.issued_at, r.revoked_sessions;
 end;
 $$;
 
@@ -117,7 +142,7 @@ revoke execute on function public.admin_issue_booth_pin_checked(uuid, text, time
 grant  execute on function public.admin_issue_booth_pin_checked(uuid, text, timestamptz) to authenticated;
 
 comment on function public.admin_issue_booth_pin_checked(uuid, text, timestamptz) is
-  '관리자 전용. 화면이 본 PIN 상태 · 발급 시각이 지금과 같을 때만 admin_issue_booth_pin 을 부릅니다(다르면 booth_pin_state_changed). p_booth_id 가 null 이면 0줄.';
+  '관리자 전용. 화면이 본 PIN 상태 · 발급 시각이 지금과 같을 때만 admin_issue_booth_pin 을 부릅니다(다르면 booth_pin_state_changed[_self|_race], 바뀐 것 없음). 부스별 advisory lock → PIN 줄 FOR UPDATE 순서, lock_timeout 5초. p_booth_id 가 null 이면 0줄.';
 
 notify pgrst, 'reload schema';
 
