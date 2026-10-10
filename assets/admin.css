@@ -305,6 +305,8 @@
 }
 .pubswitch:hover { border-color: var(--ink-2); }
 .pubswitch:disabled { opacity: 0.5; cursor: progress; }
+/* ⋯ 의 PIN 발급 단추: 안전한(조건부) 발급 함수를 확인하지 못해 잠겼을 때 잠긴 것이 보이게 */
+.credmore .btn:disabled { opacity: 0.45; cursor: not-allowed; }
 .pubswitch__dot { width: 9px; height: 9px; border-radius: 50%; background: var(--line); flex: none; }
 .pubswitch.is-on { border-color: var(--primary); color: var(--primary); background: var(--primary-t); }
 .pubswitch.is-on .pubswitch__dot { background: var(--primary); }

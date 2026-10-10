@@ -7,7 +7,8 @@
 --     A 의 '선택 PIN 발급' 이 B 의 PIN 을 조용히 덮어씁니다(B 가 나눠 준 PIN 이 실패하고
 --     그 PIN 으로 연 기기가 로그아웃). 화면이 직전에 다시 확인해도 그 확인과 발급 사이의
 --     틈(왕복 한 번)은 화면만으로 닫을 수 없습니다. 그래서 print-qr.html 의 여러 부스 PIN
---     발급 · 재발급은 이 함수가 있을 때만 켜집니다(없으면 그 단추를 잠급니다).
+--     발급 · 재발급과 관리자 → 부스 ⋯ 메뉴의 한 부스 발급 · 재발급 · 다시 켜기는 모두 이 함수가
+--     있을 때만 켜집니다(없으면 그 단추를 잠급니다). PIN 끄기(admin_disable_booth_pin)는 그대로입니다.
 --
 --   이 파일이 하는 일 (더하기만 합니다)
 --     public.admin_issue_booth_pin_checked(부스, 기대 상태, 기대 발급 시각) 하나를 만듭니다.
@@ -21,8 +22,9 @@
 --       4. 상태('none' · 'on' · 'off')와 발급 시각(admin_booth_credentials 의 pin_issued_at)이
 --          화면이 본 값과 다르면 아무것도 바꾸지 않고 멈춥니다.
 --            hint booth_pin_state_changed       다른 계정이 바꿨거나 상태가 다름
---            hint booth_pin_state_changed_self  같은 관리자 계정이 2분 안에 바꿈(응답을 잃은 앞 요청을
---                                               브라우저가 다시 보낸 경우 등 — 화면은 '결과 확인 필요')
+--            hint booth_pin_state_changed_self  같은 관리자 계정이 2분 안에 새로 발급함(발급 시각이 화면이 본 값과
+--                                               다름 — 응답을 잃은 앞 요청을 브라우저가 다시 보낸 경우 등, 화면은
+--                                               '결과 확인 필요'). 누가 PIN 을 끈 것뿐이면 이 힌트가 아닙니다.
 --       5. 같으면 기존 admin_issue_booth_pin(부스) 를 그대로 부릅니다 — PIN 만들기 · 해시 ·
 --          세션 끊기 · 보안 기록은 기존 함수 그대로입니다(한 글자도 바꾸지 않습니다).
 --       6. 'none' 을 기대했는데 기존 함수가 새 줄을 넣지 않고 고쳤다면(같은 순간 다른 곳에서
@@ -35,8 +37,8 @@
 --   바꾸지 않는 것
 --     admin_issue_booth_pin · admin_disable_booth_pin · admin_booth_credentials · booth_pin_login ·
 --     booth_session_* · booth_ctrl_* · 표 · 칸 · 설정. 확인 표가 적용 전후 정의 md5 를 견줍니다.
---     관리자 → 부스 ⋯ 메뉴의 개별 PIN 발급은 계속 기존 함수를 씁니다(같은 부스를 같은 순간 ⋯ 로도
---     발급하면 ⋯ 쪽이 나중에 덮을 수 있습니다 — 이 함수가 남의 PIN 을 덮지는 않습니다).
+--     기존 admin_issue_booth_pin 은 지우지 않습니다(화면은 더 부르지 않지만, 되돌리기 · SQL 로 하는 일에 남겨 둠).
+--     PIN 끄기는 조건 없이 그대로라, 같은 순간 재발급과 겹치면 나중에 온 끄기가 이깁니다(PIN 이 꺼진 쪽 — 안전한 쪽).
 --
 --   동시 실행 확인 (2026-10-10, 로컬 PostgreSQL 17.10, 연결 여러 개)
 --     같은 부스 동시 신규 · 동시 재발급 · 같은 계정 두 기기 · 기존 함수와의 충돌 · 응답 유실 뒤 재전송 ·
@@ -113,7 +115,10 @@ begin
 
   if v_state <> p_expect_state
      or (p_expect_state <> 'none' and v_at is distinct from p_expect_issued_at) then
-    if v_by is not null and v_by = auth.uid() and v_at > pg_catalog.now() - interval '2 minutes' then
+    -- '같은 계정이 방금 새로 발급함' 일 때만입니다. 다른 관리자가 PIN 을 끈 경우는 발급 시각 · 발급자가 그대로라
+    -- 발급 시각이 화면이 본 값과 같으면 여기에 걸지 않습니다(그냥 상태가 바뀐 것).
+    if v_by is not null and v_by = auth.uid() and v_at is distinct from p_expect_issued_at
+       and v_at > pg_catalog.now() - interval '2 minutes' then
       raise exception '같은 관리자 계정으로 방금 이 부스의 PIN 이 바뀌었습니다. 응답을 받지 못한 앞 요청이 처리됐을 수 있습니다.'
         using errcode = 'P0001', hint = 'booth_pin_state_changed_self';
     end if;

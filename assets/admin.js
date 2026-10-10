@@ -315,9 +315,23 @@
      PIN 기능(supabase/migration-booth-pin.sql) 전이면 함수가 없어 상태 칸만 비웁니다 —
      목록 · 수정 · 공개는 그대로 동작합니다.
      여기(⋯)서는 한 부스씩 발급합니다. 여러 부스를 골라 발급 · 재발급하는 일은 QR · PIN 관리(print-qr.html)가 맡습니다. 원문은 발급 창에서 한 번만 보이고
-     창을 닫으면 화면 · 변수에서 사라집니다 — 저장 · 기록 · 알림 · 주소 어디에도 넣지 않습니다. */
-  var creds = null;          // { 부스 id: {qr_state, pin_state, pin_sessions, pin_failures_1h, …} } · null = 모름
+     창을 닫으면 화면 · 변수에서 사라집니다 — 저장 · 기록 · 알림 · 주소 어디에도 넣지 않습니다.
+     발급 · 재발급 · 다시 켜기는 QR · PIN 관리와 같은 조건부 함수(admin_issue_booth_pin_checked,
+     migration-booth-pin-checked.sql)로만 합니다. 누를 때 서버 상태를 다시 읽어 ⋯ 를 펼칠 때 본 상태와 같을 때만
+     묻고, 서버도 그 상태 · 발급 시각이 그대로일 때만 바꿉니다. 함수가 없거나 확인하지 못하면 단추를 잠그고,
+     조건 없는 admin_issue_booth_pin 으로 바꿔 부르지 않습니다. PIN 끄기(admin_disable_booth_pin)는 그대로입니다. */
+  var creds = null;          // { 부스 id: {qr_state, pin_state, pin_issued_at, pin_sessions, pin_failures_1h, …} } · null = 모름
   var PIN_FAIL_WARN = 10;    // 최근 1시간 PIN 실패가 이만큼이면 'PIN 실패 많음'
+  var pinChecked = null;     // 조건부 발급 함수: true 있음 · false 없음 · null 확인 못 함
+  var PIN_WAIT_MS = 25000;   // 발급 요청이 이만큼 답이 없으면 '결과 확인 필요' 로 안내합니다
+  // 조건부 발급 함수가 있는지 묻습니다(부스 없이 부르면 아무것도 하지 않고 0줄).
+  function probePinChecked() {
+    return C.rpc('admin_issue_booth_pin_checked', { p_booth_id: null, p_expect_state: null, p_expect_issued_at: null })
+      .then(function () { return true; }, function (e) {
+        var code = (e && e.code) || '';
+        return (code === 'PGRST202' || code === '42883') ? false : null;
+      });
+  }
   function loadCreds() {
     if (DEMO) return Promise.resolve();
     var a = C.rpc('admin_booth_credentials').then(function (rows) {
@@ -328,13 +342,14 @@
       creds = null;
       if (window.console) console.warn('[admin] 운영자 QR · PIN 상태를 읽지 못했습니다', e && (e.code || e.message));
     });
+    var p = probePinChecked().then(function (v) { pinChecked = v; });
     // '확인 필요' 를 세려고 대기 값도 함께 읽습니다(관리자는 모든 부스의 값을 읽을 수 있음). 못 읽으면 그 카드만 뺍니다.
     var b = C.select('booth_live', { columns: 'booth_id,congestion,updated_at', order: false }).then(function (rows) {
       var m = {};
       (rows || []).forEach(function (l) { m[l.booth_id] = l; });
       liveMap = m;
     }, function () { liveMap = null; });
-    return Promise.all([a, b]);
+    return Promise.all([a, b, p]);
   }
   function credOf(r) {
     if (!creds) return null;
@@ -365,14 +380,20 @@
       return '<button class="btn ' + (danger ? 'btn--danger' : 'btn--ghost') + ' btn--sm" type="button" data-act="' + act + '">' +
         esc(text) + '</button>';
     }
+    // 발급 · 재발급 · 다시 켜기는 조건부 발급 함수가 있다고 확인될 때만 켭니다. PIN 끄기는 따로라 그대로 둡니다.
+    var ready = pinChecked === true;
+    function issueBtn(text) {
+      return '<button class="btn btn--ghost btn--sm" type="button" data-act="pin-issue"' + (ready ? '' : ' disabled') + '>' + esc(text) + '</button>';
+    }
     var acts = !hasSlot(r) ? '<span class="demomore__na">구역과 부스 번호를 먼저 지정해 주세요.</span>'
-      : c.pin_state === 'on' ? b('pin-issue', 'PIN 재발급') + b('pin-off', 'PIN 끄기', true)
-      : c.pin_state === 'off' ? b('pin-issue', '새 PIN으로 다시 켜기')
-      : b('pin-issue', 'PIN 발급');
+      : c.pin_state === 'on' ? issueBtn('PIN 재발급') + b('pin-off', 'PIN 끄기', true)
+      : c.pin_state === 'off' ? issueBtn('새 PIN으로 다시 켜기')
+      : issueBtn('PIN 발급');
     return '<div class="demomore credmore">' +
       '<p class="demomore__t">운영자 PIN · QR 카드를 쓸 수 없는 부스에만 요청을 받아 발급합니다' +
         (c.pin_sessions > 0 ? ' · 지금 PIN 로그인 ' + c.pin_sessions + '대' : '') + '</p>' +
       '<div class="demomore__acts">' + acts + '</div>' +
+      (hasSlot(r) && !ready ? '<p class="demomore__na credmore__off" role="note">' + esc(pinCheckedMessage()) + '</p>' : '') +
       '<p class="demomore__t">운영자 QR 발급 · 끄기 · 바꾸기와 여러 부스의 PIN 발급 · 재발급은 ' +
         '<a href="print-qr.html" target="_blank" rel="noopener">QR · PIN 관리</a> 화면에서 합니다</p></div>';
   }
@@ -389,6 +410,31 @@
     if (e && (e.code === 'PGRST202' || e.code === '42883')) return 'PIN 기능이 아직 켜지지 않았습니다(DB 설정 전).';
     if (e && e.code === 'P0002') return e.message || '해당 부스를 찾을 수 없습니다.';
     return C.dataMessage(e);
+  }
+  function pinCheckedMessage() {
+    return pinChecked === false
+      ? '안전한 PIN 발급 기능이 준비되지 않았습니다. 관리자 설정을 확인해 주세요. (PIN 끄기는 쓸 수 있어요)'
+      : '안전한 PIN 발급 기능을 확인하지 못했습니다. 연결을 확인한 뒤 화면을 새로 고쳐 주세요. (PIN 끄기는 쓸 수 있어요)';
+  }
+  function pinStateLabel(c) {
+    if (!c) return '상태 확인 불가';
+    return { on: 'PIN 발급됨', off: 'PIN 꺼짐' }[c.pin_state] || 'PIN 미발급';
+  }
+  // 오류 코드가 없는 오류(연결 끊김 · 시간 초과)는 서버에서 처리됐는지 알 수 없습니다.
+  function pinNoAnswer(e) { return !e || !e.code || e.timeout || /Failed to fetch|NetworkError|Load failed/i.test(String(e.message || '')); }
+  function pinWait(p, ms) {
+    return new Promise(function (resolve, reject) {
+      var t = setTimeout(function () { var e = new Error('응답 시간 초과'); e.timeout = true; reject(e); }, ms);
+      p.then(function (v) { clearTimeout(t); resolve(v); }, function (e) { clearTimeout(t); reject(e); });
+    });
+  }
+  // 결과를 단정할 수 없을 때 · 다른 곳에서 바뀌었을 때는 사라지는 알림 대신 닫을 때까지 남는 창으로 알립니다.
+  function pinNotice(title, text) {
+    return UI.reveal({ title: title, closeLabel: '확인', bodyHtml: '<p class="modal__desc">' + esc(text) + '</p>' });
+  }
+  // 바뀐 상태로 목록을 다시 그리고 그 줄의 ⋯ 를 펼쳐 둡니다.
+  function pinRefresh(row) {
+    return loadCreds().then(function () { renderPanel(); reopenMore(row.id); });
   }
   // 방금 만든 PIN 을 한 번만 보여 줍니다. 창을 닫으면 원문을 담은 변수도 비웁니다.
   function showPinOnce(row, pin, revoked, before) {
@@ -420,9 +466,53 @@
       }
     }).then(function () { pin = null; });
   }
+  /* 한 부스 PIN 발급 · 재발급 · 다시 켜기.
+     1. 조건부 발급 함수가 아직 있는지 다시 묻습니다(없거나 확인 못 하면 아무것도 보내지 않고 멈춤).
+     2. 그 부스의 지금 상태를 서버에서 다시 읽어, ⋯ 를 펼칠 때 본 상태 · 발급 시각과 다르면 묻지 않고 멈춥니다
+        (예: '발급' 을 눌렀는데 그사이 다른 관리자가 발급 → 눌렀다면 남의 PIN 을 재발급하는 셈).
+     3. 새로 읽은 상태로 확인 창을 띄우고, 그 상태 · 발급 시각을 조건으로 admin_issue_booth_pin_checked 를 부릅니다.
+        확인 창을 띄운 뒤 누가 바꿨다면 서버가 거절합니다(바뀐 것 없음). */
+  var pinBusy = false;       // 한 번에 한 부스 일만(두 번 눌러 확인 창 · 요청이 겹치지 않게)
   function pinIssue(row) {
-    var c = credOf(row) || { pin_state: 'none', pin_sessions: 0 };
+    if (pinBusy) return Promise.resolve();
+    pinBusy = true;
+    return pinIssueRun(row).then(function () { pinBusy = false; }, function () { pinBusy = false; });
+  }
+  function pinIssueRun(row) {
+    var seen = creds ? creds[row.id] || null : null;
     var label = boothSlot(row) + ' ' + (row.name || '');
+    var cur = null;
+    return probePinChecked().then(function (v) {
+      pinChecked = v;
+      if (v !== true) {
+        renderPanel(); reopenMore(row.id);
+        toast(pinCheckedMessage(), true);
+        return null;
+      }
+      return C.rpc('admin_booth_credentials').then(function (rows) {
+        var m = {};
+        (rows || []).forEach(function (x) { m[x.booth_id] = x; });
+        cur = m[row.id] || null;
+        return m;
+      });
+    }).then(function (m) {
+      if (!m) return;
+      var changed = !cur || !seen || cur.pin_state !== seen.pin_state ||
+        (cur.pin_issued_at || null) !== (seen.pin_issued_at || null);
+      if (changed) {
+        creds = m;
+        renderPanel(); reopenMore(row.id);
+        return pinNotice('PIN 상태가 바뀌었어요',
+          '“' + label + '”의 PIN 상태가 ⋯ 를 연 뒤 다른 곳에서 바뀌었어요(지금: ' + pinStateLabel(cur) + '). ' +
+          '아무것도 바꾸지 않았어요. 바뀐 상태를 보고 다시 골라 주세요.');
+      }
+      return askAndIssue(row, label, cur);
+    }).catch(function (e) {
+      console.error('[admin] PIN 상태 확인 실패', e && (e.code || e.message));
+      toast('최신 PIN 상태를 확인하지 못해 아무것도 바꾸지 않았어요. 연결을 확인한 뒤 다시 눌러 주세요.', true);
+    });
+  }
+  function askAndIssue(row, label, c) {
     var p = privateOf('booths', row.id);
     var contact = p && (p.manager || p.manager_phone) ? [p.manager, p.manager_phone].filter(Boolean).join(' · ') : '';
     var ask = ' 전화로 요청을 받았다면 ' + (contact ? '등록된 담당자(' + contact + ')' : '등록된 담당자 연락처') +
@@ -438,17 +528,51 @@
           message: '“' + label + '” 부스의 운영자 PIN을 만듭니다. PIN은 다음 창에서 한 번만 보여 드려요.' };
     return UI.confirm({ title: o.title, message: o.message + ask, confirmLabel: o.label, danger: o.danger }).then(function (yes) {
       if (!yes) return;
-      return C.rpc('admin_issue_booth_pin', { p_booth_id: row.id }).then(function (rows) {
+      // 발급 시각은 서버가 준 글자 그대로 보냅니다(Date 로 바꾸면 마이크로초가 사라져 서버 견주기가 어긋남).
+      var call = C.rpc('admin_issue_booth_pin_checked', {
+        p_booth_id: row.id, p_expect_state: c.pin_state,
+        p_expect_issued_at: c.pin_state === 'none' ? null : (c.pin_issued_at || null)
+      });
+      return pinWait(call, PIN_WAIT_MS).then(function (rows) {
         var r = Object.prototype.toString.call(rows) === '[object Array]' ? rows[0] : rows;
         var pin = r && /^\d{6}$/.test(String(r.pin || '')) ? String(r.pin) : null;
         var revoked = (r && r.revoked_sessions) || 0;
         r = null; rows = null;
-        if (!pin) throw new Error('PIN 응답을 받지 못했습니다. 목록을 새로 고친 뒤 다시 발급해 주세요.');
+        if (!pin) {
+          return pinRefresh(row).then(function () {
+            return pinNotice('결과 확인 필요',
+              '서버 응답에 PIN이 없었어요. “' + label + '”의 PIN이 바뀌었을 수 있고, 그랬다면 그 PIN은 다시 볼 수 없어요. ' +
+              '목록에서 지금 상태를 확인한 뒤 필요하면 재발급해 주세요.');
+          });
+        }
         showPinOnce(row, pin, revoked, c.pin_state);
         pin = null;
         return loadCreds().then(function () { renderPanel(); });
-      }).catch(function (e) {
-        console.error('[admin] PIN 발급 실패', e && (e.code || e.message));
+      }, function (e) {
+        console.error('[admin] PIN 발급 실패', e && (e.code || e.message), e && e.hint);
+        var hint = (e && e.hint) || '';
+        if (hint === 'booth_pin_state_changed' || hint === 'booth_pin_state_changed_race') {
+          return pinRefresh(row).then(function () {
+            return pinNotice('PIN 상태가 바뀌었어요',
+              '확인 창을 연 사이 다른 곳에서 “' + label + '”의 PIN을 바꿔 서버가 거절했어요. 아무것도 바꾸지 않았어요. ' +
+              '바뀐 상태를 보고 다시 골라 주세요.');
+          });
+        }
+        if (hint === 'booth_pin_state_changed_self' || pinNoAnswer(e)) {
+          return pinRefresh(row).then(function () {
+            return pinNotice('결과 확인 필요',
+              (hint === 'booth_pin_state_changed_self'
+                ? '같은 관리자 계정으로 방금 “' + label + '”의 PIN이 바뀌었다며 서버가 거절했어요. 앞 요청이 응답 없이 처리됐거나 같은 계정의 다른 기기에서 바꿨을 수 있어요. '
+                : '응답을 받지 못했어요(연결 끊김 또는 응답 시간 초과). 서버에서 “' + label + '”의 PIN이 바뀌었을 수 있어요. ') +
+              '이 화면은 지금 PIN을 모릅니다. 자동으로 다시 보내지 않아요 — 목록에서 지금 상태를 확인한 뒤 필요하면 재발급해 주세요.');
+          });
+        }
+        if (e && (e.code === 'PGRST202' || e.code === '42883')) {
+          pinChecked = false;
+          renderPanel(); reopenMore(row.id);
+          toast(pinCheckedMessage(), true);
+          return;
+        }
         toast(pinMessage(e), true);
       });
     });
