@@ -66,15 +66,15 @@ supabase/
   migration-portal-actions.sql    fix 판의 앞 버전 (기록용)
   migration-booth-live.sql   ★ 부스 대기 현황 전체 정의 (표 셋 · 함수 여덟 · 열쇠 끄기 · 관리자 직접 수정)
   migration-booth-live-admin.sql   위 파일 처음 판에 열쇠 끄기 · 직접 수정을 더한 차이분 (운영 DB 적용 기록용)
-  migration-booth-master-data.sql  부스 · 구역 기준 데이터 1a: 공개 여부 · 미배정 · 번호 규칙 · QR 발급 분리 (초안 · 미적용)
-  migration-booth-private.sql      1b: 부스 담당자 · 메모를 관리자 전용 표로 (초안 · 미적용 · 포털 배포와 함께)
+  migration-booth-master-data.sql  부스 · 구역 기준 데이터 1a: 공개 여부 · 미배정 · 번호 규칙 · QR 발급 분리 (2026-10-03 Production 적용)
+  migration-booth-private.sql      1b: 부스 담당자 · 메모를 관리자 전용 표로 (2026-10-03 Production 적용 · 포털 배포와 함께)
   rollback-booth-master-data.sql   위 두 파일 되돌리기 (초안)
   migration-booth-pin.sql          부스 운영자 PIN 보조 로그인 (PIN · 임시 세션 · 보안 기록 · 전체 스위치 — 2026-10-03 Production 적용)
   rollback-booth-pin.sql           위 파일 되돌리기 (QR 표 · 함수는 그대로)
   migration-booth-example-pin.sql  운영 준비용 [예시] 부스 공통 PIN (스위치 · 세션 표시 · PIN 로그인에 리허설 길 — 2026-10-04 Production 적용)
   rollback-booth-example-pin.sql   위 파일 되돌리기 (PIN 로그인 · 세션 확인을 앞 판으로, 실제 PIN · QR 그대로)
-  migration-booth-pin-checked.sql  운영자 PIN 조건부 발급 함수 하나 더하기 (QR · PIN 관리의 여러 부스 발급에 필수 — 초안 · 미적용 · 승인 뒤에만)
-  rollback-booth-pin-checked.sql   위 파일 되돌리기 (그 함수만 지움)
+  migration-booth-pin-checked.sql  운영자 PIN 조건부 발급 함수 하나 더하기 (QR · PIN 관리 일괄 · ⋯ 개별 PIN 발급에 필수 — 2026-10-11 Production 적용 · migration 20261010155715 booth_pin_checked)
+  rollback-booth-pin-checked.sql   위 파일 되돌리기 (그 함수만 지움 · 화면을 먼저 되돌린 뒤에만)
   add-settings-fields.sql    설정 부가 칼럼 (선택 · 지금 화면에서는 쓰지 않음)
 
 dev-server.ps1        로컬 확인용 정적 서버 (Windows · Node 없이)
@@ -404,7 +404,7 @@ node dev-server.js
   미배정 · 비공개가 됩니다(운영자 QR · 대기 기록은 남음). 담당자 · 연락처 · 운영
   메모 · 특이사항은 수정창의 ‘관리자 전용 정보’(`booth_private` 표)에 적습니다.
   > 이 동작은 `supabase/migration-booth-master-data.sql` · `migration-booth-private.sql`
-  > 적용이 전제입니다(아직 운영 DB 에 적용하지 않은 초안).
+  > 적용이 전제입니다(둘 다 2026-10-03 Production 적용).
 - 모든 입력창: 제목 · 단추 줄은 고정, 본문만 스크롤. 오류는 저장 단추 위와
   해당 칸 아래에 함께 나오고 그 칸으로 초점이 옮겨 갑니다.
 
@@ -857,10 +857,18 @@ PIN 실패 많음을 보여 주고, 현황 수정도 눌러 볼 수 있습니다
   무작위 부하(60초, 1,610회)를 확인했습니다(교착 0 · 잃어버린 갱신 0).
   **PIN 끄기는 조건 없이 그대로입니다**: 재발급과 같은 순간 겹치면 나중에 처리된 쪽이 남는데, 끄기가 나중이면 방금 재발급한 PIN 도
   꺼집니다(결과 창에 보인 그 PIN 은 쓸 수 없음 — 꺼진 쪽이라 안전). 끄기가 먼저면 재발급이 거절됩니다.
-- **Production 에 켜는 순서**: ① 승인 → ② Supabase 에 `migration-booth-pin-checked.sql` 적용(맨 아래 확인 표가 모두
-  true) → ③ 운영 포털(main) 배포 → ④ QR · PIN 관리와 관리자 ⋯ 에서 경고 없이 단추가 켜지는지 확인(실제 부스 발급 없이).
-  화면을 먼저 올리면 함수가 없는 동안 **⋯ 의 한 부스 PIN 발급도 잠깁니다**(끄기는 됨) — 그래서 ② 를 먼저 합니다.
-  되돌리기: 화면은 커밋 되돌리기, DB 는 `rollback-booth-pin-checked.sql`(지우면 화면 단추가 다시 잠김).
+- **Production 적용 기록(2026-10-11)**: ① 승인 → ② Supabase 에 `migration-booth-pin-checked.sql` 적용(migration
+  `20261010155715 booth_pin_checked`, 맨 아래 확인 표 모두 true) → ③ 운영 포털 main 을 `b5229ee` 로 올려 GitHub Pages 배포
+  → ④ 관리자 로그인 뒤 QR · PIN 관리와 관리자 ⋯ 에서 경고 없이 단추가 켜지는지 확인. ④ 는 **실제 PIN 발급 · 재발급 · 끄기
+  없이** 단추 상태만 봤고, 앞뒤로 PIN · QR · 대기 값 · 설정이 그대로인 것을 확인했습니다. 이제 개별(⋯) · 일괄(QR · PIN 관리)
+  발급이 모두 조건부 함수만 씁니다. 새 환경에 켤 때도 같은 순서입니다 — 화면을 먼저 올리면 함수가 없는 동안 **⋯ 의 한 부스
+  PIN 발급도 잠깁니다**(끄기는 됨).
+- **문제가 생기면 되돌리는 순서 — 화면 먼저, DB 나중**: ① 화면 — main 의 `print-qr.html` · `assets/admin.js` ·
+  `assets/admin.css` 를 배포 전 판(`2e600f4`)으로 되돌리는 커밋을 push 합니다(README · SQL 파일은 그대로 둠, Pages 캐시 최대
+  10분). 예전 화면은 PIN 패널이 없고 ⋯ 는 조건 없는 `admin_issue_booth_pin` 을 부릅니다. 화면만 문제라면 여기서 멈추고 DB
+  함수는 남겨 둬도 됩니다(아무도 부르지 않을 뿐). ② DB — 함수까지 지워야 할 때만 ① 이 반영된 것을 확인한 뒤
+  `rollback-booth-pin-checked.sql`. 거꾸로 하면 지금 화면의 PIN 발급 · 재발급 단추가 잠깁니다(데이터는 안전 · PIN 끄기는 됨).
+  어느 쪽도 PIN · QR · 세션은 바꾸지 않습니다.
 - **협의용 예시**(`print-qr.html?demo=1`): 서버 함수를 부르지 않고 이 화면 안에서만 흉내 냅니다(예시 PIN 4자리).
 
 ### 부스 운영 현황 (행사 당일 콘솔 · `booth-admin.html`)

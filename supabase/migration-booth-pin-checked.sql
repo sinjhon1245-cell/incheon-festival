@@ -1,5 +1,5 @@
 -- ===================================================================
--- 운영자 PIN 조건부 발급 (admin_issue_booth_pin_checked) — 초안 · 미적용
+-- 운영자 PIN 조건부 발급 (admin_issue_booth_pin_checked) — 2026-10-11 Production 적용
 --
 --   왜 필요한가
 --     admin_issue_booth_pin(부스) 는 첫 발급 · 재발급 · 다시 켜기를 조건 없이 처리합니다.
@@ -44,8 +44,13 @@
 --     같은 부스 동시 신규 · 동시 재발급 · 같은 계정 두 기기 · 기존 함수와의 충돌 · 응답 유실 뒤 재전송 ·
 --     교착(앞 초안은 재현됨, 이 판은 0) · lock_timeout. 결과는 Gate 1.5 보고 참고.
 --
--- 사용법 (승인 뒤에만): SQL Editor 또는 apply_migration 에 전체 붙여넣고 Run(한 트랜잭션).
---   여러 번 실행해도 같은 결과입니다. 되돌리기: rollback-booth-pin-checked.sql
+-- 적용 기록: 2026-10-11(한국 시각) Production Supabase 에 apply_migration 으로 적용 — migration
+--   20261010155715 booth_pin_checked. 맨 아래 확인 표 모두 true(기존 함수 정의 7/7 그대로 · 새 함수 있음 ·
+--   anon 실행 불가). 같은 날 운영 포털 main(b5229ee)을 GitHub Pages 에 배포했고, 관리자 화면에서 개별(⋯) ·
+--   일괄(QR · PIN 관리) 발급 단추가 이 함수로 켜지는 것을 실제 PIN 발급 없이 확인했습니다.
+--   이 파일의 실행문 · 함수 본문은 적용한 그대로이고, 적용 뒤에는 이 머리말 주석만 고쳤습니다.
+-- 다시 적용할 때(새 환경 · 되돌린 뒤): SQL Editor 또는 apply_migration 에 전체 붙여넣고 Run(한 트랜잭션).
+--   여러 번 실행해도 같은 결과입니다. 되돌리기: rollback-booth-pin-checked.sql(화면을 먼저 되돌린 뒤 — README)
 -- 선행: migration-booth-pin.sql
 -- ===================================================================
 
