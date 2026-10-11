@@ -62,7 +62,9 @@
   .lvbar .lvtools__row { gap: 6px; }
   .lvbar .lvtools__row .search { flex: 1 1 auto; max-width: none; }
   .lvbar .lvtools__row .listsel { flex: 0 0 100px; }
-  .lvbar .select { padding-left: 9px; padding-right: 22px; font-size: 13.5px; background-position: right 6px center; }
+  /* 화살표는 브라우저가 상자 안에 따로 그립니다. 오른쪽 여백을 22px 더 두면 100px 상자에서 '구역 전체' ·
+     '운영 우선' 의 마지막 글자가 잘렸습니다. */
+  .lvbar .select { padding-left: 9px; padding-right: 4px; font-size: 13.5px; background-position: right 6px center; }
   .lvbar .search input { padding-left: 32px; padding-right: 8px; font-size: 15px; }
   .lvbar .search::before { left: 11px; }
 }
