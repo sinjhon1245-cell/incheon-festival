@@ -1000,6 +1000,27 @@ html.is-demo .row { scroll-margin-top: calc(56px + var(--demo-h) + env(safe-area
 /* 처음 받기에 실패했을 때: 제목은 위 큰 숫자 자리가 말하니 설명과 단추만 둡니다 */
 .empty--fail .empty__d { margin-top: 0; }
 
+/* 배치 준비 중(사전 안내) — 구역 · 번호가 정해지기 전의 실제 부스. 구역 묶음과 같은 검은 선 제목,
+   번호 칸에는 번호 대신 '배치 준비 중' 을 옅게 두 줄로, 오른쪽 대기 칸은 비웁니다(대기 값 없음). */
+#pending { scroll-margin-top: 56px; }
+.pending__note { margin-top: 8px; font-size: 13.5px; line-height: 1.5; color: var(--muted); }
+.group--pending .rows { margin-top: 10px; border-top: 1px solid var(--line); }
+.row.is-pending .row__main { grid-template-columns: 48px minmax(0, 1fr); min-height: 56px; cursor: default; }
+.row.is-pending .row__code { white-space: normal; font-size: 12px; font-weight: 600; line-height: 1.25; }
+/* 펼칠 수 없는 줄이라 긴 이름 · 학교도 여기서 끝까지 보여 줍니다(빈 대기 칸 자리까지 씁니다) */
+.row.is-pending .row__right { display: none; }
+.row.is-pending .row__name { display: block; -webkit-line-clamp: unset; overflow: visible; }
+.row.is-pending .row__org { white-space: normal; }
+.row__prog {
+  display: block;
+  margin-top: 3px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--muted-2);
+}
+.here__org { margin-top: 4px; font-size: 14px; color: var(--muted); }
+.here--pending .here__name { display: block; -webkit-line-clamp: unset; overflow: visible; }
+
 /* ── 9. 한눈에 ─────────────────────────────────────────────── */
 .map { margin-top: 6px; }
 .map__toggle {

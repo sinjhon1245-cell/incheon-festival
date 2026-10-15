@@ -116,6 +116,8 @@
            프로그램이 부스 수십 개를 처음부터 다시 읽게 됩니다. 바뀐 요약만
            아래 sr-summary 가 알립니다. -->
       <div id="list"></div>
+      <!-- 배치 준비 중(사전 안내) 부스 묶음. 구역 · 번호가 정해지기 전의 실제 부스(renderPending). -->
+      <div id="pending" hidden></div>
       <!-- 목록 끝까지 내려온 뒤에도 위로 올라가지 않고 나갈 수 있게 한 번 더 둡니다(예시 화면에서만). -->
       <div class="demoexit" id="demoexit" hidden>
         <button type="button" class="line-btn" data-act="demo-exit">실제 화면으로 돌아가기</button>
@@ -226,6 +228,7 @@
       zones: [],
       raw: [],          // BoothCore 가 정리해 준 부스(운영 시간 규칙 적용 전)
       booths: [],       // 화면에 쓰는 부스(운영 시간 규칙 적용 후)
+      unplaced: [],     // 배치 준비 중(사전 안내) 부스: 이름 · 기관 · 체험 내용만. booths 와 섞지 않습니다
       byId: {},
       liveReady: null,
       info: null,       // BoothCore.eventInfo()
@@ -244,7 +247,7 @@
       mapOpen: false,
       prevSig: null,    // 바뀐 줄을 찾으려고 기억해 둔 값
       changed: {},
-      keys: { hero: '', tabs: '', list: '', here: '', sheet: '', sum: '', band: '', strip: '', pick: '' },
+      keys: { hero: '', tabs: '', list: '', here: '', sheet: '', sum: '', band: '', strip: '', pick: '', pending: '' },
       zpick: false,     // '구역 선택' 패널이 열려 있는가
       hereParam: null,
       hereGone: false,
@@ -343,6 +346,47 @@
       return m ? norm(m[1] + (sep || '') + m[2]) : '';
     }
 
+    /* ── 배치 준비 중(사전 안내) ─────────────────────────────────
+       구역 · 번호가 정해지기 전의 실제 부스입니다. 서버(booth_preview_list)가 이름 · 기관 · 체험 내용만
+       주고, 구역 · 번호 · 대기 값은 없습니다. 부스 목록(S.booths)과 섞지 않아 구역 탭 · 상태 숫자 ·
+       대기 정렬 · 한눈에는 지금과 같고, 목록 아래 '배치 준비 중' 묶음 하나로만 보입니다.
+       전체 구역을 볼 때와 검색할 때만 보이고, 상태(여유 · 보통 …)로 거르는 동안에는 숨습니다. */
+    function pendHay(b) { return norm([b.name, orgText(b), b.program].join(' ')); }
+    function pendingItems() {
+      if (!S.unplaced.length || S.ui.count) return [];
+      if (!searchOpen() && S.ui.zone) return [];
+      var q = searchTest();
+      return q ? S.unplaced.filter(function (b) { return q(pendHay(b)); }) : S.unplaced;
+    }
+    function pendingRowHtml(b) {
+      var org = orgText(b);
+      return '<li class="row is-pending" data-id="' + esc(b.id) + '">' +
+        '<div class="row__main">' +
+          '<span class="row__code">배치<br />준비 중</span>' +
+          '<span class="row__body"><span class="row__name">' + esc(b.name || '이름 미정') + '</span>' +
+            (org ? '<span class="row__org">' + esc(org) + '</span>' : '') +
+            (b.program ? '<span class="row__prog">' + esc(b.program) + '</span>' : '') + '</span>' +
+          '<span class="row__right"></span>' +
+        '</div>' +
+      '</li>';
+    }
+    function renderPending() {
+      var box = $('pending');
+      var list = S.hasData ? pendingItems() : [];
+      var key = list.map(function (b) { return [b.id, b.name, b.org, b.program].join(':'); }).join(',');
+      if (key === S.keys.pending) return;
+      S.keys.pending = key;
+      box.hidden = !list.length;
+      if (!list.length) { box.innerHTML = ''; return; }
+      var restore = focusKey(box);
+      box.innerHTML = '<section class="group group--pending" aria-labelledby="zone-pending">' +
+        '<h2 class="zone" id="zone-pending"><span class="zone__label">배치 준비 중</span>' +
+          '<span class="zone__n">' + list.length + '곳</span></h2>' +
+        '<p class="pending__note">구역과 부스 번호는 배치가 확정되면 안내해요. 대기 시간은 행사 운영 중에 표시돼요.</p>' +
+        '<ul class="rows">' + list.map(pendingRowHtml).join('') + '</ul></section>';
+      restoreFocus(box, restore);
+    }
+
     // 한글 낱자모: 조합형(0x1100-0x11FF)과 호환형 'ㄱ'-'ㆎ'(0x3131-0x318E)
     // 천지인 자판은 모음을 만드는 도중 'ㆍ' 대신 '·'(0x00B7) · '‥'(0x2025)를 보여 주기도 해서 함께 뺍니다.
     function isJamo(c) { return (c >= 0x1100 && c <= 0x11FF) || (c >= 0x3131 && c <= 0x318E) || c === 0x00B7 || c === 0x2025; }
@@ -369,7 +413,7 @@
     // 조합 이벤트(isComposing)는 iOS 한글 자판에서 믿을 수 없으니 글자 모양만 봅니다.
     var qMemo = { q: null, list: null, test: null };
     function searchTest() {
-      if (qMemo.q === S.ui.q && qMemo.list === S.booths) return qMemo.test;
+      if (qMemo.q === S.ui.q && qMemo.list === S.booths && qMemo.pend === S.unplaced) return qMemo.test;
       // 끝에 붙은 낱자모('ㄹ', '로봇ㅊ' 의 'ㅊ')는 아직 치는 중인 글자라 뺍니다.
       var q = norm(S.ui.q), e = q.length;
       while (e > 0 && isJamo(q.charCodeAt(e - 1))) e--;
@@ -377,7 +421,9 @@
       var test = null;
       if (q) {
         var exact = function (h) { return h.indexOf(q) >= 0; };
-        var anyHit = function (t) { return S.booths.some(function (b) { return t(hay(b)); }); };
+        var anyHit = function (t) {
+          return S.booths.some(function (b) { return t(hay(b)); }) || S.unplaced.some(function (b) { return t(pendHay(b)); });
+        };
         test = exact;
         var c = q.charCodeAt(q.length - 1);
         if (c >= 0xAC00 && c <= 0xD7A3) {
@@ -403,7 +449,7 @@
           else if (!anyHit(exact)) test = loose;
         }
       }
-      qMemo = { q: S.ui.q, list: S.booths, test: test };
+      qMemo = { q: S.ui.q, list: S.booths, pend: S.unplaced, test: test };
       return test;
     }
 
@@ -627,6 +673,29 @@
       return null;
     }
 
+    // 배치 준비 중 부스: id 전체 또는 앞부분(8자 이상, 하나로만 맞을 때)으로만 찾습니다(번호가 없으니까요).
+    function resolvePending(param) {
+      var list = S.unplaced, n = norm(param), i;
+      if (!n) return null;
+      for (i = 0; i < list.length; i++) if (String(list[i].id).toLowerCase() === n) return list[i];
+      var hex = n.replace(/-/g, '');
+      if (!/^[0-9a-f]{8,}$/.test(hex)) return null;
+      var hit = list.filter(function (b) { return String(b.id).toLowerCase().replace(/-/g, '').indexOf(hex) === 0; });
+      return hit.length === 1 ? hit[0] : null;
+    }
+    function herePendingHtml(b) {
+      var org = orgText(b);
+      return '<section class="here here--pending" aria-labelledby="here-label">' +
+        '<p class="here__label" id="here-label"><i class="sq" aria-hidden="true"></i>지금 계신 부스</p>' +
+        '<div class="here__main">' +
+          '<div><span class="here__code">배치 준비 중</span><p class="here__name">' + esc(b.name) + '</p>' +
+            (org ? '<p class="here__org">' + esc(org) + '</p>' : '') + '</div>' +
+        '</div>' +
+        '<p class="here__age">구역과 부스 번호는 배치가 확정되면 안내해요. 대기 시간은 행사 운영 중에 표시돼요.</p>' +
+        '<div class="here__foot"><button type="button" class="link" data-act="here-close">전체 부스 보기</button></div>' +
+      '</section>';
+    }
+
     function alternatives(b) {
       var free = S.booths.filter(function (x) { return x.id !== b.id && bucketOf(x) === '여유'; });
       free.sort(function (x, y) { return (waitNum(x) - waitNum(y)) || core.compareCode(x.code, y.code); });
@@ -681,7 +750,9 @@
       var html = '';
       if (S.hereParam && !S.hereGone && S.hasData) {
         var b = resolveHere(S.hereParam);
+        var p = b ? null : resolvePending(S.hereParam);
         if (b) html = hereHtml(b);
+        else if (p) html = herePendingHtml(p);
         // 지난번 결과에 없다고 바로 '못 찾음' 이라 하지 않습니다. 서버에서 새로 받은 뒤에 판단합니다.
         else if (S.fresh) html = '<p class="notfound">이 안내 QR의 부스를 찾지 못했어요 · 아래 전체 목록에서 찾아 주세요</p>';
       }
@@ -699,7 +770,10 @@
       var ph = S.info.phase;
       if (ph === 'after') return 'after';
       if (S.liveReady === false) return 'notready';
-      return (ph === 'open' || S.preview) ? 'live' : ph;
+      var live = ph === 'open' || S.preview;
+      // 운영 중인데 배치 · 공개된 부스가 아직 하나도 없으면(모두 배치 준비 중) '0곳' 대신 안내 문장을 둡니다.
+      if (live && !S.booths.length && S.unplaced.length) return 'placing';
+      return live ? 'live' : ph;
     }
 
     // 운영 시간 밖일 때 '지금 계신 부스' 카드에 붙일 한 줄
@@ -746,6 +820,10 @@
       if (mode === 'after') {
         return label + '<p class="hero__head">행사가 끝났어요.</p><p class="hero__copy">함께해 줘서 고마워요.</p>';
       }
+      if (mode === 'placing') {
+        return label + '<p class="hero__head">부스 배치를<br />준비하고 있어요</p>' +
+          '<p class="hero__copy">구역과 부스 번호가 정해지면 부스별 대기 시간이 여기에 실시간으로 표시돼요.</p>';
+      }
       return '';
     }
 
@@ -787,8 +865,11 @@
       }
       var fresh = c['여유'] + c['보통'] + c['혼잡'] + c.off;
       $('h-free').textContent = c['여유'];
-      $('h-total').textContent = S.booths.length;
-      $('h-sub').textContent = fresh ? '현재 대기 정보가 입력된 ' + fresh + '곳 기준' : '아직 대기 시간을 입력한 부스가 없어요';
+      // 전체는 아래 목록의 곳 수와 같게(배치 준비 중 포함) 셉니다. 대기 값은 배치 · 공개된 부스에만 있습니다.
+      var pend = S.unplaced.length;
+      $('h-total').textContent = S.booths.length + pend;
+      $('h-sub').textContent = (fresh ? '현재 대기 정보가 입력된 ' + fresh + '곳 기준' : '아직 대기 시간을 입력한 부스가 없어요') +
+        (pend ? ' · 배치 준비 중 ' + pend + '곳' : '');
       $('h-dist').hidden = !fresh;
       each($('h-dist').children, function (seg) {
         var k = seg.getAttribute('data-seg');
@@ -807,7 +888,8 @@
 
     /* ── 6. 붙박이 줄 ──────────────────────────────────────────── */
     function renderBar() {
-      var show = S.hasData && S.booths.length > 0;
+      // 배치 준비 중 부스만 있어도 검색칸은 둡니다(구역 탭은 배치된 부스의 구역으로만 만듭니다).
+      var show = S.hasData && (S.booths.length > 0 || S.unplaced.length > 0);
       // 숨어 있던 탭 줄은 폭이 0 이라 그때 잰 흐림(is-more)이 틀립니다. 다시 보일 때 고쳐 잽니다.
       var tabsWereHidden = $('bar').hidden || $('bar-tabs').hidden;
       $('bar').hidden = !show;
@@ -822,7 +904,7 @@
       $('bar-tabs').hidden = searchMode;
       $('search').hidden = !searchMode;
       // 부스가 많으면 요약 아래에 검색칸 모양의 단추를 하나 더 둡니다(검색칸이 열려 있으면 숨김).
-      $('search-field').hidden = searchMode || S.booths.length < SEARCH_FIELD_MIN;
+      $('search-field').hidden = searchMode || S.booths.length + S.unplaced.length < SEARCH_FIELD_MIN;
       S.multi = multi;
       var cancel = $('search-cancel');
       if (multi) { cancel.textContent = '취소'; cancel.hidden = false; }
@@ -967,9 +1049,11 @@
 
     /* ── 7. 보기 · 정렬 · 결과 줄 ─────────────────────────────── */
     function renderControls(items) {
-      var show = S.hasData && S.booths.length > 0;
+      var placed = S.hasData && S.booths.length > 0;
+      var show = placed || (S.hasData && S.unplaced.length > 0);
       // 운영 시간 밖에는 대기 시간이 없으니 '한눈에' · '대기 짧은 순' 이 뜻이 없습니다.
-      $('controls').hidden = !show || !liveOn();
+      // 배치 준비 중 부스만 있을 때도 대기 값이 없으니 숨깁니다.
+      $('controls').hidden = !placed || !liveOn();
       each(document.querySelectorAll('[data-view]'), function (b) {
         b.setAttribute('aria-pressed', b.getAttribute('data-view') === S.ui.view ? 'true' : 'false');
       });
@@ -991,9 +1075,10 @@
           '<button type="button" class="link result__clear" data-act="clear-count" aria-label="' + esc(word) + ' 필터 해제">' +
             '<span class="result__x" aria-hidden="true">×</span>필터 해제</button>';
       } else if (searching()) {
-        html = '검색 결과 <b>' + items.length + '곳</b>';
+        html = '검색 결과 <b>' + (items.length + pendingItems().length) + '곳</b>';
       } else {
-        html = '<b>' + items.length + '곳</b>';
+        // 배치 준비 중 묶음은 전체 구역을 볼 때만 보이므로(pendingItems) 그때만 함께 셉니다.
+        html = '<b>' + (items.length + pendingItems().length) + '곳</b>';
       }
       if (res.getAttribute('data-k') !== html) {
         var restore = focusKey(res);
@@ -1207,10 +1292,15 @@
         return;
       }
       if (!S.booths.length) {
-        if (S.keys.list !== 'none') {
-          S.keys.list = 'none';
-          box.innerHTML = emptyHtml('부스 정보 준비 중', '부스 배치가 확정되면 이곳에 표시돼요.').replace('class="empty"', 'class="empty empty--none"') +
-            (core.isMock ? '' : demoCtaHtml());
+        // 배치 준비 중 부스가 있으면 그 묶음(renderPending)이 목록 자리를 채웁니다.
+        // 검색해서 그 묶음에도 맞는 부스가 없을 때만 '찾는 부스가 없어요' 를 보입니다.
+        var none = !S.unplaced.length ? 'none' : (searching() && !pendingItems().length ? 'none-q' : 'none-p');
+        if (S.keys.list !== none) {
+          S.keys.list = none;
+          box.innerHTML = none === 'none'
+            ? emptyHtml('부스 정보 준비 중', '부스 배치가 확정되면 이곳에 표시돼요.').replace('class="empty"', 'class="empty empty--none"') +
+              (core.isMock ? '' : demoCtaHtml())
+            : none === 'none-q' ? emptyHtml('찾는 부스가 없어요', '부스 이름 · 학교 · 체험 내용의 일부로 찾아 보세요.') : '';
         }
         return;
       }
@@ -1230,9 +1320,11 @@
       // patch() 는 상태 칸만 고칩니다. 그래서 이름 · 학교 · 번호 · 구역 이름이 바뀌면(5분마다 전부
       // 다시 받을 때 관리자가 고친 값) 줄을 새로 만들어야 합니다. 펼침(S.open)과 초점은
       // 새로 만들어도 이어집니다. 한눈에 타일은 code 대신 no 를 보여 주니 no 도 넣습니다.
+      // 고른 부스가 없을 때 '없어요' 안내를 낼지는 아래 배치 준비 중 묶음에 맞는 부스가 있는지에 달려 있어 그 수도 넣습니다.
+      var pendN = items.length ? 0 : pendingItems().length;
       var key = [view, grouped ? 'g' : 'f', liveOn() ? 1 : 0, safeMapUrl(S.settings.booth_map_url),
         zoneList().map(function (z) { return z.key + ':' + z.label; }).join(','),
-        items.map(function (b) { return [b.id, b.no, b.code, b.name, orgText(b)].join(':'); }).join(',')].join('|');
+        items.map(function (b) { return [b.id, b.no, b.code, b.name, orgText(b)].join(':'); }).join(','), pendN].join('|');
 
       if (!force && key === S.keys.list) {
         patch(box, items, view);
@@ -1240,7 +1332,7 @@
         S.keys.list = key;
         var restore = focusKey(box);
         if (!items.length) {
-          box.innerHTML = emptyHtml(searching() ? '찾는 부스가 없어요' : '조건에 맞는 부스가 없어요',
+          box.innerHTML = pendN ? '' : emptyHtml(searching() ? '찾는 부스가 없어요' : '조건에 맞는 부스가 없어요',
             searching() ? '부스 이름 · 번호 · 체험 내용의 일부로 찾아 보세요.' : '다른 구역이나 상태를 골라 보세요.');
         } else if (view === 'grid') {
           box.innerHTML = mapHtml() + zoneGroups(items).map(function (g) {
@@ -1357,6 +1449,7 @@
       renderPick();
       renderControls(items);
       renderList(items, force);
+      renderPending();
       renderSheet(items);
       renderSummary(c);
       S.changed = {};
@@ -1396,6 +1489,7 @@
         S.settings = data.settings || {};
         S.zones = data.zones || [];
         S.liveReady = data.liveReady;
+        S.unplaced = data.unplaced || [];
         take(data.booths);
         S.mode = data.mode || 'normal';
         // 서버가 새로 만든 스냅샷일 때만 '새로 받음' 으로 셉니다. CDN 은 같은 사본을 몇 번 더 줄 수 있습니다.
@@ -1968,6 +2062,7 @@
         S.settings = snap.settings || {};
         S.zones = snap.zones || [];
         S.liveReady = snap.liveReady;
+        S.unplaced = snap.unplaced || [];
         take(snap.booths);
       }
 

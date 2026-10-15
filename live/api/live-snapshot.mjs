@@ -16,6 +16,9 @@
                  실패 뒤 5초는 Supabase 에 다시 묻지 않음
      Supabase ─ 관람객 브라우저와 같은 공개용 키(anon/publishable)로 읽으므로
                RLS 가 공개하지 않은 부스 · 구역은 처음부터 오지 않습니다.
+               예외: 사전 안내로 고른 배치 전 부스는 booth_preview_list() 로
+               이름 · 기관 · 체험 내용만 따로 받아 unplaced 에 싣습니다
+               (구역 · 번호 · 대기 값 없음, 운영자 접속 조건과 무관).
 
    응답에 넣는 것은 관람객 화면이 그리는 공개 값뿐입니다. QR 열쇠 · PIN · 세션 ·
    담당자 연락처 · 메모 · booth_private · 관리자 정보는 읽지도 않습니다.
@@ -75,12 +78,28 @@ async function get(path) {
 }
 
 async function readMaster() {
-  const [settings, zones, booths] = await Promise.all([
+  const [settings, zones, booths, unplaced] = await Promise.all([
     get('settings?select=event_title,venue,date_label,time_label,event_start,event_end,booth_map_url,booth_map_alt&order=id.asc&limit=1'),
     get('zones?select=key,label,sort_order&order=sort_order.asc,key.asc'),
-    get('booths?select=id,no,code,zone_key,name,org,program')
+    get('booths?select=id,no,code,zone_key,name,org,program'),
+    readUnplaced()
   ]);
-  return { settings: (settings && settings[0]) || {}, zones: zones || [], booths: booths || [] };
+  return { settings: (settings && settings[0]) || {}, zones: zones || [], booths: booths || [], unplaced: unplaced || [] };
+}
+
+// 배치 준비 중(사전 안내) 부스 — supabase/migration-booth-preview.sql 의 booth_preview_list().
+// 이름 · 기관 · 체험 내용만 옵니다(구역 · 번호 · 대기 값 없음). 운영자 접속과는 무관합니다.
+// 함수가 아직 없으면(PGRST202 · 404) 빈 목록 — 화면은 지금과 같게 그립니다.
+// 다른 실패(권한 · 시간 초과 · 5xx)는 부스 · 구역 · 기본정보 읽기까지 막지 않습니다. 이 인스턴스의
+// 지난 목록을 그대로 쓰고(처음이면 빈 목록), 공개 부스 · 대기 값은 평소대로 새로 그립니다.
+async function readUnplaced() {
+  try {
+    return (await get('rpc/booth_preview_list')) || [];
+  } catch (err) {
+    if (err.code === 'PGRST202' || err.status === 404) return [];
+    console.error('[live-snapshot] booth_preview_list failed', err.status || '', err.code || err.message);
+    return (master && master.unplaced) || [];
+  }
 }
 
 // 표가 아직 없으면(DB 설정 전 — PGRST205) null: 관람객 화면이 '행사 당일부터 표시' 로 그립니다.
@@ -126,7 +145,15 @@ function compose(m, liveRows, now) {
         waitMinutes: show ? Number(l.wait_minutes ?? 0) : null,
         updatedAt: show ? l.updated_at : null
       };
-    })
+    }),
+    // 배치 준비 중: booths 와 따로 둡니다. 예전 화면(이 칸을 모름)은 그대로 booths 만 그립니다.
+    // 대기 값은 싣지 않습니다(배치 · 공개 전에는 운영자가 입력할 수도 없음).
+    unplaced: (m.unplaced || []).filter((b) => b && b.id && !SAMPLE_RE.test(str(b.org))).map((b) => ({
+      id: b.id,
+      name: str(b.name),
+      org: str(b.org),
+      program: str(b.program)
+    }))
   };
 }
 

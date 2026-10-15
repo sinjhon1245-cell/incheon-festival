@@ -827,7 +827,8 @@
         settings: mem.settings,
         zones: mem.zones,
         boothRows: mem.boothRows,
-        liveRows: mem.liveRows
+        liveRows: mem.liveRows,
+        unplaced: mem.unplaced || []
       }));
     } catch (e) { /* 저장소가 꽉 찼거나 막힘 — 없어도 화면은 돕니다 */ }
     try { window.localStorage.removeItem(SNAPSHOT_KEY_OLD); } catch (e) { /* 무시 */ }
@@ -850,7 +851,8 @@
       boothRows: s.boothRows,
       liveRows: liveRows,
       liveReady: liveRows !== null,
-      booths: normalize(s.boothRows, liveRows, zones)
+      booths: normalize(s.boothRows, liveRows, zones),
+      unplaced: unplacedRows(s.unplaced)
     };
   }
 
@@ -917,6 +919,18 @@
     });
   }
 
+  // 배치 준비 중(사전 안내) 부스: 이름 · 기관 · 체험 내용만. 구역 · 번호 · 대기 값이 없어
+  // 부스 목록(boothRows)과 섞지 않습니다 — 구역 탭 · 상태 숫자 · 대기 정렬은 지금과 같습니다.
+  function unplacedRows(list) {
+    var out = [];
+    if (Object.prototype.toString.call(list) !== '[object Array]') return out;
+    list.forEach(function (b) {
+      if (!b || !b.id || isSample(b)) return;
+      out.push({ id: String(b.id), name: String(b.name || ''), org: String(b.org || ''), program: String(b.program || '') });
+    });
+    return out;
+  }
+
   // 스냅샷(서버 모양)을 이 파일의 표 모양(settings · zones · boothRows · liveRows)으로 바꿉니다.
   function fromSnapshot(d) {
     var e = d.event || {};
@@ -934,6 +948,7 @@
       zones: sortZones((d.zones || []).map(function (z) { return { key: z.key, label: z.label, sort_order: z.order }; })),
       boothRows: boothRows,
       liveRows: d.liveReady === false ? null : liveRows,
+      unplaced: unplacedRows(d.unplaced),
       generatedAt: d.generatedAt || null,
       mode: /^(normal|conserve|manual)$/.test(String(d.mode || '')) ? d.mode : 'normal'
     };
@@ -952,7 +967,7 @@
     }
     return fetchSnapshot().then(function (d) {
       var s = fromSnapshot(d);
-      mem = { settings: s.settings, zones: s.zones, boothRows: s.boothRows, liveRows: s.liveRows };
+      mem = { settings: s.settings, zones: s.zones, boothRows: s.boothRows, liveRows: s.liveRows, unplaced: s.unplaced };
       BoothCore.liveReady = s.liveRows !== null;
       BoothCore.lastOkAt = new Date();
       saveSnapshot();
@@ -960,6 +975,7 @@
         settings: s.settings,
         zones: s.zones,
         booths: normalize(s.boothRows, s.liveRows, s.zones),
+        unplaced: s.unplaced,
         liveReady: s.liveRows !== null,
         generatedAt: s.generatedAt,
         mode: s.mode
