@@ -218,6 +218,8 @@
       display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
     }
     .card__org { margin-top: 1mm; font-size: 9pt; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    /* 배치 미정 부스: 번호 대신 부스 id 앞 8자리(관람객 화면도 이 앞자리로 찾습니다) */
+    .card__bid { margin-top: 0.5mm; font-size: 9pt; font-weight: 700; color: var(--ink-2); font-variant-numeric: tabular-nums; }
     .card__mid { display: flex; align-items: flex-start; gap: 4mm; margin-top: 4mm; }
     .card__qr { flex: none; width: 50mm; margin: 0; } /* 여백 4mm 를 빼면 QR 42mm (35mm 이상) */
     .steps { list-style: none; margin: 0; padding: 1mm 0 0; font-size: 9pt; line-height: 1.45; }
@@ -367,7 +369,7 @@
       .card__body { padding: 10px 12px 8px; }
       .card__code { font-size: 22px; }
       .card__name { font-size: 15px; }
-      .card__org { font-size: 13px; }
+      .card__org, .card__bid { font-size: 13px; }
       .card__meta { font-size: 12px; }
       .card__mid, .card__hand { display: none; }
       .card__off { margin-top: 8px; padding: 8px 10px; font-size: 13.5px; }
@@ -801,7 +803,9 @@
      기본정보 · 지금 대기 값(공개)은 BoothCore.load() 로 읽고, 부스 목록은 관리자로
      로그인했으면 관리자 권한으로 다시 읽습니다 — 공개 전 부스도 카드를 미리 인쇄해
      나눠 줄 수 있어야 하기 때문입니다(공개 전에는 QR 을 찍어도 운영 함수가 거절).
-     구역 · 번호가 없는 부스(미배정)는 카드 · 안내문을 만들 수 없어 목록에서 빼고 수만 알립니다.
+     구역 · 번호가 없는 실제 부스(배치 미정)는 운영자 카드만 맨 뒤 '배치 미정' 묶음에 두고(번호 대신
+     '배치 미정' 과 부스 id 앞 8자리), 안내문은 만들지 않습니다. 그 QR 은 이 화면에서 발급하지 않고
+     운영본부가 사전 발급 SQL 로 만듭니다. 구역 · 번호가 없는 예시 부스는 지금처럼 뺍니다.
      열쇠가 필요한 일(운영자 카드 · 발급 · 바꾸기 · 실시간 값 지우기)은 Core.db() 로 부릅니다.
      Core.db() 는 관리자 화면과 같은 저장소의 로그인을 쓰므로, 관리자 화면에서 로그인해 두면
      여기서도 관리자입니다. 권한은 화면이 아니라 DB 함수(is_admin)가 막습니다.
@@ -842,6 +846,9 @@
       SIGN_NOT_SHOWN: '공개 전에는 이 안내문 QR을 찍어도 부스를 찾지 못해요. 공개하면 같은 종이가 그대로 열려요.',
       ISSUED_ONE: '운영자 QR을 발급했어요. 카드를 인쇄해 이 부스 담당 선생님에게만 주세요.',
       ISSUE_NONE: '발급하지 않았어요 — 이미 QR이 있거나 구역 · 번호가 없는 부스예요. 새로 고침해 확인해 주세요.',
+      UNPLACED: '배치 미정',
+      UNPLACED_NOKEY: '배치 미정 부스의 운영자 QR은 운영본부가 사전 발급 SQL로 한꺼번에 발급합니다.',
+      UNPLACED_HINT: '구역 · 번호가 정해져 공개되면 이 QR로 접속됩니다. 그 전에는 접속되지 않습니다.',
       KEY_OFF: "이 부스의 운영자 QR은 꺼져 있어요. 다시 쓰려면 '열쇠 바꾸기'로 새 열쇠를 받으세요.",
       OFF_ELSEWHERE: '다른 기기에서 이 부스의 열쇠를 껐어요.',
       OFF_LATE: '응답이 늦게 왔을 뿐 열쇠는 이미 꺼져 있었어요.',
@@ -1040,9 +1047,9 @@
       tab: 'ops',
       paper: 'A4',
       settings: {},
-      booths: null,        // BoothCore 가 정리한 부스 목록 (구역 순 → 코드 순). 미배정은 빠짐
+      booths: null,        // BoothCore 가 정리한 부스 목록 (구역 순 → 코드 순, 배치 미정(unplaced)은 맨 뒤)
       byId: {},
-      unassigned: 0,       // 구역 · 번호가 없어 목록에서 뺀 부스 수(관리자로 읽었을 때만 압니다)
+      unassigned: 0,       // 구역 · 번호가 없는 실제 부스(배치 미정) 수(관리자로 읽었을 때만 압니다)
       liveReady: null,
       loadError: null,
       // access: booth_id → {token, issued_at, rotated, disabled, disabled_at}. 열쇠를 끈 부스는
@@ -1151,7 +1158,15 @@
       return true;
     }
     // 종이 · 화면의 기관 이름에는 '[예시]' 표시를 찍지 않습니다(DB 값 · 판별은 그대로).
-    function orgZone(b) { return [BC.displayOrganization(b.org), b.zone_name].filter(Boolean).join(' · '); }
+    // 배치 미정 부스는 구역이 없으니 기관만 적습니다.
+    function orgZone(b) { return [BC.displayOrganization(b.org), b.unplaced ? '' : b.zone_name].filter(Boolean).join(' · '); }
+    /* 배치 미정(구역 · 번호가 없는 실제 부스). 묶음 · 칩 열쇠는 실제 구역 코드(영문 · 숫자)나
+       '전체' 칩('')과 겹치지 않는 값으로 둡니다. 번호는 지어 내지 않고 '배치 미정' 으로 적습니다. */
+    var UNPLACED = '__unplaced';
+    function zoneOf(b) { return b.unplaced ? UNPLACED : (b.zone_key || ''); }
+    function codeText(b) { return b.unplaced ? MSG.UNPLACED : b.code; }
+    // 부스 id(uuid) 앞 8자리. 관람객 화면도 이 앞자리로 부스를 찾습니다. 열쇠와는 상관없습니다.
+    function shortId(b) { return String(b.id || '').slice(0, 8).toLowerCase(); }
     function norm(s) {
       s = String(s == null ? '' : s);
       if (s.normalize) s = s.normalize('NFC');
@@ -1304,58 +1319,67 @@
     }
     // 찾는 칸은 관람객 화면 검색과 같은 칸을 봅니다: 부스 코드(B-12 · b12 · 12) · 부스명 · 체험 내용 · 운영기관 · 구역 이름.
     // 인쇄 순서는 바꾸지 않습니다(종이는 늘 구역 · 번호 순) — 여기서는 맞는 카드만 남깁니다.
+    // 배치 미정 부스는 번호가 없어 '배치 미정' 과 카드에 찍힌 부스 id 앞 8자리로도 찾습니다.
     function matches(b, q) {
       if (!q) return true;
       var code = norm(b.code), m = /^([a-z]+)-?0*(\d+)$/.exec(code);
-      var hay = [code, code.replace(/-/g, ''), m ? m[1] + m[2] + ' ' + m[1] + '-' + m[2] : '', norm(b.name), norm(b.program), norm(BC.displayOrganization(b.org)), norm(b.zone_name)].join(' ');
+      var hay = [code, code.replace(/-/g, ''), m ? m[1] + m[2] + ' ' + m[1] + '-' + m[2] : '', norm(b.name), norm(b.program), norm(BC.displayOrganization(b.org)), norm(b.zone_name),
+        b.unplaced ? norm(MSG.UNPLACED) + ' ' + shortId(b) : ''].join(' ');
       return hay.indexOf(q) >= 0 || hay.replace(/\s+/g, '').indexOf(q.replace(/\s+/g, '')) >= 0;
     }
     function applyFilter(kind) {
       var q = norm(S.lists[kind].q), z = S.lists[kind].zone;
       items(kind).forEach(function (el) {
         var b = S.byId[el.getAttribute('data-id')];
-        el.classList.toggle('is-filtered', !!b && (!matches(b, q) || (!!z && (b.zone_key || '') !== z)));
+        el.classList.toggle('is-filtered', !!b && (!matches(b, q) || (!!z && zoneOf(b) !== z)));
       });
       updateCount(kind);
     }
 
     /* ── 구역 ─────────────────────────────────────────────────────────
        카드는 구역마다 묶어 그립니다(.zsect). '구역별로 새 페이지' 가 꺼져 있으면 묶음은 배치에 아무
-       영향이 없고(display: contents), 켜면 구역마다 새 종이에서 시작합니다. 구역 칩은 그 구역 카드만 남깁니다. */
+       영향이 없고(display: contents), 켜면 구역마다 새 종이에서 시작합니다. 구역 칩은 그 구역 카드만 남깁니다.
+       배치 미정 부스는 맨 뒤 '배치 미정' 묶음 · 칩 하나로 모입니다(① 에만 있습니다). */
     function zonedHtml(list, itemHtml) {
       var out = '', cur = null;
       list.forEach(function (b) {
-        var k = b.zone_key || '';
+        var k = zoneOf(b);
         if (k !== cur) {
           if (cur !== null) out += '</section>';
           cur = k;
           out += '<section class="zsect" data-zone="' + esc(k) + '"><h3 class="zsect__h">' +
-            esc([k, b.zone_name].filter(Boolean).join(' · ') || '구역 미정') + '</h3>';
+            esc(b.unplaced ? MSG.UNPLACED : ([k, b.zone_name].filter(Boolean).join(' · ') || '구역 미정')) + '</h3>';
         }
         out += itemHtml(b);
       });
       return out + (cur !== null ? '</section>' : '');
     }
-    function zoneList() {
+    // ② 부스 앞 안내는 배치가 정해진 부스만 만듭니다. 배치 미정 부스는 ① 운영자 카드에만 둡니다.
+    function listOf(kind) {
+      var all = S.booths || [];
+      return kind === 'signs' ? all.filter(function (b) { return !b.unplaced; }) : all;
+    }
+    function zoneList(kind) {
       var seen = {}, out = [];
-      (S.booths || []).forEach(function (b) {
-        var k = b.zone_key || '';
-        if (!seen[k]) { seen[k] = { key: k, name: b.zone_name || '', n: 0 }; out.push(seen[k]); }
+      listOf(kind).forEach(function (b) {
+        var k = zoneOf(b);
+        if (!seen[k]) { seen[k] = { key: k, name: b.unplaced ? '' : (b.zone_name || ''), n: 0 }; out.push(seen[k]); }
         seen[k].n++;
       });
       return out;
     }
     function renderZoneChips(kind) {
       var box = $('zchips-' + kind);
-      var zs = zoneList();
+      var zs = zoneList(kind);
       if (zs.length < 2) { box.hidden = true; box.innerHTML = ''; S.lists[kind].zone = ''; return; }
       if (S.lists[kind].zone && !zs.some(function (z) { return z.key === S.lists[kind].zone; })) S.lists[kind].zone = '';
       box.hidden = false;
-      box.innerHTML = [{ key: '', name: '', n: S.booths.length }].concat(zs).map(function (z) {
+      box.innerHTML = [{ key: '', name: '', n: listOf(kind).length }].concat(zs).map(function (z) {
         var on = S.lists[kind].zone === z.key;
-        var label = z.key ? z.key : '전체';
+        var label = z.key === UNPLACED ? MSG.UNPLACED : (z.key ? z.key : '전체');
+        var full = z.key === UNPLACED ? MSG.UNPLACED : z.key + ' · ' + z.name;
         return '<button type="button" class="zchip" data-zone-f="' + esc(z.key) + '" data-list="' + kind + '" aria-pressed="' + on + '"' +
-          (z.key ? ' title="' + esc(z.key + ' · ' + z.name) + '" aria-label="' + esc(z.key + ' · ' + z.name + ' · ' + z.n + '곳') + '"' : '') + '>' +
+          (z.key ? ' title="' + esc(full) + '" aria-label="' + esc(full + ' · ' + z.n + '곳') + '"' : '') + '>' +
           esc(label) + '<span>' + z.n + '</span></button>';
       }).join('');
     }
@@ -1391,10 +1415,13 @@
       var L = LISTS[kind];
       var all = items(kind).length, shown = shownItems(kind).length, n = printableCount(kind);
       var off = kind === 'ops' ? $(L.grid).querySelectorAll('.item.is-keyoff').length : 0;
-      var nokey = kind === 'ops' ? $(L.grid).querySelectorAll('.item.is-nokey').length : 0;
+      // 배치 미정 부스는 이 화면에서 발급할 수 없어(사전 발급 SQL) 미발급 수를 따로 셉니다.
+      var nokey = kind === 'ops' ? $(L.grid).querySelectorAll('.item.is-nokey:not(.is-unplaced)').length : 0;
+      var waitKey = kind === 'ops' ? $(L.grid).querySelectorAll('.item.is-nokey.is-unplaced').length : 0;
       var text = '인쇄할 ' + L.unit + ' ' + n + '장 · A4 ' + pagesOf(kind) + '쪽' + (S.zoneBreak ? '(구역별 새 페이지)' : '');
       text += (S.lists[kind].q || S.lists[kind].zone) ? ' · 찾은 부스 ' + shown + '곳 / 전체 ' + all + '곳' : ' · 전체 ' + all + '곳';
       if (nokey) text += ' · QR 미발급 ' + nokey + '곳(인쇄 안 함)';
+      if (waitKey) text += ' · 배치 미정 QR 미발급 ' + waitKey + '곳(인쇄 안 함)';
       if (off) text += ' · 열쇠 꺼짐 ' + off + '곳(인쇄 안 함)';
       // 인쇄할 장 가운데 예시 부스가 섞여 있으면 알려 줍니다(실제 최종 카드로 오인하지 않게 — 화면에만).
       var ex = shownItems(kind).filter(function (el) { return el.classList.contains('is-sample') && printable(el); }).length;
@@ -1456,7 +1483,9 @@
           '<span>운영자 QR <b class="' + k[1] + '">' + esc(k[0]) + '</b></span>' +
           '<span>행사 공개 <b class="' + p[1] + '">' + esc(p[0]) + '</b></span>' +
         '</p>' +
-        (shownToPublic(b) ? '' : '<p class="kst__hint">' + esc(MSG.NOT_SHOWN) + '</p>');
+        // 배치 미정 부스는 공개만으로는 열리지 않아(구역 · 번호도 있어야 함) 그 안내로 바꿉니다.
+        (b.unplaced ? '<p class="kst__hint">' + esc(MSG.UNPLACED_HINT) + '</p>'
+          : shownToPublic(b) ? '' : '<p class="kst__hint">' + esc(MSG.NOT_SHOWN) + '</p>');
     }
 
     function opsItemHtml(b) {
@@ -1464,21 +1493,24 @@
       var off = isOff(a);
       var hasKey = !!(a && a.token);
       var noKey = !a && !isMock;   // 아직 발급하지 않은 부스(열쇠 줄이 없음). 시연은 늘 열쇠가 있습니다
+      // 배치 미정: 번호 대신 '배치 미정' 과 부스 id 앞 8자리를 찍고, 이 화면에서는 발급하지 않습니다(사전 발급 SQL).
+      var unplaced = !!b.unplaced;
       // 바꾸기 · 끄기가 아직 도는 중에 카드가 다시 그려져도 두 '예' 단추는 계속 잠가 둡니다.
       var busyAttr = S.ops.busy[b.id] ? ' disabled' : '';
       var cls = off ? ' is-keyoff' : (noKey ? ' is-nokey' : (S.lists.ops.off[b.id] ? ' is-off' : ''));
-      return '<div class="item item--ops' + cls + (BC.isSample(b) ? ' is-sample' : '') + '" data-id="' + esc(b.id) + '">' +
-        '<article class="card" aria-label="' + esc(b.code + (off ? ' 운영자 카드 (열쇠 꺼짐)' : noKey ? ' 운영자 카드 (QR 미발급)' : ' 운영자 카드')) + '">' +
+      return '<div class="item item--ops' + cls + (BC.isSample(b) ? ' is-sample' : '') + (unplaced ? ' is-unplaced' : '') + '" data-id="' + esc(b.id) + '">' +
+        '<article class="card" aria-label="' + esc(codeText(b) + (off ? ' 운영자 카드 (열쇠 꺼짐)' : noKey ? ' 운영자 카드 (QR 미발급)' : ' 운영자 카드')) + '">' +
           '<div class="card__band">' + (off ? '부스 운영자용 · 열쇠 꺼짐' : noKey ? '부스 운영자용 · QR 미발급' : '부스 운영자용 · 관람객용 아님') + '</div>' +
           (isMock ? '<span class="stamp">' + esc(MSG.STAMP) + '</span>' : '') +
           '<div class="card__body">' +
-            '<div class="card__code">' + esc(b.code) + '</div>' +
+            '<div class="card__code">' + esc(codeText(b)) + '</div>' +
             '<div class="card__name">' + esc(b.name) + '</div>' +
             '<div class="card__org">' + esc(orgZone(b)) + '</div>' +
+            (unplaced ? '<div class="card__bid">부스 ID ' + esc(shortId(b)) + '</div>' : '') +
             (off
               ? '<div class="card__off" tabindex="-1" data-offnote><b>열쇠 꺼짐</b>' + esc(MSG.KEY_OFF) + '</div>'
               : noKey
-              ? '<div class="card__off card__nokey" tabindex="-1" data-nokeynote><b>' + esc(MSG.NO_KEY) + '</b>' + esc(MSG.NOKEY_NOTE) + '</div>'
+              ? '<div class="card__off card__nokey" tabindex="-1" data-nokeynote><b>' + esc(MSG.NO_KEY) + '</b>' + esc(unplaced ? MSG.UNPLACED_NOKEY : MSG.NOKEY_NOTE) + '</div>'
               : '<div class="card__mid">' +
                   '<figure class="card__qr"><div class="qr" data-qr></div>' +
                     '<figcaption class="qr__host">' + esc(op.base.host) + '</figcaption></figure>' +
@@ -1496,9 +1528,10 @@
         '<div class="acts">' +
           (off ? '<span class="pick pick--off">인쇄 안 함 (열쇠 꺼짐)</span>'
             : noKey ? '<span class="pick pick--off">인쇄 안 함 (QR 미발급)</span>' : pickHtml('ops', b.id)) +
-          (noKey ? '<button type="button" class="btn btn--primary" data-act="issue">운영자 QR 발급</button>' : '') +
+          (noKey && !unplaced ? '<button type="button" class="btn btn--primary" data-act="issue">운영자 QR 발급</button>' : '') +
           (off || noKey ? '' : '<button type="button" class="btn" data-act="big"' + (hasKey ? '' : ' disabled') + '>QR 크게 보기</button>') +
-          '<button type="button" class="btn" data-act="fix" aria-expanded="false">대기 값 직접 고치기</button>' +
+          // 배치 미정 부스는 관람객에게 대기 값이 보이지 않고 운영자도 들어올 수 없어 직접 고치기를 두지 않습니다.
+          (unplaced ? '' : '<button type="button" class="btn" data-act="fix" aria-expanded="false">대기 값 직접 고치기</button>') +
         '</div>' +
         '<p class="now" data-now>' + nowHtml(b.id) + '</p>' +
         '<div class="acts acts--more">' +
@@ -1567,13 +1600,16 @@
       return '<p>' + msgHtml + '</p><button type="button" class="btn" data-act="reload">다시 불러오기</button>';
     }
 
-    // 구역 · 번호가 없어 목록에서 뺀 부스(관리자로 읽었을 때만 압니다).
+    // 구역 · 번호가 없는 실제 부스(배치 미정, 관리자로 읽었을 때만 압니다).
+    // ① 에는 맨 뒤 '배치 미정' 묶음으로 있고, ② 에는 없습니다.
     function paintUnassigned() {
-      var text = S.unassigned
-        ? '구역 · 번호가 정해지지 않은 부스 ' + S.unassigned + '곳은 목록에 없어요. 관리자 → 부스에서 구역과 번호를 정하면 여기에 나와요.'
+      var n = S.unassigned;
+      $('unassigned-ops').textContent = n
+        ? '구역 · 번호가 정해지지 않은 부스 ' + n + '곳은 맨 뒤 ‘배치 미정’ 묶음에 있어요.'
         : '';
-      $('unassigned-ops').textContent = text;
-      $('unassigned-signs').textContent = text;
+      $('unassigned-signs').textContent = n
+        ? '구역 · 번호가 정해지지 않은 부스 ' + n + '곳은 목록에 없어요. 관리자 → 부스에서 구역과 번호를 정하면 여기에 나와요.'
+        : '';
     }
 
     function renderOps() {
@@ -1658,11 +1694,11 @@
         state.innerHTML = retryHtml(esc(MSG.LOAD_FAIL));
       } else if (S.booths === null) {
         state.innerHTML = '<p>부스 정보를 불러오는 중이에요</p>';
-      } else if (!S.booths.length) {
+      } else if (!listOf('signs').length) {
         state.innerHTML = '<p>' + esc(MSG.EMPTY) + '</p>';
       } else {
         state.innerHTML = '';
-        grid.innerHTML = zonedHtml(S.booths, signItemHtml);
+        grid.innerHTML = zonedHtml(listOf('signs'), signItemHtml);
         items('signs').forEach(function (el) {
           makeQr(el.querySelector('[data-qr]'), visLink(el.getAttribute('data-id')));
         });
@@ -1751,13 +1787,19 @@
           var rows = res[0] || [], zones = res[1] || [], zonePub = {}, pub = {};
           zones.forEach(function (z) { zonePub[z.key] = !!z.is_published; });
           rows.forEach(function (b) { pub[b.id] = !!b.is_published; });
-          var assigned = rows.filter(function (b) { return b.zone_key && b.no !== null && b.no !== undefined; });
-          var list = BC.normalize(assigned, null, zones).map(function (b) {
+          function placed(b) { return b.zone_key && b.no !== null && b.no !== undefined; }
+          var assigned = rows.filter(placed);
+          // 구역 · 번호가 없는 실제 부스는 표시(unplaced)를 달아 맨 뒤에 둡니다. 예시 부스는 지금처럼 뺍니다.
+          var waiting = rows.filter(function (b) { return !placed(b) && !BC.isSample(b); });
+          var list = BC.normalize(assigned, null, zones).concat(BC.normalize(waiting, null, zones).map(function (b) {
+            b.unplaced = true;
+            return b;
+          })).map(function (b) {
             b.is_published = pub[b.id];
             b.zone_published = !!zonePub[b.zone_key];
             return b;
           });
-          return { booths: list, unassigned: rows.length - assigned.length };
+          return { booths: list, unassigned: waiting.length };
         });
       }).then(null, function (err) {
         if (window.console) console.warn('[print-qr] 관리자 권한으로 부스를 읽지 못해 공개 목록을 씁니다', err);
@@ -2010,6 +2052,9 @@
        이미 열쇠가 있는 부스는 건너뜁니다(바꾸려면 '열쇠 바꾸기'). */
     function issueKeys(ids) {
       var gen = S.gen;
+      // 배치 미정 부스는 보내지 않습니다(서버도 거절합니다). 그 QR 은 운영본부가 사전 발급 SQL 로 만듭니다.
+      ids = ids.filter(function (id) { return !(S.byId[id] && S.byId[id].unplaced); });
+      if (!ids.length) return Promise.resolve([]);
       return Core.rpc('admin_issue_booth_tokens', { p_booth_ids: ids }).then(function (rows) {
         if (gen !== S.gen) throw lockedErr();
         (rows || []).forEach(function (r) {
@@ -2045,9 +2090,9 @@
       });
     }
 
-    // 지금 보이는(찾기로 가려지지 않은) 카드 가운데 QR 을 아직 발급하지 않은 부스.
+    // 지금 보이는(찾기로 가려지지 않은) 카드 가운데 QR 을 아직 발급하지 않은 부스. 배치 미정 부스는 뺍니다.
     function noKeyIds() {
-      return shownItems('ops').filter(function (el) { return el.classList.contains('is-nokey'); })
+      return shownItems('ops').filter(function (el) { return el.classList.contains('is-nokey') && !el.classList.contains('is-unplaced'); })
         .map(function (el) { return el.getAttribute('data-id'); });
     }
     function paintIssueAll() {
@@ -2478,7 +2523,7 @@
       var seq = ++S.ov.seq;
       S.ov.id = id;
       if (!S.ov.back) S.ov.back = document.activeElement;
-      $('ov-code').textContent = b.code;
+      $('ov-code').textContent = codeText(b);
       $('ov-name').textContent = b.name;
       $('ov-host').textContent = op.base.host;
       $('ov-copied').textContent = '';
