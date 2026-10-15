@@ -2,6 +2,11 @@
 -- 되돌리기: migration-booth-private.sql(1b) · migration-booth-master-data.sql(1a)
 -- — 초안. 적용한 순서의 반대로, 필요한 부분만 돌립니다.
 --
+--   ⚠️ 행사 준비 · 운영 중인 운영 DB 에는 실행하지 마세요.
+--      B 는 booth_ctrl_get · booth_ctrl_set · booth_ctrl_touch 를 공개 조건 없는 판으로 되돌립니다.
+--      그러면 아직 공개하지 않은 부스의 운영자 QR(사전 발급분 포함)로도 운영자 화면이 열리고 대기 값을 바꿀 수 있습니다.
+--      실행이 꼭 필요하면 운영본부가 먼저 운영자 열쇠를 모두 끄거나 다시 발급할 계획을 세운 뒤에 합니다.
+--
 --   A. 1b 되돌리기  booths 에 내부 칸을 다시 만들고 booth_private 의 값을 옮긴 뒤
 --                   booth_private 를 지웁니다. ⚠️ 그 칸은 다시 anon 이 읽게 됩니다.
 --   B. 1a 되돌리기  2026-10-02 production 상태(정책 · 제약 · 함수 본문)로 돌립니다.

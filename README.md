@@ -64,11 +64,11 @@ supabase/
   migration-official-info-2026.sql ★ 공식 공문(2026. 9. 29.) 행사 기본정보
   migration-lock-portal-actions.sql ★ 상태 변경 함수를 운영진 전용으로 · 자리표시 연락처 비움
   migration-portal-actions.sql    fix 판의 앞 버전 (기록용)
-  migration-booth-live.sql   ★ 부스 대기 현황 전체 정의 (표 셋 · 함수 여덟 · 열쇠 끄기 · 관리자 직접 수정)
+  migration-booth-live.sql   ★ 부스 대기 현황 전체 정의 (표 셋 · 함수 여덟 · 열쇠 끄기 · 관리자 직접 수정) — 새 DB 전용 · 운영 DB 재실행 금지
   migration-booth-live-admin.sql   위 파일 처음 판에 열쇠 끄기 · 직접 수정을 더한 차이분 (운영 DB 적용 기록용)
   migration-booth-master-data.sql  부스 · 구역 기준 데이터 1a: 공개 여부 · 미배정 · 번호 규칙 · QR 발급 분리 (2026-10-03 Production 적용)
   migration-booth-private.sql      1b: 부스 담당자 · 메모를 관리자 전용 표로 (2026-10-03 Production 적용 · 포털 배포와 함께)
-  rollback-booth-master-data.sql   위 두 파일 되돌리기 (초안)
+  rollback-booth-master-data.sql   위 두 파일 되돌리기 (초안) — 운영 DB 실행 금지(운영자 접속의 공개 조건이 빠짐)
   migration-booth-pin.sql          부스 운영자 PIN 보조 로그인 (PIN · 임시 세션 · 보안 기록 · 전체 스위치 — 2026-10-03 Production 적용)
   rollback-booth-pin.sql           위 파일 되돌리기 (QR 표 · 함수는 그대로)
   migration-booth-example-pin.sql  운영 준비용 [예시] 부스 공통 PIN (스위치 · 세션 표시 · PIN 로그인에 리허설 길 — 2026-10-04 Production 적용)
@@ -199,15 +199,19 @@ Supabase 대시보드 → **SQL Editor** 에서 순서대로 실행합니다.
 8. `supabase/migration-event-dates-2026.sql` — 새 환경의 행사 기간 보정 (선택)
 9. `supabase/migration-lock-portal-actions.sql` — **상태 변경을 운영진 전용으로. 반드시 실행**
    (6번 뒤에 실행합니다. 6번을 다시 돌리면 두 함수가 다시 anon 에 열리므로 9번도 다시 실행하세요.)
-10. `supabase/migration-booth-live.sql` — **부스 실시간 대기 현황 · 운영자 QR 열쇠.** 3번 뒤에 실행합니다
-   (아래 ‘부스 실시간 대기 현황 → 켜는 순서’ 1번과 같은 파일입니다. 열쇠 끄기 · 관리자 직접
-   수정까지 담은 전체 정의라, 다시 돌려도 그 기능이 되돌아가지 않습니다.
+10. `supabase/migration-booth-live.sql` — **부스 실시간 대기 현황 · 운영자 QR 열쇠.** 3번 뒤에 실행합니다.
+   **새 DB 를 처음 만들 때만** 실행합니다(아래 ‘부스 실시간 대기 현황 → 켜는 순서’ 1번과 같은 파일).
+   이 파일의 운영자 함수(`booth_ctrl_get` · `booth_ctrl_set` · `booth_ctrl_touch`)는 열쇠만 확인하는 첫 판이라,
+   이어서 `migration-booth-master-data.sql`(1a)을 적용해야 운영자 접속이 ‘부스 공개 + 구역 공개 + 번호 있음’
+   부스로 좁혀집니다(지금 운영 DB 상태).
    `migration-booth-live-admin.sql` 은 운영 DB 에 처음 판을 먼저 적용했기 때문에 남긴
-   차이분이라 새 DB 에서는 실행하지 않아도 됩니다.)
+   차이분이라 새 DB 에서는 실행하지 않아도 됩니다.
 
 > ⚠️ 3번을 실행한 뒤에는 1·2번을 다시 실행하지 마세요.
 > 예전 “관계자 로그인 필수” 정책이 되살아나 포털이 다시 잠깁니다.
-> 모든 파일이 기존 데이터를 지우지 않고, 여러 번 실행해도 안전합니다.
+> 모든 파일이 기존 데이터를 지우지 않지만, **10번 `migration-booth-live.sql` 과 `rollback-booth-master-data.sql` 은
+> 운영 DB 에 다시 실행하지 마세요.** 운영자 함수가 공개 조건 없는 첫 판으로 돌아가, 아직 공개하지 않은 부스의
+> 운영자 QR(사전 발급분 포함)로도 운영자 화면이 열립니다. 권한만 빠진 경우의 처리는 ‘켜는 순서’ 1번 아래에 있습니다.
 >
 > `migration-portal-actions.sql` 은 6번의 앞 판이라 따로 실행하지 않아도
 > 됩니다. `add-settings-fields.sql` 은 지금 화면에서 쓰지 않는 칸을
@@ -565,7 +569,9 @@ GitHub Pages(`main`), 부스 Live 사이트는 Vercel 프로젝트 `incheon-live
 
 ### 켜는 순서
 
-1. **DB** — Supabase 대시보드 → SQL Editor 에 `supabase/migration-booth-live.sql` 을
+1. **DB** — ⚠️ **운영 DB(이미 켜짐)에는 실행하지 않습니다.** 새 DB 를 만들 때만 이 파일 → `migration-booth-master-data.sql`(1a)
+   순서로 적용합니다.
+   Supabase 대시보드 → SQL Editor 에 `supabase/migration-booth-live.sql` 을
    통째로 붙여 넣고 Run 합니다. 표 셋(`booth_live` · `booth_access` · `booth_live_log`)과
    함수 여덟(운영자용 셋 · 관리자용 다섯 — 열쇠 끄기 · 직접 수정 포함)이 만들어지고,
    맨 아래 확인 표의 1~22번 ‘맞음’ 이 모두 true 여야 합니다.
@@ -576,10 +582,21 @@ GitHub Pages(`main`), 부스 Live 사이트는 Vercel 프로젝트 `incheon-live
    실행 전에도 화면들은 깨지지 않습니다(관람객 화면은 “부스별 대기 시간은 행사
    당일부터 표시돼요”, 운영자 화면은 “부스 대기 현황 기능이 아직 켜지지 않았어요”).
 
-   > **고치려고 다시 실행할 때는 `migration-booth-live.sql` 하나만 실행합니다**
-   > (예: 누가 보안 점검 경고를 보고 anon 실행 권한을 거뒀을 때). 전체 정의라
-   > 열쇠 끄기 · 직접 수정도 그대로 남고, 꺼 둔 열쇠는 끌 때 문자열까지 바꿔
-   > 두었기 때문에 되살아나지 않습니다. 여러 번 실행해도 안전합니다.
+   > **운영 DB 를 고칠 때 이 파일을 다시 실행하지 않습니다.** 이 파일은 운영자 함수를 지우고 첫 판(열쇠만 확인)으로
+   > 다시 만들어, 지금 운영 DB 의 ‘부스 공개 + 구역 공개 + 번호 있음’ 조건이 빠집니다. 그러면 아직 공개하지 않은 부스의
+   > 운영자 QR(사전 발급분 포함)로도 운영자 화면이 열립니다. `rollback-booth-master-data.sql` 도 같은 결과입니다.
+   >
+   > 누가 보안 점검 경고를 보고 anon 실행 권한을 거둔 경우에는 **권한만** 되돌립니다(함수 본문 · 열쇠 · 기록은 그대로):
+   >
+   > ```sql
+   > grant execute on function public.booth_ctrl_get(text)                to anon, authenticated;
+   > grant execute on function public.booth_ctrl_set(text, text, integer) to anon, authenticated;
+   > grant execute on function public.booth_ctrl_touch(text)              to anon, authenticated;
+   > ```
+   >
+   > PIN 보조 로그인 함수의 권한은 `migration-booth-pin.sql` 의 `grant execute … to anon, authenticated` 다섯 줄과 같습니다.
+   > 함수 본문을 다시 넣어야 하는 일이 생기면 실행하기 전에 운영본부가 `migration-booth-master-data.sql` 의 정의를
+   > 기준으로 따로 검토합니다.
 
    > Supabase 보안 점검(Advisors)이 `booth_ctrl_*` 세 함수에
    > `anon_security_definer_function_executable` 경고를 띄웁니다. **의도된
@@ -1028,7 +1045,7 @@ A~J 는 리허설용 임시 구역입니다(이름 'A구역' … 'J구역', 정�
 | 선생님 휴대폰이 꺼졌다 · 꺼 둔 부스의 값이 틀려 있다 | 그 부스의 **‘대기 값 직접 고치기’** → 대기 시간 · 잠시 중단 · 오늘 마감 · 값 지우기(“정보 없음”) 중 하나. 운영자 입력과 같은 규칙으로 여유 · 보통 · 혼잡이 정해지고, 입력 기록에는 `source = 'admin'` 으로 남습니다(아래 결과 보고의 평균에는 들어가지 않습니다) |
 | 담당 선생님이 교대한다 | 카드를 다음 담당자에게 넘깁니다. 열쇠는 사람이 아니라 부스에 붙어 있어 새로 받을 필요가 없습니다 |
 | 운영자 화면이 “이 QR은 이제 쓸 수 없어요” | 열쇠를 바꿨거나 껐거나, 부스를 지웠다가 다시 만든 경우입니다 → 꺼 둔 부스가 아니면 ‘QR 크게 보기’ 로 새 QR |
-| 운영자 화면이 “부스 대기 현황 기능이 아직 켜지지 않았어요” 또는 “부스 대기 입력이 잠시 꺼졌어요” | 켜는 순서 1(SQL)이 안 됐거나, 누가 보안 점검 경고를 보고 함수의 anon 실행 권한을 거둔 경우입니다 → `supabase/migration-booth-live.sql` 을 다시 실행합니다(전체 정의 · 여러 번 돌려도 안전 · 꺼 둔 열쇠는 되살아나지 않음). **열쇠는 멀쩡하니 바꾸지 마세요** — 바꾸면 카드를 전부 다시 인쇄해야 합니다 |
+| 운영자 화면이 “부스 대기 현황 기능이 아직 켜지지 않았어요” 또는 “부스 대기 입력이 잠시 꺼졌어요” | 켜는 순서 1(SQL)이 안 됐거나, 누가 보안 점검 경고를 보고 함수의 anon 실행 권한을 거둔 경우입니다 → ‘켜는 순서’ 1번 아래 **권한만 되돌리는 `grant` 세 줄**을 실행합니다. **`migration-booth-live.sql` 을 다시 실행하지 마세요**(공개 조건이 빠져 공개 전 부스의 QR 로도 열립니다). **열쇠는 멀쩡하니 바꾸지 마세요** — 바꾸면 카드를 전부 다시 인쇄해야 합니다 |
 | 관람객 화면에서 숫자가 흐리다 | 30분 넘게 입력이 없는 부스입니다. 포털 부스 현황 맨 위 ‘부스 대기 입력’ 을 펼치면 오래된 순으로 보이니 그 부스에 알려 주세요 |
 | 행사장 와이파이가 불안정하다 | 운영자 화면은 누른 값을 휴대폰에 붙잡아 두었다가 연결되면 저절로 저장합니다(“저장 대기 중”). 10분 넘게 못 보낸 값은 저장하기 전에 다시 묻습니다 |
 
