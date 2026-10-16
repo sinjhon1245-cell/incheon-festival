@@ -113,6 +113,9 @@
        boothLiveOk 는 표를 한 번이라도 제대로 읽었는가 — 표가 아직 없거나
        읽기에 실패했으면 부스 화면의 입력 현황 띠를 그리지 않습니다. */
     boothLive: {}, boothLiveOk: false,
+    /* 등록은 됐지만 구역 · 번호가 아직 공개되지 않아 booths 에 없는 실제 부스 수
+       (booth_preview_list). 0 이면 이전과 같은 화면입니다. */
+    boothPending: 0,
     staff: null,   // 이 브라우저에 로그인한 운영진(staff_profiles 줄). 없으면 null
     error: null, loading: false
   };
@@ -320,6 +323,27 @@
     });
   }
 
+  /* 배치 준비 중인 실제 부스. 등록은 됐지만 구역 · 번호가 정해져 공개되기 전이라
+     위 목록(공개 부스)에는 없고, 관람객 화면은 같은 목록을 '배치 준비 중' 으로 보여 줍니다.
+     포털이 이 부스들을 '아직 미등록' 이라고 하지 않도록 수만 셉니다.
+     booth_preview_list() 는 id · 이름 · 기관 · 체험 내용만 돌려줍니다(열쇠 · PIN · 연락처 없음).
+     배치 · 공개된 부스는 함수가 스스로 빼므로, 공개가 진행되면 수가 줄고 모두 공개되면
+     0 이 되어 포털은 원래 화면으로 돌아갑니다. 혹시 겹치는 id 가 있으면 공개 쪽에 둡니다.
+     함수가 없거나(migration-booth-preview.sql 전) 읽지 못해도 다른 화면을 막지 않습니다 — 0. */
+  function loadBoothPending() {
+    return C.rpc('booth_preview_list').then(function (rows) {
+      return Array.isArray(rows) ? rows : [];
+    }).catch(function (e) {
+      if (!e || e.code !== 'PGRST202') console.warn('[portal] 배치 준비 중 부스를 읽지 못했습니다', e);
+      return [];
+    });
+  }
+  function countPending(rows, booths) {
+    var shown = {};
+    booths.forEach(function (b) { shown[b.id] = true; });
+    return rows.filter(function (r) { return r && r.id && !shown[r.id]; }).length;
+  }
+
   function loadAll() {
     S.loading = true; S.error = null;
     liveAt = Date.now();   // 방금 받았으니 부스 화면의 1분 갱신은 다음 분부터
@@ -344,7 +368,8 @@
       C.selectSoft('supply_allocations'),
       // 부스 대기 현황은 맨 뒤에 둡니다. migration-booth-live.sql 전에는 표가
       // 없고, 읽다 실패해도 포털의 다른 화면을 막지 않습니다(selectBoothLive).
-      selectBoothLive()
+      selectBoothLive(),
+      loadBoothPending()
     ]).then(function (r) {
       S.settings = r[0][0] || {};
       S.schedule = r[1]; S.zones = publicZones(r[2]); S.booths = publicBooths(r[3], S.zones); S.notices = r[4];
@@ -353,6 +378,7 @@
       S.tasks = r[10]; S.assigns = r[11];
       S.supplyItems = r[12]; S.supplyTargets = r[13]; S.supplyAllocs = r[14];
       applyBoothLive(r[15]);
+      S.boothPending = countPending(r[16], S.booths);
       S.loading = false;
     }).catch(function (e) {
       S.loading = false;
@@ -440,6 +466,8 @@
                   + [전체 협의용 예시 보기 →]
        예시 켬    맨 위 "협의용 예시" 띠 + 카드마다 '예시' + [예시 닫기]
        실제 등록  미리보기 · 단추 · 예시가 모두 사라지고 실제 데이터만 보입니다
+       배치 전    (부스만) 실제 부스가 등록돼 배치를 기다리는 중이면 예시를 아예 두지 않습니다 —
+                  'A-01' 같은 예시 번호가 곧 정해질 실제 배치로 읽히기 쉽습니다
      미리보기는 '준비 중' 안내와 구분선으로 떼어 두고, 머리에 '협의용 예시 ·
      실제 행사 정보가 아닙니다' 를 답니다 — 사이트가 비어 보이지 않게 하되
      확정 정보로 읽히지 않게 합니다.
@@ -534,6 +562,7 @@
   }
   // 지금 이 화면이 예시를 보여 주는 중인가. 실제 데이터가 한 건이라도 있으면 아닙니다.
   function sampleShown(kind) {
+    if (kind === 'booths' && S.boothPending) return false;
     return sampleWanted(kind) && !(kind === 'sched' ? S.schedule.length : S.booths.length);
   }
   function isSampleSched() { return !!(S.schedule[0] && S.schedule[0].sample); }
@@ -1046,9 +1075,12 @@
           : !leftSupply.length ? '모두 배부 완료'
           : '배부 예정 ' + leftSupply.filter(function (t) { return (t.status || '미배부') === '미배부'; }).length +
             ' · 배부 중 ' + leftSupply.filter(function (t) { return t.status === '일부 배부'; }).length },
+      // 배치 준비 중인 실제 부스도 '전체' 에 셉니다. 공개된 부스가 하나도 없으면 아래 줄로 배치 전임을 알립니다.
       { key: 'booth', go: 'booths', l: '전체 부스',
-        n: S.booths.length || null,
-        sub: S.booths.length ? '부스 현황 보기' : '아직 미등록' }
+        n: (S.booths.length + S.boothPending) || null,
+        sub: !S.boothPending ? (S.booths.length ? '부스 현황 보기' : '아직 미등록')
+          : S.booths.length ? '배치 준비 중 ' + S.boothPending + '곳'
+          : '배치 준비 중' }
     ];
     var statsHtml = '<nav class="dash__stats" aria-label="운영 현황">' + stats.map(function (st) {
       var none = st.n == null;
@@ -2091,6 +2123,15 @@
     if (r.top < vt) ul.scrollTop -= vt - r.top;
   }
 
+  /* 관람객 화면(부스 Live) 첫 화면으로 가는 단추. 배치 준비 중 목록은 그 화면에 있습니다.
+     config.js 의 visitorSiteUrl 이 https 주소일 때만 둡니다. 새 탭으로 엽니다. */
+  function visitorLink() {
+    var url = String((window.FESTIVAL_CONFIG || {}).visitorSiteUrl || '').trim();
+    if (!/^https:\/\//i.test(url)) return '';
+    return '<a class="btn btn--ghost btn--sm" href="' + esc(url) + '" target="_blank" rel="noopener noreferrer" ' +
+      'aria-label="관람객 화면에서 배치 준비 중 목록 보기 (새 탭)">관람객 화면에서 보기 <span aria-hidden="true">↗</span></a>';
+  }
+
   function viewBooths() {
     // 등록된 부스가 없고 예시를 켜 두었으면 예시 부스로 같은 화면을 그립니다.
     if (sampleShown('booths')) {
@@ -2116,6 +2157,15 @@
 
     // 등록된 부스가 없으면 필터 · 검색 없이 준비 중 안내만 둡니다.
     if (!items.length) {
+      // 실제 부스가 배치를 기다리는 중이면 그 사실과 관람객 화면 주소만. 협의용 예시는 두지 않습니다.
+      if (S.boothPending) {
+        return '<div class="page">' + pageHead('부스 현황') + map +
+          emptyBox('부스 배치 확정 전',
+            '실제 부스 ' + S.boothPending + '곳이 등록되어 있습니다. 구역과 부스 번호가 확정되어 공개되면 이 화면에 표시됩니다.',
+            '관람객 화면에는 지금 \'배치 준비 중\' 목록으로 안내되고 있습니다.',
+            visitorLink()) +
+          '</div>';
+      }
       return '<div class="page">' + pageHead('부스 현황') + map +
         emptyBox('부스 정보 준비 중', '부스 배치 및 운영기관 정보는 확정되는 대로 업데이트됩니다.') +
         samplePreview('booths') +
@@ -2181,7 +2231,9 @@
     return '<div class="page">' +
       pageHead('부스 현황') + bar + live +
       map +
-      '<p class="countline">' + (sample ? '예시 부스' : '전체 부스') + ' <b>' + items.length + '</b>개</p>' +
+      // 일부만 공개된 동안에는 아직 배치 전인 부스 수를 같은 줄에 덧붙입니다(홈 '전체 부스' 와 합이 맞게).
+      '<p class="countline">' + (sample ? '예시 부스' : S.boothPending ? '배치된 부스' : '전체 부스') +
+      ' <b>' + items.length + '</b>개' + (!sample && S.boothPending ? ' · 배치 준비 중 ' + S.boothPending + '곳' : '') + '</p>' +
       zoneHtml +
       typeHtml +
       '<div class="tools"><div class="search"><label class="sr-only" for="booth-q">부스 검색</label>' +
