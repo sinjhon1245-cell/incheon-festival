@@ -803,7 +803,9 @@
         return '<p class="hero__label">부스 대기 현황</p><p class="hero__head">정보를 불러오지 못했어요</p>';
       }
       if (mode === 'before') {
-        return label + '<p class="hero__dday">D-' + i.dday + '</p>' +
+        // 'D-21' 만 두면 부스 번호(구역-번호)처럼 읽힐 수 있어, 앞에 '개막까지' 를 작게 붙입니다.
+        return label + '<p class="hero__dday"><span class="hero__ddkey">개막까지</span>' +
+          '<span aria-hidden="true">D-' + i.dday + '</span><span class="sr-only">' + i.dday + '일 남았어요</span></p>' +
           '<p class="hero__copy">' + esc((i.nextOpenLabel || '행사 당일') + '부터 부스별 대기 시간이 여기에 실시간으로 표시돼요') + '</p>';
       }
       if (mode === 'notready') {

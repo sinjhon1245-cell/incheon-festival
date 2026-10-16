@@ -541,10 +541,22 @@ html.is-demo .row { scroll-margin-top: calc(56px + var(--demo-h) + env(safe-area
 /* 운영 시간 밖 · 기능 준비 전 */
 .hero__dday {
   margin-top: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 12px;
   font-size: clamp(64px, 19vw, 96px);
   font-weight: 800;
   line-height: .86;
   letter-spacing: -0.05em;
+}
+/* 큰 숫자 앞의 작은 말 — 'D-21' 이 부스 번호가 아니라 개막까지 남은 날임을 알립니다 */
+.hero__ddkey {
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  color: var(--ink-2);
 }
 .hero__head {
   margin-top: 10px;
