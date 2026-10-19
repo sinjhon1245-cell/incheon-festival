@@ -3617,9 +3617,25 @@
       var f = focusSel ? $('pinov-acts').querySelector(focusSel) : null;
       if (f && !f.disabled) f.focus();
     }
+    // 이번 결과에서 같은 숫자의 PIN 을 받은 부스 묶음(부스 번호만 돌려줌 — PIN 숫자는 안내 글에 넣지 않습니다).
+    // PIN 은 부스마다 다른 소금을 친 해시로만 저장돼 서버는 겹침을 알 수 없고, 원문이 있는 이 결과 창에서만 견줄 수 있습니다.
+    // 겹치면 서로의 부스를 골라 같은 PIN 으로 들어갈 수 있으므로, 묶음마다 한 곳을 재발급하도록 알립니다(발급 방식은 그대로).
+    function samePinGroups(items) {
+      var by = {}, out = [];
+      items.forEach(function (it) {
+        if (it.status !== 'ok' || !it.pin) return;
+        (by[it.pin] = by[it.pin] || []).push(it.code);
+      });
+      Object.keys(by).forEach(function (k) { if (by[k].length > 1) out.push(by[k]); });
+      by = null;
+      return out;
+    }
     function showResult(job) {
       job.phase = 'result';
       job.csvStarted = false; job.printOpened = false; job.ack = false; job.status = '';
+      var same = samePinGroups(job.items), sameOf = {};
+      job.same = same.map(function (g) { return g.join(' · '); });
+      same.forEach(function (g) { g.forEach(function (c) { sameOf[c] = g.filter(function (x) { return x !== c; }).join(' · '); }); });
       var t = tally(job.items), done = t.ok === job.items.length;
       var title = (job.kind === 'reissue' ? 'PIN 재발급' : 'PIN 발급') + (done ? ' 완료' : ' 결과');
       var sum = '<ul class="pinov__sum">' +
@@ -3635,6 +3651,7 @@
           if (it.anomaly) why = '<p class="pinres__why is-unk">예상과 달리 PIN 로그인 기기 ' + it.revoked + '대가 로그아웃됐어요. 다른 관리자가 방금 이 부스 PIN을 발급했다면 그 PIN은 이제 쓸 수 없어요 — 위의 새 PIN을 쓰세요.</p>';
           else if (it.common) why = '<p class="pinres__why">공통 PIN으로 연 기기 ' + it.revoked + '대가 로그아웃됐어요. 이제 이 부스는 위의 새 PIN으로 들어가요.</p>';
           else if (it.revoked) why = '<p class="pinres__why">예전 PIN으로 연 기기 ' + it.revoked + '대가 로그아웃됐어요.</p>';
+          if (sameOf[it.code]) why += '<p class="pinres__why is-unk">' + esc(sameOf[it.code]) + ' 부스와 같은 PIN이에요.</p>';
         } else if (it.status === 'unknown') {
           right = '<span class="pinres__st is-unk">결과 확인 필요</span>';
           why = '<p class="pinres__why is-unk">' + esc(unknownWhy(it)) + '</p>';
@@ -3652,6 +3669,8 @@
       var has = t.ok > 0;
       fillOv(title,
         sum +
+        (same.length ? '<div class="pinov__warn" id="pinov-same"><b>같은 PIN을 받은 부스가 ' + same.length + '묶음 있어요: ' + esc(job.same.join(' / ')) + '</b>' +
+          '서로의 부스를 골라 같은 PIN으로 들어갈 수 있어요. 이 창의 PIN을 저장한 뒤, 묶음마다 한 곳을 ‘선택 PIN 재발급’ 해 주세요.</div>' : '') +
         (has ? '<div class="pinov__warn"><b>' + esc(M.KEEP) + '</b>' + esc(M.SENSITIVE) + '</div>' : '') +
         (has ? '<p class="pinx__hint">' + esc(M.VOLATILE) + (opSite() ? ' 운영자 안내: ' + esc(opSite()) + ' → “부스 번호와 PIN으로 시작” → 구역 → 부스 → PIN.' : '') + '</p>' : '') +
         list,
@@ -3690,7 +3709,8 @@
         var redo = job.items.filter(function (it) { return it.status === 'fail' || it.status === 'unknown'; }).map(function (it) { return it.id; });
         P.last = {
           text: '방금 ' + (job.kind === 'reissue' ? 'PIN 재발급' : 'PIN 발급') + ': 성공 ' + t.ok + ' · 실패 ' + t.fail + ' · 결과 확인 필요 ' + t.unknown +
-            (t.skip ? ' · 건너뜀 ' + t.skip : '') + (t.notrun ? ' · 실행 안 함 ' + t.notrun : '') + '. 결과 창을 닫아 PIN은 이제 다시 볼 수 없어요.',
+            (t.skip ? ' · 건너뜀 ' + t.skip : '') + (t.notrun ? ' · 실행 안 함 ' + t.notrun : '') + '. 결과 창을 닫아 PIN은 이제 다시 볼 수 없어요.' +
+            (job.same && job.same.length ? ' 같은 PIN을 받은 부스: ' + job.same.join(' / ') + ' — 묶음마다 한 곳을 재발급해 주세요.' : ''),
           redo: redo
         };
         job.items.forEach(function (it) { it.pin = null; delete it.pin; });
