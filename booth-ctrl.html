@@ -143,10 +143,10 @@
       <div id="pin-s2" hidden>
         <h1 class="screen__title">부스를 골라 주세요</h1>
         <p class="screen__text" id="pin-zone-name"></p>
-        <!-- 한 구역에 부스가 많을 때(PIN_FIND_MIN 곳 이상)만: 번호(12 · A12 · A-12)나 부스명으로 바로 찾기 -->
+        <!-- 한 구역에 부스가 많을 때(PIN_FIND_MIN 곳 이상)만: 번호(12 · A12 · A-12 · R4-07) · 부스명 · 학교명으로 바로 찾기 -->
         <div class="pinfind" id="pin-find" hidden>
-          <label class="sr-only" for="pin-q">부스 번호 또는 부스명으로 찾기</label>
-          <input class="pinfind__input" id="pin-q" type="search" placeholder="부스 번호 또는 부스명으로 찾기"
+          <label class="sr-only" for="pin-q">부스 번호 · 부스명 · 학교명으로 찾기</label>
+          <input class="pinfind__input" id="pin-q" type="search" placeholder="부스 번호 · 부스명 · 학교명으로 찾기"
                  autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="search" />
         </div>
         <p class="pinfind__none" id="pin-find-none" role="status" hidden></p>
@@ -915,12 +915,17 @@
       }).join('');
     }
     // 한 구역 부스가 PIN_FIND_MIN 곳 이상이면 목록 위에 찾기 칸을 둡니다. 운영자는 카드 · 안내로 부스 번호를
-    // 알고 오므로 '12' · 'A12' · 'A-12' 로 바로 찾고, 부스명 일부로도 찾습니다. 부스가 적으면 지금 목록 그대로.
+    // 알고 오므로 '12' · 'A12' · 'A-12' · 'R4-07' 로 바로 찾고, 부스명 · 학교명(운영기관) 일부로도 찾습니다.
+    // 부스가 적으면 지금 목록 그대로.
     var PIN_FIND_MIN = 10;
+    var PIN_FIND_OTHER_MAX = 5;   // 이 구역에 없을 때 보여 줄 다른 구역 부스(부스명 · 학교명이 맞는 것) 수
+    // 부스 칸: 첫 줄 번호 + 부스명, 둘째 줄 학교명(운영기관 — DB 의 기관 칸 그대로, 예시 부스는 '[예시]' 만 뗌)
     function boothPick(b, other) {
+      var org = core.displayOrganization(b.org);
       return '<button type="button" class="pick pick--booth' + (other ? ' pick--other' : '') + '" data-booth="' + esc(b.id) + '">' +
         '<span class="pick__k num">' + esc(other ? codeOf(b) : pad2(b.no)) + '</span>' +
         '<span class="pick__t">' + esc(b.name || '') +
+          (org ? '<span class="pick__o">' + esc(org) + '</span>' : '') +
           (other ? '<span class="pick__s">' + esc(zoneNameOf(b.zone_key) + ' · 다른 구역') + '</span>' : '') + '</span></button>';
     }
     function pickZone(key) {
@@ -932,41 +937,78 @@
       renderBoothPicks();
       pinStep(2);
     }
-    // 찾기 글 → 이 구역의 부스(맞는 정도 순). 'A-12' · 'a12' 는 구역 A 의 12번, '12' 는 이 구역의 12번.
-    // 번호가 꼭 맞음 → 번호 앞자리가 맞음(1 → 1 · 10~19) → 부스명에 들어 있음. 다른 구역 번호(B-12)를
-    // 치면 그 부스도 맨 위에 '다른 구역' 으로 보여 줍니다.
+    // 견주기용 글: 전각 → 반각(NFKC) · 여러 줄표 → '-' · 공백 없앰 · 소문자
+    function findKey(s) {
+      s = String(s == null ? '' : s);
+      if (typeof s.normalize === 'function') s = s.normalize('NFKC');
+      return s.replace(/[‐-―−﹣－]/g, '-').replace(/\s+/g, '').toLowerCase();
+    }
+    // 번호로 찾기: 'A-12' · 'R4-07' 은 그 구역의 그 번호, 'A12' · 'R407' 은 있는 구역 이름이 앞에 붙은 번호(긴 이름 먼저),
+    // '12' 는 이 구역의 12번. 번호 모양이 아니면 null.
+    function codeQuery(q) {
+      var d = /^([A-Z][A-Z0-9]{0,2})-0*(\d{1,3})$/.exec(q);
+      if (d) return { zone: d[1], no: Number(d[2]) };
+      var best = '';
+      pin.zones.forEach(function (z) {
+        var k = String(z.key).toUpperCase();
+        if (k.length > best.length && q.indexOf(k) === 0 && /^\d{1,3}$/.test(q.slice(k.length))) best = k;
+      });
+      if (best) return { zone: best, no: Number(q.slice(best.length)) };
+      var n = /^0*(\d{1,3})$/.exec(q);
+      return n ? { zone: null, no: Number(n[1]) } : null;
+    }
+    // 글이 들어 있는 곳: 부스명 2 · 학교명(운영기관) 3 · 없음 9
+    function textScore(b, key) {
+      if (!key) return 9;
+      if (findKey(b.name).indexOf(key) >= 0) return 2;
+      if (findKey(core.displayOrganization(b.org)).indexOf(key) >= 0) return 3;
+      return 9;
+    }
+    // 찾기 글 → 이 구역의 부스(맞는 정도 순). 번호가 꼭 맞음 → 번호 앞자리가 맞음(1 → 1 · 10~19) →
+    // 부스명에 들어 있음 → 학교명에 들어 있음. 다른 구역 번호(B-12)를 치면 그 부스도 맨 위에 '다른 구역' 으로,
+    // 부스명 · 학교명이 이 구역에는 없고 다른 구역에 있으면 그 부스들(최대 PIN_FIND_OTHER_MAX)을 '다른 구역' 으로 보여 줍니다.
     function findBooths(raw) {
       var list = boothsIn(pin.zone);
       var here = String(pin.zone || '').toUpperCase();
-      var q = String(raw || '').replace(/\s+/g, '').toUpperCase();
-      if (!q) return { list: list, other: null, exact: false };
-      var m = /^([A-Z]{1,3})-?0*(\d{1,3})$/.exec(q), n = /^0*(\d{1,3})$/.exec(q);
-      var zone = m ? m[1] : null, no = m ? Number(m[2]) : (n ? Number(n[1]) : null);
+      var key = findKey(raw);
+      var q = key.toUpperCase();
+      if (!q) return { list: list, other: null, more: [], moreCut: false, exact: false };
+      var c = codeQuery(q);
+      var zone = c ? c.zone : null, no = c ? c.no : null;
       var other = null;
       if (zone && zone !== here) {
         other = pin.booths.filter(function (b) { return String(b.zone_key).toUpperCase() === zone && Number(b.no) === no; })[0] || null;
       }
-      var name = String(raw || '').toLowerCase().replace(/\s+/g, '');
       var scored = list.map(function (b) {
         var s = 9;
         if (no !== null && (!zone || zone === here)) {
           if (Number(b.no) === no) s = 0;
           else if (String(Number(b.no)).indexOf(String(no)) === 0) s = 1;
         }
-        if (s > 2 && name && String(b.name || '').toLowerCase().replace(/\s+/g, '').indexOf(name) >= 0) s = 2;
+        if (s > 2) s = Math.min(s, textScore(b, key));
         return { b: b, s: s };
       }).filter(function (x) { return x.s < 9; })
         .sort(function (a, b) { return a.s - b.s || Number(a.b.no) - Number(b.b.no); });
-      return { list: scored.map(function (x) { return x.b; }), other: other, exact: !!(scored[0] && scored[0].s === 0) };
+      var more = [];
+      if (!scored.length && !other && !c && key.length >= 2) {
+        var zoneOrder = pin.zones.map(function (z) { return z.key; });
+        more = pin.booths.filter(function (b) { return b.zone_key !== pin.zone && textScore(b, key) < 9; })
+          .sort(function (a, b) { return zoneOrder.indexOf(a.zone_key) - zoneOrder.indexOf(b.zone_key) || Number(a.no) - Number(b.no); });
+      }
+      return { list: scored.map(function (x) { return x.b; }), other: other, more: more.slice(0, PIN_FIND_OTHER_MAX),
+               moreCut: more.length > PIN_FIND_OTHER_MAX, exact: !!(scored[0] && scored[0].s === 0) };
     }
     function renderBoothPicks() {
       var raw = $('pin-find').hidden ? '' : $('pin-q').value;
       var r = findBooths(raw);
       $('pin-booths').innerHTML = (r.other ? boothPick(r.other, true) : '') +
-        r.list.map(function (b) { return boothPick(b, false); }).join('');
-      var none = !!raw.trim() && !r.list.length && !r.other;
-      $('pin-find-none').hidden = !none;
-      $('pin-find-none').textContent = none ? '“' + raw.trim() + '” 검색 결과가 없어요. 번호나 이름을 다시 확인해 주세요.' : '';
+        r.list.map(function (b) { return boothPick(b, false); }).join('') +
+        r.more.map(function (b) { return boothPick(b, true); }).join('');
+      var none = !!raw.trim() && !r.list.length && !r.other && !r.more.length;
+      var note = none ? '“' + raw.trim() + '” 검색 결과가 없어요. 부스 번호 · 부스명 · 학교명을 다시 확인해 주세요.'
+        : r.moreCut ? '다른 구역에서 더 찾았어요. 학교명이나 부스명을 조금 더 입력해 주세요.' : '';
+      $('pin-find-none').hidden = !note;
+      $('pin-find-none').textContent = note;
       return r;
     }
     function pickBooth(id) {
@@ -2158,7 +2200,7 @@
         if (e.key !== 'Enter') return;
         e.preventDefault();
         var r = renderBoothPicks();
-        var all = (r.other ? [r.other] : []).concat(r.list);
+        var all = (r.other ? [r.other] : []).concat(r.list, r.more);
         if (r.other || r.exact || all.length === 1) pickBooth(all[0].id);
       });
       // 칸 그림의 '다음 칸' 표시는 커서가 있을 때만 보입니다.

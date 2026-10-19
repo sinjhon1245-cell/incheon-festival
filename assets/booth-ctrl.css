@@ -297,6 +297,8 @@ button {
 .pick__s { font-size: 13px; color: var(--muted); }
 .pick--booth { flex-direction: row; align-items: center; gap: 12px; min-height: 56px; }
 .pick--booth .pick__k { flex: none; min-width: 1.8em; font-size: 17px; }
+/* 부스 칸 둘째 줄: 학교명(운영기관) — 부스명보다 작고 옅게 */
+.pick__o { display: block; margin-top: 3px; font-size: 13px; font-weight: 500; line-height: 1.4; color: var(--muted); }
 .pindirect { margin-top: 8px; }
 
 /* 부스 고르기 찾기 칸(한 구역 부스가 많을 때만) — 번호(12 · A-12)나 부스명으로 */
