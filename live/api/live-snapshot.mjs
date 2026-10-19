@@ -22,8 +22,10 @@
 
    응답에 넣는 것은 관람객 화면이 그리는 공개 값뿐입니다. QR 열쇠 · PIN · 세션 ·
    담당자 연락처 · 메모 · booth_private · 관리자 정보는 읽지도 않습니다.
-   기관 이름 앞의 '[예시]' 같은 내부 표시도 떼어 내고, 행사 전에는 예시 부스가
-   아닌 부스의 대기 값을 빼고 보냅니다(관람객 화면과 같은 규칙을 여기서 적용).
+   기관 이름 앞의 '[예시]' 같은 내부 표시도 떼어 냅니다.
+   대기 값은 행사 전에도 그대로 싣습니다(리허설 — 관리자 '리허설 관리' 의 시험 값 · 운영자 QR 연습 값).
+   관람객 화면이 행사 전에는 맨 위에 '리허설 중 · 실제 대기시간이 아닙니다' 띠를 붙이고, 행사 날에는
+   문 열기 전에 넣은 값 · 운영 시간 밖의 값을 지우고 그립니다(visitor.html derive · booth-core applyOpenRule).
 
    질의 문자열(?…)이 붙은 요청은 400 으로 돌려보냅니다. 캐시 주소가 하나여야
    CDN 이 막아 주고, 시각 · 난수를 붙여 캐시를 우회하는 요청이 생기지 않습니다.
@@ -47,18 +49,12 @@ const CDN_ERR = 'max-age=5';
 const MODE = /^(normal|conserve|manual)$/.test(String(process.env.VISITOR_TRAFFIC_MODE || '').trim().toLowerCase())
   ? String(process.env.VISITOR_TRAFFIC_MODE).trim().toLowerCase() : 'normal';
 
-const KST_MS = 9 * 60 * 60 * 1000;
 const SAMPLE_RE = /^\s*\[예시\]/;
 
 let master = null;    // { at, settings, zones, booths }
 let snap = null;      // { at, body, generatedAt }
 let inflight = null;  // 진행 중인 Supabase 읽기
 let pauseUntil = 0;
-
-function kstDay(v) {
-  const ms = typeof v === 'number' ? v : Date.parse(String(v || ''));
-  return Number.isNaN(ms) ? '' : new Date(ms + KST_MS).toISOString().slice(0, 10);
-}
 
 async function get(path) {
   const res = await fetch(REST + path, {
@@ -114,8 +110,6 @@ async function readLive() {
 
 function compose(m, liveRows, now) {
   const s = m.settings || {};
-  // 행사 전(한국 날짜로 첫날 전)에는 예시 부스의 값만 미리 보여 줍니다(관람객 화면과 같은 규칙).
-  const before = !!s.event_start && kstDay(now) < kstDay(s.event_start);
   const live = new Map();
   (liveRows || []).forEach((l) => { if (l && l.booth_id) live.set(l.booth_id, l); });
   const str = (v) => (v === null || v === undefined ? '' : String(v));
@@ -132,7 +126,8 @@ function compose(m, liveRows, now) {
     zones: (m.zones || []).map((z) => ({ key: str(z.key), label: str(z.label), order: z.sort_order ?? null })),
     booths: (m.booths || []).map((b) => {
       const l = live.get(b.id);
-      const show = !!(l && l.congestion) && (!before || SAMPLE_RE.test(str(b.org)));
+      // 행사 전에도 그대로(리허설). 시험 값이라는 안내 · 행사 날 문 열기 전 값 지우기는 관람객 화면이 합니다.
+      const show = !!(l && l.congestion);
       return {
         id: b.id,
         no: b.no ?? null,

@@ -46,6 +46,7 @@
   --st-off-mark: #8A93AB;   /* 네모 · 테두리 전용(3.07:1). 작은 글자로 쓰면 대비가 모자랍니다 */
   --faint:       #8A93AB;   /* 장식(타일의 '—') — 큰 글자(3:1 기준)에만 */
   --lag:         #FFC857;   /* 보라 띠 위 '오래된 정보' 네모. 장식이라 글자에는 쓰지 않습니다 */
+  --rh-ink:      #8A4B00;   /* 행사 전 리허설 띠 · 안내 글자(흰 바탕 6.8:1 · 흰 글자를 얹어도 6.8:1) */
 
   --gutter: 20px;
   --bar-h:  48px;
@@ -262,12 +263,27 @@ html.is-demo { --demo-h: 38px; }
   white-space: nowrap;
 }
 /* 안전 영역(노치)은 맨 위 띠가 맡으니 보라 띠는 기본 여백만 둡니다 */
-html.is-demo .band__in { padding-top: 14px; }
-html.is-demo .bar { top: calc(var(--demo-h) + env(safe-area-inset-top)); }
+html.is-demo .band__in,
+html.is-rehearsal .band__in { padding-top: 14px; }
+html.is-demo .bar,
+html.is-rehearsal .bar { top: calc(var(--demo-h) + env(safe-area-inset-top)); }
 html.is-demo .controls,
 html.is-demo #list,
 html.is-demo .zone,
-html.is-demo .row { scroll-margin-top: calc(56px + var(--demo-h) + env(safe-area-inset-top)); }
+html.is-demo .row,
+html.is-rehearsal .controls,
+html.is-rehearsal #list,
+html.is-rehearsal .zone,
+html.is-rehearsal .row { scroll-margin-top: calc(56px + var(--demo-h) + env(safe-area-inset-top)); }
+
+/* 행사 전 리허설 띠 — 협의용 예시 띠와 같은 자리 · 높이, 색만 주황 줄무늬(시험 값).
+   글자는 남색, 꼬리표는 짙은 주황 바탕에 흰 글자(6.8:1). */
+html.is-rehearsal { --demo-h: 38px; }
+.rhbar {
+  background: repeating-linear-gradient(-45deg, #FFF3D6 0 12px, #FDE6B0 12px 24px);
+  border-bottom-color: var(--rh-ink);
+}
+.rhbar .demotag { background: var(--rh-ink); }
 
 /* 예시 화면 안내 · '준비 중' 아래 입구 — 점선 상자로 실제 목록과 떼어 둡니다 */
 .demoinfo,
@@ -478,6 +494,14 @@ html.is-demo .row { scroll-margin-top: calc(56px + var(--demo-h) + env(safe-area
   margin-top: 12px;
   font-size: 13px;
   color: var(--muted);
+}
+/* 행사 전 리허설: 큰 숫자 아래 한 줄(맨 위 '리허설 중' 띠와 같은 뜻) */
+.hero__rh {
+  margin-top: 6px;
+  font-size: 13.5px;
+  font-weight: 700;
+  line-height: 1.5;
+  color: var(--rh-ink);
 }
 
 /* 분포 막대: 여유 · 보통 · 혼잡 · 중단마감 · 정보 없음. 칸 너비는 부스 수에 비례합니다. */

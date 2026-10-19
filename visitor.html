@@ -47,6 +47,14 @@
     </div>
   </div>
 
+  <!-- 행사 전 리허설 띠. 행사 전인데 대기 값이 보일 때만 켜집니다(renderRehearsal). 스크롤해도 맨 위에
+       붙어 있어 리허설 시험 값을 실제 대기시간으로 읽지 않게 합니다. 협의용 예시 띠와 같은 자리 · 모양입니다. -->
+  <div class="demobar rhbar" id="rhbar" role="note" hidden>
+    <div class="col demobar__in">
+      <p class="demobar__t"><span class="demotag">리허설 중</span><span class="sr-only"> · </span><span class="demobar__w">실제 대기시간이 아닙니다.</span></p>
+    </div>
+  </div>
+
   <header class="band">
     <div class="col band__in">
       <div class="band__row">
@@ -252,7 +260,7 @@
       hereParam: null,
       hereGone: false,
       mode: 'normal',   // 서버가 스냅샷에 실어 보내는 받기 방식(normal · conserve · manual). 화면에 이름을 보이지 않습니다
-      preview: false    // 행사 전이지만 예시 부스('[예시]' 기관) 값을 미리 보여 주는 중 — 화면에 따로 알리지는 않습니다
+      preview: false    // 행사 전이지만 리허설 값(관리자 리허설 채우기 · 운영자 QR 연습 · 예시 부스)을 보여 주는 중 — 맨 위 '리허설 중' 띠로 알립니다
     };
 
     /* ── 작은 도우미 ─────────────────────────────────────────── */
@@ -277,7 +285,7 @@
     function smooth() { return reduceMotion ? 'auto' : 'smooth'; }
 
     // 운영 시간 중이고 기능이 켜져 있을 때만 대기 시간을 보여 줍니다.
-    // 행사 전이라도 예시 부스가 있으면 그 부스들의 값은 미리 보여 줍니다(S.preview).
+    // 행사 전이라도 리허설 값이 있으면 그 값을 '리허설 중' 띠와 함께 보여 줍니다(S.preview).
     function liveOn() {
       return !!S.info && (S.info.phase === 'open' || S.preview) && S.liveReady !== false;
     }
@@ -288,8 +296,10 @@
     function derive() {
       S.info = core.eventInfo(S.settings, Date.now());
       var list = S.raw || [];
-      // 행사 전에는 스냅샷이 예시 부스의 값만 담아 옵니다(live/api/live-snapshot.mjs 가 '[예시]' 로
-      // 가려 냄 — 그 표시는 관람객에게 보내지 않습니다). 그래서 값이 있는 부스가 곧 미리 보기 부스입니다.
+      // 행사 전에도 스냅샷은 대기 값을 그대로 담아 옵니다(리허설 — live/api/live-snapshot.mjs). 값이 하나라도 있으면
+      // 미리 보기로 그리고, 맨 위 '리허설 중 · 실제 대기시간이 아닙니다' 띠를 켭니다(renderRehearsal).
+      // 행사 날에는 아래 규칙대로 문 열기 전 값 · 운영 시간 밖 값을 지우므로, 전날까지의 리허설 값(23시 초기화가
+      // 빠졌어도)이 행사 당일 '지금 대기' 로 보이지 않습니다.
       S.preview = S.info.phase === 'before' && list.some(function (b) { return !!b.congestion; });
       if (S.info.phase === 'open') {
         // 오늘 문 열기 전에 넣은 값(리허설 · 아침 준비)은 '지금 대기' 가 아닙니다.
@@ -836,6 +846,7 @@
           '<p class="hero__total">전체 <b id="h-total">0</b>곳</p>' +
         '</div>' +
         '<p class="hero__sub" id="h-sub"></p>' +
+        '<p class="hero__rh" id="h-rh" hidden></p>' +
         '<div class="dist" id="h-dist" aria-hidden="true">' +
           ['free', 'normal', 'busy', 'off', 'unknown'].map(function (k) {
             return '<i class="dist__s dist__s--' + k + '" data-seg="' + k + '"></i>';
@@ -872,6 +883,10 @@
       $('h-total').textContent = S.booths.length + pend;
       $('h-sub').textContent = (fresh ? '현재 대기 정보가 입력된 ' + fresh + '곳 기준' : '아직 대기 시간을 입력한 부스가 없어요') +
         (pend ? ' · 배치 준비 중 ' + pend + '곳' : '');
+      // 행사 전 리허설: 큰 숫자 바로 아래에도 시험 값이라고 한 번 더 적습니다(맨 위 띠와 같은 뜻).
+      var rhNote = S.preview ? '행사 전 리허설 값이에요. 실제 대기시간은 ' + (S.info.nextOpenLabel || '행사 당일') + '부터 표시돼요.' : '';
+      $('h-rh').textContent = rhNote;
+      $('h-rh').hidden = !rhNote;
       $('h-dist').hidden = !fresh;
       each($('h-dist').children, function (seg) {
         var k = seg.getAttribute('data-seg');
@@ -1443,6 +1458,7 @@
       // 고른 상태가 이제 뜻이 없으면(운영 시간이 끝남 등) 풉니다.
       if (S.ui.count && !liveOn()) S.ui.count = '';
       var items = visible();
+      renderRehearsal();
       renderBand();
       renderStrip();
       renderHere();
@@ -1455,6 +1471,16 @@
       renderSheet(items);
       renderSummary(c);
       S.changed = {};
+    }
+
+    // 행사 전 리허설 띠: 행사 전인데 대기 값이 보이면(S.preview) 맨 위에 붙여 시험 값임을 알립니다.
+    // 붙박이 줄(구역 · 검색)은 협의용 예시 띠와 같은 규칙으로 그 아래에 붙습니다(visitor.css 의 is-rehearsal).
+    function renderRehearsal() {
+      var on = !!S.preview && !core.isMock;
+      var bar = $('rhbar');
+      if (bar.hidden === !on) return;
+      bar.hidden = !on;
+      document.documentElement.classList.toggle('is-rehearsal', on);
     }
 
     /* ── 받기 ─────────────────────────────────────────────────── */
@@ -1735,8 +1761,9 @@
     function showResults(fromBar, instant) {
       var res = $('result');
       if (res.hidden) return;
-      // 예시 화면에서는 맨 위 '협의용 예시' 띠도 붙박이라, 그 높이까지 더해 가리지 않게 합니다.
-      var barH = ($('bar').hidden ? 0 : $('bar').offsetHeight) + ($('demobar').hidden ? 0 : $('demobar').offsetHeight);
+      // 예시 화면 · 리허설 중에는 맨 위 띠도 붙박이라, 그 높이까지 더해 가리지 않게 합니다.
+      var barH = ($('bar').hidden ? 0 : $('bar').offsetHeight) + ($('demobar').hidden ? 0 : $('demobar').offsetHeight) +
+        ($('rhbar').hidden ? 0 : $('rhbar').offsetHeight);
       var top = res.getBoundingClientRect().top;
       if (fromBar ? top < barH : top > window.innerHeight - 160) {
         var y = window.pageYOffset + top - barH - 8;
