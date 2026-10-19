@@ -115,8 +115,8 @@
      isSample(b)         → boolean  기관(org)이 '[예시]' 로 시작하는 운영 준비용 예시 부스
      displayOrganization(org) → 화면용 기관 이름(앞의 '[예시]' 만 뗌). DB 값 · 판별에는 쓰지 않습니다
      samplePreview(info, b) → boolean  행사 전(phase 'before')의 예시 부스인가.
-         관람객 화면은 행사 전에는 대기 값을 감추지만, 이때만 그 부스의 값을 미리
-         보여 줍니다(협의 · 리허설용). 기관에서 '[예시]' 를 지우면 원래 규칙으로 돌아갑니다.
+         (2026-10 리허설 기능부터 관람객 · 운영자 화면은 이 함수를 쓰지 않습니다 — 행사 전에는 예시 · 실제
+          부스 모두 오늘 넣은 값을 '리허설 중' 띠와 함께 보여 줍니다. 남겨 둔 것은 옛 호출을 깨지 않으려는 것)
      compareCode(a, b)   → number  'A-2' 와 'A-10' 을 숫자 순서로 견줍니다
      esc(s)              → HTML 에 넣을 수 있게 & < > " ' 를 바꾼 문자열
      pad2(n)             → '03' (두 자리보다 길면 자르지 않습니다)
@@ -168,8 +168,9 @@
   try { isMock = new URLSearchParams(window.location.search).has('demo'); } catch (e) { isMock = false; }
   var hasConfig = !!(cfg.supabaseUrl && cfg.supabaseAnonKey);
 
-  // v2: 관람객 화면이 /api/live-snapshot 으로 받은 값(기관 이름의 '[예시]' 를 떼고, 행사 전에는
-  // 예시 부스 값만 둠)을 남깁니다. v1 은 Supabase 에서 바로 받은 원래 값이라 새로 쓸 때 지웁니다.
+  // v2: 관람객 화면이 /api/live-snapshot 으로 받은 값(기관 이름의 '[예시]' 를 떼고, 행사 전에는 오늘 넣은
+  // 리허설 값만 · 행사 날에는 운영 시간에 그날 문 연 뒤 값만 둠)을 남깁니다. v1 은 Supabase 에서 바로 받은
+  // 원래 값이라 새로 쓸 때 지웁니다.
   var SNAPSHOT_KEY = 'aisw-visitor-snapshot-v2';
   var SNAPSHOT_KEY_OLD = 'aisw-visitor-snapshot-v1';
   // v3: 아직 누르지 않은 시연 부스의 시각을 '지금 - age_min' 으로 그때그때 셈합니다.
