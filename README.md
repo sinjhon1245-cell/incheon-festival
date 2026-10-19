@@ -75,6 +75,8 @@ supabase/
   rollback-booth-example-pin.sql   위 파일 되돌리기 (PIN 로그인 · 세션 확인을 앞 판으로, 실제 PIN · QR 그대로)
   migration-booth-pin-checked.sql  운영자 PIN 조건부 발급 함수 하나 더하기 (QR · PIN 관리 일괄 · ⋯ 개별 PIN 발급에 필수 — 2026-10-11 Production 적용 · migration 20261010155715 booth_pin_checked)
   rollback-booth-pin-checked.sql   위 파일 되돌리기 (그 함수만 지움 · 화면을 먼저 되돌린 뒤에만)
+  migration-booth-rehearsal-pin.sql  행사 전 리허설: 실제 부스 84곳 공통 PIN (11-05 23:00 KST 또는 그 부스 개별 PIN 발급 때 끝 — 대상 판정 하나 + private 함수 둘)
+  rollback-booth-rehearsal-pin.sql   위 파일 되돌리기 (= 리허설 공통 PIN 즉시 끝 · 예시 부스 공통 PIN 그대로)
   add-settings-fields.sql    설정 부가 칼럼 (선택 · 지금 화면에서는 쓰지 않음)
 
 dev-server.ps1        로컬 확인용 정적 서버 (Windows · Node 없이)
@@ -1073,6 +1075,29 @@ A~J 는 리허설용 임시 구역입니다(이름 'A구역' … 'J구역', 정�
 - **적용 순서**(각각 따로 승인): ① `migration-booth-rehearsal.sql`(함수) ② 관리자 웹 배포(main) ③ 관람객 사이트 배포(booth-live)
   ④ `schedule-booth-rehearsal-reset.sql`(예약 켜기). ① 전에 ② 가 먼저 나가도 칸에 ‘DB 함수가 아직 없습니다’ 만 보이고 단추는 잠깁니다.
   되돌리기는 `supabase/rollback-booth-rehearsal.sql`(예약 · 함수만 지움 — 넣은 값은 [리허설 대기시간 비우기] 로 먼저 지웁니다).
+
+### 행사 전 리허설: 실제 부스 공통 PIN (`supabase/migration-booth-rehearsal-pin.sql`)
+
+리허설 동안 실제 부스 84곳 운영자도 부스마다 PIN 을 받지 않고 **운영 준비용 공통 PIN**(예시 부스와 같은 값)으로 운영자 화면을
+엽니다. 새 인증 길이 아니라 예시 부스 공통 PIN 의 길(`booth_pin_login` → `booth_common_pin_ok` → `booth_common_pin_target`,
+세션은 쓸 때마다 `booth_session_resolve` 가 대상 판정을 다시 봄)에서 **대상 판정에 리허설 갈래 하나**를 더했습니다.
+로그인 · 세션 확인 · 공통 PIN 비교 · 발급 함수는 그대로이고, 값은 개별 PIN 으로 저장하지 않습니다(PIN 표에 줄이 생기지 않음).
+
+- **대상**: 리허설 대상 84곳(`private.rehearsal_booth_ids`) 중 공개 · 구역 공개 · 번호 있음 · 개별 PIN 을 한 번도 받지 않은 부스.
+  고른 부스에만 묶인 세션(그날 24:00 까지 · 부스당 10개)이고, 횟수 제한 · 보안 기록(`detail = 'common_pin'`, 원문 없음)은 그대로입니다.
+  운영자 화면에는 실제 부스에 공통 PIN 안내가 나오지 않습니다(예시 부스에만) — 운영자에게는 리허설 안내 때 따로 알립니다.
+- **끝나는 때 — 둘 중 이른 쪽, 서버가 판정**(기간 화면 · 켜고 끄기 없음)
+  1. **2026-11-05 23:00 KST**(기본정보의 행사 시작 날이 앞당겨지면 그날 00:00 KST). 그때부터 새 공통 PIN 로그인은 맞지 않는 PIN
+     과 같고, 열려 있던 공통 PIN 화면은 다음 저장 · 확인 때 서버가 거절합니다(화면은 “운영본부가 이 부스의 PIN을 바꿨습니다.”).
+     행사 날에는 공통 PIN 로그인 · 수정이 되지 않습니다. QR 은 상관없습니다.
+  2. **그 부스에 개별 PIN 을 발급한 순간** — QR 인쇄 화면 **‘운영자 PIN 발급·관리’ → 선택 PIN 발급**(또는 ⋯ 메뉴). 기존 발급이
+     한 트랜잭션에서 PIN 저장 · 그 부스 세션 모두 끊기 · 발급 기록을 하므로, 그 순간 공통 PIN 세션이 끊기고 새 로그인도 막힙니다.
+     PIN 끄기도 줄을 지우지 않고 발급 기록도 남아 **그 부스에는 공통 PIN 이 다시 열리지 않습니다.** QR 은 다시 내지 않습니다.
+- **부스마다 따로 끝납니다.** 일괄 발급 중 일부가 실패하면(그 부스 발급 전체가 되돌아감) 그 부스만 공통 PIN 이 남습니다 — 결과 창의
+  실패 줄을 보고 같은 단추로 다시 발급하면(이미 발급된 부스는 확인창에서 제외) 그 순간 끝납니다. 늦어도 11-05 23:00 에 끝납니다.
+- 리허설 대기 채우기 · 비우기 · 23시 초기화와는 따로 돕니다(초기화는 세션을 끊지 않고, PIN 이 끝나도 넣은 값은 그대로).
+- **일찍 끝내기**: 부스별로는 개별 PIN 발급, 한꺼번에는 `supabase/rollback-booth-rehearsal-pin.sql`(대상 판정을 예시 부스 판으로 되돌림 —
+  실제 부스 공통 PIN 로그인과 열린 화면이 즉시 멈춤, 데이터 · 세션 줄 · 기록은 그대로). PIN 로그인 전체 스위치를 끄면 모든 PIN 이 멈춥니다.
 
 ### 현장 대처
 
