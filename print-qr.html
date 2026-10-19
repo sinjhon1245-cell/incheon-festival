@@ -3519,8 +3519,10 @@
         it.pin = pin;
         pin = null;
         it.revoked = revoked;
-        // 미발급 · 꺼진 부스였는데 PIN 세션이 끊겼다면 예상 밖입니다(조건부 발급에서는 생기지 않아야 함).
-        if (it.expect !== 'on' && revoked > 0) it.anomaly = true;
+        // 미발급 부스의 PIN 세션은 운영 준비용 공통 PIN(예시 부스 · 행사 전 리허설)으로 연 것뿐입니다 — 첫 발급이 끊는 게 정상.
+        // 꺼진 부스였는데 PIN 세션이 끊겼다면 예상 밖입니다(끌 때 이미 끊었고, 조건부 발급에서는 생기지 않아야 함).
+        if (it.expect === 'none' && revoked > 0) it.common = true;
+        else if (it.expect !== 'on' && revoked > 0) it.anomaly = true;
       }, function (err) {
         if (gen !== P.gen) return;
         classify(it, err);
@@ -3631,6 +3633,7 @@
         if (it.status === 'ok') {
           right = '<span class="pinres__pin">' + esc(fmtPin(it.pin)) + '</span>';
           if (it.anomaly) why = '<p class="pinres__why is-unk">예상과 달리 PIN 로그인 기기 ' + it.revoked + '대가 로그아웃됐어요. 다른 관리자가 방금 이 부스 PIN을 발급했다면 그 PIN은 이제 쓸 수 없어요 — 위의 새 PIN을 쓰세요.</p>';
+          else if (it.common) why = '<p class="pinres__why">공통 PIN으로 연 기기 ' + it.revoked + '대가 로그아웃됐어요. 이제 이 부스는 위의 새 PIN으로 들어가요.</p>';
           else if (it.revoked) why = '<p class="pinres__why">예전 PIN으로 연 기기 ' + it.revoked + '대가 로그아웃됐어요.</p>';
         } else if (it.status === 'unknown') {
           right = '<span class="pinres__st is-unk">결과 확인 필요</span>';
