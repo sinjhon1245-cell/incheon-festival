@@ -296,10 +296,15 @@
     function derive() {
       S.info = core.eventInfo(S.settings, Date.now());
       var list = S.raw || [];
-      // 행사 전에도 스냅샷은 대기 값을 그대로 담아 옵니다(리허설 — live/api/live-snapshot.mjs). 값이 하나라도 있으면
-      // 미리 보기로 그리고, 맨 위 '리허설 중 · 실제 대기시간이 아닙니다' 띠를 켭니다(renderRehearsal).
-      // 행사 날에는 아래 규칙대로 문 열기 전 값 · 운영 시간 밖 값을 지우므로, 전날까지의 리허설 값(23시 초기화가
-      // 빠졌어도)이 행사 당일 '지금 대기' 로 보이지 않습니다.
+      // 행사 전에도 스냅샷은 오늘 넣은 리허설 값을 담아 옵니다(live/api/live-snapshot.mjs 가 같은 규칙으로 거름).
+      // 값이 하나라도 있으면 미리 보기로 그리고, 맨 위 '리허설 중 · 실제 대기시간이 아닙니다' 띠를 켭니다(renderRehearsal).
+      // 이 브라우저에 남은 지난 스냅샷(먼저 그리는 값)에서도 어제 값은 쓰지 않습니다 — 23시 초기화가 빠졌어도 같은 규칙.
+      // 행사 날에는 아래 규칙대로 문 열기 전 값 · 운영 시간 밖 값을 지우므로, 전날까지의 리허설 값이 행사 당일
+      // '지금 대기' 로 보이지 않습니다(공개 API 도 같은 값을 보내지 않음).
+      if (S.info.phase === 'before') {
+        var today = core.kstDay(Date.now());
+        list = list.map(function (b) { return b.congestion && core.kstDay(b.congestion_updated_at) !== today ? clearLive(b) : b; });
+      }
       S.preview = S.info.phase === 'before' && list.some(function (b) { return !!b.congestion; });
       if (S.info.phase === 'open') {
         // 오늘 문 열기 전에 넣은 값(리허설 · 아침 준비)은 '지금 대기' 가 아닙니다.

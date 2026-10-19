@@ -23,9 +23,15 @@
    응답에 넣는 것은 관람객 화면이 그리는 공개 값뿐입니다. QR 열쇠 · PIN · 세션 ·
    담당자 연락처 · 메모 · booth_private · 관리자 정보는 읽지도 않습니다.
    기관 이름 앞의 '[예시]' 같은 내부 표시도 떼어 냅니다.
-   대기 값은 행사 전에도 그대로 싣습니다(리허설 — 관리자 '리허설 관리' 의 시험 값 · 운영자 QR 연습 값).
-   관람객 화면이 행사 전에는 맨 위에 '리허설 중 · 실제 대기시간이 아닙니다' 띠를 붙이고, 행사 날에는
-   문 열기 전에 넣은 값 · 운영 시간 밖의 값을 지우고 그립니다(visitor.html derive · booth-core applyOpenRule).
+   대기 값은 관람객 화면과 같은 때의 규칙(livePhase)을 여기서도 적용해, 보여 주면 안 되는 값은 아예
+   보내지 않습니다(칸은 그대로 두고 status · waitMinutes · updatedAt 만 null).
+     행사 전(한국 날짜로 첫날 전) — 리허설: 오늘(한국 날짜) 넣은 값만 보냅니다. 관람객 화면이 맨 위에
+                                    '리허설 중 · 실제 대기시간이 아닙니다' 띠를 붙입니다.
+     행사 날 운영 시간(첫날의 여는 시각 ~ 끝날의 닫는 시각, 기본정보 event_start · event_end)
+                                  — 오늘 문을 연 뒤 넣은 값만 보냅니다(전날 리허설 값 · 아침 준비 값 제외).
+     행사 날 문 열기 전 · 닫은 뒤 · 행사가 끝난 뒤 — 대기 값을 보내지 않습니다.
+   그래서 23시 자동 초기화가 빠졌어도, 남은 리허설 값이 행사 당일 공개 API 로 '지금 대기' 처럼 나가지 않습니다.
+   캐시된 응답(마지막 정상본)을 내줄 때도 그 사이 때가 바뀌었으면(10:00 · 17:00 · 자정) 지금 때로 다시 만듭니다.
 
    질의 문자열(?…)이 붙은 요청은 400 으로 돌려보냅니다. 캐시 주소가 하나여야
    CDN 이 막아 주고, 시각 · 난수를 붙여 캐시를 우회하는 요청이 생기지 않습니다.
@@ -50,9 +56,11 @@ const MODE = /^(normal|conserve|manual)$/.test(String(process.env.VISITOR_TRAFFI
   ? String(process.env.VISITOR_TRAFFIC_MODE).trim().toLowerCase() : 'normal';
 
 const SAMPLE_RE = /^\s*\[예시\]/;
+const KST_MS = 9 * 60 * 60 * 1000;   // 한국은 서머타임이 없어 9시간을 더한 UTC 날짜 · 시각이 곧 한국 날짜 · 시각
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 let master = null;    // { at, settings, zones, booths }
-let snap = null;      // { at, body, generatedAt }
+let snap = null;      // { at, body, ms, key, m, liveRows } — key: 만들 때의 때(livePhase().key)
 let inflight = null;  // 진행 중인 Supabase 읽기
 let pauseUntil = 0;
 
@@ -108,8 +116,31 @@ async function readLive() {
   }
 }
 
+/* 지금 어떤 대기 값을 보내도 되는가 — 관람객 화면(booth-core eventInfo · applyOpenRule · visitor.html derive)과
+   같은 읽기입니다. 여는 시각 = event_start 의 한국 시각, 닫는 시각 = event_end 의 한국 시각, 행사 날 = 두 날짜 사이.
+     { key, from }  from(ms) 이후에 넣은 값만 보냄 · from 이 null 이면 아무 값도 보내지 않음
+     key           때가 바뀌는 곳(자정 · 여는 시각 · 닫는 시각)마다 달라지는 이름 — 캐시한 응답을 다시 만들지 정할 때 씀
+   일정이 비었거나 읽을 수 없으면 거르지 않습니다(관람객 화면도 그때는 늘 '운영 중' 으로 그림). */
+function livePhase(s, now) {
+  const a = Date.parse(String((s && s.event_start) || '')), b = Date.parse(String((s && s.event_end) || ''));
+  if (Number.isNaN(a) || Number.isNaN(b)) return { key: 'always', from: 0 };
+  const day = Math.floor((now + KST_MS) / DAY_MS);
+  const first = Math.floor((a + KST_MS) / DAY_MS), last = Math.floor((b + KST_MS) / DAY_MS);
+  const min = Math.floor(((now + KST_MS) % DAY_MS) / 60000);
+  const openMin = Math.floor(((a + KST_MS) % DAY_MS) / 60000);
+  let closeMin = Math.floor(((b + KST_MS) % DAY_MS) / 60000);
+  if (closeMin <= openMin) closeMin = 24 * 60;   // 닫는 시각이 여는 시각보다 이르면 그날 끝까지(관람객 화면과 같음)
+  const dayStart = day * DAY_MS - KST_MS;         // 오늘 0시(한국)
+  if (day < first) return { key: 'before:' + day, from: dayStart };              // 리허설: 오늘 넣은 값만
+  if (day > last) return { key: 'after', from: null };
+  if (min < openMin) return { key: 'preopen:' + day, from: null };
+  if (min >= closeMin) return { key: 'closed:' + day, from: null };
+  return { key: 'open:' + day, from: dayStart + openMin * 60000 };               // 오늘 문 연 뒤 값만
+}
+
 function compose(m, liveRows, now) {
   const s = m.settings || {};
+  const phase = livePhase(s, now);
   const live = new Map();
   (liveRows || []).forEach((l) => { if (l && l.booth_id) live.set(l.booth_id, l); });
   const str = (v) => (v === null || v === undefined ? '' : String(v));
@@ -126,8 +157,9 @@ function compose(m, liveRows, now) {
     zones: (m.zones || []).map((z) => ({ key: str(z.key), label: str(z.label), order: z.sort_order ?? null })),
     booths: (m.booths || []).map((b) => {
       const l = live.get(b.id);
-      // 행사 전에도 그대로(리허설). 시험 값이라는 안내 · 행사 날 문 열기 전 값 지우기는 관람객 화면이 합니다.
-      const show = !!(l && l.congestion);
+      // 지금 때에 보여도 되는 값만(livePhase). 값을 넣은 시각을 읽을 수 없으면 보내지 않습니다.
+      const at = l ? Date.parse(String(l.updated_at || '')) : NaN;
+      const show = !!(l && l.congestion) && phase.from !== null && !Number.isNaN(at) && at >= phase.from;
       return {
         id: b.id,
         no: b.no ?? null,
@@ -165,7 +197,7 @@ async function rebuild() {
     readLive()
   ]);
   const body = JSON.stringify(compose(m, liveRows, t0));
-  snap = { at: t0, body, ms: Date.now() - t0 };
+  snap = { at: t0, body, ms: Date.now() - t0, key: livePhase(m.settings, t0).key, m, liveRows };
   console.log('[live-snapshot] supabase read', { master: needMaster, ms: snap.ms });
 }
 
@@ -209,6 +241,10 @@ export default {
     }
 
     if (snap && Date.now() - snap.at < KEEP_MS) {
+      // 만든 뒤 때가 바뀌었으면(예: 16:59 에 만든 마지막 정상본을 17:00 뒤에 내줄 때) 지금 때로 다시 만듭니다.
+      // Supabase 를 다시 읽지 않고 받아 둔 값으로만 만들며, 만든 시각(at · 마지막 정상본 10분 기준)은 그대로 둡니다.
+      const t1 = Date.now(), key = livePhase(snap.m.settings, t1).key;
+      if (key !== snap.key) snap = { ...snap, key, body: JSON.stringify(compose(snap.m, snap.liveRows, t1)) };
       const extra = { 'Vercel-CDN-Cache-Control': CDN_OK, 'X-Snapshot-Source': source };
       if (source === 'fresh') extra['Server-Timing'] = 'origin;dur=' + snap.ms;
       return reply(request, 200, snap.body, extra);
