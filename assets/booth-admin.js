@@ -825,7 +825,10 @@
       rhFact('쓸 수 있는 때', s.closed ? '닫힘 · 행사 기간' : (rhLastDay() ? rhLastDay() + '까지' : '행사 전까지'), s.closed) +
       '</dl>';
     if (s.closed) {
-      return html + '<p class="rhpanel__lock">행사가 시작되어 리허설 관리는 닫혔습니다. 행사 운영은 운영자 QR 입력을 씁니다.</p>';
+      var C2 = rh.last && !RH_SENDING[b] ? rh.last : null;
+      return html + '<p class="rhpanel__lock">행사가 시작되어 리허설 관리는 닫혔습니다. 행사 운영은 운영자 QR 입력을 씁니다.</p>' +
+        (C2 ? '<p class="rhpanel__note">마지막 실행 ' + esc(rhStamp(C2.at)) + ' · 성공 ' + C2.done + '곳 · 넣지 못함 ' +
+          (C2.failed.length + C2.skipped.length) + '곳</p>' : '');
     }
     var off = !!b || !targets.length;
     html += '<div class="rhpanel__acts">' +
@@ -949,6 +952,12 @@
       return Promise.all([loadRehearsal().then(null, function () { /* 지난 상태로 그림 */ }), refreshMaster()]).then(function () {
         if (!nBad) {
           toast(fill ? '실제 부스 ' + res.done.length + '곳에 리허설 대기시간을 채웠습니다.' : '실제 부스 ' + res.done.length + '곳의 리허설 대기시간을 비웠습니다.');
+          return;
+        }
+        // 권한 · 로그인 만료 · 행사 시작으로 멈췄으면 그 까닭과 '넣지 못함' 으로(보내지 않은 부스는 실패가 아님)
+        var stop = res.failed.filter(function (f) { return rhStop(f.e); })[0];
+        if (stop) {
+          toast(rhMessage(stop.e) + ' 멈춤 — 성공 ' + res.done.length + '곳 · 넣지 못함 ' + nBad + '곳', true);
           return;
         }
         var codes = res.failed.map(function (f) { return f.j.r.code; }).concat(res.skipped.map(function (j) { return j.r.code; }));
