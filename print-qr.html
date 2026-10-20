@@ -94,10 +94,6 @@
     .tb__row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
     .tb__title { margin: 0; font-size: 20px; font-weight: 800; display: flex; align-items: center; gap: 10px; }
     .tb__acts { display: flex; gap: 8px; flex-wrap: wrap; }
-    .tb__msg { margin: 10px 0 0; font-size: 14px; font-weight: 600; }
-    .tb__msg:empty { display: none; }
-    .tb__msg.is-ok { color: var(--st-free); }
-    .tb__msg.is-err { color: var(--danger); }
     .tabs { display: flex; gap: 4px; margin-top: 10px; overflow-x: auto; scrollbar-width: none; }
     .tabs::-webkit-scrollbar { display: none; }
     .tab {
@@ -604,18 +600,9 @@
                인쇄 화면으로 보기는 관리 단추 · 확인 칸 · 상태 글을 숨겨 종이로 나갈 카드만 화면에 보여 줍니다. -->
           <label class="opt"><input type="checkbox" id="opt-zonebreak" /> 구역별로 새 페이지에서 시작</label>
           <label class="opt"><input type="checkbox" id="opt-printview" /> 인쇄 화면으로 보기</label>
-          <button type="button" class="btn btn--danger" id="reset-btn" hidden>실시간 값 모두 지우기</button>
           <button type="button" class="btn btn--primary" id="print-btn" disabled>인쇄하기</button>
         </div>
       </div>
-      <div class="confirm" id="reset-confirm" hidden>
-        <p>리허설 값과 어제 값이 지워지고 모든 부스가 “정보 없음”이 됩니다. 계속할까요?</p>
-        <div class="confirm__acts">
-          <button type="button" class="btn btn--danger-solid" id="reset-yes">모두 지우기</button>
-          <button type="button" class="btn" id="reset-no">그만두기</button>
-        </div>
-      </div>
-      <p class="tb__msg" id="reset-msg" role="status" aria-live="polite"></p>
       <div class="tabs" role="tablist" aria-label="인쇄할 종류">
         <button type="button" class="tab" role="tab" id="tab-ops" data-tab="ops" aria-controls="panel-ops" aria-selected="true">① 부스 운영자용</button>
         <button type="button" class="tab" role="tab" id="tab-signs" data-tab="signs" aria-controls="panel-signs" aria-selected="false" tabindex="-1">② 부스 앞 안내</button>
@@ -1069,7 +1056,6 @@
       // liveSeq: 지금 값(BC.refreshLive)을 읽으러 보낼 때마다 하나씩 올리는 번호(putNow 참고).
       ops: { state: 'loading', msg: '', access: {}, checkedAt: 0, lockedOut: false, lockMsg: '',
              ver: 0, appliedVer: 0, localVer: {}, now: {}, demoOff: {}, busy: {}, liveSeq: 0 },
-      isAdmin: false,
       // 로그아웃할 때마다 하나씩 올립니다. 그 전에 보낸 요청의 답(열쇠)이 늦게 와도
       // 번호가 다르면 버려서, 로그아웃한 화면에 열쇠가 다시 그려지지 않게 합니다.
       gen: 0,
@@ -1825,11 +1811,6 @@
       });
     }
 
-    function setAdmin(on) {
-      S.isAdmin = !!on;
-      $('reset-btn').hidden = !S.isAdmin;
-    }
-
     // 시연: 열쇠는 'demo-' + id 로 정해져 있습니다. 발급 시각과 끝자리는 운영자 화면
     // 아래쪽에 보이는 것과 맞추려고 같은 엔진(ctrlGet)에서 받아 옵니다.
     function demoAccess() {
@@ -1848,15 +1829,7 @@
           S.ops.access[r.id] = { token: off ? null : r.token, issued_at: r.issued_at, rotated: false, disabled: off };
         });
         S.ops.state = 'ready';
-        setAdmin(true);
       });
-    }
-
-    function checkAdmin(session) {
-      var uid = session && session.user && session.user.id;
-      if (!uid) return;
-      var gen = S.gen;
-      Core.fetchProfile(uid).then(function () { if (gen === S.gen && Core.isAdmin()) setAdmin(true); });
     }
 
     function realAccess() {
@@ -1874,7 +1847,6 @@
       return Core.session().then(function (session) {
         if (gen !== S.gen) return;
         if (!session) { S.ops.state = 'login'; return; }
-        checkAdmin(session);
         // 막힌 상태(QR 주소 설정 전)에서는 열쇠를 읽지 않습니다. 읽어도 카드를 그릴 수 없습니다.
         // (admin_booth_access 는 조회만 합니다 — 열쇠는 '운영자 QR 발급' 단추로만 만듭니다.)
         if (op.blocked) { S.ops.state = 'blocked'; return; }
@@ -1884,7 +1856,6 @@
           S.ops.access = accessMap(rows);
           S.ops.checkedAt = Date.now();
           S.ops.state = 'ready';
-          setAdmin(true);
         }, function (err) {
           if (gen !== S.gen) return;
           var k = errKind(err);
@@ -2000,8 +1971,6 @@
       S.ops.state = 'login';
       S.ops.lockedOut = true;
       S.ops.lockMsg = msg || MSG.SIGNED_OUT;
-      setAdmin(false);
-      $('reset-confirm').hidden = true;
       closeBig();
       renderOps();
     }
@@ -2637,31 +2606,6 @@
       });
     }
 
-    /* ── 실시간 값 모두 지우기 ─────────────────────────────────────── */
-    function resetLive() {
-      var yes = $('reset-yes'), msg = $('reset-msg');
-      yes.disabled = true;
-      msg.className = 'tb__msg';
-      msg.textContent = '지우는 중이에요';
-      var job = isMock
-        ? sleep(150).then(function () { BC.resetDemo(); return null; })
-        : Core.rpc('admin_reset_booth_live');
-      job.then(function (n) {
-        yes.disabled = false;
-        $('reset-confirm').hidden = true;
-        // 카드 아래 '지금:' 줄도 모두 '정보 없음' 이 됐으니 걷어 냅니다.
-        S.ops.now = {};
-        Object.keys(S.byId).forEach(paintNow);
-        msg.className = 'tb__msg is-ok';
-        msg.textContent = isMock ? '예시 값을 처음 상태로 되돌렸어요' : '지웠어요 (' + (Number(n) || 0) + '곳)';
-      }, function (err) {
-        yes.disabled = false;
-        msg.className = 'tb__msg is-err';
-        msg.innerHTML = errHtml(err);
-        if (window.console) console.warn('[print-qr] 실시간 값을 지우지 못했습니다', err);
-      });
-    }
-
     /* ── 이벤트 ────────────────────────────────────────────────────── */
     function bind() {
       TABS.forEach(function (t) {
@@ -2680,18 +2624,6 @@
       });
 
       $('print-btn').addEventListener('click', function () { if (canPrint()) window.print(); });
-
-      $('reset-btn').addEventListener('click', function () {
-        var c = $('reset-confirm');
-        c.hidden = !c.hidden;
-        $('reset-msg').textContent = '';
-        if (!c.hidden) $('reset-no').focus();
-      });
-      $('reset-no').addEventListener('click', function () {
-        $('reset-confirm').hidden = true;
-        $('reset-btn').focus();
-      });
-      $('reset-yes').addEventListener('click', resetLive);
 
       ['ops', 'signs'].forEach(function (kind) {
         $('q-' + kind).addEventListener('input', function () {
