@@ -735,15 +735,23 @@ button {
 .nudge__btn:active { transform: scale(0.97); }
 
 .still {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
   width: 100%;
   min-height: 48px;
   margin-top: 8px;
+  padding: 8px 12px;
   border: 1px solid var(--line-2);
   background: var(--panel);
   color: var(--ink-2);
   font-size: 15px;
   font-weight: 700;
 }
+/* 둘째 줄: 무엇이 바뀌는지(값은 그대로 · 확인 시각만) — 작은 보조 글씨 */
+.still__s { font-size: 12.5px; font-weight: 500; line-height: 1.4; color: var(--muted); }
 .still:active { transform: scale(0.99); }
 
 /* ── 대기시간 단추 ─────────────────────────────────────────────── */
@@ -804,8 +812,9 @@ button {
 .off__t { font-size: 16px; font-weight: 800; letter-spacing: -0.02em; }
 .off__s { font-size: 12.5px; line-height: 1.4; color: var(--muted); }
 #btn-closed .off__t { color: var(--danger); }
-.off.is-on { background: var(--off-t); border-color: var(--off); }
-#btn-closed.is-on { background: var(--danger-t); border-color: var(--danger); }
+/* 고른 상태는 대기시간 단추와 같은 보라(선택) — 지금 중단 · 마감 중인지 한눈에 보이게 */
+.off.is-on { background: var(--accent); border-color: var(--accent); color: var(--on); }
+.off.is-on .off__s, #btn-closed.is-on .off__t { color: var(--on); }
 .off:active { transform: scale(0.98); }
 
 /* 오늘 마감 — 한 번 더 묻기 (창을 띄우지 않고 그 자리에서) */

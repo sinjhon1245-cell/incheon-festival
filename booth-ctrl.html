@@ -259,7 +259,10 @@
             <p class="nudge__text" id="nudge-text"></p>
             <button type="button" class="nudge__btn" id="nudge-btn" data-act="touch">맞아요</button>
           </div>
-          <button type="button" class="still" id="still" data-act="touch" hidden>변동 없음 · 지금 확인</button>
+          <button type="button" class="still" id="still" data-act="touch" hidden>
+            <span class="still__t" id="still-t">변동 없음 · 지금 확인</span>
+            <span class="still__s">값은 그대로 두고 확인한 시각만 새로 저장해요</span>
+          </button>
         </div>
 
         <div class="col">
@@ -1990,7 +1993,7 @@
       // '맞아요' · '지금 확인' 을 보내는 동안에는 눌린 것이 보이게 글자를 바꿉니다(다시 눌러도 touch() 가 거릅니다).
       // '확인 중' 은 '맞아요' 와 폭이 같아 옆 글이 밀리지 않습니다.
       $('nudge-btn').textContent = touching ? '확인 중' : '맞아요';
-      $('still').textContent = touching ? '확인하는 중…' : '변동 없음 · 지금 확인';
+      $('still-t').textContent = touching ? '확인하는 중…' : '변동 없음 · 지금 확인';
 
       // 단추: 지금 값에 불을 켭니다
       var nodes = $('waits').querySelectorAll('.w');
