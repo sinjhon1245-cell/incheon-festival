@@ -648,6 +648,7 @@
           <div class="pinx__ctl">
             <input type="search" id="pinx-q" placeholder="부스 코드 · 이름 · 기관 찾기" aria-label="PIN 관리 목록에서 부스 찾기" autocomplete="off" />
             <div class="zchips" id="pinx-zones" role="group" aria-label="PIN 관리 구역" hidden></div>
+            <button type="button" class="btn" id="pinx-real" hidden>실제 부스 모두 선택</button>
             <button type="button" class="btn" id="pinx-all">보이는 부스 모두 선택</button>
             <button type="button" class="btn" id="pinx-none">선택 해제</button>
           </div>
@@ -1072,7 +1073,8 @@
       // 로그아웃할 때마다 하나씩 올립니다. 그 전에 보낸 요청의 답(열쇠)이 늦게 와도
       // 번호가 다르면 버려서, 로그아웃한 화면에 열쇠가 다시 그려지지 않게 합니다.
       gen: 0,
-      lists: { ops: { q: '', zone: '', off: {} }, signs: { q: '', zone: '', off: {} } },
+      // off: '인쇄에 포함' 을 끈 부스 · seen: 한 번 본 부스(예시 기본 끄기를 처음 볼 때만 — pickRealByDefault)
+      lists: { ops: { q: '', zone: '', off: {}, seen: {} }, signs: { q: '', zone: '', off: {}, seen: {} } },
       zoneBreak: false,   // 구역별로 새 페이지에서 시작(① · ②)
       posterOk: false,
       // seq: 크게 보기를 열거나 닫을 때마다 올립니다. 늦게 온 열쇠 확인 결과가
@@ -1426,6 +1428,8 @@
       // 인쇄할 장 가운데 예시 부스가 섞여 있으면 알려 줍니다(실제 최종 카드로 오인하지 않게 — 화면에만).
       var ex = shownItems(kind).filter(function (el) { return el.classList.contains('is-sample') && printable(el); }).length;
       if (ex) text += ' · 예시 부스 ' + ex + '장 포함';
+      var exOut = shownItems(kind).filter(function (el) { return el.classList.contains('is-sample') && el.classList.contains('is-off'); }).length;
+      if (exOut) text += ' · 예시 부스 ' + exOut + '곳 제외(넣으려면 카드의 ‘인쇄에 포함’)';
       $(L.count).textContent = text;
       if (kind === 'ops') paintIssueAll();
       updatePrintBtn();
@@ -1755,6 +1759,20 @@
       S.unassigned = unassigned || 0;
       S.byId = {};
       S.booths.forEach(function (b) { S.byId[b.id] = b; });
+      pickRealByDefault();
+    }
+    // 인쇄 기본값은 실제 부스만(① · ②). 예시 부스(기관 '[예시]')는 처음 보일 때 '인쇄에 포함' 을 꺼 둡니다 —
+    // 카드의 '인쇄에 포함' 이나 구역 칩 + 모두 선택으로 언제든 넣을 수 있고, 한 번 정한 뒤에는 다시 읽어도 그대로 둡니다.
+    // 실제 · 예시는 수로 정하지 않고 부스마다 BC.isSample 로 가립니다.
+    function pickRealByDefault() {
+      ['ops', 'signs'].forEach(function (kind) {
+        var L = S.lists[kind];
+        (S.booths || []).forEach(function (b) {
+          if (L.seen[b.id]) return;
+          L.seen[b.id] = true;
+          if (BC.isSample(b)) L.off[b.id] = true;
+        });
+      });
     }
 
     // 공개 읽기(BoothCore)로 온 부스는 이미 보이는 부스입니다 — 공개 · 구역 공개로 둡니다.
@@ -3237,6 +3255,11 @@
       var n = vis.filter(function (b) { return selectable(b.id); }).length;
       $('pinx-all').textContent = P.q ? '찾은 ' + n + '곳 모두 선택' : (P.zone ? P.zone + '구역 ' + n + '곳 모두 선택' : '전체 ' + n + '곳 선택');
       $('pinx-all').disabled = P.busy || !n;
+      // 실제 부스(예시 아님) 모두 — 수는 지금 데이터에서 셉니다. 예시가 없으면 '전체 선택' 과 같아 숨깁니다.
+      var real = P.rows.filter(function (b) { return !BC.isSample(b) && selectable(b.id); }).length;
+      $('pinx-real').hidden = !P.rows.some(function (b) { return BC.isSample(b); });
+      $('pinx-real').textContent = '실제 부스 ' + real + '곳 선택';
+      $('pinx-real').disabled = P.busy || !real;
       $('pinx-q').disabled = P.busy;
       [].slice.call(zones.querySelectorAll('[data-pzone]')).forEach(function (b) { b.disabled = P.busy; });
     }
@@ -3877,6 +3900,15 @@
         if (li) li.classList.toggle('is-sel', t.checked);
         setMsg('', '');
         renderBar();
+      });
+      // 실제 부스만 고릅니다. 찾기 · 구역을 먼저 풀어, 고른 부스가 모두 화면에 보이게 합니다(가려진 선택 없음).
+      $('pinx-real').addEventListener('click', function () {
+        if (P.busy) return;
+        P.q = ''; P.zone = ''; $('pinx-q').value = '';
+        clearSel();
+        P.rows.forEach(function (b) { if (!BC.isSample(b) && selectable(b.id)) P.sel[b.id] = true; });
+        setMsg('', '');
+        renderList(); renderBar();
       });
       $('pinx-all').addEventListener('click', function () {
         if (P.busy) return;
