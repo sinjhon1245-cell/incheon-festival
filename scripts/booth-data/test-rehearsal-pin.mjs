@@ -25,7 +25,7 @@
           --pin-dir ../incheon-festival-rh-pin --live-dir ../incheon-festival-rh-live --old-dir ../incheon-festival-rh-main
    결과: out/rehearsal/rehearsal-pin-test-report.md
    =================================================================== */
-import { readFileSync, readdirSync, writeFileSync, mkdirSync } from 'node:fs';
+import { readFileSync, readdirSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
@@ -188,6 +188,7 @@ t('A0-2 상태 = Production(부스 134 · 공개 84 · 공개 구역 R1~R4 · �
 // 관리자 화면(booth-admin · 작업 브랜치 = main 과 같은 파일)으로 84곳 리허설 값 채우기 — 지금 Production 과 같게
 const inline = (html, dir, files) => {
   for (const p of files) {
+    if (!existsSync(join(dir, p))) continue;   // 그 판에 없는 파일(예: assets/pin-status.js 이전 판)은 건너뜀
     const src = readFileSync(join(dir, p), 'utf8').replace(/<\/script/gi, '<\\/script');
     html = html.replace(new RegExp(`<script src="${p.replace(/[.]/g, '\\.')}"></script>`), () => `<script>${src}</script>`);
   }
@@ -215,7 +216,7 @@ const click = (w, el) => el && el.dispatchEvent(new w.MouseEvent('click', { bubb
 async function openAdmin() {
   const { client, calls } = adminClient();
   const html = readFileSync(join(PIN, 'booth-admin.html'), 'utf8').replace(/<script src="https:\/\/cdn\.jsdelivr\.net[^"]*"><\/script>/g, '');
-  const dom = new JSDOM(inline(html, PIN, ['assets/config.js', 'assets/core.js', 'assets/ui.js', 'assets/booth-core.js', 'assets/mock-data.js', 'assets/admin-demo.js', 'assets/booth-admin.js']), {
+  const dom = new JSDOM(inline(html, PIN, ['assets/config.js', 'assets/core.js', 'assets/ui.js', 'assets/booth-core.js', 'assets/mock-data.js', 'assets/admin-demo.js', 'assets/pin-status.js', 'assets/booth-admin.js']), {
     url: 'https://sinjhon1245-cell.github.io/incheon-festival/booth-admin.html', runScripts: 'dangerously', pretendToBeVisual: true, virtualConsole: quiet(),
     beforeParse(w) {
       w.supabase = { createClient: () => client };
@@ -280,8 +281,12 @@ const pf3 = await migIn('drop function private.rehearsal_cutoff();');
 t('A5 멈춤 조건: 대상 판정이 모르는 판 · 공통 PIN 비교가 다른 판 · 리허설 함수 없음 → 아무것도 바꾸지 않고 멈춤 · 그 뒤 DB 그대로',
   /booth_common_pin_target 이 예상한 판이 아닙니다/.test(pf1) && /예상한 판이 아닙니다/.test(pf2) && /선행 조건 누락: migration-booth-rehearsal\.sql/.test(pf3) &&
   fnDiff(fn1, await fnMap()).length === 0 && JSON.stringify(await fp()) === JSON.stringify(F1), [pf1, pf2, pf3].join(' | '));
-t('A6 SQL 파일 두 개에 공통 PIN 값 · BEGIN/COMMIT 없음 · 줄 끝 LF',
-  !MIG.includes(COMMON) && !RB.includes(COMMON) && !/^\s*(begin|commit)\s*;/im.test(MIG + RB) && !/\r/.test(MIG + RB));
+// 줄 끝은 저장소에 들어간 파일(git) 기준 — Windows 작업 폴더는 core.autocrlf 로 CRLF 로 풀려 있을 수 있음. git 이 없으면 작업 폴더 파일.
+const committed = p => { try { return execFileSync('git', ['-C', PIN, 'show', 'HEAD:' + p], { encoding: 'utf8', maxBuffer: 1 << 26 }); } catch { return null; } };
+const MIG_C = committed('supabase/migration-booth-rehearsal-pin.sql') ?? MIG, RB_C = committed('supabase/rollback-booth-rehearsal-pin.sql') ?? RB;
+t('A6 SQL 파일 두 개에 공통 PIN 값 · BEGIN/COMMIT 없음 · 줄 끝 LF(저장소 파일) · 작업 폴더 파일과 줄 끝 말고 같음',
+  !MIG.includes(COMMON) && !RB.includes(COMMON) && !/^\s*(begin|commit)\s*;/im.test(MIG + RB) && !/\r/.test(MIG_C + RB_C) &&
+  MIG.replace(/\r/g, '') === MIG_C && RB.replace(/\r/g, '') === RB_C);
 
 // ══ B. 리허설 기간(지금 시각 = 2026-10-19) ═══════════════════════════════
 section = 'B 리허설 기간';
@@ -609,7 +614,7 @@ for (const code of ['R1-02', 'R1-05', 'R4-21', 'R3-05', 'R3-06', 'R3-07']) preSe
 preSess['R1-01'] = s1; preSess['R1-03'] = { session: L3s.session };
 function printHtml(dir) {
   const html = readFileSync(join(dir, 'print-qr.html'), 'utf8').replace(/<script src="https:\/\/cdn\.jsdelivr\.net[^"]*"><\/script>/g, '');
-  return inline(html, dir, ['assets/config.js', 'assets/core.js', 'assets/booth-core.js', 'assets/mock-data.js']);
+  return inline(html, dir, ['assets/config.js', 'assets/core.js', 'assets/booth-core.js', 'assets/mock-data.js', 'assets/pin-status.js']);
 }
 async function openPrint(dir, hooks) {
   const { client, calls } = adminClient(hooks);

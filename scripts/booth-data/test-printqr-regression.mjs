@@ -56,7 +56,7 @@ async function until(fn, ms = 15000, step = 40) { const end = Date.now() + ms; w
 const sameSet = (a, b) => a.length === b.length && [...a].sort().join() === [...b].sort().join();
 
 // ── 두 판의 파일 ─────────────────────────────────────────────────────────
-const ASSETS = ['assets/config.js', 'assets/core.js', 'assets/booth-core.js', 'assets/mock-data.js'];
+const ASSETS = ['assets/config.js', 'assets/core.js', 'assets/booth-core.js', 'assets/mock-data.js', 'assets/pin-status.js'];   // pin-status.js 는 그 판에 있을 때만(아래)
 const SRC = {
   old: { html: git('show', `${oldRef}:print-qr.html`), asset: p => git('show', `${oldRef}:${p}`) },
   new: { html: readFileSync(newPath, 'utf8'), asset: p => readFileSync(join(NEW_DIR, p), 'utf8') }
@@ -65,7 +65,9 @@ function pageHtml(which) {
   const s = SRC[which];
   let html = s.html.replace(/<script src="https:\/\/cdn\.jsdelivr\.net[^"]*"><\/script>/g, '');
   for (const p of ASSETS) {
-    const src = s.asset(p).replace(/<\/script/gi, '<\\/script');
+    let src;
+    try { src = s.asset(p); } catch (e) { continue; }   // 그 판에 없는 파일
+    src = src.replace(/<\/script/gi, '<\\/script');
     html = html.replace(new RegExp(`<script src="${p.replace(/[.]/g, '\\.')}"></script>`), () => `<script>${src}</script>`);
   }
   return html.replace(/<link[^>]+stylesheet[^>]*>/g, '');
@@ -219,8 +221,11 @@ t('R6 QR 일괄 발급 단추 · 카드 단추(발급 · 교체 · 끄기 · 직
   }), `${issueAll(oldP)} → ${issueAll(newP)}`);
 const WRITES = /^admin_(issue_booth_tokens|rotate_booth_token|disable_booth_token|set_booth_live|reset_booth_live|issue_booth_pin|issue_booth_pin_checked|disable_booth_pin|rehearsal_set_live)$/;
 const readsOf = P => [...new Set(P.calls.map(c => c.name))].sort().join(',');
-t('R7 두 판 모두 열기만 해서는 발급 · 교체 · 끄기 · 값 쓰기 호출 없음(점검용 빈 호출 제외) · 부른 함수 목록 같음 · DB 열쇠 지문 그대로',
-  ![...oldP.calls, ...newP.calls].some(c => WRITES.test(c.name) && c.args.p_booth_id !== null) && readsOf(oldP) === readsOf(newP) && (await accessFp(A)) === fp0, readsOf(newP));
+// 새 판이 더 부를 수 있는 읽기 전용 함수(관리자 확인 뒤 상태만 돌려줌) — 리허설 공통 PIN 표시(A-4)
+const EXTRA_READS = new Set(['admin_rehearsal_status']);
+const readsBase = P => [...new Set(P.calls.map(c => c.name))].filter(n => !EXTRA_READS.has(n)).sort().join(',');
+t('R7 두 판 모두 열기만 해서는 발급 · 교체 · 끄기 · 값 쓰기 호출 없음(점검용 빈 호출 제외) · 부른 함수 목록 같음(새 판이 더한 읽기 전용 상태 함수 말고) · DB 열쇠 지문 그대로',
+  ![...oldP.calls, ...newP.calls].some(c => WRITES.test(c.name) && c.args.p_booth_id !== null) && readsBase(oldP) === readsBase(newP) && (await accessFp(A)) === fp0, readsOf(newP));
 const toks = (await A.db.query('select token from public.booth_access')).rows.map(x => x.token);
 t('R8 새 판 HTML(글 · 속성 · title)에 열쇠 없음', toks.every(tk => !newP.d.documentElement.outerHTML.includes(tk)));
 const printCss = P => (P.d.querySelector('style').textContent.match(/\.item\.is-off, \.item\.is-filtered, \.item\.is-keyoff, \.item\.is-nokey \{ display: none !important; \}/) || [''])[0];
@@ -366,14 +371,19 @@ function fnBody(src, name) {
   let j = i + 1; while (j < lines.length && lines[j] !== '    }') j++;
   return lines.slice(i, j + 1).join('\n');
 }
-const fnDiff = FLOW.filter(n => { const a = fnBody(SRC.old.html, n), b = fnBody(SRC.new.html, n); return !a || a !== b; });
-const rpcSites = s => (s.match(/rpc\('[a-z_]+'/g) || []).sort().join(',');
-const lineSet = s => s.replace(/\r/g, '').split('\n');
-const oldLines = lineSet(SRC.old.html), newLines = new Set(lineSet(SRC.new.html));
-const removed = oldLines.filter(l => !newLines.has(l));
-t(`I1 소스: 발급 · 재발급 흐름 함수 ${FLOW.length}개 본문이 예전 판과 같음 · DB 함수 부르는 곳(rpc) 같음 · 예전 판에서 사라진 줄은 인쇄 목록 상태 한 줄(lists)뿐`,
-  fnDiff.length === 0 && rpcSites(SRC.old.html) === rpcSites(SRC.new.html) && removed.length <= 1 && removed.every(l => /lists: \{ ops: \{ q: '', zone: '', off: \{\} \}/.test(l)),
-  `다름 ${fnDiff.join(',')} | 사라진 줄 ${removed.length}`);
+// 용어만 ‘개별 PIN’ 으로 바꾼 글(A-4)은 같게 봅니다 — 그 밖의 글자 · 로직은 한 글자도 달라지면 안 됨
+const termNorm = s => s && s.replace(/개별 PIN /g, 'PIN ');
+const fnDiff = FLOW.filter(n => { const a = termNorm(fnBody(SRC.old.html, n)), b = termNorm(fnBody(SRC.new.html, n)); return !a || a !== b; });
+// 쓰기 함수(발급 · 재발급 · 끄기 · 열쇠 · 대기 값)를 부르는 곳의 수. 전체 값 지우기는 인쇄 화면에서 뺄 수 있고(A-1 — 늘어나면 안 됨),
+// 읽기 전용 함수(상태 · 조회)는 세지 않습니다.
+const WRITE_RPC = ['admin_issue_booth_pin_checked', 'admin_issue_booth_pin', 'admin_disable_booth_pin', 'admin_issue_booth_tokens',
+  'admin_rotate_booth_token', 'admin_disable_booth_token', 'admin_set_booth_live'];
+const siteN = (s, n) => (s.match(new RegExp("rpc\\('" + n + "'", 'g')) || []).length;
+const sitesSame = WRITE_RPC.every(n => siteN(SRC.old.html, n) === siteN(SRC.new.html, n));
+const resetOk = siteN(SRC.new.html, 'admin_reset_booth_live') <= siteN(SRC.old.html, 'admin_reset_booth_live');
+t(`I1 소스: 발급 · 재발급 흐름 함수 ${FLOW.length}개 본문이 예전 판과 글자 하나까지 같음 · 쓰기 함수(발급 · 재발급 · 끄기 · 열쇠 · 대기 값)를 부르는 곳 수 같음 · 전체 값 지우기는 늘지 않음`,
+  fnDiff.length === 0 && sitesSame && resetOk,
+  `다름 ${fnDiff.join(',')} | 쓰기 호출 ${WRITE_RPC.map(n => n + ' ' + siteN(SRC.old.html, n) + '→' + siteN(SRC.new.html, n)).join(' ')}`);
 // I2 · I3 동작: 복제 DB 두 벌 — 예전 판은 '임시구역' 찾기 + 찾은 84곳 모두 선택(예전 길), 새 판은 '실제 부스 84곳 선택'
 async function runJob(P, kind) {
   click(P.w, P.d.getElementById(kind === 'issue' ? 'pinx-issue' : 'pinx-reissue'));

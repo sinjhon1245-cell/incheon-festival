@@ -14,7 +14,7 @@
           [--live-dir ../incheon-festival-h1] [--main-dir ../incheon-festival-p1] [--dump <폴더>]
    결과: out/gate4r/test-report.md
    =================================================================== */
-import { readFileSync, readdirSync, writeFileSync, mkdirSync } from 'node:fs';
+import { readFileSync, readdirSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
@@ -121,6 +121,7 @@ function fakeClock(w, at) {
 }
 const inline = (html, dir, files) => {
   for (const p of files) {
+    if (!existsSync(join(dir, p))) continue;   // 그 판에 없는 파일(예: assets/pin-status.js 이전 판)은 건너뜀
     const src = readFileSync(join(dir, p), 'utf8').replace(/<\/script/gi, '<\\/script');
     html = html.replace(new RegExp(`<script src="${p.replace(/[.]/g, '\\.')}"></script>`), () => `<script>${src}</script>`);
   }
@@ -199,7 +200,7 @@ async function printPage() {
   if (!html.includes(QR_TAG)) throw new Error('print-qr.html 의 QR 생성기 주소가 바뀌었습니다');
   html = html.replace(QR_TAG, () => `<script>${QR_SRC.replace(/<\/script/gi, '<\\/script')}</script>`)
     .replace(/<script src="https:\/\/cdn\.jsdelivr\.net[^"]*"><\/script>/g, '');
-  html = inline(html, mainDir, ['assets/config.js', 'assets/core.js', 'assets/booth-core.js', 'assets/mock-data.js']);
+  html = inline(html, mainDir, ['assets/config.js', 'assets/core.js', 'assets/booth-core.js', 'assets/mock-data.js', 'assets/pin-status.js']);
   const log = [], errors = [];
   const dom = new JSDOM(html, {
     url: 'https://sinjhon1245-cell.github.io/incheon-festival/print-qr.html', runScripts: 'dangerously', pretendToBeVisual: true,

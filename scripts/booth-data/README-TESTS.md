@@ -49,7 +49,13 @@ node --max-old-space-size=8192 scripts/booth-data/test-printqr-regression.mjs $A
 node --max-old-space-size=8192 scripts/booth-data/test-visitor-preview.mjs $A --live-dir ../incheon-festival-live
 node --max-old-space-size=8192 scripts/booth-data/test-qr-e2e.mjs $A --live-dir ../incheon-festival-live --qr-dir $D/qrlib
 node --max-old-space-size=8192 scripts/booth-data/test-gate4r.mjs $A --main-dir ../incheon-festival-main --live-dir ../incheon-festival-live --qr-dir $D/qrlib
+node --max-old-space-size=8192 scripts/booth-data/test-reset-removed.mjs $A --main-dir ../incheon-festival-main
+node --max-old-space-size=8192 scripts/booth-data/test-pin-status.mjs $A --main-dir ../incheon-festival-main
 ```
+
+- `test-reset-removed.mjs`(A-1): 인쇄 화면에서 ‘실시간 값 모두 지우기’ 를 뺀 판 기준. 예전 판은 `--old-ref`(기본 6a34872)로 git 에서 읽습니다.
+- `test-pin-status.mjs`(A-4): 리허설 공통 PIN · 개별 PIN 표시가 서버 판정(`private.booth_common_pin_target` + PIN 보조 로그인 스위치)과 같은지 —
+  복제 DB 의 공통 PIN 판정 함수에만 시험 시계를 겁니다(`lib/ui-harness.mjs`). 관리자 부스 관리는 포털 표가 없어 협의용 예시로 봅니다.
 
 - 비교용 옛 판(7ebf536 · 421f656 · 56c3138 · 6fd46d8)은 `git worktree add <폴더> <커밋>` 으로 만들거나, 시험이 git 으로 직접 읽습니다.
 - 결과 보고서는 `out/rehearsal/` · `out/gate3c/` · `out/gate4r/` 에 씁니다(git 제외).

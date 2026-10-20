@@ -19,7 +19,7 @@
           --main-dir ../incheon-festival-rh-main --live-dir ../incheon-festival-rh-live [--dump <폴더>]
    결과: out/rehearsal/rehearsal-test-report.md
    =================================================================== */
-import { readFileSync, readdirSync, writeFileSync, mkdirSync } from 'node:fs';
+import { readFileSync, readdirSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
@@ -213,6 +213,7 @@ t('A22 migration 의 대상 확인: 84곳 중 하나가 예시(기관 [예시])�
 // ══ B. 관리자 화면(jsdom) ═══════════════════════════════════════════
 const inline = (html, dir, files) => {
   for (const p of files) {
+    if (!existsSync(join(dir, p))) continue;   // 그 판에 없는 파일(예: assets/pin-status.js 이전 판)은 건너뜀
     const src = readFileSync(join(dir, p), 'utf8').replace(/<\/script/gi, '<\\/script');
     html = html.replace(new RegExp(`<script src="${p.replace(/[.]/g, '\\.')}"></script>`), () => `<script>${src}</script>`);
   }
@@ -221,7 +222,7 @@ const inline = (html, dir, files) => {
 const ADMIN_LINKS = [...readFileSync(join(MAIN, 'booth-admin.html'), 'utf8').matchAll(/<link[^>]+stylesheet[^>]*>/g)].map(m => m[0]).join('');
 function adminHtml() {
   const html = readFileSync(join(MAIN, 'booth-admin.html'), 'utf8').replace(/<script src="https:\/\/cdn\.jsdelivr\.net[^"]*"><\/script>/g, '');
-  return inline(html, MAIN, ['assets/config.js', 'assets/core.js', 'assets/ui.js', 'assets/booth-core.js', 'assets/mock-data.js', 'assets/admin-demo.js', 'assets/booth-admin.js']);
+  return inline(html, MAIN, ['assets/config.js', 'assets/core.js', 'assets/ui.js', 'assets/booth-core.js', 'assets/mock-data.js', 'assets/admin-demo.js', 'assets/pin-status.js', 'assets/booth-admin.js']);
 }
 const DATE_KEYS = new Set(['cutoff', 'kst_today']);
 // PostgREST 처럼: date 는 'YYYY-MM-DD', timestamptz 는 ISO 글자
