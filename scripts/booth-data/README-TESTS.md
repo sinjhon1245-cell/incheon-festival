@@ -3,7 +3,7 @@
 부스 화면(운영자 · 관람객 · QR · PIN 관리)과 DB 함수를 **로컬 복제 DB(PGlite)와 jsdom** 위에서 견주는 시험입니다.
 어떤 시험도 Production 에 접속하지 않습니다. 열쇠 · PIN 은 복제 DB 안의 가짜 값이고, 결과에는 개수와 참 · 거짓만 적습니다.
 
-이 브랜치에는 **코드만** 있습니다. 시험이 읽는 운영 데이터(`out/`)는 git 에 넣지 않습니다(`.gitignore`).
+이 브랜치에는 **코드만** 있습니다(시험 · 도우미 · 복제 DB SQL · `supabase/migration-booth-preview.sql` — Gate 3-C 에서 Production 에 적용했지만 main 에는 없는 사전 안내 migration 을 시험이 복제 DB 에 다시 적용하므로 함께 둠). 시험이 읽는 운영 데이터(`out/`)는 git 에 넣지 않습니다(`.gitignore`).
 
 ## 1. 준비물(한 번)
 
