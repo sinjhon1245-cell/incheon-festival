@@ -86,7 +86,7 @@
            누르면 붙박이 줄의 검색칸이 열립니다(붙박이 줄 높이는 그대로). -->
       <button type="button" class="qopen" id="search-field" data-act="search-open" hidden>
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" aria-hidden="true" focusable="false"><circle cx="10.5" cy="10.5" r="6.5" /><path d="M15.5 15.5 20.5 20.5" /></svg>
-        <span>부스 이름 · 번호 · 체험 내용으로 찾기</span>
+        <span>부스 이름 · 번호 · 학교명으로 찾기</span>
       </button>
     </div>
 
@@ -100,7 +100,7 @@
         </div>
         <form class="bar__search" id="search" role="search" hidden>
           <label class="sr-only" for="q">부스 검색</label>
-          <input type="search" id="q" placeholder="부스 이름 · 번호 · 체험 내용" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="search" />
+          <input type="search" id="q" placeholder="부스 이름 · 번호 · 학교명" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="search" />
           <button type="button" class="bar__cancel" id="search-cancel">취소</button>
         </form>
       </div>
@@ -1097,7 +1097,8 @@
           '<button type="button" class="link result__clear" data-act="clear-count" aria-label="' + esc(word) + ' 필터 해제">' +
             '<span class="result__x" aria-hidden="true">×</span>필터 해제</button>';
       } else if (searching()) {
-        html = '검색 결과 <b>' + (items.length + pendingItems().length) + '곳</b>';
+        // 결과 줄은 flex 라 글자와 <b> 가 따로 놓이면 사이 띄어쓰기가 사라집니다 — 한 덩이(result__t)로 묶습니다.
+        html = '<span class="result__t">검색 결과 <b>' + (items.length + pendingItems().length) + '곳</b></span>';
       } else {
         // 배치 준비 중 묶음은 전체 구역을 볼 때만 보이므로(pendingItems) 그때만 함께 셉니다.
         html = '<b>' + (items.length + pendingItems().length) + '곳</b>';
@@ -1355,7 +1356,7 @@
         var restore = focusKey(box);
         if (!items.length) {
           box.innerHTML = pendN ? '' : emptyHtml(searching() ? '찾는 부스가 없어요' : '조건에 맞는 부스가 없어요',
-            searching() ? '부스 이름 · 번호 · 체험 내용의 일부로 찾아 보세요.' : '다른 구역이나 상태를 골라 보세요.');
+            searching() ? '부스 이름 · 번호 · 학교명의 일부로 찾아 보세요.' : '다른 구역이나 상태를 골라 보세요.');
         } else if (view === 'grid') {
           box.innerHTML = mapHtml() + zoneGroups(items).map(function (g) {
             return '<section class="group">' + zoneHead(g, g.items.length) +
