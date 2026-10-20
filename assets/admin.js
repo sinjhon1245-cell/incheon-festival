@@ -122,9 +122,9 @@
     '공개 칸 번호 정리 필요': 'warn',
     // 부스 · 구역의 공개 상태(publishState)
     '공개': 'ok', '비공개': 'off', '미배정': 'warn', '구역 비공개': 'warn',
-    // 운영자 QR · PIN · 대기 현황 표시(PIN 미발급은 평소 상태라 회색 — 요청한 부스에만 발급합니다)
+    // 운영자 QR · 개별 PIN · 대기 현황 표시(개별 PIN 미발급은 평소 상태라 회색). 리허설 공통 PIN 은 부스 운영 현황 · QR · PIN 관리에서 봅니다.
     'QR 발급됨': 'info', 'QR 미발급': 'warn', 'QR 꺼짐': 'off', '확인 필요': 'danger',
-    'PIN 발급됨': 'info', 'PIN 미발급': 'off', 'PIN 꺼짐': 'off', 'PIN 실패 많음': 'danger'
+    '개별 PIN 발급됨': 'info', '개별 PIN 미발급': 'off', '개별 PIN 꺼짐': 'off', 'PIN 실패 많음': 'danger'
   };
   function badge(t) { return '<span class="badge badge--' + (TONE[t] || 'off') + '">' + esc(t) + '</span>'; }
   function tag(t) { return '<span class="badge badge--plain">' + esc(t) + '</span>'; }
@@ -369,8 +369,8 @@
     // 협의용 예시에서만 예시 PIN(4자리)을 줄에 보입니다. 실제 PIN 원문은 발급 창에서 한 번만 보이고 다시 조회할 수 없습니다.
     var demoPinTag = DEMO && c.pin_state === 'on' && AD.demoPin(r.id) ? tag('예시 PIN ' + AD.demoPin(r.id)) : '';
     return badge({ on: 'QR 발급됨', off: 'QR 꺼짐' }[c.qr_state] || 'QR 미발급') +
-      badge({ on: 'PIN 발급됨', off: 'PIN 꺼짐' }[c.pin_state] || 'PIN 미발급') + demoPinTag +
-      (c.pin_sessions > 0 ? tag('PIN 로그인 ' + c.pin_sessions + '대') : '') +
+      badge({ on: '개별 PIN 발급됨', off: '개별 PIN 꺼짐' }[c.pin_state] || '개별 PIN 미발급') + demoPinTag +
+      (c.pin_sessions > 0 ? tag('유효한 PIN 세션 ' + c.pin_sessions + '개') : '') +
       (c.pin_failures_1h >= PIN_FAIL_WARN ? badge('PIN 실패 많음') : '');
   }
   function credMore(r) {
@@ -391,7 +391,7 @@
       : issueBtn('PIN 발급');
     return '<div class="demomore credmore">' +
       '<p class="demomore__t">운영자 PIN · QR 카드를 쓸 수 없는 부스에만 요청을 받아 발급합니다' +
-        (c.pin_sessions > 0 ? ' · 지금 PIN 로그인 ' + c.pin_sessions + '대' : '') + '</p>' +
+        (c.pin_sessions > 0 ? ' · 유효한 PIN 세션 ' + c.pin_sessions + '개' : '') + '</p>' +
       '<div class="demomore__acts">' + acts + '</div>' +
       (hasSlot(r) && !ready ? '<p class="demomore__na credmore__off" role="note">' + esc(pinCheckedMessage()) + '</p>' : '') +
       '<p class="demomore__t">운영자 QR 발급 · 끄기 · 바꾸기와 여러 부스의 PIN 발급 · 재발급은 ' +
@@ -418,7 +418,7 @@
   }
   function pinStateLabel(c) {
     if (!c) return '상태 확인 불가';
-    return { on: 'PIN 발급됨', off: 'PIN 꺼짐' }[c.pin_state] || 'PIN 미발급';
+    return { on: '개별 PIN 발급됨', off: '개별 PIN 꺼짐' }[c.pin_state] || '개별 PIN 미발급';
   }
   // 오류 코드가 없는 오류(연결 끊김 · 시간 초과)는 서버에서 처리됐는지 알 수 없습니다.
   function pinNoAnswer(e) { return !e || !e.code || e.timeout || /Failed to fetch|NetworkError|Load failed/i.test(String(e.message || '')); }
@@ -2040,7 +2040,7 @@
       if (res.error) { toast(res.error, true); return; }
       renderPanel();
       reopenMore(row.id);
-      if (op === 'off') { toast('PIN 꺼짐으로 바꿨습니다(협의용 예시). QR은 그대로입니다.'); return; }
+      if (op === 'off') { toast('개별 PIN 꺼짐으로 바꿨습니다(협의용 예시). QR은 그대로입니다.'); return; }
       UI.reveal({
         title: '운영자 PIN 발급 · 협의용 예시',
         closeLabel: '닫기',

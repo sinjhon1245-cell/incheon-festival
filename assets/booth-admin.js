@@ -40,6 +40,7 @@
     try { return new URLSearchParams(window.location.search).has('demo'); } catch (e) { return false; }
   })() && !!window.AdminDemo;
   var AD = window.AdminDemo;
+  var PS = window.PinStatus;   // 리허설 공통 PIN · 개별 PIN 판정(assets/pin-status.js)
   var DEMO_TEXT = '협의용 예시 · 실제 행사 정보가 아닙니다.';
 
   var LIVE_MS = 15000;
@@ -57,7 +58,8 @@
   ];
   var BY = { qr: '운영자 QR', pin: '운영자 PIN', admin: '관리자 입력' };
 
-  var data = { zones: [], booths: [], live: {}, creds: null, liveAt: null, masterAt: null, failAt: null };
+  // pinOn: PIN 보조 로그인 스위치(settings.booth_pin_enabled) — true · false · null(모름)
+  var data = { zones: [], booths: [], live: {}, creds: null, pinOn: null, liveAt: null, masterAt: null, failAt: null };
   var ui = { view: 'live', quick: 'all', zone: '', q: '', sort: 'ops', hidden: false, more: '' };
   var busy = {};
   var stops = [];
@@ -81,11 +83,15 @@
       C.select('zones', { columns: 'key,label,sort_order,is_published', order: [['sort_order', true], ['key', true]] }),
       C.select('booths', { columns: 'id,zone_key,no,code,name,org,program,is_published', order: false }),
       // PIN 기능 전(함수 없음)이거나 못 읽으면 접속 칸만 비웁니다.
-      C.rpc('admin_booth_credentials').then(null, function () { return null; })
+      C.rpc('admin_booth_credentials').then(null, function () { return null; }),
+      // 공통 PIN 도 이 스위치가 꺼지면 로그인되지 않습니다(로그인 함수가 먼저 봄). 못 읽으면 모름(null).
+      C.select('settings', { columns: 'booth_pin_enabled', order: false, limit: 1 }).then(null, function () { return null; })
     ]).then(function (r) {
       data.zones = r[0] || [];
       data.booths = r[1] || [];
       data.creds = r[2] ? indexBy(r[2], 'booth_id') : null;
+      var st = r[3] && r[3][0];
+      data.pinOn = st && typeof st.booth_pin_enabled === 'boolean' ? st.booth_pin_enabled : null;
       data.masterAt = new Date();
     });
   }
@@ -227,16 +233,25 @@
     return '<span class="lv__val"><span class="lv__word">' + esc(stateText(r)) + '</span><span class="lv__dash" aria-hidden="true">—</span></span>';
   }
   // 줄에 띄울 '손이 가야 할 표시' — 정상은 쓰지 않습니다. 빨강: QR 꺼짐 · PIN 실패 많음,
-  // 주황: QR 미발급(발급하면 되는 준비 일), 회색: PIN 미발급 · PIN 꺼짐(QR 이 기본 길이라 약하게).
+  // 주황: QR 미발급(발급하면 되는 준비 일), 회색: 개별 PIN 미발급 · 개별 PIN 꺼짐(QR 이 기본 길이라 약하게).
+  // 리허설 공통 PIN 을 쓸 수 있는 동안(실제 부스 · 11-05 23:00 까지 · 개별 PIN 없음)의 '개별 PIN 미발급' 은 정상이라
+  // 줄에 띄우지 않습니다 — 위 요약 줄과 펼친 상세(접속)에는 그대로 보입니다. 끝나는 때가 지나면 다시 띄웁니다.
   function flag(text, kind) { return '<span class="flag flag--' + kind + '">' + esc(text) + '</span>'; }
+  function commonEnd() { return rh.st ? PS.endOf(rh.st.cutoff) : 0; }
+  // 리허설 공통 PIN 상태 — 대상 목록(rh.st)을 아직 못 읽었으면 'unknown'(그때는 예전처럼 '미발급' 을 띄움)
+  function commonOf(r) {
+    var c = r.cred;
+    return PS.common({ target: rh.st ? !!rh.st.ids[r.id] : null, shown: r.shown, pinState: c ? c.pin_state : null,
+                       switchOn: data.pinOn, end: commonEnd(), now: Date.now() });
+  }
   function credFlags(r) {
     var c = r.cred;
     if (!c) return '';
     var out = '';
     if (c.qr_state === 'off') out += flag('QR 꺼짐', 'bad');
     else if (c.qr_state !== 'on') out += flag('QR 미발급', 'warn');
-    if (c.pin_state === 'off') out += flag('PIN 꺼짐', 'off');
-    else if (c.pin_state !== 'on') out += flag('PIN 미발급', 'off');
+    if (c.pin_state === 'off') out += flag('개별 PIN 꺼짐', 'off');
+    else if (c.pin_state !== 'on' && commonOf(r).key !== 'open') out += flag('개별 PIN 미발급', 'off');
     if (r.pinIssue) out += flag('PIN 실패 많음', 'bad');
     return out;
   }
@@ -244,9 +259,32 @@
     var c = r.cred;
     if (!c) return '접속 정보를 읽지 못했습니다';
     var qr = { on: 'QR 정상', off: 'QR 꺼짐' }[c.qr_state] || 'QR 미발급';
-    var pin = c.pin_state === 'on' ? 'PIN 정상' : (c.pin_state === 'off' ? 'PIN 꺼짐' : 'PIN 미발급');
-    return qr + ' · ' + pin + (c.pin_sessions > 0 ? ' · PIN 로그인 ' + c.pin_sessions + '대' : '') +
+    var cp = commonOf(r);
+    var cmn = cp.key === 'open' ? ' · ' + cp.label + '(' + PS.endText(commonEnd()) + '까지)' : (cp.label ? ' · ' + cp.label : '');
+    // pin_sessions = 끝나지 않은 PIN 세션 수(지금 화면을 보고 있는지는 알 수 없음)
+    return qr + ' · ' + PS.individual(c.pin_state).label + cmn +
+      (c.pin_sessions > 0 ? ' · 유효한 PIN 세션 ' + c.pin_sessions + '개' : '') +
       (c.pin_failures_1h ? ' · 최근 1시간 PIN 실패 ' + c.pin_failures_1h + '번' : '');
+  }
+  // 요약 두 줄 — 리허설 공통 PIN / 개별 PIN. 실제 부스 = DB 의 리허설 대상(admin_rehearsal_status), 수는 고정하지 않습니다.
+  function pinHtml(all) {
+    if (DEMO || !rh.st) return '';
+    var end = commonEnd(), endTxt = PS.endText(end);
+    var s = PS.summarize(all.map(function (r) {
+      return { target: !!rh.st.ids[r.id], pinState: r.cred ? r.cred.pin_state : null, common: commonOf(r) };
+    }));
+    var l1;
+    if (!(Date.now() < end)) l1 = esc(endTxt) + '에 끝났어요';
+    else if (!data.creds) l1 = esc(endTxt) + '까지 · 부스별 상태를 읽지 못했어요';
+    else if (data.pinOn === false) l1 = 'PIN 보조 로그인이 꺼져 있어 지금은 쓸 수 없어요(관리자 → 기본정보)';
+    else l1 = esc(endTxt) + '까지 · 사용 가능 <b>' + s.open + '곳</b>' +
+      (s.closed ? ' · 개별 PIN 발급으로 닫힘 ' + s.closed + '곳' : '') + (s.hidden ? ' · 비공개라 못 씀 ' + s.hidden + '곳' : '');
+    var l2 = !data.creds ? '상태를 읽지 못했어요'
+      : '실제 부스 ' + s.target + '곳 중 발급 <b>' + s.on + '곳</b> · 미발급 ' + s.none + '곳 · 꺼짐 ' + s.offPin + '곳' +
+        (s.unk ? ' · 확인 불가 ' + s.unk + '곳' : '') +
+        ' · <a href="print-qr.html" target="_blank" rel="noopener">QR · PIN 관리</a>';
+    return '<p class="lvpin__row"><span class="lvpin__k">리허설 공통 PIN</span><span>' + l1 + '</span></p>' +
+      '<p class="lvpin__row"><span class="lvpin__k">개별 PIN</span><span>' + l2 + '</span></p>';
   }
   function agoHtml(r) {
     if (!r.at) return '<span class="lv__agov">' + (r.state === 'missing' ? '입력 없음' : '') + '</span>';
@@ -402,6 +440,7 @@
         (DEMO ? '<p class="demohint">' + esc(DEMO_TEXT) + ' 현황 수정을 눌러도 실제 DB에 반영되지 않고, 새로 고치면 처음 예시로 돌아갑니다.</p>' : '') +
         (DEMO ? '' : '<section class="card rhpanel" id="lv-rh" aria-labelledby="lv-rh-title"' + (rh.open ? '' : ' hidden') + '></section>') +
         '<p class="lvmeta" id="lv-meta" aria-live="polite"></p>' +
+        '<div class="lvpin" id="lv-pin"></div>' +
         '<div class="minigrid sumgrid" id="lv-sum" role="group" aria-label="걸러 보기"></div>' +
         // 검색 · 구역 · 정렬 · 지금 걸러 보는 것은 스크롤해도 맨 위에 붙어 있습니다(데스크톱은 표 머리도 함께).
         '<div class="lvbar" id="lv-bar">' +
@@ -431,6 +470,7 @@
     var all = rowsNow();
     var rows = filtered(all);
     $('#lv-meta').innerHTML = metaHtml();
+    $('#lv-pin').innerHTML = pinHtml(all);
     $('#lv-sum').innerHTML = summaryHtml(all);
     var sel = $('#lv-zone');
     if (document.activeElement !== sel) sel.innerHTML = zoneOptions();
@@ -986,6 +1026,8 @@
     });
   }
   function refreshMaster() {
+    // 리허설 대상 · 행사 첫날(공통 PIN 요약)도 함께 다시 읽습니다. 못 읽으면 지난 값으로 그립니다.
+    if (!DEMO) loadRehearsal().then(null, function () { /* 지난 상태 */ });
     return loadMaster().then(loadLive).then(paint, function (e) {
       data.failAt = new Date();
       console.warn('[booth-admin] 부스 목록을 읽지 못했습니다', e && (e.code || e.message));
@@ -1187,6 +1229,8 @@
       $('#view').innerHTML = '';
       paint();
       startPolls();
+      // 리허설 공통 PIN 요약 · 줄 표시에 쓸 대상 목록. 다 읽으면 다시 그립니다(못 읽으면 예전처럼 '개별 PIN 미발급' 을 띄움).
+      if (!DEMO) loadRehearsal().then(paint, function () { /* 리허설 관리 칸이 까닭을 보임 */ });
     }).catch(function (e) {
       console.error('[booth-admin] 불러오기 실패', e && (e.code || e.message));
       $('#view').innerHTML = '<div class="state state--error">' + esc(C.dataMessage(e)) +

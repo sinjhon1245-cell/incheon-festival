@@ -15,6 +15,14 @@
 .lvmeta__t { font-weight: 700; color: var(--ink-2); font-variant-numeric: tabular-nums; }
 .lvmeta__t.is-bad { color: var(--danger); }
 
+/* 리허설 공통 PIN · 개별 PIN 요약 두 줄 — 색을 더하지 않고 글자로만(정상 상태라 경고처럼 보이지 않게) */
+.lvpin { display: grid; gap: 2px; margin: -6px 2px 0; font-size: 13px; line-height: 1.55; color: var(--muted); }
+.lvpin:empty { display: none; }
+.lvpin__row { display: flex; flex-wrap: wrap; gap: 0 8px; margin: 0; }
+.lvpin__k { flex: none; min-width: 7.6em; font-weight: 700; color: var(--ink-2); }
+.lvpin b { font-weight: 700; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.lvpin a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
+
 /* 요약 숫자 = 걸러 보기 단추. 화면을 덮지 않게 작게. */
 .sumgrid { grid-template-columns: repeat(auto-fit, minmax(84px, 1fr)); gap: 6px; }
 .sum { padding: 8px 10px; min-height: 56px; border-radius: 10px; }
