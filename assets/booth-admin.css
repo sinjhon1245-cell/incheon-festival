@@ -18,8 +18,9 @@
 /* 리허설 공통 PIN · 개별 PIN 요약 두 줄 — 색을 더하지 않고 글자로만(정상 상태라 경고처럼 보이지 않게) */
 .lvpin { display: grid; gap: 2px; margin: -6px 2px 0; font-size: 13px; line-height: 1.55; color: var(--muted); }
 .lvpin:empty { display: none; }
-.lvpin__row { display: flex; flex-wrap: wrap; gap: 0 8px; margin: 0; }
-.lvpin__k { flex: none; min-width: 7.6em; font-weight: 700; color: var(--ink-2); }
+/* 이름 칸 · 값 칸 두 열 — 값이 길어 줄이 바뀌어도 이름 오른쪽에 맞춰 흐름(휴대폰) */
+.lvpin__row { display: grid; grid-template-columns: 7.6em minmax(0, 1fr); gap: 0 8px; margin: 0; }
+.lvpin__k { font-weight: 700; color: var(--ink-2); }
 .lvpin b { font-weight: 700; color: var(--ink-2); font-variant-numeric: tabular-nums; }
 .lvpin a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
 
