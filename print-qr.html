@@ -1429,7 +1429,7 @@
       var ex = shownItems(kind).filter(function (el) { return el.classList.contains('is-sample') && printable(el); }).length;
       if (ex) text += ' · 예시 부스 ' + ex + '장 포함';
       var exOut = shownItems(kind).filter(function (el) { return el.classList.contains('is-sample') && el.classList.contains('is-off'); }).length;
-      if (exOut) text += ' · 예시 부스 ' + exOut + '곳 제외(넣으려면 카드의 ‘인쇄에 포함’)';
+      if (exOut) text += ' · 예시 부스 ' + exOut + '곳 제외(넣으려면 ' + L.unit + '의 ‘인쇄에 포함’)';
       $(L.count).textContent = text;
       if (kind === 'ops') paintIssueAll();
       updatePrintBtn();
