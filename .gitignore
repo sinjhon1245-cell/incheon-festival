@@ -50,3 +50,6 @@ desktop.ini
 # ── Claude Code 개인 설정 ──────────────────────────────────────────
 # launch.json 은 미리보기 설정이라 공유합니다.
 .claude/settings.local.json
+
+# scripts/booth-data — 운영 데이터 · 시험 결과(Production 스냅샷 · 명단 · 열쇠 SQL)는 git 에 넣지 않음
+scripts/booth-data/out/
