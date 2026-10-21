@@ -134,8 +134,13 @@ const base = { target: true, shown: true, pinState: 'none', switchOn: true, end:
 const k = o => PS.common(Object.assign({}, base, o)).key;
 t('U3 판정 순서 — 사용 가능 · 개별 PIN(발급 · 꺼짐)이면 닫힘 · 끝남 · 비공개 · 스위치 꺼짐 · 대상 아님 · 모름',
   k({}) === 'open' && k({ pinState: 'on' }) === 'closed' && k({ pinState: 'off' }) === 'closed' && k({ now: 100 }) === 'ended' &&
-  k({ shown: false }) === 'hidden' && k({ switchOn: false }) === 'off' && k({ switchOn: null }) === 'open' && k({ target: false }) === 'na' &&
+  k({ shown: false }) === 'hidden' && k({ switchOn: false }) === 'off' && k({ target: false }) === 'na' &&
   k({ target: null }) === 'unknown' && k({ pinState: null }) === 'unknown');
+t('U5 PIN 보조 로그인 설정을 못 읽으면(null · 없음) ‘사용 가능’ 이 아니라 ‘상태 확인 불가’(unchecked) — 켜졌다고 확인한 때(true)만 사용 가능 · 셈에서도 따로',
+  k({ switchOn: null }) === 'unchecked' && k({ switchOn: undefined }) === 'unchecked' && k({ switchOn: 'yes' }) === 'unchecked' && k({ switchOn: true }) === 'open' &&
+  PS.common(Object.assign({}, base, { switchOn: null })).label.includes('상태 확인 불가') &&
+  PS.summarize([{ target: true, pinState: 'none', common: PS.common(Object.assign({}, base, { switchOn: null })) }]).open === 0 &&
+  PS.summarize([{ target: true, pinState: 'none', common: PS.common(Object.assign({}, base, { switchOn: null })) }]).unchecked === 1);
 t('U4 pin-status.js 는 읽기만 — DB 호출 · 네트워크 · 저장 없음', !/rpc\(|fetch\(|localStorage|\.from\(|XMLHttpRequest/.test(psSrc));
 
 // ══ P 상황별 ═══════════════════════════════════════════════════════════
@@ -249,6 +254,84 @@ ba = await readBoothAdmin(T, hooks); pq = await readPrintPin(T, hooks);
 t('P14 실제 부스 수는 DB 대상 목록에서 — 목록이 83곳이면 “실제 부스 83곳 중 …” · 사용 가능 62 · 빠진 R4-21 은 ‘공통 PIN’ 표 없음',
   ba.target === 83 && ba.open === 62 && pq.target === 83 && pq.open === 62 && !pq.tagged.includes(drop), `${ba.strip} | ${pq.notes.slice(0, 100)}`);
 closeAll(ba, pq);
+
+// ══ B 경계 조건 — 설정을 못 읽을 때 · 오래 열어 둔 화면의 끝나는 때 ══════════════════════
+section = 'B 경계 조건';
+const failSettings = { fromError: tb => tb === 'settings' };
+srv = await serverOpen();
+ba = await readBoothAdmin(T, failSettings); pq = await readPrintPin(T, failSettings);
+const lgUnk = await login('R3-03');
+const b1Detail = await detailOf(ba.p, idOf('R3-04'));
+t('B1 PIN 보조 로그인 설정을 못 읽으면(스위치는 실제로 켜짐 · 서버는 63곳 받음) — 운영 현황 “상태 확인 불가 — PIN 보조 로그인 설정을 읽지 못했어요” · ‘사용 가능 N곳’ 을 말하지 않음 · QR · PIN 관리 안내 “상태 확인 불가” · ‘공통 PIN’ 표 0 · 줄 상세 “리허설 공통 PIN 상태 확인 불가”',
+  srv.length === 63 && /상태 확인 불가 — PIN 보조 로그인 설정을 읽지 못했어요/.test(ba.strip) && ba.open === null && !/사용 가능 \d+곳/.test(ba.strip) &&
+  /리허설 공통 PIN: 상태 확인 불가/.test(pq.notes) && pq.open === null && pq.tagged.length === 0 && /리허설 공통 PIN 상태 확인 불가/.test(b1Detail),
+  `${srv.length} | ${ba.strip} | ${pq.notes.slice(0, 120)} | ${pq.tagged.length} | ${b1Detail}`);
+t('B2 확인 불가일 때 줄은 예전처럼 ‘개별 PIN 미발급’ 을 띄움(정상이라고 단정하지 않음) · 서버 쪽 공통 PIN 123456 로그인은 그대로 됨(화면 설정 읽기와 무관)',
+  flagged(ba, '개별 PIN 미발급').length === 63 && lgUnk.ok === true, `${flagged(ba, '개별 PIN 미발급').length} ${lgUnk.ok} ${lgUnk.reason}`);
+closeAll(ba, pq);
+await db.exec('update public.settings set booth_pin_enabled = false where id = 1');
+const srvOff = await serverOpen();
+ba = await readBoothAdmin(T, failSettings);
+t('B3 스위치가 실제로 꺼졌는데 설정까지 못 읽어도 — 서버 0곳 · 화면은 ‘사용 가능’ 수를 말하지 않고 “상태 확인 불가”(어긋난 수 없음)',
+  srvOff.length === 0 && /상태 확인 불가/.test(ba.strip) && ba.open === null, `${srvOff.length} ${ba.strip}`);
+closeAll(ba);
+await db.exec('update public.settings set booth_pin_enabled = true where id = 1');
+// 오래 열어 둔 QR · PIN 관리: 끝나기 27시간 전(11-04 20:00)에 열고, 1시간 넘는 타이머는 시험이 시계를 옮겨 직접 부름
+async function openPinPage(atMs) {
+  const p = await openPage({ JSDOM, VirtualConsole, dir: MAIN, file: 'print-qr.html', R, rest, at: atMs, longTimers: true });
+  await until(() => p.d.querySelectorAll('#grid-ops .item--ops').length > 0, 30000);
+  click(p.w, p.d.getElementById('pinx-toggle'));
+  await until(() => !p.d.getElementById('pinx-main').hidden && p.d.querySelectorAll('#pinx-list .prow').length > 0, 25000);
+  await wait(150);
+  return p;
+}
+const notesOf = p => text(p.d.getElementById('pinx-notes'));
+const tagsOf = p => p.d.querySelectorAll('#pinx-list .pst--cmn').length;
+const END_MS = KST('2026-11-05T23:00:00');
+let T0 = await at('2026-11-04T20:00:00');
+let lp = await openPinPage(T0);
+const firstTimers = [...lp.w.__long.values()].map(x => x.ms);
+const steps = [];
+for (let guard = 0; guard < 12 && lp.w.__long.size; guard++) {
+  const [id, tm] = [...lp.w.__long.entries()].sort((a, b) => (a[1].from + a[1].ms) - (b[1].from + b[1].ms))[0];
+  lp.w.__long.delete(id);
+  const due = tm.from + tm.ms;
+  lp.w.__setNow(due); await clock.setNow(new Date(due).toISOString());
+  tm.fn(); await wait(80);
+  steps.push({ at: new Date(due + 9 * 3600e3).toISOString().slice(5, 16).replace('T', ' '), open: /까지 쓸 수 있어요/.test(notesOf(lp)), ended: /에 끝났어요/.test(notesOf(lp)), tags: tagsOf(lp), next: lp.w.__long.size });
+}
+const srvEnd = await serverOpen();
+const last = steps[steps.length - 1] || {};
+t('B4 끝나기 27시간 전부터 열어 둔 QR · PIN 관리 — 처음 6시간짜리 예약 하나(예전 코드는 24시간 넘으면 예약 없음) · 6시간마다 다시 예약 · 마지막 예약이 11-05 23:00 직후 → “23:00에 끝났어요” · ‘공통 PIN’ 표 0 · 더 예약 없음 · 서버도 0',
+  firstTimers.length === 1 && firstTimers[0] === 6 * 3600e3 && steps.length === 5 && steps.slice(0, 4).every(s => s.open && !s.ended && s.tags === 63 && s.next === 1) &&
+  last.ended && last.tags === 0 && last.next === 0 && /11-05 23:00/.test(last.at) && srvEnd.length === 0 && !lp.errors.length,
+  JSON.stringify({ firstTimers, steps, srv: srvEnd.length }));
+lp.dom.window.close();
+// 화면으로 돌아오기 · 창 다시 고르기: 타이머가 멈췄던 경우(잠자기 · 숨김) — 시계만 23:00 뒤로 옮기고 이벤트로 다시 봄
+T0 = await at('2026-11-04T20:00:00');
+const v1 = await openPinPage(T0), v2 = await openPinPage(T0);
+const beforeV = [/까지 쓸 수 있어요/.test(notesOf(v1)), tagsOf(v1)];
+const AFTER = END_MS + 5000;
+v1.w.__setNow(AFTER); v2.w.__setNow(AFTER); await clock.setNow('2026-11-05 23:00:05+09');
+v1.d.dispatchEvent(new v1.w.Event('visibilitychange')); v2.w.dispatchEvent(new v2.w.Event('focus'));
+await wait(150);
+t('B5 타이머가 돌지 않았어도 화면으로 돌아오면(visibilitychange) · 창을 다시 고르면(focus) 바로 “23:00에 끝났어요” · ‘공통 PIN’ 표 0',
+  beforeV[0] && beforeV[1] === 63 && /에 끝났어요/.test(notesOf(v1)) && tagsOf(v1) === 0 && /에 끝났어요/.test(notesOf(v2)) && tagsOf(v2) === 0 && !v1.errors.length && !v2.errors.length,
+  JSON.stringify([beforeV, notesOf(v1).slice(0, 60), tagsOf(v1), notesOf(v2).slice(0, 60), tagsOf(v2)]));
+v1.dom.window.close(); v2.dom.window.close();
+// 오래 열어 둔 부스 운영 현황: 15초마다 다시 그리기 · 돌아오면 3초 안에 다시 읽기(BoothCore.poll)
+T0 = await at('2026-11-04T20:00:00');
+const ba1 = await readBoothAdmin(T0), ba2 = await readBoothAdmin(T0);
+const b6before = [ba1.open, ba2.open];
+ba1.p.w.__setNow(AFTER); ba2.p.w.__setNow(AFTER); await clock.setNow('2026-11-05 23:00:05+09');
+ba1.p.d.dispatchEvent(new ba1.p.w.Event('visibilitychange'));
+const viaVisible = await until(() => /23:00에 끝났어요/.test(text(ba1.p.d.getElementById('lv-pin'))), 6000, 100);
+const viaPoll = await until(() => /23:00에 끝났어요/.test(text(ba2.p.d.getElementById('lv-pin'))), 25000, 200);
+t('B6 끝나기 27시간 전부터 열어 둔 부스 운영 현황 — 돌아오면 3초 안에 · 그대로 두어도 다음 15초 다시 읽기에서 “23:00에 끝났어요” 로 바뀜(별도 타이머 없이 주기 다시 읽기로)',
+  b6before[0] === 63 && b6before[1] === 63 && viaVisible && viaPoll && !ba1.errors.length && !ba2.errors.length,
+  JSON.stringify([b6before, viaVisible, viaPoll, text(ba2.p.d.getElementById('lv-pin')).slice(0, 80)]));
+closeAll(ba1, ba2);
+T = await at('2026-10-25T15:00:00');
 
 // ══ W 쓰기 · 말 · 용어 ═════════════════════════════════════════════════
 section = 'W 쓰기 · 말 · 용어';

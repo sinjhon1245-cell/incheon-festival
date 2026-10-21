@@ -54,10 +54,18 @@ node --max-old-space-size=8192 scripts/booth-data/test-pin-status.mjs $A --main-
 ```
 
 - `test-reset-removed.mjs`(A-1): 인쇄 화면에서 ‘실시간 값 모두 지우기’ 를 뺀 판 기준. 예전 판은 `--old-ref`(기본 6a34872)로 git 에서 읽습니다.
+  D4-3 은 README 가 ‘단추만 뺐고 DB 함수 · 관리자 RPC 실행 권한은 그대로’ 라고 적는지, D4-4 는 복제 DB 에서 그 권한이 그대로인지
+  (authenticated 실행 가능 · anon 42501 · 관리자가 아닌 계정 거절 · 관리자 RPC 는 지금도 전체를 지움) 봅니다.
 - `test-pin-status.mjs`(A-4): 리허설 공통 PIN · 개별 PIN 표시가 서버 판정(`private.booth_common_pin_target` + PIN 보조 로그인 스위치)과 같은지 —
   복제 DB 의 공통 PIN 판정 함수에만 시험 시계를 겁니다(`lib/ui-harness.mjs`). 관리자 부스 관리는 포털 표가 없어 협의용 예시로 봅니다.
+  경계: U5 · B1–B3 은 PIN 보조 로그인 설정을 못 읽을 때(`hooks.fromError('settings')`) ‘사용 가능’ 수를 말하지 않는지,
+  B4 · B5 는 끝나기 27시간 전부터 열어 둔 QR · PIN 관리가 23:00 에 바뀌는지(1시간 넘는 타이머를 모아 두고 화면 시계를 옮겨 부름 —
+  `openPage({ longTimers: true })` · `w.__setNow`), B6 은 부스 운영 현황이 화면 복귀 · 주기 읽기로 바뀌는지 봅니다.
 
 - 비교용 옛 판(7ebf536 · 421f656 · 56c3138 · 6fd46d8)은 `git worktree add <폴더> <커밋>` 으로 만들거나, 시험이 git 으로 직접 읽습니다.
 - 결과 보고서는 `out/rehearsal/` · `out/gate3c/` · `out/gate4r/` 에 씁니다(git 제외).
 - 리허설 시험의 A · B 묶음은 DB 함수가 행사 첫날(2026-11-06 KST) 전에만 열리므로 그 전에만 그대로 통과합니다.
 - 2026-10-20 결과(1차 UI 수정 병합 전): 운영자 29 · 리허설 82 · QR · PIN 관리 28 · 관람객 48 · 공통 PIN 61 · QR 종단 30 · Gate 4-R 88 — 모두 통과.
+- 2026-10-21 결과(A-1 #15 026b1e4 + A-4 #16 6635197 합친 판 · booth-live 63d260b): 전체 지우기 제거 15 · 공통 · 개별 PIN 표시 32 ·
+  QR · PIN 관리 28 · 공통 PIN 61 · 리허설 82 · Gate 4-R 88 · 운영자 29 · 관람객 48 · QR 종단 30 — 413 / 413 통과.
+  보완 전 커밋에서는 새 항목만 실패(A-4 22351b3 26 / 32 · A-1 a225f25 14 / 15).

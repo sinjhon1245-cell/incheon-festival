@@ -124,6 +124,24 @@ t('D4-1 DB 함수 그대로 — admin_reset_booth_live 5f6ed44f · private.rehea
 const readme = readFileSync(join(MAIN, 'README.md'), 'utf8');
 t('D4-2 README — 인쇄 화면 단추를 누르라는 안내 없음 · 리허설 대기시간 비우기 · 23:00 자동 초기화 · 뺀 까닭과 날짜가 적힘',
   !/인쇄 화면의 \*\*‘실시간 값 모두 지우기’\*\*/.test(readme) && /리허설 대기시간 비우기/.test(readme) && /23:00\(KST\) 자동 초기화/.test(readme) && /2026-10-21/.test(readme));
+t('D4-3 README 설명이 정확함 — ‘단추만’ 뺐고 DB 함수 · 실행 권한은 그대로(관리자 계정은 RPC · SQL Editor 로 지금도 부를 수 있음 · anon 은 못 부름) · “SQL Editor 에서만” 같은 말 없음',
+  /\*\*인쇄 화면의 단추만\*\* 뺐습니다/.test(readme) && /\*\*DB 함수와 실행 권한은 그대로입니다\*\*/.test(readme) && /RPC `admin_reset_booth_live`/.test(readme) &&
+  /익명 `anon` 은 부를 수 없음/.test(readme) && /DB 함수와 관리자 RPC 실행 권한은 그대로/.test(readme) && !/SQL Editor 에서 상황을 확인한 뒤 실행합니다/.test(readme));
+// README 가 말하는 권한이 실제와 같은지(복제 DB = Production 권한 · 함수 본문 지문 같음) — 함수 · 권한은 바꾸지 않음
+const priv = await q1(`select has_function_privilege('authenticated', 'public.admin_reset_booth_live()', 'EXECUTE') a,
+  has_function_privilege('anon', 'public.admin_reset_booth_live()', 'EXECUTE') n`);
+let anonErr = null;
+try { await R.asAnon('select public.admin_reset_booth_live() n'); } catch (e) { anonErr = e.code; }
+let notAdminErr = null;
+try { await db.exec("set test.uid = '00000000-0000-4000-8000-0000000000aa'"); await db.query('select public.admin_reset_booth_live() n'); } catch (e) { notAdminErr = e.code; } finally { await db.exec("set test.uid = ''"); }
+const liveBefore = +(await q1('select count(*) n from public.booth_live')).n;
+await db.exec(`set test.uid = '${ADMIN}'`);
+const delN = +(await q1('select public.admin_reset_booth_live() n')).n;
+await db.exec("set test.uid = ''");
+const liveAfter = +(await q1('select count(*) n from public.booth_live')).n;
+t('D4-4 (복제 DB에서만) 권한 그대로 — authenticated 실행 가능 · anon 실행 불가(42501) · 관리자가 아닌 로그인 계정 거절(42501) · 관리자 RPC 로는 지금도 전체 지움(단추가 없어도 함수는 살아 있음)',
+  priv.a === true && priv.n === false && anonErr === '42501' && notAdminErr === '42501' && delN === liveBefore && liveBefore > 0 && liveAfter === 0,
+  JSON.stringify({ priv, anonErr, notAdminErr, liveBefore, delN, liveAfter }));
 
 rmSync(OLD_DIR, { recursive: true, force: true });
 const passed = results.filter(x => x.ok).length;

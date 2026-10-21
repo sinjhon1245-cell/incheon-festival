@@ -68,11 +68,17 @@ export async function installTestClock(db, mainDir) {
 const DATE_KEYS = new Set(['cutoff', 'kst_today']);
 export const asJson = rows => JSON.parse(JSON.stringify(rows), (k, v) => (DATE_KEYS.has(k) && typeof v === 'string' ? v.slice(0, 10) : v));
 // 관리자 클라이언트(가짜 Supabase). hooks.rpc(name, args) 가 값을 돌려주면 그 답을 씁니다(대상 목록 바꿔 보기 등).
+// hooks.fromError(table) 이 참이면 그 표 읽기를 실패로 돌려줍니다(설정을 못 읽는 경우 등).
 export function adminClient(R, hooks = {}) {
   const log = [], calls = [];
   const base = fakeSupabase(R, log).createClient();
   const client = Object.assign({}, base, {
-    from: table => { const b = base.from(table); const th = b.then; b.then = (ok, bad) => th.call(b, res => { if (res && res.data) res.data = asJson(res.data); return res; }).then(ok, bad); return b; },
+    from: table => {
+      const b = base.from(table); const th = b.then;
+      const fail = hooks.fromError && hooks.fromError(table);
+      b.then = (ok, bad) => (fail ? Promise.resolve({ data: null, error: { code: 'TEST', message: '시험: 읽기 실패' } }) : th.call(b, res => { if (res && res.data) res.data = asJson(res.data); return res; })).then(ok, bad);
+      return b;
+    },
     rpc: async (name, args) => {
       calls.push({ name, args: args || {} });
       const res = await base.rpc(name, args);
@@ -84,12 +90,24 @@ export function adminClient(R, hooks = {}) {
   return { client, log, calls };
 }
 
-// 화면 시계: Date 를 정한 시각에서 흐르게 합니다(서버 시계와 따로 맞춤).
+// 화면 시계: Date 를 정한 시각에서 흐르게 합니다(서버 시계와 따로 맞춤). w.__setNow(ms) 로 시각을 옮깁니다(열어 둔 채 시간이 흐른 경우).
 export function fakeClock(w, at) {
-  const RD = w.Date, off = at - RD.now();
+  const RD = w.Date; let off = at - RD.now();
   function FD(...a) { if (!new.target) return new RD(RD.now() + off).toString(); return a.length ? new RD(...a) : new RD(RD.now() + off); }
   FD.prototype = RD.prototype; FD.now = () => RD.now() + off; FD.UTC = RD.UTC; FD.parse = RD.parse;
   w.Date = FD;
+  w.__setNow = ms => { off = ms - RD.now(); };
+}
+// 1시간보다 긴 타이머는 실제로 기다리지 않고 w.__long 에 모아 둡니다 — 시험이 시계를 옮긴 뒤 직접 부릅니다(며칠 열어 둔 화면 흉내).
+function captureLongTimers(w) {
+  const rs = w.setTimeout.bind(w), rc = w.clearTimeout.bind(w);
+  let n = 1e9;
+  w.__long = new Map();
+  w.setTimeout = (fn, ms, ...a) => {
+    if (Number(ms) > 3600e3) { const id = ++n; w.__long.set(id, { fn, ms: Number(ms), from: w.Date.now() }); return id; }
+    return rs(fn, ms, ...a);
+  };
+  w.clearTimeout = id => { if (w.__long.has(id)) w.__long.delete(id); else rc(id); };
 }
 
 const PAGE_ASSETS = {
@@ -106,8 +124,8 @@ export function pageHtml(dir, file) {
   }
   return html.replace(/<link[^>]+stylesheet[^>]*>/g, '');
 }
-// 열기: { JSDOM, VirtualConsole, dir, file, R, rest, at(화면 시계 ms · 없으면 실제), hooks, query, hash }
-export async function openPage({ JSDOM, VirtualConsole, dir, file, R, rest, at, hooks, query = '', hash = '' }) {
+// 열기: { JSDOM, VirtualConsole, dir, file, R, rest, at(화면 시계 ms · 없으면 실제), hooks, query, hash, longTimers }
+export async function openPage({ JSDOM, VirtualConsole, dir, file, R, rest, at, hooks, query = '', hash = '', longTimers = false }) {
   const { client, calls, log } = adminClient(R, hooks);
   const vc = new VirtualConsole(); vc.on('jsdomError', () => {});
   const dom = new JSDOM(pageHtml(dir, file), {
@@ -125,6 +143,7 @@ export async function openPage({ JSDOM, VirtualConsole, dir, file, R, rest, at, 
         return { ok: r.status < 400, status: r.status, text: async () => b, json: async () => JSON.parse(b) };
       };
       if (at) fakeClock(w, at);
+      if (longTimers) captureLongTimers(w);
     }
   });
   const errors = []; dom.window.addEventListener('error', e => errors.push(e.message));
