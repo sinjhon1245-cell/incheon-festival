@@ -19,10 +19,10 @@
   <!-- 화면 안내 페이지. 데이터를 읽지 않는 정적 페이지라 스크립트가 없습니다.
        아래 두 미리보기는 실제 화면을 줄여 그린 그림이고, 부스명 · 값은 예시로 고정입니다.
        두 단추 모두 실제 운영 화면을 엽니다 — 관람객 화면(/) · 부스 운영자 화면(/booth-ctrl).
-       리허설 기간에는 운영자 카드에 리허설 공통 PIN 을 공개로 안내합니다(운영 요청, 2026-10-21).
-       그 PIN 으로 실제 부스의 대기시간을 바꿀 수 있어 위험 안내를 함께 둡니다. 쓸 수 있는지는 서버가
-       정합니다(리허설 실제 부스 · 2026-11-05 23:00 KST 전 · 개별 PIN 이 없는 부스). 매일 23:00 초기화는
-       대기시간만 지우며 PIN 과는 관계없습니다. 리허설이 끝나면 이 안내를 지웁니다.
+       리허설 기간에는 운영자 단추 바로 위에 리허설 공통 PIN 을 작은 보조 줄로 안내합니다(운영 요청, 2026-10-21).
+       쓸 수 있는지는 서버가 정합니다(리허설 실제 부스 · 2026-11-05 23:00 KST 전 · 개별 PIN 이 없는 부스).
+       보조 줄의 기한(11월 4일)은 운영 안내 기준으로, 서버 기한보다 이르게 적습니다.
+       매일 23:00 초기화는 대기시간만 지우며 PIN 과는 관계없습니다. 리허설이 끝나면 이 안내를 지웁니다.
        그 밖의 운영용 PIN · QR 열쇠 같은 접속 정보는 적지 않습니다.
        운영 포털 · 관리자 화면으로 가는 링크나 주소는 두지 않습니다
        (live/build.sh 가 그런 흔적을 찾으면 배포를 멈춥니다). -->
@@ -159,6 +159,9 @@
             </div>
           </div>
 
+          <!-- 리허설 공통 PIN 짧은 안내(리허설 기간만). 단추보다 튀지 않는 보조 줄입니다. -->
+          <p class="card__note pinhint"><span class="pinhint__k">리허설용 공통 PIN</span> <b class="pinhint__v">123456</b> <span class="pinhint__d">· 11월 4일까지</span></p>
+
           <div class="card__foot">
             <a class="cta" href="/booth-ctrl" target="_blank" rel="noopener noreferrer">부스 운영자 실제 화면 열기<span aria-hidden="true">&#x2197;&#xFE0E;</span><span class="sr-only"> (실제 운영 화면, 새 탭에서 열림)</span></a>
             <dl class="facts">
@@ -166,20 +169,6 @@
               <div class="facts__row"><dt>실제 주소</dt><dd>incheon-live.vercel.app/booth-ctrl</dd></div>
               <div class="facts__row"><dt>로그인</dt><dd>부스별 운영자 QR 또는 PIN</dd></div>
             </dl>
-            <!-- 리허설 공통 PIN 안내(리허설 기간만). 조건은 서버가 정하고, 이 글은 그 조건을 그대로 옮긴 것입니다. -->
-            <section class="pinnote" aria-labelledby="pinnote-title">
-              <div class="pinnote__head">
-                <h3 class="pinnote__title" id="pinnote-title">리허설 공통 PIN</h3>
-                <p class="pinnote__until">2026년 11월 5일 23:00까지</p>
-              </div>
-              <p class="pinnote__pin"><span class="sr-only">PIN </span><b class="pinnote__v">123456</b></p>
-              <ul class="pinnote__list">
-                <li>리허설 기간 중 실제 부스 운영자 로그인에 사용하는 공통 PIN입니다.</li>
-                <li>개별 PIN이 발급된 부스는 해당 개별 PIN을 사용합니다. 그 부스에서는 공통 PIN으로 로그인할 수 없습니다.</li>
-                <li>실제 운영 화면에서 입력한 대기시간은 관람객 화면에도 반영됩니다.</li>
-              </ul>
-              <p class="pinnote__warn"><b class="pinnote__warnt">공개 안내 주의</b>이 페이지는 누구나 볼 수 있습니다. 이 PIN을 아는 사람은 리허설 기간 동안 실제 부스의 대기시간을 바꿀 수 있고, 바뀐 값은 관람객 화면에 그대로 보입니다. 리허설 중 입력한 값은 시험용이며 매일 23:00에 대기시간만 초기화됩니다. 초기화와 관계없이 PIN은 위 기한까지 쓰입니다.</p>
-            </section>
           </div>
         </section>
       </div>
