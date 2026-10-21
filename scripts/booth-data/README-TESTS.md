@@ -51,12 +51,14 @@ node --max-old-space-size=8192 scripts/booth-data/test-qr-e2e.mjs $A --live-dir 
 node --max-old-space-size=8192 scripts/booth-data/test-gate4r.mjs $A --main-dir ../incheon-festival-main --live-dir ../incheon-festival-live --qr-dir $D/qrlib
 node --max-old-space-size=8192 scripts/booth-data/test-reset-removed.mjs $A --main-dir ../incheon-festival-main
 node --max-old-space-size=8192 scripts/booth-data/test-pin-status.mjs $A --main-dir ../incheon-festival-main
-node scripts/booth-data/test-example-page.mjs --live-dir ../incheon-festival-live --pptr-dir <pptr/node_modules/puppeteer-core 가 든 폴더> [--base-ref 63d260b]
+node scripts/booth-data/test-example-page.mjs --live-dir ../incheon-festival-live --pptr-dir <pptr/node_modules/puppeteer-core 가 든 폴더> [--base-ref 3b9d1a3]
 ```
 
 - `test-example-page.mjs`(/example/ 화면 안내): booth-live 작업 폴더를 `sh live/build.sh` 로 빌드해 Edge(puppeteer-core)로 엽니다.
-  공개 페이지에 PIN 이 없는지 · 체험 단추가 `?demo=1` 예시 화면을 여는지(그 화면의 Supabase · `/api` 요청 0) · 미리보기 말이 지금 두 화면에 있는지 ·
-  배포본에서 `example/` 말고는 `--base-ref` 빌드와 바이트 같은지 봅니다. 행사 명칭은 `--official`(기본 settings.event_title 값).
+  공개 페이지에 PIN 이 없는지 · 관람객 단추가 실제 관람객 화면(`/`)을, 운영자 단추가 `/booth-ctrl?demo=1` 예시 화면(Supabase · `/api` 요청 0)을 여는지 ·
+  안내 문구가 ‘운영자 체험 값은 실제 관람객 화면에 반영되지 않음’ 을 말하는지 · 미리보기 말이 지금 두 화면에 있는지 ·
+  배포본에서 `example/` 말고는 `--base-ref` 빌드와 바이트 같은지 봅니다. 실제 관람객 화면에는 시험용 스냅샷(`GET /api/live-snapshot`, 부스 A-01 하나)을
+  돌려주고, 그 화면의 요청이 조회뿐인지 · 같은 브라우저에서 운영자 예시에서 누른 값이 그 화면에 나타나지 않는지 봅니다. 행사 명칭은 `--official`(기본 settings.event_title 값).
 
 - `test-reset-removed.mjs`(A-1): 인쇄 화면에서 ‘실시간 값 모두 지우기’ 를 뺀 판 기준. 예전 판은 `--old-ref`(기본 6a34872)로 git 에서 읽습니다.
   D4-3 은 README 가 ‘단추만 뺐고 DB 함수 · 관리자 RPC 실행 권한은 그대로’ 라고 적는지, D4-4 는 복제 DB 에서 그 권한이 그대로인지
@@ -76,3 +78,5 @@ node scripts/booth-data/test-example-page.mjs --live-dir ../incheon-festival-liv
   보완 전 커밋에서는 새 항목만 실패(A-4 22351b3 26 / 32 · A-1 a225f25 14 / 15).
 - 2026-10-21 결과(/example/ PR #17 3b9d1a3): 화면 안내 11 · 관람객 48 · 운영자 29 · 공통 PIN 61 · QR 종단 30 — 179 / 179 통과.
   바꾸기 전 판(63d260b)에서는 새 항목만 실패(4 / 11).
+- 2026-10-21 결과(/example/ 관람객 실제 화면 링크 0f47c88 · 기준 3b9d1a3): 화면 안내 12 · 관람객 48 · 운영자 29 · 공통 PIN 61 · QR 종단 30 — 180 / 180 통과.
+  바꾸기 전 판(3b9d1a3)에서는 링크 · 문구 · 변경 · 새 탭 연결 항목만 실패(8 / 12 — X2 · X2b · X7 · X9).

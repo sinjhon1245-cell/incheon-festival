@@ -1,12 +1,15 @@
 /* ===================================================================
    /example/ 화면 안내 페이지 시험 (booth-live 의 live/example)
    ───────────────────────────────────────────────────────────────────
-   · 정적: 스크립트 없음 · 확인용 PIN(123456 등 숫자 PIN) 없음 · 체험 단추 = ?demo=1 · 행사 명칭 · 미리보기 문구가 실제 두 화면에 있는 말인지 · 색 값
+   · 정적: 스크립트 없음 · 확인용 PIN(123456 등 숫자 PIN) 없음 · 관람객 단추 = 실제 화면(/) · 운영자 단추 = ?demo=1 · 안내 문구
+     (운영자 체험 값은 실제 관람객 화면에 반영되지 않음) · 행사 명칭 · 미리보기 문구가 실제 두 화면에 있는 말인지 · 색 값
    · 빌드: sh live/build.sh 통과(운영 포털 흔적 검사 포함) · 배포본에서 example/ 말고는 기준 판(--base-ref) 빌드와 바이트 동일
-   · 브라우저(Edge · 390 / 1440): 가로 넘침 · 오류 · 데이터 요청 0 · 체험 단추 → 예시 화면(협의용 예시 띠) · 예시 화면도 데이터 요청 0
-     · 같은 브라우저에서 운영자 예시에서 누른 값이 관람객 예시에 보이는지(페이지 문구가 말하는 것) · 실제 관람객 화면은 데이터를 요청함(검출 확인)
-   빌드 결과를 incheon-live.vercel.app 주소로 띄우고, Supabase · /api 요청은 모두 막고 셉니다(Production 접속 없음).
-   node test-example-page.mjs --live-dir <booth-live 작업 폴더> --pptr-dir <puppeteer-core 가 든 폴더> [--base-ref 63d260b] [--official "…"]
+   · 브라우저(Edge · 390 / 1440): 가로 넘침 · 오류 · 데이터 요청 0 · 관람객 단추 → 실제 관람객 화면(협의용 예시 띠 없음)
+     · 운영자 단추 → 협의용 예시(띠 있음 · 데이터 요청 0) · 실제 관람객 화면의 요청은 조회(GET /api/live-snapshot)뿐
+     · 같은 브라우저에서 운영자 예시에서 누른 값이 실제 관람객 화면에 나타나지 않음(관람객 예시에는 나타남 — 누른 값이 저장됐다는 확인)
+   빌드 결과를 incheon-live.vercel.app 주소로 띄웁니다. GET /api/live-snapshot 에는 시험용 스냅샷(부스 A-01 하나)을 돌려주고,
+   다른 /api · Supabase 요청은 모두 막고 셉니다(Production 접속 없음).
+   node test-example-page.mjs --live-dir <booth-live 작업 폴더> --pptr-dir <puppeteer-core 가 든 폴더> [--base-ref 3b9d1a3] [--official "…"]
    =================================================================== */
 import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync, statSync, mkdtempSync } from 'node:fs';
 import { join, resolve, dirname, extname, relative } from 'node:path';
@@ -18,7 +21,7 @@ import { fileURLToPath } from 'node:url';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const arg = (n, d) => { const i = process.argv.indexOf(`--${n}`); return i > 0 ? process.argv[i + 1] : d; };
 const LIVE = resolve(arg('live-dir'));
-const BASE_REF = arg('base-ref', '63d260b');
+const BASE_REF = arg('base-ref', '3b9d1a3');
 const OFFICIAL = arg('official', '2026 인천 AI미래채움 교육페스티벌');   // settings.event_title (Production 읽기 확인 2026-10-21)
 const VENUE = arg('venue', '인천 상상플랫폼');
 const puppeteer = createRequire(join(resolve(arg('pptr-dir')), 'pptr', 'package.json'))('puppeteer-core');
@@ -41,10 +44,20 @@ t('X1 스크립트 없음 · 확인용 PIN 없음 — 123456 도, 6자리 숫자
   [/<script/i.test(HTML), /123456/.test(HTML), (HTML.match(/\b\d{6}\b/g) || []).length, /확인용 PIN/.test(HTML)].join(' '));
 const links = [...HTML.matchAll(/<a\s[^>]*>/g)].map(m => m[0]);
 const href = a => (a.match(/href="([^"]*)"/) || [])[1];
-t('X2 체험 단추 둘 = 협의용 예시 화면(/?demo=1 · /booth-ctrl?demo=1) · 새 탭 · noopener · 다른 링크 없음(실제 화면 · 운영 포털로 가는 링크 없음)',
-  links.length === 2 && href(links[0]) === '/?demo=1' && href(links[1]) === '/booth-ctrl?demo=1' &&
-  links.every(a => /target="_blank"/.test(a) && /rel="[^"]*noopener/.test(a)) && /관람객 화면 체험하기/.test(TEXT) && /부스 운영자 화면 체험하기/.test(TEXT),
-  JSON.stringify(links.map(href)));
+const ctaText = a => textOf((HTML.split(a)[1] || '').split('</a>')[0]);
+t('X2 단추 둘 — 관람객 “관람객 실제 화면 보기” = 실제 관람객 화면(/ · ?demo 없음) · 운영자 “부스 운영자 화면 체험하기” = 협의용 예시(/booth-ctrl?demo=1) · 새 탭 · noopener · 다른 링크 없음(운영 포털로 가는 링크 없음)',
+  links.length === 2 && href(links[0]) === '/' && href(links[1]) === '/booth-ctrl?demo=1' &&
+  links.every(a => /target="_blank"/.test(a) && /rel="[^"]*noopener/.test(a)) &&
+  /^관람객 실제 화면 보기 /.test(ctaText(links[0])) && /^부스 운영자 화면 체험하기 /.test(ctaText(links[1])) && !/관람객 화면 체험하기/.test(TEXT),
+  JSON.stringify(links.map(a => [href(a), ctaText(a)])));
+const LEAD = textOf((HTML.match(/<p class="top__lead">([\s\S]*?)<\/p>/) || [])[1] || '');
+const FLOW = textOf((HTML.match(/<p class="flow__text">([\s\S]*?)<\/p>/) || [])[1] || '');
+t('X2b 안내 문구 — 머리: 관람객 단추는 실제 대기 현황 화면 · 운영자 체험 값은 실제 대기시간과 관람객 화면에 반영되지 않음 · 미리보기는 예시 / 연결 안내: 실제 행사의 연결과 체험 화면을 나눠 적음 · 예전 ‘관람객 예시에 반영’ 문구 없음',
+  /‘관람객 실제 화면 보기’는 누구나 로그인 없이 보는 실제 대기 현황 화면/.test(LEAD) && /실제 대기시간과 관람객 화면에는 반영되지 않습니다/.test(LEAD) &&
+  /미리보기의 부스 정보와 숫자는 예시입니다/.test(LEAD) && /^실제 행사에서는 .*관람객 화면에 자동으로 반영됩니다/.test(FLOW) &&
+  /‘부스 운영자 화면 체험하기’는 예시 부스만 쓰는 체험 화면이라, 거기서 누른 값은 실제 관람객 화면에 나타나지 않습니다/.test(FLOW) &&
+  !/관람객 예시/.test(TEXT) && !/새로 고치면/.test(TEXT),
+  JSON.stringify({ LEAD, FLOW }));
 const names = [...TEXT.matchAll(/20\d\d ?인천[^·]{0,30}?(?:페스티벌|축제)/g)].map(m => m[0].trim());
 t(`X3 행사 명칭 = 공식 명칭 “${OFFICIAL}”(머리 · 관람객 미리보기 띠 모두) · 장소 “${VENUE}” · 다른 표기 없음`,
   names.length >= 2 && names.every(n => n === OFFICIAL) && TEXT.includes(`${OFFICIAL} · ${VENUE}`), JSON.stringify(names));
@@ -97,15 +110,26 @@ const REWRITE = { '/': 'index.html', '/visitor.html': 'index.html', '/booth-ctrl
 const browser = await puppeteer.launch({ executablePath: EDGE, headless: true, args: ['--lang=ko-KR', '--hide-scrollbars'] });
 const VP = { m: { width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true }, d: { width: 1440, height: 900 } };
 const wait = ms => new Promise(r => setTimeout(r, ms));
+// 실제 관람객 화면(/)이 읽는 같은 사이트 스냅샷의 시험용 응답(live/api/live-snapshot.mjs 의 compose 모양). 부스는 A-01 하나 · 여유 5분.
+const FIX_AT = new Date().toISOString();
+const FIXTURE = JSON.stringify({ version: 1, generatedAt: FIX_AT, mode: 'normal', liveReady: true,
+  event: { title: OFFICIAL, venue: VENUE, dateLabel: '', timeLabel: '', start: null, end: null, mapUrl: '', mapAlt: '' },
+  zones: [{ key: 'A', label: 'A 구역', order: 1 }],
+  booths: [{ id: 'fx-a01', no: 1, code: 'A-01', zone: 'A', name: '시험용 실제 부스', org: '시험 학교', program: '', status: '여유', waitMinutes: 5, updatedAt: FIX_AT }],
+  unplaced: [] });
 function guard(p, log) {
   p.on('request', req => {
     const u = new URL(req.url());
     if (u.hostname === 'incheon-live.vercel.app') {
-      if (u.pathname.startsWith('/api/')) { log.data.push(u.pathname); return req.respond({ status: 503, body: 'blocked' }); }
+      if (u.pathname.startsWith('/api/')) {
+        log.data.push(req.method() + ' ' + u.pathname);
+        if (u.pathname === '/api/live-snapshot' && req.method() === 'GET') return req.respond({ status: 200, contentType: 'application/json; charset=utf-8', body: FIXTURE });
+        return req.respond({ status: 503, body: 'blocked' });
+      }
       const f = join(DIST, REWRITE[u.pathname] || u.pathname.replace(/^\//, ''));
       return existsSync(f) ? req.respond({ status: 200, contentType: TYPES[extname(f)] || 'application/octet-stream', body: readFileSync(f) }) : req.respond({ status: 404, body: 'nf' });
     }
-    if (u.hostname.endsWith('supabase.co')) { log.data.push('supabase'); return req.respond({ status: 503, body: 'blocked' }); }
+    if (u.hostname.endsWith('supabase.co')) { log.data.push(req.method() + ' supabase' + u.pathname); return req.respond({ status: 503, body: 'blocked' }); }
     if (!/cdn\.jsdelivr\.net/.test(u.hostname)) log.other.push(u.hostname);
     return req.continue();
   });
@@ -118,6 +142,7 @@ async function page(ctx, vp, path) {
   return { p, log };
 }
 const geo = {};
+const realLogs = [];   // 실제 관람객 화면(/)이 보낸 데이터 요청 전부(X11)
 for (const vp of ['m', 'd']) {
   const ctx = await browser.createBrowserContext();
   const { p, log } = await page(ctx, vp, '/example/');
@@ -128,7 +153,7 @@ for (const vp of ['m', 'd']) {
   });
   await p.screenshot({ path: `${OUT}/example-${vp}.jpg`, type: 'jpeg', quality: 82, fullPage: true });
   geo[vp] = { ...g, log };
-  // 체험 단추 → 새 탭(협의용 예시)
+  // 단추 → 새 탭(관람객: 실제 화면 · 운영자: 협의용 예시)
   const tabs = [];
   for (const i of [0, 1]) {
     const target = new Promise(res => browser.once('targetcreated', res));
@@ -137,7 +162,9 @@ for (const vp of ['m', 'd']) {
     await np.setViewport(VP[vp]); await np.setRequestInterception(true);
     const nlog = { data: [], other: [], err: [] }; guard(np, nlog);
     await np.reload({ waitUntil: 'networkidle0' }); await wait(800);
-    tabs.push({ url: new URL(np.url()).pathname + new URL(np.url()).search, demo: await np.evaluate(() => { const b = document.getElementById('demobar'); return !!b && !b.hidden && /협의용 예시/.test(b.textContent); }), log: nlog });
+    tabs.push({ url: new URL(np.url()).pathname + new URL(np.url()).search, demo: await np.evaluate(() => { const b = document.getElementById('demobar'); return !!b && !b.hidden && /협의용 예시/.test(b.textContent); }),
+      fx: await np.evaluate(() => /시험용 실제 부스/.test(document.body.innerText)), log: nlog });
+    realLogs.push(...(i === 0 ? nlog.data : []));
     await np.close();
   }
   geo[vp].tabs = tabs;
@@ -147,37 +174,41 @@ const L = v => `${v.sw}/${v.iw} data=${v.log.data.length} err=${v.log.err.length
 t('X8 /example/ 390 · 1440 — 가로 넘침 없음 · 페이지 오류 0 · 데이터 요청 0 · 1440 은 두 카드 나란히 · 두 체험 단추 높이 같음',
   ['m', 'd'].every(vp => geo[vp].sw <= geo[vp].iw && !geo[vp].log.err.length && !geo[vp].log.data.length) && geo.d.two && geo.d.ctas[0] === geo.d.ctas[1],
   `m ${L(geo.m)} · d ${L(geo.d)} two=${geo.d.two} ctas=${geo.d.ctas}`);
-t('X9 체험 단추 → 새 탭에서 협의용 예시 화면(“협의용 예시” 띠)이 열리고, 그 화면도 데이터 요청 0 · 오류 0(390 · 1440 · 관람객 · 운영자)',
-  ['m', 'd'].every(vp => geo[vp].tabs.length === 2 && geo[vp].tabs[0].url === '/?demo=1' && geo[vp].tabs[1].url === '/booth-ctrl?demo=1' &&
-    geo[vp].tabs.every(x => x.demo && !x.log.data.length && !x.log.err.length)),
-  JSON.stringify(['m', 'd'].map(vp => geo[vp].tabs.map(x => [x.url, x.demo, x.log.data.length, x.log.err.length]))));
-// 같은 브라우저: 운영자 예시에서 A-01 을 30분으로 → 관람객 예시(먼저 열어 둔 탭 · 새로 연 탭)
+t('X9 단추 → 새 탭: 관람객 = 실제 관람객 화면(/ · 협의용 예시 띠 없음 · 시험용 스냅샷의 부스를 그림) · 운영자 = 협의용 예시(/booth-ctrl?demo=1 · 띠 있음 · 데이터 요청 0) · 두 화면 오류 0(390 · 1440)',
+  ['m', 'd'].every(vp => geo[vp].tabs.length === 2 && geo[vp].tabs[0].url === '/' && geo[vp].tabs[1].url === '/booth-ctrl?demo=1' &&
+    !geo[vp].tabs[0].demo && geo[vp].tabs[0].fx && geo[vp].tabs[0].log.data.length > 0 &&
+    geo[vp].tabs[1].demo && !geo[vp].tabs[1].log.data.length && geo[vp].tabs.every(x => !x.log.err.length)),
+  JSON.stringify(['m', 'd'].map(vp => geo[vp].tabs.map(x => [x.url, x.demo, x.fx, x.log.data.length, x.log.err.length]))));
+// 같은 브라우저: 실제 관람객 화면(/)을 연 채로 운영자 예시에서 A-01 을 30분으로 → 실제 관람객 화면(그대로 둔 탭 · 새로 고침 · 새로 연 탭)
 {
   const ctx = await browser.createBrowserContext();
-  const vis = await page(ctx, 'm', '/?demo=1');
+  const real = await page(ctx, 'm', '/');
   const a01 = pg => pg.evaluate(() => { const r = [...document.querySelectorAll('.row')].find(x => /A-01/.test((x.querySelector('.row__code') || {}).textContent || '')); return r ? r.textContent.replace(/\s+/g, ' ').trim() : ''; });
-  const before = await a01(vis.p);
+  const bar = pg => pg.evaluate(() => { const b = document.getElementById('demobar'); return !!b && !b.hidden; });
+  const before = await a01(real.p);
   const ctl = await page(ctx, 'm', '/booth-ctrl?demo=1');
   await ctl.p.evaluate(() => { const b = [...document.querySelectorAll('[data-act="demo-direct"]')].find(x => x.offsetParent !== null); b && b.click(); });
   await wait(1200);
   const code = await ctl.p.evaluate(() => (document.getElementById('h-code') || {}).textContent);
   await ctl.p.evaluate(() => { const b = document.querySelector('#waits [data-wait="30"]'); b && b.click(); });
   await wait(1500);
-  // 열어 둔 관람객 예시가 새로 고치지 않고도 바뀌는지는 참고로만 적습니다 — 관람객 화면은 보이는 동안 · 마지막으로 읽은 지
-  // 5초가 지났을 때만 곧바로 다시 읽고, 아니면 다음 자동 갱신 차례를 기다립니다(visitor.html resume). 페이지 문구도 그만큼만 말합니다.
-  await vis.p.bringToFront();
-  let live = ''; for (let i = 0; i < 20 && !/30\s*분/.test(live); i++) { await wait(300); live = await a01(vis.p); }
-  await vis.p.reload({ waitUntil: 'networkidle0' }); await wait(600); const reloaded = await a01(vis.p);
-  const fresh = await page(ctx, 'm', '/?demo=1'); const after = await a01(fresh.p);
-  const real = await page(ctx, 'm', '/');   // 검출 확인: 실제 화면은 데이터를 요청(여기서는 막힘)
-  t('X10 페이지 문구대로 — 같은 브라우저에서 운영자 예시(A-01)에서 30분을 누르면, 열어 둔 관람객 예시를 새로 고치거나 새로 연 관람객 예시에 A-01 30분 혼잡 · 그동안 데이터 요청 0',
-    code === 'A-01' && !/30\s*분/.test(before) && /30\s*분.*혼잡/.test(reloaded) && /30\s*분.*혼잡/.test(after) && !vis.log.data.length && !ctl.log.data.length && !fresh.log.data.length &&
-    /새로 고치면 바로 보입니다/.test(TEXT),
-    JSON.stringify({ code, before, reloaded, after, data: [vis.log.data.length, ctl.log.data.length, fresh.log.data.length] }));
-  console.log(`  (참고) 새로 고치지 않은 관람객 예시 탭 6초 안 반영: ${/30\s*분/.test(live) ? '예' : '아니오 — 다음 자동 갱신 차례에 반영'}`);
-  t('X11 검출 확인 — 같은 방법으로 실제 관람객 화면(/)을 열면 데이터 요청이 잡힘(예시 화면의 ‘요청 0’ 이 검사 누락이 아님)', real.log.data.length > 0, JSON.stringify(real.log.data));
+  await real.p.bringToFront(); await wait(6500);   // 보이는 동안 · 5초가 지나면 다시 읽는 길(visitor.html resume)도 지나게 둡니다
+  const kept = await a01(real.p);
+  await real.p.reload({ waitUntil: 'networkidle0' }); await wait(600);
+  const reloaded = await a01(real.p), reloadedBar = await bar(real.p);
+  const stored = await real.p.evaluate(() => { try { return /"wait_minutes":30/.test(localStorage.getItem('aisw-booth-demo-v3') || ''); } catch (e) { return false; } });
+  const fresh = await page(ctx, 'm', '/'); const after = await a01(fresh.p), freshBar = await bar(fresh.p);
+  const demo = await page(ctx, 'm', '/?demo=1'); const demoA01 = await a01(demo.p);   // 누른 값이 이 브라우저의 예시 저장소에 들어갔다는 확인
+  realLogs.push(...real.log.data, ...fresh.log.data);
+  t('X10 운영자 체험 값은 실제 관람객 화면에 나타나지 않음 — 같은 브라우저에서 운영자 예시 A-01 에 30분을 눌러도 실제 관람객 화면(그대로 둔 탭 · 새로 고침 · 새로 연 탭)의 A-01 은 실제 값(여유 5분) 그대로 · 협의용 예시 띠 없음 · 같은 사이트 저장소에 예시 값 30분이 있고 관람객 예시에는 30분 혼잡(누른 값이 저장된 것) · 운영자 예시 데이터 요청 0',
+    code === 'A-01' && /5\s*분.*여유/.test(before) && kept === before && reloaded === before && after === before && !/30\s*분/.test(after) &&
+    !reloadedBar && !freshBar && stored && /30\s*분.*혼잡/.test(demoA01) && !ctl.log.data.length && !demo.log.data.length,
+    JSON.stringify({ code, before, kept, reloaded, after, reloadedBar, freshBar, stored, demoA01, data: [ctl.log.data.length, demo.log.data.length] }));
   await ctx.close();
 }
+const realBad = realLogs.filter(x => x !== 'GET /api/live-snapshot');
+t('X11 실제 관람객 화면의 요청은 조회뿐 — 모든 데이터 요청이 GET /api/live-snapshot(같은 사이트 · CDN 캐시 주소) · Supabase 직접 요청 0 · 쓰기(POST · PATCH · PUT · DELETE) 0',
+  realLogs.length > 0 && !realBad.length, `${realLogs.length}건 · 그 밖 ${JSON.stringify(realBad)}`);
 await browser.close();
 
 const ok = results.filter(r => r.ok).length;
