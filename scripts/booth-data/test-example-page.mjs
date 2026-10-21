@@ -54,7 +54,8 @@ t('X1 스크립트 없음 · 공개 PIN 은 운영자 카드의 단추 위 보�
   HINTS.length === 1 && HINTS[0].includes(`<b class="pinhint__v">${COMMON}</b>`) && at(HINTS[0]) > at('class="cp__offs"') && at(HINTS[0]) < at('<a class="cta"') &&
   !/pinnote/.test(HTML + CSS) && !/확인용 PIN|예시 PIN/.test(HTML) && !/facts__pin/.test(CSS) && !/\b\d{6}\b/.test(CSS.replace(/#[0-9A-Fa-f]{3,8}\b/g, '')),
   JSON.stringify({ script: /<script/i.test(HTML), COMMON, six, hints: HINTS.length, order: HINTS[0] ? [at('class="cp__offs"'), at(HINTS[0]), at('<a class="cta"')] : null, pinnote: /pinnote/.test(HTML + CSS) }));
-// 보조 줄의 기한은 운영 안내 기준(서버보다 이르게 적어도 됨) — 서버 기한(main 의 SQL)보다 늦게 적으면 안 됩니다.
+// 보조 줄의 ‘N월 N일까지 사용’ 은 운영상 안내하는 사용 기간(만료일 아님 — 서버보다 이르게 적어도 됨). 서버 기한(main 의 SQL)보다
+// 늦게 적으면 안 되고, 페이지가 그날을 PIN 만료로 말하지도 않아야 합니다.
 // 23:00 초기화가 대기시간만 지운다는 것은 초기화 함수에서 읽고, 페이지가 ‘초기화로 PIN 이 끝난다’ 고 말하지 않는지 봅니다.
 const msql = p => readFileSync(join(MAIN, 'supabase', p), 'utf8').replace(/\r/g, '');
 const PIN_SQL = msql('migration-booth-rehearsal-pin.sql'), REH_SQL = msql('migration-booth-rehearsal.sql');
@@ -62,11 +63,11 @@ const untilLit = (PIN_SQL.match(/rehearsal_common_pin_until\(\)\s*returns[\s\S]*
 const untilMs = untilLit.length ? Date.parse(`${untilLit[1]}-${untilLit[2]}-${untilLit[3]}T${untilLit[4]}:${untilLit[5]}:00+09:00`) : NaN;
 const resetFn = (REH_SQL.match(/function private\.rehearsal_live_reset\(\)[\s\S]*?\$function\$;/) || [''])[0];
 const HINT = textOf(HINTS[0] || '');
-const hd = HINT.match(/· (\d{1,2})월 (\d{1,2})일까지$/);
+const hd = HINT.match(/· (\d{1,2})월 (\d{1,2})일까지 사용$/);
 const hintEndMs = hd && untilLit.length ? Date.parse(`${untilLit[1]}-${hd[1].padStart(2, '0')}-${hd[2].padStart(2, '0')}T00:00:00+09:00`) + 24 * 3600e3 : NaN;   // 그날 끝(다음 날 0시)
 const CTRL_PIN_LEN = (CTRL.match(/var PIN_LEN = isMock \? (\d) : (\d);/) || []);
-t(`X1b PIN 보조 줄 = 짧은 한 줄 “리허설용 공통 PIN ${COMMON} · N월 N일까지” · 적은 기한(그날 끝)이 서버 기한(${untilLit.slice(1, 4).join('-')} ${untilLit[4]}:${untilLit[5]} KST) 보다 늦지 않음 · 23:00 초기화는 대기시간만(함수: booth_live 만 지움)이고 페이지가 초기화로 PIN 이 끝난다고 말하지 않음 · 자릿수 = 실제 운영자 화면 PIN 칸(6)`,
-  !!hd && HINT === `리허설용 공통 PIN ${COMMON} · ${hd[1]}월 ${hd[2]}일까지` && hintEndMs <= untilMs &&
+t(`X1b PIN 보조 줄 = 짧은 한 줄 “운영자 공통 PIN ${COMMON} · N월 N일까지 사용” · 적은 사용 기간(그날 끝)이 서버 기한(${untilLit.slice(1, 4).join('-')} ${untilLit[4]}:${untilLit[5]} KST) 보다 늦지 않음 · 페이지에 ‘만료’ 라는 말 없음 · 23:00 초기화는 대기시간만(함수: booth_live 만 지움)이고 페이지가 초기화로 PIN 이 끝난다고 말하지 않음 · 자릿수 = 실제 운영자 화면 PIN 칸(6)`,
+  !!hd && HINT === `운영자 공통 PIN ${COMMON} · ${hd[1]}월 ${hd[2]}일까지 사용` && hintEndMs <= untilMs && !/만료/.test(TEXT) &&
   /delete from public\.booth_live as l where l\.booth_id = any \(private\.rehearsal_booth_ids\(\)\)/.test(resetFn) && !/booth_pin|booth_session|booth_access/.test(resetFn) &&
   !/초기화[^.]*(PIN|핀)[^.]*(끝|무효|만료|쓸 수 없|사용할 수 없|막히|중지)/.test(TEXT) && !/(PIN|핀)[^.]*초기화(되|하)/.test(TEXT) &&
   CTRL_PIN_LEN[2] === String(COMMON.length),
