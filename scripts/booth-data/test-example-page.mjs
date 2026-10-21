@@ -1,16 +1,17 @@
 /* ===================================================================
    /example/ 화면 안내 페이지 시험 (booth-live 의 live/example)
    ───────────────────────────────────────────────────────────────────
-   · 정적: 스크립트 없음 · 공개 PIN 은 리허설 공통 PIN 안내 한 곳뿐(값 = 운영자 화면의 공통 PIN 값 · 그 밖의 6자리 숫자 없음)
-     · PIN 안내 = 서버의 실제 사용 조건(main 의 리허설 SQL: 기한 · 개별 PIN 부스 제외 · 23:00 초기화는 대기시간만)
+   · 정적: 스크립트 없음 · 공개 PIN 은 운영자 단추 위 리허설 공통 PIN 보조 줄 한 곳뿐(값 = 운영자 화면의 공통 PIN 값 · 그 밖의 6자리 숫자 없음)
+     · 보조 줄의 기한이 서버 기한(main 의 리허설 SQL)보다 늦지 않음 · 23:00 초기화는 대기시간만(초기화로 PIN 이 끝난다고 말하지 않음)
      · 두 단추 = 실제 운영 화면(/ · /booth-ctrl, ?demo 없음) · 안내 문구 · 행사 명칭 · 미리보기 문구가 실제 두 화면에 있는 말인지 · 색 값
    · 빌드: sh live/build.sh 통과(운영 포털 흔적 검사 포함) · 배포본에서 example/ 말고는 기준 판(--base-ref) 빌드와 바이트 동일
-   · 브라우저(Edge · 390 / 1440): 가로 넘침 · 오류 · 데이터 요청 0 · PIN 숫자 크기 · 대비 · 1440 두 단추 같은 높이
+   · 브라우저(Edge · 390 / 1440): 가로 넘침 · 오류 · 데이터 요청 0 · 1440 두 단추 같은 높이
+     · PIN 보조 줄: 작게(단추 글자보다 작음 · 두 줄 이하) · 읽히게(대비 4.5:1 이상) · 미리보기 아래 · 단추 바로 위(8~24px)
      · 관람객 단추 → 실제 관람객 화면 · 운영자 단추 → 실제 운영자 화면(둘 다 협의용 예시 띠 없음 · 예시 저장소 안 만듦)
      · 두 실제 화면을 열기만 했을 때의 요청은 조회뿐(관람객 GET /api/live-snapshot · 운영자 Supabase GET — 로그인 · 쓰기 · RPC 없음)
    빌드 결과를 incheon-live.vercel.app 주소로 띄웁니다. GET /api/live-snapshot 에는 시험용 스냅샷(부스 A-01 하나)을 돌려주고,
    다른 /api · Supabase 요청은 모두 막고 셉니다(Production 접속 없음).
-   node test-example-page.mjs --live-dir <booth-live 작업 폴더> --main-dir <main 작업 폴더> --pptr-dir <puppeteer-core 가 든 폴더> [--base-ref 0f47c88] [--official "…"]
+   node test-example-page.mjs --live-dir <booth-live 작업 폴더> --main-dir <main 작업 폴더> --pptr-dir <puppeteer-core 가 든 폴더> [--base-ref 3212ef7] [--official "…"]
    =================================================================== */
 import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync, statSync, mkdtempSync } from 'node:fs';
 import { join, resolve, dirname, extname, relative } from 'node:path';
@@ -22,7 +23,7 @@ import { fileURLToPath } from 'node:url';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const arg = (n, d) => { const i = process.argv.indexOf(`--${n}`); return i > 0 ? process.argv[i + 1] : d; };
 const LIVE = resolve(arg('live-dir'));
-const BASE_REF = arg('base-ref', '0f47c88');
+const BASE_REF = arg('base-ref', '3212ef7');
 const MAIN = resolve(arg('main-dir'));   // main 작업 폴더 — 리허설 공통 PIN · 초기화 SQL(supabase/) 을 읽습니다
 const OFFICIAL = arg('official', '2026 인천 AI미래채움 교육페스티벌');   // settings.event_title (Production 읽기 확인 2026-10-21)
 const VENUE = arg('venue', '인천 상상플랫폼');
@@ -41,38 +42,35 @@ const textOf = h => h.replace(/<!--[\s\S]*?-->/g, ' ').replace(/<[^>]+>/g, ' ').
 const TEXT = textOf(HTML);
 
 // ── 1. 정적 ─────────────────────────────────────────────────────
-// 공개 PIN 은 운영 요청(2026-10-21)으로 리허설 공통 PIN 하나만 — 운영자 카드의 .pinnote 한 곳에 · 운영자 화면이 쓰는 공통 PIN 값과 같게.
-// 그 밖의 6자리 숫자(개별 PIN 처럼 보이는 값) · 예시 PIN · ‘확인용 PIN’ 은 여전히 없어야 합니다.
+// 공개 PIN 은 운영 요청(2026-10-21)으로 리허설 공통 PIN 하나만 — 운영자 단추 바로 위 작은 보조 줄(.pinhint) 한 곳에 ·
+// 운영자 화면이 쓰는 공통 PIN 값과 같게. 그 밖의 6자리 숫자(개별 PIN 처럼 보이는 값) · 예시 PIN · ‘확인용 PIN’ 은 여전히 없어야 합니다.
 const COMMON = (CTRL.match(/var COMMON_PIN_HINT = '(\d+)';/) || [])[1];
 const six = HTML.match(/\b\d{6}\b/g) || [];
 const ctrlCard = HTML.split('id="ctrl-who"')[1] || '';
-const PINNOTE = (HTML.match(/<section class="pinnote"[\s\S]*?<\/section>/g) || []);
-t('X1 스크립트 없음 · 공개 PIN 은 운영자 카드의 리허설 공통 PIN 안내 한 곳뿐 — 6자리 숫자는 그 값 하나(주석 포함) · 값 = 운영자 화면의 공통 PIN 값(booth-ctrl COMMON_PIN_HINT) · ‘확인용 PIN’ · 예시 PIN 없음 · CSS 에 6자리 숫자 없음(색 값 #xxxxxx 제외)',
+const HINTS = HTML.match(/<p class="card__note pinhint">[\s\S]*?<\/p>/g) || [];
+const at = s => ctrlCard.indexOf(s);
+t('X1 스크립트 없음 · 공개 PIN 은 운영자 카드의 단추 위 보조 줄(.pinhint) 한 곳뿐(운영 상태 미리보기 뒤 · “부스 운영자 실제 화면 열기” 앞) — 6자리 숫자는 그 값 하나(주석 포함) · 값 = 운영자 화면의 공통 PIN 값(booth-ctrl COMMON_PIN_HINT) · 예전 큰 PIN 상자(.pinnote) 없음(HTML · CSS) · ‘확인용 PIN’ · 예시 PIN 없음 · CSS 에 6자리 숫자 없음(색 값 #xxxxxx 제외)',
   !/<script/i.test(HTML) && !!COMMON && /^\d{6}$/.test(COMMON) && six.length === 1 && six[0] === COMMON &&
-  PINNOTE.length === 1 && PINNOTE[0].includes(`<b class="pinnote__v">${COMMON}</b>`) && ctrlCard.includes(PINNOTE[0]) &&
-  !/확인용 PIN|예시 PIN/.test(HTML) && !/facts__pin/.test(CSS) && !/\b\d{6}\b/.test(CSS.replace(/#[0-9A-Fa-f]{3,8}\b/g, '')),
-  JSON.stringify({ script: /<script/i.test(HTML), COMMON, six, notes: PINNOTE.length, inCtrl: PINNOTE[0] ? ctrlCard.includes(PINNOTE[0]) : false }));
-// PIN 안내 글 = 서버의 실제 조건(main 의 SQL). 기한 · 개별 PIN 부스 제외는 공통 PIN 함수에서, 23:00 초기화가 대기시간만 지운다는 것은 초기화 함수에서 읽습니다.
+  HINTS.length === 1 && HINTS[0].includes(`<b class="pinhint__v">${COMMON}</b>`) && at(HINTS[0]) > at('class="cp__offs"') && at(HINTS[0]) < at('<a class="cta"') &&
+  !/pinnote/.test(HTML + CSS) && !/확인용 PIN|예시 PIN/.test(HTML) && !/facts__pin/.test(CSS) && !/\b\d{6}\b/.test(CSS.replace(/#[0-9A-Fa-f]{3,8}\b/g, '')),
+  JSON.stringify({ script: /<script/i.test(HTML), COMMON, six, hints: HINTS.length, order: HINTS[0] ? [at('class="cp__offs"'), at(HINTS[0]), at('<a class="cta"')] : null, pinnote: /pinnote/.test(HTML + CSS) }));
+// 보조 줄의 기한은 운영 안내 기준(서버보다 이르게 적어도 됨) — 서버 기한(main 의 SQL)보다 늦게 적으면 안 됩니다.
+// 23:00 초기화가 대기시간만 지운다는 것은 초기화 함수에서 읽고, 페이지가 ‘초기화로 PIN 이 끝난다’ 고 말하지 않는지 봅니다.
 const msql = p => readFileSync(join(MAIN, 'supabase', p), 'utf8').replace(/\r/g, '');
 const PIN_SQL = msql('migration-booth-rehearsal-pin.sql'), REH_SQL = msql('migration-booth-rehearsal.sql');
 const untilLit = (PIN_SQL.match(/rehearsal_common_pin_until\(\)\s*returns[\s\S]*?least\(timestamptz '(\d{4})-(\d\d)-(\d\d) (\d\d):(\d\d):00\+09'/) || []);
-const untilKo = untilLit.length ? `${untilLit[1]}년 ${Number(untilLit[2])}월 ${Number(untilLit[3])}일 ${untilLit[4]}:${untilLit[5]}까지` : '(SQL 에서 못 읽음)';
-const openFn = (PIN_SQL.match(/function private\.rehearsal_common_pin_open\(p_booth uuid\)[\s\S]*?\$\$;/) || [''])[0];
+const untilMs = untilLit.length ? Date.parse(`${untilLit[1]}-${untilLit[2]}-${untilLit[3]}T${untilLit[4]}:${untilLit[5]}:00+09:00`) : NaN;
 const resetFn = (REH_SQL.match(/function private\.rehearsal_live_reset\(\)[\s\S]*?\$function\$;/) || [''])[0];
-const NOTE = textOf(PINNOTE[0] || '');
+const HINT = textOf(HINTS[0] || '');
+const hd = HINT.match(/· (\d{1,2})월 (\d{1,2})일까지$/);
+const hintEndMs = hd && untilLit.length ? Date.parse(`${untilLit[1]}-${hd[1].padStart(2, '0')}-${hd[2].padStart(2, '0')}T00:00:00+09:00`) + 24 * 3600e3 : NaN;   // 그날 끝(다음 날 0시)
 const CTRL_PIN_LEN = (CTRL.match(/var PIN_LEN = isMock \? (\d) : (\d);/) || []);
-t(`X1b PIN 안내 = 실제 인증 조건 — 기한 “${untilKo}”(공통 PIN 함수의 기한) · 개별 PIN 이 생긴 부스는 공통 PIN 불가(함수: booth_pin 행 · 발급 · 재발급 · 끄기 기록이 있으면 닫힘) · 입력값은 관람객 화면에 반영 · 공개 위험 안내 · 23:00 초기화는 대기시간만(함수: booth_live 만 지움)이고 초기화로 PIN 이 끝난다고 말하지 않음 · 자릿수 = 실제 운영자 화면 PIN 칸(6)`,
-  untilLit.length > 0 && NOTE.includes(untilKo) &&
-  /not exists \(select 1 from public\.booth_pin p where p\.booth_id = p_booth\)/.test(openFn) && /'pin_issued', 'pin_reissued', 'pin_disabled'/.test(openFn) &&
-  NOTE.includes('리허설 기간 중 실제 부스 운영자 로그인에 사용하는 공통 PIN입니다') &&
-  NOTE.includes('개별 PIN이 발급된 부스는 해당 개별 PIN을 사용합니다. 그 부스에서는 공통 PIN으로 로그인할 수 없습니다') &&
-  NOTE.includes('실제 운영 화면에서 입력한 대기시간은 관람객 화면에도 반영됩니다') &&
-  NOTE.includes('이 페이지는 누구나 볼 수 있습니다') && NOTE.includes('이 PIN을 아는 사람은 리허설 기간 동안 실제 부스의 대기시간을 바꿀 수 있고') &&
+t(`X1b PIN 보조 줄 = 짧은 한 줄 “리허설용 공통 PIN ${COMMON} · N월 N일까지” · 적은 기한(그날 끝)이 서버 기한(${untilLit.slice(1, 4).join('-')} ${untilLit[4]}:${untilLit[5]} KST) 보다 늦지 않음 · 23:00 초기화는 대기시간만(함수: booth_live 만 지움)이고 페이지가 초기화로 PIN 이 끝난다고 말하지 않음 · 자릿수 = 실제 운영자 화면 PIN 칸(6)`,
+  !!hd && HINT === `리허설용 공통 PIN ${COMMON} · ${hd[1]}월 ${hd[2]}일까지` && hintEndMs <= untilMs &&
   /delete from public\.booth_live as l where l\.booth_id = any \(private\.rehearsal_booth_ids\(\)\)/.test(resetFn) && !/booth_pin|booth_session|booth_access/.test(resetFn) &&
-  NOTE.includes('매일 23:00에 대기시간만 초기화됩니다') && NOTE.includes('초기화와 관계없이 PIN은 위 기한까지 쓰입니다') &&
-  !/초기화[^.]*(PIN|핀)[^.]*(끝|무효|만료|쓸 수 없|사용할 수 없|막히|중지)/.test(TEXT) && !/(PIN|핀)[^.]*초기화(되|하)/.test(TEXT.replace('초기화와 관계없이 PIN은', '')) &&
+  !/초기화[^.]*(PIN|핀)[^.]*(끝|무효|만료|쓸 수 없|사용할 수 없|막히|중지)/.test(TEXT) && !/(PIN|핀)[^.]*초기화(되|하)/.test(TEXT) &&
   CTRL_PIN_LEN[2] === String(COMMON.length),
-  JSON.stringify({ untilKo, openFn: openFn.length, resetFn: resetFn.length, pinLen: CTRL_PIN_LEN.slice(1), NOTE: NOTE.slice(0, 200) }));
+  JSON.stringify({ HINT, hintEnd: Number.isNaN(hintEndMs) ? null : new Date(hintEndMs).toISOString(), until: Number.isNaN(untilMs) ? null : new Date(untilMs).toISOString(), resetFn: resetFn.length, pinLen: CTRL_PIN_LEN.slice(1) }));
 const links = [...HTML.matchAll(/<a\s[^>]*>/g)].map(m => m[0]);
 const href = a => (a.match(/href="([^"]*)"/) || [])[1];
 const ctaText = a => textOf((HTML.split(a)[1] || '').split('</a>')[0]);
@@ -189,12 +187,17 @@ for (const vp of ['m', 'd']) {
   const g = await p.evaluate(() => {
     const r = s => document.querySelector(s).getBoundingClientRect();
     const ctas = [...document.querySelectorAll('.cta')].map(a => Math.round(a.getBoundingClientRect().top + scrollY));
-    const pn = document.querySelector('.pinnote'), v = document.querySelector('.pinnote__v'), cs = v && getComputedStyle(v);
-    const ctrlFacts = document.querySelectorAll('.card')[1].querySelector('.facts').getBoundingClientRect();
+    const card = document.querySelectorAll('.card')[1], h = card.querySelector('.pinhint'), v = h && h.querySelector('.pinhint__v');
+    const cta = card.querySelector('.cta'), cp = card.querySelector('.cp');
+    // 보조 줄의 위 여백(padding-top)은 미리보기와의 간격이므로, 글이 차지하는 칸(위 여백을 뺀 상자)으로 잽니다.
+    const hc = h && getComputedStyle(h), vc = v && getComputedStyle(v), hb = h && h.getBoundingClientRect();
+    const hr = h && { top: hb.top + parseFloat(hc.paddingTop), bottom: hb.bottom, right: hb.right, width: hb.width, height: hb.height - parseFloat(hc.paddingTop) };
     return { sw: document.documentElement.scrollWidth, iw: innerWidth, ctas, two: r('.cards > .card:nth-child(2)').top < r('.cards > .card:first-child').bottom - 10,
-      pin: v ? { text: v.textContent, fs: parseFloat(cs.fontSize), fw: Number(cs.fontWeight), color: cs.color, bg: getComputedStyle(pn).backgroundColor,
-        shown: v.getBoundingClientRect().width > 0 && getComputedStyle(pn).display !== 'none' && getComputedStyle(pn).visibility !== 'hidden',
-        fits: pn.scrollWidth <= pn.clientWidth && pn.getBoundingClientRect().right <= innerWidth, belowFacts: pn.getBoundingClientRect().top >= ctrlFacts.bottom - 1 } : null };
+      bigBox: !!document.querySelector('.pinnote'),
+      pin: v ? { text: v.textContent, fs: parseFloat(hc.fontSize), vfs: parseFloat(vc.fontSize), ctaFs: parseFloat(getComputedStyle(cta).fontSize), height: Math.round(hr.height),
+        color: hc.color, bg: getComputedStyle(card).backgroundColor, shown: hr.width > 0 && hc.display !== 'none' && hc.visibility !== 'hidden',
+        fits: h.scrollWidth <= h.clientWidth && hr.right <= innerWidth,
+        gapToCta: Math.round(cta.getBoundingClientRect().top - hr.bottom), gapFromPv: Math.round(hr.top - cp.getBoundingClientRect().bottom) } : null };
   });
   await p.screenshot({ path: `${OUT}/example-${vp}.jpg`, type: 'jpeg', quality: 82, fullPage: true });
   geo[vp] = { ...g, log };
@@ -221,8 +224,10 @@ for (const vp of ['m', 'd']) {
   await ctx.close();
 }
 const L = v => `${v.sw}/${v.iw} data=${v.log.data.length} err=${v.log.err.length} other=${v.log.other.length}`;
-t('X8 /example/ 390 · 1440 — 가로 넘침 없음 · 페이지 오류 0 · 데이터 요청 0 · 1440 은 두 카드 나란히 · 두 단추 높이 같음 · PIN 숫자가 보이고(28px 이상 · 굵게 · 바탕 대비 7:1 이상) 카드 안에 들어가며 운영자 안내 줄 아래에 있음',
-  ['m', 'd'].every(vp => { const q = geo[vp], k = q.pin; return q.sw <= q.iw && !q.log.err.length && !q.log.data.length && k && k.text === COMMON && k.shown && k.fits && k.belowFacts && k.fs >= 28 && k.fw >= 700 && contrast(k.color, k.bg) >= 7; }) &&
+console.log(`  (기록) PIN 보조 줄 ${JSON.stringify(['m', 'd'].map(vp => geo[vp].pin && { vp, ...geo[vp].pin, cr: +contrast(geo[vp].pin.color, geo[vp].pin.bg).toFixed(1), ctas: geo[vp].ctas }))}`);
+t('X8 /example/ 390 · 1440 — 가로 넘침 없음 · 페이지 오류 0 · 데이터 요청 0 · 1440 은 두 카드 나란히 · 두 단추 높이 같음 · 큰 PIN 상자 없음 · PIN 보조 줄은 작고(글자 14px 이하 · 단추 글자보다 작음 · 두 줄 이하) 읽히며(바탕 대비 4.5:1 이상) 카드 안에 들어가고, 미리보기 아래(12px 이상) · 단추 바로 위(8~24px)',
+  ['m', 'd'].every(vp => { const q = geo[vp], k = q.pin; return q.sw <= q.iw && !q.log.err.length && !q.log.data.length && !q.bigBox && k && k.text === COMMON && k.shown && k.fits &&
+    k.fs <= 14 && k.fs < k.ctaFs && k.vfs < k.ctaFs && k.height <= 48 && contrast(k.color, k.bg) >= 4.5 && k.gapToCta >= 8 && k.gapToCta <= 24 && k.gapFromPv >= 12; }) &&
     geo.d.two && geo.d.ctas[0] === geo.d.ctas[1],
   `m ${L(geo.m)} · d ${L(geo.d)} two=${geo.d.two} ctas=${geo.d.ctas} pin=${JSON.stringify(['m', 'd'].map(vp => geo[vp].pin && { ...geo[vp].pin, cr: contrast(geo[vp].pin.color, geo[vp].pin.bg).toFixed(1) }))}`);
 t('X9 단추 → 새 탭 = 실제 운영 화면(390 · 1440) — 관람객 / (시험용 스냅샷의 부스를 그림) · 운영자 /booth-ctrl · 둘 다 협의용 예시 띠 없음 · 예시 PIN 상자 없음 · 예시 저장소를 만들지 않음 · 페이지 오류 0',

@@ -51,13 +51,14 @@ node --max-old-space-size=8192 scripts/booth-data/test-qr-e2e.mjs $A --live-dir 
 node --max-old-space-size=8192 scripts/booth-data/test-gate4r.mjs $A --main-dir ../incheon-festival-main --live-dir ../incheon-festival-live --qr-dir $D/qrlib
 node --max-old-space-size=8192 scripts/booth-data/test-reset-removed.mjs $A --main-dir ../incheon-festival-main
 node --max-old-space-size=8192 scripts/booth-data/test-pin-status.mjs $A --main-dir ../incheon-festival-main
-node scripts/booth-data/test-example-page.mjs --live-dir ../incheon-festival-live --main-dir ../incheon-festival-main --pptr-dir <pptr/node_modules/puppeteer-core 가 든 폴더> [--base-ref 0f47c88]
+node scripts/booth-data/test-example-page.mjs --live-dir ../incheon-festival-live --main-dir ../incheon-festival-main --pptr-dir <pptr/node_modules/puppeteer-core 가 든 폴더> [--base-ref 3212ef7]
 ```
 
 - `test-example-page.mjs`(/example/ 화면 안내): booth-live 작업 폴더를 `sh live/build.sh` 로 빌드해 Edge(puppeteer-core)로 엽니다.
-  두 단추가 실제 운영 화면(`/` · `/booth-ctrl`, `?demo` 없음)을 여는지 · 공개 PIN 이 운영자 카드의 리허설 공통 PIN 안내 한 곳뿐인지
-  (값 = booth-ctrl 의 공통 PIN 값 · 그 밖의 6자리 숫자 없음) · 안내 글이 main 의 리허설 SQL 조건과 같은지(공통 PIN 기한 · 개별 PIN 부스 제외 ·
-  23:00 초기화는 `booth_live` 만 지움 — 초기화로 PIN 이 끝난다고 말하지 않음) · PIN 숫자 크기 · 대비 · 미리보기 말이 지금 두 화면에 있는지 ·
+  두 단추가 실제 운영 화면(`/` · `/booth-ctrl`, `?demo` 없음)을 여는지 · 공개 PIN 이 운영자 단추 바로 위 보조 줄(`.pinhint`) 한 곳뿐인지
+  (값 = booth-ctrl 의 공통 PIN 값 · 그 밖의 6자리 숫자 없음 · 예전 큰 PIN 상자 `.pinnote` 없음) · 보조 줄에 적은 기한이 main 의 리허설 SQL 기한보다
+  늦지 않은지 · 23:00 초기화는 `booth_live` 만 지우고 페이지가 초기화로 PIN 이 끝난다고 말하지 않는지 · 보조 줄이 작고(단추 글자보다 작음 · 두 줄 이하)
+  읽히는지(대비 4.5:1) · 단추 바로 위(8~24px)에 있는지 · 미리보기 말이 지금 두 화면에 있는지 ·
   배포본에서 `example/` 말고는 `--base-ref` 빌드와 바이트 같은지 봅니다. 실제 관람객 화면에는 시험용 스냅샷(`GET /api/live-snapshot`, 부스 A-01 하나)을
   돌려주고, Supabase 는 사전 확인(OPTIONS)만 통과시키고 실제 요청은 세고 막습니다 — 두 실제 화면을 열기만 했을 때 요청이 조회뿐인지
   (관람객 `GET /api/live-snapshot` · 운영자 Supabase GET settings · zones · booths, RPC · 로그인 없음) 봅니다. 행사 명칭은 `--official`(기본 settings.event_title 값).
@@ -84,3 +85,5 @@ node scripts/booth-data/test-example-page.mjs --live-dir ../incheon-festival-liv
   바꾸기 전 판(3b9d1a3)에서는 링크 · 문구 · 변경 · 새 탭 연결 항목만 실패(8 / 12 — X2 · X2b · X7 · X9).
 - 2026-10-21 결과(/example/ 두 단추 실제 화면 · 리허설 공통 PIN 안내 3212ef7 · 기준 0f47c88 · main f3b61b1): 화면 안내 13 · 관람객 48 · 운영자 29 ·
   공통 PIN 61 · QR 종단 30 — 181 / 181 통과. 바꾸기 전 판(0f47c88)에서는 PIN 안내 · 링크 · 문구 · 변경 · 화면 · 새 탭 항목만 실패(5 / 13).
+- 2026-10-21 결과(/example/ PIN 작은 보조 줄 3e575d2 · 기준 3212ef7): 화면 안내 13 · 관람객 48 · 운영자 29 · 공통 PIN 61 · QR 종단 30 — 181 / 181 통과.
+  바꾸기 전 판(3212ef7 · 큰 PIN 상자)에서는 PIN 보조 줄 · 변경 · 화면 항목만 실패(9 / 13 — X1 · X1b · X7 · X8).
