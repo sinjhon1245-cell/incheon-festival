@@ -18,8 +18,10 @@
 <body>
   <!-- 화면 안내 페이지. 데이터를 읽지 않는 정적 페이지라 스크립트가 없습니다.
        아래 두 미리보기는 실제 화면을 줄여 그린 그림이고, 값은 고정입니다.
-       '체험하기' 단추는 협의용 예시 화면(?demo=1)으로 보냅니다. 예시 화면은 이 브라우저 안의
-       예시 부스만 쓰고 서버를 읽거나 쓰지 않습니다(assets/booth-core.js 의 시연 모드).
+       관람객 단추는 실제 관람객 화면(/)을 엽니다 — 누구나 보는 조회 화면입니다.
+       운영자 단추는 협의용 예시 화면(/booth-ctrl?demo=1)으로 보냅니다. 예시 화면은 이 브라우저 안의
+       예시 부스만 쓰고 서버를 읽거나 쓰지 않습니다(assets/booth-core.js 의 시연 모드). 시연 모드는
+       주소의 ?demo 로만 정해져, 예시에서 누른 값이 실제 관람객 화면(/)에 나타날 길은 없습니다.
        공개 페이지라 운영용 PIN 같은 접속 정보는 적지 않습니다.
        운영 포털 · 관리자 화면으로 가는 링크나 주소는 두지 않습니다
        (live/build.sh 가 그런 흔적을 찾으면 배포를 멈춥니다). -->
@@ -28,7 +30,9 @@
       <p class="top__event">2026 인천 AI미래채움 교육페스티벌</p>
       <h1 class="top__title">부스 대기 현황</h1>
       <p class="top__lead">관람객 화면과 부스 운영자 화면을 아래에서 각각 확인하실 수 있습니다.
-        ‘체험하기’는 실제 행사 정보와 분리된 협의용 예시 화면을 새 탭에서 엽니다. 예시 화면에서 누른 값은 그 브라우저 안에서만 바뀌고 서버에 저장되지 않습니다.</p>
+        ‘관람객 실제 화면 보기’는 누구나 로그인 없이 보는 실제 대기 현황 화면을 새 탭에서 엽니다.
+        ‘부스 운영자 화면 체험하기’는 예시 부스로만 움직이는 체험 화면을 엽니다. 체험 화면에서 누른 값은 그 브라우저 안에서만 보이고, 실제 대기시간과 관람객 화면에는 반영되지 않습니다.
+        아래 미리보기의 부스 정보와 숫자는 예시입니다.</p>
     </header>
 
     <main>
@@ -93,9 +97,9 @@
           </div>
 
           <div class="card__foot">
-            <a class="cta" href="/?demo=1" target="_blank" rel="noopener noreferrer">관람객 화면 체험하기<span aria-hidden="true">&#x2197;&#xFE0E;</span><span class="sr-only"> (협의용 예시 화면, 새 탭에서 열림)</span></a>
+            <a class="cta" href="/" target="_blank" rel="noopener noreferrer">관람객 실제 화면 보기<span aria-hidden="true">&#x2197;&#xFE0E;</span><span class="sr-only"> (실제 운영 화면, 새 탭에서 열림)</span></a>
             <dl class="facts">
-              <div class="facts__row"><dt>체험 화면</dt><dd>예시 부스 · 실제 대기 정보와 섞이지 않음</dd></div>
+              <div class="facts__row"><dt>여는 화면</dt><dd>실제 관람객 화면 · 실제 대기 현황</dd></div>
               <div class="facts__row"><dt>실제 주소</dt><dd>incheon-live.vercel.app</dd></div>
               <div class="facts__row"><dt>로그인</dt><dd>필요 없음</dd></div>
             </dl>
@@ -156,9 +160,9 @@
           </div>
 
           <div class="card__foot">
-            <a class="cta" href="/booth-ctrl?demo=1" target="_blank" rel="noopener noreferrer">부스 운영자 화면 체험하기<span aria-hidden="true">&#x2197;&#xFE0E;</span><span class="sr-only"> (협의용 예시 화면, 새 탭에서 열림)</span></a>
+            <a class="cta" href="/booth-ctrl?demo=1" target="_blank" rel="noopener noreferrer">부스 운영자 화면 체험하기<span aria-hidden="true">&#x2197;&#xFE0E;</span><span class="sr-only"> (체험 화면, 실제 대기시간은 바뀌지 않음, 새 탭에서 열림)</span></a>
             <dl class="facts">
-              <div class="facts__row"><dt>체험 화면</dt><dd>예시 부스 · 예시 PIN은 화면에서 안내</dd></div>
+              <div class="facts__row"><dt>여는 화면</dt><dd>체험 화면 · 실제 대기시간은 바뀌지 않음</dd></div>
               <div class="facts__row"><dt>실제 주소</dt><dd>incheon-live.vercel.app/booth-ctrl</dd></div>
               <div class="facts__row"><dt>로그인</dt><dd>부스별 운영자 QR 또는 운영본부에서 받은 PIN</dd></div>
             </dl>
@@ -169,7 +173,7 @@
       <section class="flow" aria-labelledby="flow-title">
         <div>
           <h2 class="flow__title" id="flow-title">이렇게 연결됩니다</h2>
-          <p class="flow__text">부스 운영자가 입력한 대기시간은 관람객 화면에 자동으로 반영됩니다. 체험 화면도 같은 브라우저라면 운영자 예시에서 누른 값이 관람객 예시에 반영됩니다(관람객 예시를 새로 고치면 바로 보입니다).</p>
+          <p class="flow__text">실제 행사에서는 부스 운영자가 QR 또는 PIN으로 접속한 운영자 화면에 입력한 대기시간이 관람객 화면에 자동으로 반영됩니다. 이 페이지의 ‘부스 운영자 화면 체험하기’는 예시 부스만 쓰는 체험 화면이라, 거기서 누른 값은 실제 관람객 화면에 나타나지 않습니다.</p>
         </div>
         <ol class="steps">
           <li class="step"><span class="step__who">부스 운영자</span><span class="step__what">대기시간 입력</span></li>
