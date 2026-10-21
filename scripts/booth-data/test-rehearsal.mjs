@@ -645,16 +645,20 @@ const cd = cdom.window.document, cw = cdom.window;
 const cerr = []; cw.addEventListener('error', e => cerr.push(e.message));
 await until(() => !cd.getElementById('v-confirm').hidden, 8000);
 click(cw, cd.getElementById('cf-yes'));
-await until(() => !cd.getElementById('now-note').hidden, 8000);
-const note = text(cd.getElementById('now-note'));
+// 행사 전(리허설) 카드 아래 안내는 2026-10-21 운영 요청으로 뺐습니다 — 값이 그려진 뒤에도 안내 칸이 비어 있어야 합니다.
+// 리허설로 다루는지는 D2 의 저장 알림(‘리허설 중’ 안내와 함께 보여요)이 그대로 확인합니다.
+await until(() => /(바로|\d+|중단|마감)/.test(text(cd.getElementById('now-main') || cd.querySelector('.now__main'))), 8000);
+await new Promise(r => setTimeout(r, 400));
+const noteEl = cd.getElementById('now-note');
+const note = text(noteEl);
 const nowBefore = text(cd.getElementById('now'));
 const logMax0 = +(await q1('select max(id) m from public.booth_live_log')).m;
 click(cw, cd.querySelector('.w[data-wait="15"]'));
 await until(() => /반영했습니다/.test(text(cd.getElementById('toast'))), 8000);
 const ctoast = text(cd.getElementById('toast'));
 const lastLog = await q1('select booth_id::text id, source, wait_minutes from public.booth_live_log where id > $1 order by id desc limit 1', [logMax0]);
-t('D1 운영자 화면(행사 전): 관리자가 채운 값이 보이고 · 안내 “행사 전 리허설이에요. 누른 값은 관람객 화면에 ‘리허설 중’ 안내와 함께 보여요.”',
-  /(바로|\d+|중단|마감)/.test(nowBefore) && note === '행사 전 리허설이에요. 누른 값은 관람객 화면에 ‘리허설 중’ 안내와 함께 보여요.' && !cerr.length, note);
+t('D1 운영자 화면(행사 전): 관리자가 채운 값이 보이고 · 현재 대기 카드 아래 리허설 안내 없음(안내 칸 숨김 · 빈 글)',
+  /(바로|\d+|중단|마감)/.test(nowBefore) && noteEl.hidden && note === '' && !/리허설이에요/.test(nowBefore) && !cerr.length, JSON.stringify({ hidden: noteEl.hidden, note, nowBefore }));
 t('D2 운영자 15분 누름 → 관리자 값을 덮어씀(기록 source set) · 알림 “관람객 화면에 ‘리허설 중’ 안내와 함께 보여요.”',
   lastLog && lastLog.id === idOf('R4-21') && lastLog.source === 'set' && lastLog.wait_minutes === 15 && /관람객 화면에 ‘리허설 중’ 안내와 함께 보여요/.test(ctoast), ctoast);
 cdom.window.close();

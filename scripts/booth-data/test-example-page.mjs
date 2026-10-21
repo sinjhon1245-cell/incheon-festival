@@ -128,11 +128,16 @@ const BASE = mkdtempSync(join(tmpdir(), 'example-base-'));
 execFileSync('sh', ['-c', `git -C "${LIVE}" -c core.autocrlf=false archive ${BASE_REF} | tar -x -C "${BASE}"`]);
 let baseOk = true; try { build(BASE); } catch (e) { baseOk = false; }
 const DIST = join(LIVE, 'live', 'dist'), BDIST = join(BASE, 'live', 'dist');
+// 빌드는 assets/*.css · *.js 에 내용 지문(숫자)을 붙입니다. 파일 목록 · 바뀐 파일은 지문을 뗀 이름으로 견줍니다.
+// 바뀌어도 되는 파일은 --expect-changed(쉼표, 지문 뗀 이름)로 받습니다 — 기본은 안내 페이지 둘뿐.
+const unhash = f => f.replace(/^(assets\/[^/]+?)\.\d+(\.(?:css|js))$/, '$1$2');
+const EXPECT = (arg('expect-changed', 'example/example.css,example/index.html')).split(',').map(s => s.trim()).filter(Boolean).sort();
 const files = buildOk ? walk(DIST).sort() : [], bfiles = baseOk ? walk(BDIST).sort() : [];
-const same = files.filter(f => existsSync(join(BDIST, f)) && readFileSync(join(DIST, f)).equals(readFileSync(join(BDIST, f))));
-const changed = files.filter(f => !same.includes(f));
-t(`X7 sh live/build.sh 통과(운영 포털 흔적 검사 포함) · 배포본 파일 목록이 기준 판 ${BASE_REF} 와 같고, 바뀐 파일은 example/ 둘뿐(관람객 · 운영자 화면 바이트 동일)`,
-  buildOk && baseOk && JSON.stringify(files) === JSON.stringify(bfiles) && JSON.stringify(changed) === JSON.stringify(['example/example.css', 'example/index.html']),
+const bmap = new Map(bfiles.map(f => [unhash(f), f]));
+const same = files.filter(f => bmap.has(unhash(f)) && readFileSync(join(DIST, f)).equals(readFileSync(join(BDIST, bmap.get(unhash(f))))));
+const changed = files.filter(f => !same.includes(f)).map(unhash).sort();
+t(`X7 sh live/build.sh 통과(운영 포털 흔적 검사 포함) · 배포본 파일 목록이 기준 판 ${BASE_REF} 와 같고(지문 뗀 이름), 바뀐 파일은 ${EXPECT.join(' · ')} 뿐(그 밖은 바이트 동일)`,
+  buildOk && baseOk && JSON.stringify(files.map(unhash).sort()) === JSON.stringify(bfiles.map(unhash).sort()) && JSON.stringify(changed) === JSON.stringify(EXPECT),
   `${buildOk} ${baseOk} ${buildErr.slice(0, 120)} changed=${JSON.stringify(changed)} files=${files.length}/${bfiles.length}`);
 
 // ── 3. 브라우저 ─────────────────────────────────────────────────
@@ -188,17 +193,20 @@ for (const vp of ['m', 'd']) {
   const g = await p.evaluate(() => {
     const r = s => document.querySelector(s).getBoundingClientRect();
     const ctas = [...document.querySelectorAll('.cta')].map(a => Math.round(a.getBoundingClientRect().top + scrollY));
-    const card = document.querySelectorAll('.card')[1], h = card.querySelector('.pinhint'), v = h && h.querySelector('.pinhint__v');
+    const card = document.querySelectorAll('.card')[1], h = card.querySelector('.pinhint');
     const cta = card.querySelector('.cta'), cp = card.querySelector('.cp');
-    // 보조 줄의 위 여백(padding-top)은 미리보기와의 간격이므로, 글이 차지하는 칸(위 여백을 뺀 상자)으로 잽니다.
-    const hc = h && getComputedStyle(h), vc = v && getComputedStyle(v), hb = h && h.getBoundingClientRect();
-    const hr = h && { top: hb.top + parseFloat(hc.paddingTop), bottom: hb.bottom, right: hb.right, width: hb.width, height: hb.height - parseFloat(hc.paddingTop) };
+    const st = e => getComputedStyle(e), R = e => e.getBoundingClientRect();
+    const v = h && h.querySelector('.pinhint__v'), kk = h && h.querySelector('.pinhint__k'), dd = h && h.querySelector('.pinhint__d');
+    const hb = h && R(h), hc = h && st(h);
     return { sw: document.documentElement.scrollWidth, iw: innerWidth, ctas, two: r('.cards > .card:nth-child(2)').top < r('.cards > .card:first-child').bottom - 10,
       bigBox: !!document.querySelector('.pinnote'),
-      pin: v ? { text: v.textContent, fs: parseFloat(hc.fontSize), vfs: parseFloat(vc.fontSize), ctaFs: parseFloat(getComputedStyle(cta).fontSize), height: Math.round(hr.height),
-        color: hc.color, bg: getComputedStyle(card).backgroundColor, shown: hr.width > 0 && hc.display !== 'none' && hc.visibility !== 'hidden',
-        fits: h.scrollWidth <= h.clientWidth && hr.right <= innerWidth,
-        gapToCta: Math.round(cta.getBoundingClientRect().top - hr.bottom), gapFromPv: Math.round(hr.top - cp.getBoundingClientRect().bottom) } : null };
+      pin: v && kk && dd ? { text: v.textContent,
+        vfs: parseFloat(st(v).fontSize), vfw: Number(st(v).fontWeight), vls: parseFloat(st(v).letterSpacing) || 0, vcolor: st(v).color, vlines: Math.round(R(v).height / parseFloat(st(v).lineHeight)),
+        kfs: parseFloat(st(kk).fontSize), kfw: Number(st(kk).fontWeight), kcolor: st(kk).color, dfs: parseFloat(st(dd).fontSize), dfw: Number(st(dd).fontWeight), dcolor: st(dd).color,
+        bg: hc.backgroundColor, border: hc.borderTopColor, padT: parseFloat(hc.paddingTop), padB: parseFloat(hc.paddingBottom),
+        height: Math.round(hb.height), ctaH: Math.round(R(cta).height), ctaBg: st(cta).backgroundColor, ctaFs: parseFloat(st(cta).fontSize),
+        shown: hb.width > 0 && hc.display !== 'none' && hc.visibility !== 'hidden', fits: h.scrollWidth <= h.clientWidth && hb.right <= innerWidth,
+        gapToCta: Math.round(R(cta).top - hb.bottom), gapFromPv: Math.round(hb.top - R(cp).bottom) } : null };
   });
   await p.screenshot({ path: `${OUT}/example-${vp}.jpg`, type: 'jpeg', quality: 82, fullPage: true });
   geo[vp] = { ...g, log };
@@ -225,12 +233,17 @@ for (const vp of ['m', 'd']) {
   await ctx.close();
 }
 const L = v => `${v.sw}/${v.iw} data=${v.log.data.length} err=${v.log.err.length} other=${v.log.other.length}`;
-console.log(`  (기록) PIN 보조 줄 ${JSON.stringify(['m', 'd'].map(vp => geo[vp].pin && { vp, ...geo[vp].pin, cr: +contrast(geo[vp].pin.color, geo[vp].pin.bg).toFixed(1), ctas: geo[vp].ctas }))}`);
-t('X8 /example/ 390 · 1440 — 가로 넘침 없음 · 페이지 오류 0 · 데이터 요청 0 · 1440 은 두 카드 나란히 · 두 단추 높이 같음 · 큰 PIN 상자 없음 · PIN 보조 줄은 작고(글자 14px 이하 · 단추 글자보다 작음 · 두 줄 이하) 읽히며(바탕 대비 4.5:1 이상) 카드 안에 들어가고, 미리보기 아래(12px 이상) · 단추 바로 위(8~24px)',
+console.log(`  (기록) PIN 띠 ${JSON.stringify(['m', 'd'].map(vp => geo[vp].pin && { vp, ...geo[vp].pin, crV: +contrast(geo[vp].pin.vcolor, geo[vp].pin.bg).toFixed(1), crK: +contrast(geo[vp].pin.kcolor, geo[vp].pin.bg).toFixed(1), crD: +contrast(geo[vp].pin.dcolor, geo[vp].pin.bg).toFixed(1), ctas: geo[vp].ctas }))}`);
+// PIN 띠(2026-10-21 UI 최종): 숫자가 띠에서 가장 크고 굵고 자간이 넓으며 한 줄 · 라벨(보라 · 굵게)과 사용 기간(옅게 · 덜 굵게)은 숫자보다 작음 ·
+// 연보라 바탕(밝고 파랑 쪽) · 위아래 안쪽 여백 같음 · 단추(보라 칠)보다 옅어 단추가 먼저 보이고 단추 높이의 1.6배 이하 · 대비(숫자 7:1 · 라벨 · 기간 4.5:1).
+const lilac = c => { const [r, g, b] = rgb(c); return b > r && b > g && lum(rgb(c)) > 0.75 && lum(rgb(c)) < 0.97; };
+t('X8 /example/ 390 · 1440 — 가로 넘침 없음 · 페이지 오류 0 · 데이터 요청 0 · 1440 은 두 카드 나란히 · 두 단추 높이 같음 · 큰 PIN 상자 없음 · PIN 띠: 숫자 20px 이상 · 굵게 · 넓은 자간 · 한 줄, 라벨 · 사용 기간보다 1.4배 이상 크고, 라벨(보라 · 굵게)이 사용 기간(옅게)보다 굵음 · 연보라 바탕 · 위아래 여백 같음 · 대비(숫자 7:1 · 라벨 · 기간 4.5:1) · 단추보다 옅고 단추 높이 1.6배 이하 · 카드 안 · 미리보기 아래(12px 이상) · 단추 바로 위(8~24px)',
   ['m', 'd'].every(vp => { const q = geo[vp], k = q.pin; return q.sw <= q.iw && !q.log.err.length && !q.log.data.length && !q.bigBox && k && k.text === COMMON && k.shown && k.fits &&
-    k.fs <= 14 && k.fs < k.ctaFs && k.vfs < k.ctaFs && k.height <= 48 && contrast(k.color, k.bg) >= 4.5 && k.gapToCta >= 8 && k.gapToCta <= 24 && k.gapFromPv >= 12; }) &&
+    k.vfs >= 20 && k.vfw >= 700 && k.vls > 0 && k.vlines === 1 && k.vfs >= 1.4 * k.kfs && k.vfs >= 1.4 * k.dfs && k.kfw > k.dfw && k.kcolor !== k.dcolor &&
+    lilac(k.bg) && k.padT === k.padB && contrast(k.vcolor, k.bg) >= 7 && contrast(k.kcolor, k.bg) >= 4.5 && contrast(k.dcolor, k.bg) >= 4.5 &&
+    lum(rgb(k.bg)) > lum(rgb(k.ctaBg)) + 0.5 && k.height <= 1.6 * k.ctaH && k.gapToCta >= 8 && k.gapToCta <= 24 && k.gapFromPv >= 12; }) &&
     geo.d.two && geo.d.ctas[0] === geo.d.ctas[1],
-  `m ${L(geo.m)} · d ${L(geo.d)} two=${geo.d.two} ctas=${geo.d.ctas} pin=${JSON.stringify(['m', 'd'].map(vp => geo[vp].pin && { ...geo[vp].pin, cr: contrast(geo[vp].pin.color, geo[vp].pin.bg).toFixed(1) }))}`);
+  `m ${L(geo.m)} · d ${L(geo.d)} two=${geo.d.two} ctas=${geo.d.ctas} pin=${JSON.stringify(['m', 'd'].map(vp => geo[vp].pin))}`);
 t('X9 단추 → 새 탭 = 실제 운영 화면(390 · 1440) — 관람객 / (시험용 스냅샷의 부스를 그림) · 운영자 /booth-ctrl · 둘 다 협의용 예시 띠 없음 · 예시 PIN 상자 없음 · 예시 저장소를 만들지 않음 · 페이지 오류 0',
   ['m', 'd'].every(vp => geo[vp].tabs.length === 2 && geo[vp].tabs[0].url === '/' && geo[vp].tabs[1].url === '/booth-ctrl' && geo[vp].tabs[0].fx &&
     geo[vp].tabs.every(x => !x.demo && !x.demoPin && !x.store && !x.log.err.length)),

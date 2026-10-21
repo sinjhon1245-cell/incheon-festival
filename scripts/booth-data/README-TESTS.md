@@ -51,15 +51,19 @@ node --max-old-space-size=8192 scripts/booth-data/test-qr-e2e.mjs $A --live-dir 
 node --max-old-space-size=8192 scripts/booth-data/test-gate4r.mjs $A --main-dir ../incheon-festival-main --live-dir ../incheon-festival-live --qr-dir $D/qrlib
 node --max-old-space-size=8192 scripts/booth-data/test-reset-removed.mjs $A --main-dir ../incheon-festival-main
 node --max-old-space-size=8192 scripts/booth-data/test-pin-status.mjs $A --main-dir ../incheon-festival-main
-node scripts/booth-data/test-example-page.mjs --live-dir ../incheon-festival-live --main-dir ../incheon-festival-main --pptr-dir <pptr/node_modules/puppeteer-core 가 든 폴더> [--base-ref 3212ef7]
+node scripts/booth-data/test-example-page.mjs --live-dir ../incheon-festival-live --main-dir ../incheon-festival-main --pptr-dir <pptr/node_modules/puppeteer-core 가 든 폴더> [--base-ref 0e065b3] [--expect-changed "a,b,…"]
 ```
 
 - `test-example-page.mjs`(/example/ 화면 안내): booth-live 작업 폴더를 `sh live/build.sh` 로 빌드해 Edge(puppeteer-core)로 엽니다.
-  두 단추가 실제 운영 화면(`/` · `/booth-ctrl`, `?demo` 없음)을 여는지 · 공개 PIN 이 운영자 단추 바로 위 보조 줄(`.pinhint`) 한 곳뿐인지
-  (값 = booth-ctrl 의 공통 PIN 값 · 그 밖의 6자리 숫자 없음 · 예전 큰 PIN 상자 `.pinnote` 없음) · 보조 줄에 적은 기한이 main 의 리허설 SQL 기한보다
-  늦지 않은지 · 23:00 초기화는 `booth_live` 만 지우고 페이지가 초기화로 PIN 이 끝난다고 말하지 않는지 · 보조 줄이 작고(단추 글자보다 작음 · 두 줄 이하)
-  읽히는지(대비 4.5:1) · 단추 바로 위(8~24px)에 있는지 · 미리보기 말이 지금 두 화면에 있는지 ·
-  배포본에서 `example/` 말고는 `--base-ref` 빌드와 바이트 같은지 봅니다. 실제 관람객 화면에는 시험용 스냅샷(`GET /api/live-snapshot`, 부스 A-01 하나)을
+  두 단추가 실제 운영 화면(`/` · `/booth-ctrl`, `?demo` 없음)을 여는지 · 공개 PIN 이 운영자 단추 바로 위 PIN 띠(`.pinhint`) 한 곳뿐인지
+  (값 = booth-ctrl 의 공통 PIN 값 · 그 밖의 6자리 숫자 없음 · 예전 큰 PIN 상자 `.pinnote` 없음) · 띠에 적은 사용 기간이 main 의 리허설 SQL 기한보다
+  늦지 않은지 · 23:00 초기화는 `booth_live` 만 지우고 페이지가 초기화로 PIN 이 끝난다고 말하지 않는지 · PIN 띠 강조(숫자 20px 이상 · 굵게 · 넓은 자간 ·
+  한 줄 · 라벨 · 기간보다 1.4배 이상 · 연보라 바탕 · 대비 숫자 7:1 · 라벨 · 기간 4.5:1 · 보라 칠 단추보다 옅고 단추 높이 1.6배 이하) · 단추 바로 위(8~24px) ·
+  미리보기 말이 지금 두 화면에 있는지 · 배포본에서 `--expect-changed`(쉼표, 자산 지문 뗀 이름 · 기본 example/ 둘) 말고는 `--base-ref` 빌드와 바이트 같은지 봅니다.
+  UI 최종(8e086c4 · a803ed7)은 `--base-ref 0e065b3 --expect-changed "assets/booth-ctrl.css,assets/visitor.css,booth-ctrl.html,example/example.css,example/index.html,index.html"`.
+- `test-rehearsal.mjs` D1(UI 최종): 행사 전 운영자 화면에 값이 보이고 현재 대기 카드 아래 리허설 안내가 없어야 합니다(리허설 처리는 D2 저장 알림이 확인).
+- `test-ctrl-school.mjs` S1-6 · S6-7(UI 최종): 운영자 CSS 는 UI 최종 규칙 16개(현재 대기 세 단 · 운영 상태 위 맞춤 · 860px 이상 subgrid 줄 격자)를
+  선언 · 순서까지 못 박고 그 밖의 규칙은 앞 판과 하나씩 같아야 하며, booth-ctrl.html 은 리허설 안내를 뺀 정해 둔 여섯 줄만 더 바뀔 수 있습니다. 실제 관람객 화면에는 시험용 스냅샷(`GET /api/live-snapshot`, 부스 A-01 하나)을
   돌려주고, Supabase 는 사전 확인(OPTIONS)만 통과시키고 실제 요청은 세고 막습니다 — 두 실제 화면을 열기만 했을 때 요청이 조회뿐인지
   (관람객 `GET /api/live-snapshot` · 운영자 Supabase GET settings · zones · booths, RPC · 로그인 없음) 봅니다. 행사 명칭은 `--official`(기본 settings.event_title 값).
 
@@ -89,3 +93,7 @@ node scripts/booth-data/test-example-page.mjs --live-dir ../incheon-festival-liv
   바꾸기 전 판(3212ef7 · 큰 PIN 상자)에서는 PIN 보조 줄 · 변경 · 화면 항목만 실패(9 / 13 — X1 · X1b · X7 · X8).
 - 2026-10-21 결과(/example/ PIN 보조 줄 문구 “운영자 공통 PIN 123456 · 11월 4일까지 사용” 0e065b3 · 기준 3212ef7): 181 / 181 통과(13 · 48 · 29 · 61 · 30).
   바꾸기 전 문구(3e575d2)에서는 문구 항목만 실패(12 / 13 — X1b). ‘N월 N일까지 사용’ 은 운영상 사용 기간(만료일 아님) — 서버 기한보다 늦지 않은지만 봅니다.
+- 2026-10-21 결과(UI 최종 a803ed7 · 기준 0e065b3 · main f3b61b1): 화면 안내 13 · 관람객 48 · 운영자 29 · 리허설 82 · 공통 PIN 61 · Gate 4-R 88 ·
+  QR 종단 30 · 공통 · 개별 PIN 표시 32 · 전체 지우기 제거 15 · QR · PIN 관리 28 — 426 / 426 통과.
+  보호 규칙 확인(일부러 망가뜨린 사본): 상관없는 운영자 CSS · UI 최종 규칙 값 바꿈 → S1-6, 상관없는 운영자 글자 · 리허설 안내 줄 바꿈 → S6-7(+ 리허설 D1),
+  booth-core.js 한 줄 → 안내 X7 이 각각 실패. 바꾸기 전 판(0e065b3)은 안내 X7 · X8, 리허설 D1 만 실패.

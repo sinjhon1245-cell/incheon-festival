@@ -203,16 +203,40 @@ t('S1-5 스타일 — .pick__o 13px(부스명 15px 보다 작게) · 보조 글�
   pickO.includes('font-size: 13px') && pickO.includes('color: var(--muted)') && pickO.includes('margin-top: 3px') && !declOf(rulesOld, '.pick__o'), pickO.join('; '));
 // 앞 판(7ebf536)에서 의도해 바꾼 규칙 — 학교명 줄(#11) · ‘지금 확인’ 설명(C-2) · 운영 상태 고른 모양(C-1)
 const INTENDED = ['.pick__o', '.still', '.still__s', '.off.is-on', '.off.is-on .off__s, #btn-closed.is-on .off__t', '#btn-closed.is-on'];
-const restKey = rs => rs.filter(r => !INTENDED.includes(r.sel)).map(r => r.sel + ' {' + r.decl.join('; ') + '}');
+// UI 최종(2026-10-21, 8e086c4): 현재 대기 카드 세 단(.now · __cap · __main · __when) · 운영 상태 단추 글 위 맞춤(.off) ·
+// 넓은 화면 두 칸 줄 격자(860px 이상 @supports subgrid 안의 규칙). 그 밖의 규칙은 여전히 하나씩 같아야 합니다.
+const UI5 = ['.now', '.now__cap', '.now__main', '.now__when', '.off'];
+const UI5_GRID = '@media (min-width: 860px) » @supports (grid-template-rows: subgrid) » ';
+const intended = sel => INTENDED.includes(sel) || UI5.includes(sel) || sel.startsWith(UI5_GRID);
+const restKey = rs => rs.filter(r => !intended(r.sel)).map(r => r.sel + ' {' + r.decl.join('; ') + '}');
 const restO = restKey(rulesOld), restN = restKey(rulesNew);
 const restDiff = restO.filter((x, k) => restN[k] !== x).concat(restN.slice(restO.length));
 const stillO = declOf(rulesOld, '.still') || [], stillN = declOf(rulesNew, '.still') || [];
 const stillAdded = stillN.filter(x => !stillO.includes(x));
-t(`S1-6 CSS 규칙 ${rulesNew.length}개를 앞 판과 하나씩 견줌 — 의도한 규칙 말고는 선택자 · 선언 · 순서 모두 같음(${restN.length}개) · ‘지금 확인’ 단추(.still)는 앞 판 선언을 모두 지키고 두 줄 배치(세로 flex · 가운데 · 간격 2px · 안쪽 여백)만 더함 · 고르지 않은 ‘오늘 운영 마감’ 빨간 글자 그대로`,
-  restDiff.length === 0 && restO.length === restN.length && stillO.length > 0 && stillO.every(x => stillN.includes(x)) &&
+// UI 최종 규칙은 빼고 넘기지 않고 선택자 · 선언 · 순서를 그대로 못 박습니다(8e086c4 의 값). 이 규칙을 다시 바꾸면 여기서 걸립니다.
+const UI5_EXPECT = [['.now', ['--c: var(--off)', '--ct: var(--off-t)', 'display: flex', 'flex-direction: column', 'margin-top: 12px', 'padding: 16px 18px', 'border: 1px solid var(--line)', 'border-radius: var(--r-big)', 'background: var(--panel)', 'box-shadow: var(--sh)']],
+  ['.now__cap', ['font-size: 14px', 'font-weight: 700', 'line-height: 1.4', 'color: var(--muted)']],
+  ['.now__main', ['display: flex', 'flex: 1 0 auto', 'flex-wrap: wrap', 'align-items: center', 'gap: 4px 12px', 'min-height: 64px', 'margin-top: 2px']],
+  ['.now__when', ['margin-top: 6px', 'font-size: 14.5px', 'line-height: 1.4', 'color: var(--muted)', 'font-variant-numeric: tabular-nums']],
+  ['.off', ['display: flex', 'flex-direction: column', 'align-items: flex-start', 'justify-content: flex-start', 'gap: 2px', 'min-width: 0', 'min-height: 64px', 'padding: 10px 14px', 'border: 1px solid var(--line-2)', 'background: var(--panel)', 'color: var(--ink)', 'text-align: left']],
+  ['GRID.main', ['grid-template-rows: repeat(5, auto)', 'row-gap: 0', 'margin-top: 12px']],
+  ['GRID.main > .col', ['display: grid', 'grid-row: 1 / span 5', 'grid-template-rows: subgrid']],
+  ['GRID.main > .col:first-child', ['padding-top: 0']],
+  ['GRID.pad', ['display: grid', 'grid-row: 1 / span 2', 'grid-template-rows: subgrid', 'margin-top: 0']],
+  ['GRID.offsec', ['display: grid', 'grid-row: 3 / span 3', 'grid-template-rows: subgrid', 'margin-top: 0']],
+  ['GRID.offsec__title', ['align-self: end', 'padding-top: 20px']],
+  ['GRID.now', ['grid-row: 2', 'margin-top: 0']],
+  ['GRID.nudge', ['grid-row: 3', 'align-self: start', 'margin-bottom: 8px']],
+  ['GRID.still', ['grid-row: 4', 'margin-top: 0']],
+  ['GRID.waits', ['align-self: start']],
+  ['GRID.w', ['min-height: 70px']]];
+const ui5Got = rulesNew.filter(r => UI5.includes(r.sel) || r.sel.startsWith(UI5_GRID)).map(r => [r.sel.replace(UI5_GRID, 'GRID'), r.decl]);
+const ui5Ok = JSON.stringify(ui5Got) === JSON.stringify(UI5_EXPECT);
+t(`S1-6 CSS 규칙 ${rulesNew.length}개를 앞 판과 하나씩 견줌 — 의도한 규칙 말고는 선택자 · 선언 · 순서 모두 같음(${restN.length}개) · UI 최종 규칙 ${UI5_EXPECT.length}개는 정해 둔 값과 선언 · 순서까지 같음 · ‘지금 확인’ 단추(.still)는 앞 판 선언을 모두 지키고 두 줄 배치(세로 flex · 가운데 · 간격 2px · 안쪽 여백)만 더함 · 고르지 않은 ‘오늘 운영 마감’ 빨간 글자 그대로`,
+  restDiff.length === 0 && restO.length === restN.length && ui5Ok && stillO.length > 0 && stillO.every(x => stillN.includes(x)) &&
   sameList(stillAdded, ['display: flex', 'flex-direction: column', 'align-items: center', 'justify-content: center', 'gap: 2px', 'padding: 8px 12px']) &&
   sameList(declOf(rulesNew, '#btn-closed .off__t') || [], ['color: var(--danger)']),
-  `다른 규칙 ${restDiff.length}: ${restDiff.slice(0, 3).join(' / ')} | .still 더함 ${stillAdded.join('; ')}`);
+  `다른 규칙 ${restDiff.length}: ${restDiff.slice(0, 3).join(' / ')} | UI 최종 규칙 ${ui5Ok ? '같음' : '다름: ' + JSON.stringify(ui5Got).slice(0, 200)} | .still 더함 ${stillAdded.join('; ')}`);
 function sameList(a, b) { return a.length === b.length && [...a].sort().join('|') === [...b].sort().join('|'); }
 
 // ══ S2 찾기 정확도(84곳) ═══════════════════════════════════════════════════
@@ -449,8 +473,19 @@ try {
   diffLines = execFileSync('git', ['-C', CTRL, 'diff', '-U0', BASE_REF, '--', 'booth-ctrl.html'], { encoding: 'utf8' }).replace(/\r/g, '').split('\n')
     .filter(l => /^[+-]/.test(l) && !/^(\+\+\+|---) /.test(l));
 } catch (e) { diffLines = null; }
+// UI 최종(2026-10-21): 행사 전(리허설) 카드 아래 안내를 뺀 phaseNote 의 세 줄 → 주석 두 줄 + 한 줄(return '')
+const UI5_NOTE = [
+  "-      if (rehearsalShown(info)) {",
+  "-        return '행사 전 리허설이에요. 누른 값은 관람객 화면에 ‘리허설 중’ 안내와 함께 보여요.';",
+  "-      }",
+  "+      // 행사 전(리허설)에는 카드 아래 안내를 두지 않습니다(운영 요청, 2026-10-21). 리허설 값 처리와",
+  "+      // 저장 알림('관람객 화면에 ‘리허설 중’ 안내와 함께 보여요') · 관람객 화면의 '리허설 중' 띠는 그대로입니다.",
+  "+      if (rehearsalShown(info)) return '';"
+];
+const ui5Hits = diffLines ? UI5_NOTE.filter(x => diffLines.includes(x)).length : 0;
+if (diffLines && ui5Hits === UI5_NOTE.length) diffLines = diffLines.filter(l => !UI5_NOTE.includes(l));
 const offDiff = diffLines ? diffLines.filter(l => !/still|^[+-]\s*<\/button>\s*$/.test(l)) : null;
-t(`S6-7 #12 이전 Production(${BASE_REF})과 견줘 booth-ctrl.html 에서 바뀐 줄은 ‘지금 확인’ 단추 마크업 · 그 글자를 바꾸는 한 줄뿐 — 저장 · QR · PIN · 로그인 코드는 그대로`,
+t(`S6-7 #12 이전 Production(${BASE_REF})과 견줘 booth-ctrl.html 에서 바뀐 줄은 ‘지금 확인’ 단추 마크업 · 그 글자를 바꾸는 한 줄 · UI 최종의 리허설 안내 제거(정해 둔 여섯 줄)뿐 — 저장 · QR · PIN · 로그인 코드는 그대로`,
   !!diffLines && offDiff.length === 0 && diffLines.filter(l => l.startsWith('-')).length <= 2, diffLines ? `바뀐 줄 ${diffLines.length} · 그 밖 ${offDiff.length}: ${offDiff.slice(0, 3).join(' / ')}` : 'git diff 실패');
 SN.c.dom.window.close(); SO.c.dom.window.close();
 t('S6-8 화면 오류 없음(두 판)', !SN.c.errors.length && !SO.c.errors.length, [...SN.c.errors, ...SO.c.errors].join(' | '));
