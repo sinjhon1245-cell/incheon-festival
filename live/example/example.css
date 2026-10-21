@@ -222,15 +222,17 @@ ul, ol { padding: 0; list-style: none; }
 /* 두 카드 나란히(860px 이상): 카드 여섯 칸(머리 셋 · 미리보기 · 보조 줄 · 단추와 안내 줄)을 바깥 격자의 줄에 맞춰
    머리 · 미리보기 시작 · 단추가 두 카드에서 같은 줄에 옵니다. 미리보기 줄(4)은 운영자 미리보기 높이만큼만 잡고,
    보조 줄(5)은 남는 높이를 받는 줄(1fr)로 둡니다 — 더 긴 관람객 미리보기는 4 · 5 두 줄에 걸칩니다.
-   그래서 운영자 공통 PIN 은 운영자 미리보기 바로 아래(.cp 아래 여백 18px)에 붙고, 오른쪽이 짧아 남는 높이는
-   PIN 아래 · 단추 위로 갑니다. subgrid 를 모르는 브라우저는 위의 세로 쌓기(아래로 붙이기)를 그대로 씁니다. */
+   운영자 공통 PIN 은 그 남는 줄의 가운데에 둡니다. 운영자 미리보기 아래 여백(20px)과 단추 위 여백(20px)을 같게 두어,
+   남는 높이가 PIN 위아래로 고르게 나뉩니다(남는 높이가 없으면 위아래 20px). 두 단추는 같은 줄(6)이라 위 · 아래 끝이 같습니다.
+   subgrid 를 모르는 브라우저는 위의 세로 쌓기(아래로 붙이기)를 그대로 씁니다. */
 @media (min-width: 860px) {
   @supports (grid-template-rows: subgrid) {
     .cards { grid-template-rows: repeat(4, auto) 1fr auto; }
     .card { display: grid; grid-row: span 6; grid-template-rows: subgrid; row-gap: 0; }
     .card__pv { align-self: start; }
     .card__pv.vp { grid-row: 4 / span 2; }
-    .card__note { grid-row: 5; align-self: start; margin-top: 0; }
+    .card__pv.cp { margin-bottom: 20px; }
+    .card__note { grid-row: 5; align-self: center; margin-top: 0; }
     .card__foot,
     .card__note + .card__foot { grid-row: 6; margin-top: 0; padding-top: 20px; }
   }
