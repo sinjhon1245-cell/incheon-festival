@@ -18,13 +18,17 @@
 <body>
   <!-- 화면 안내 페이지. 데이터를 읽지 않는 정적 페이지라 스크립트가 없습니다.
        아래 두 미리보기는 실제 화면을 줄여 그린 그림이고, 값은 고정입니다.
+       '체험하기' 단추는 협의용 예시 화면(?demo=1)으로 보냅니다. 예시 화면은 이 브라우저 안의
+       예시 부스만 쓰고 서버를 읽거나 쓰지 않습니다(assets/booth-core.js 의 시연 모드).
+       공개 페이지라 운영용 PIN 같은 접속 정보는 적지 않습니다.
        운영 포털 · 관리자 화면으로 가는 링크나 주소는 두지 않습니다
        (live/build.sh 가 그런 흔적을 찾으면 배포를 멈춥니다). -->
   <div class="wrap">
     <header class="top">
       <p class="top__event">2026 인천 AI미래채움 교육페스티벌</p>
       <h1 class="top__title">부스 대기 현황</h1>
-      <p class="top__lead">관람객 화면과 부스 운영자 화면을 아래에서 각각 확인하실 수 있습니다.</p>
+      <p class="top__lead">관람객 화면과 부스 운영자 화면을 아래에서 각각 확인하실 수 있습니다.
+        ‘체험하기’는 실제 행사 정보와 분리된 협의용 예시 화면을 새 탭에서 엽니다. 예시 화면에서 누른 값은 그 브라우저 안에서만 바뀌고 서버에 저장되지 않습니다.</p>
     </header>
 
     <main>
@@ -34,31 +38,51 @@
           <h2 class="card__title" id="visitor-title">부스 대기 현황 확인</h2>
           <p class="card__text">행사장을 방문한 학생·교사·학부모가 부스별 대기시간과 현재 운영 상태를 확인하는 화면입니다.</p>
 
-          <div class="card__pv vp" role="img" aria-label="관람객 화면 미리보기. 부스마다 번호, 이름, 운영기관, 대기시간과 상태(여유, 보통, 혼잡, 잠시 중단, 마감)를 한 줄씩 보여 줍니다.">
+          <div class="card__pv vp" role="img" aria-label="관람객 화면 미리보기. 위에 지금 여유로운 부스 수(1곳, 전체 5곳)와 상태별 부스 수가 있고, 아래 목록에 부스마다 번호, 이름, 운영기관, 대기시간과 상태(여유, 보통, 혼잡, 잠시 중단, 마감)를 한 줄씩 보여 줍니다.">
             <div class="vp__band">
-              <p class="vp__title">부스 대기 현황</p>
+              <div class="vp__bandrow">
+                <p class="vp__title">부스 대기 현황</p>
+                <p class="vp__sync"><i class="vp__syncsq"></i>자동 갱신</p>
+              </div>
               <p class="vp__event">2026 인천 AI미래채움 교육페스티벌 · 인천 상상플랫폼</p>
             </div>
+            <div class="vp__hero">
+              <p class="vp__label">지금 여유로운 부스</p>
+              <div class="vp__fig">
+                <p class="vp__big"><b class="vp__num">1</b><span class="vp__unit">곳</span></p>
+                <p class="vp__total">전체 <b>5</b>곳</p>
+              </div>
+              <div class="vp__dist">
+                <i class="dist dist--free"></i><i class="dist dist--normal"></i><i class="dist dist--busy"></i><i class="dist dist--off"></i>
+              </div>
+              <ul class="vp__counts">
+                <li class="cnt"><span class="cnt__w"><i class="sq sq--free"></i>여유</span><b class="cnt__n">1</b></li>
+                <li class="cnt"><span class="cnt__w"><i class="sq sq--normal"></i>보통</span><b class="cnt__n">1</b></li>
+                <li class="cnt"><span class="cnt__w"><i class="sq sq--busy"></i>혼잡</span><b class="cnt__n">1</b></li>
+                <li class="cnt"><span class="cnt__w"><i class="sq sq--off"></i>중단·마감</span><b class="cnt__n">2</b></li>
+              </ul>
+            </div>
+            <p class="vp__tabs"><span class="vp__tab is-on">전체 <span class="vp__tabn">5</span></span><span class="vp__tab">A 구역 <span class="vp__tabn">1</span></span><span class="vp__tab">B 구역 <span class="vp__tabn">1</span></span><span class="vp__tab">C 구역 <span class="vp__tabn">1</span></span><span class="vp__tab">D 구역 <span class="vp__tabn">1</span></span></p>
             <ul class="vp__rows">
               <li class="vr">
                 <span class="vr__code">A-02</span>
                 <span class="vr__body"><span class="vr__name">미래교실 체험관</span><span class="vr__org">인천교육청</span></span>
-                <span class="vr__right"><span class="v"><b class="v__n">5</b><span class="v__u">분</span></span><span class="st st--free"><i class="sq"></i>여유</span></span>
+                <span class="vr__right"><span class="v"><b class="v__n">5</b><span class="v__u">분</span></span><span class="st st--free">여유</span></span>
               </li>
               <li class="vr">
                 <span class="vr__code">B-01</span>
                 <span class="vr__body"><span class="vr__name">센서로 키우는 반려식물</span><span class="vr__org">인천새빛초등학교</span></span>
-                <span class="vr__right"><span class="v"><b class="v__n">15</b><span class="v__u">분</span></span><span class="st st--normal"><i class="sq"></i>보통</span></span>
+                <span class="vr__right"><span class="v"><b class="v__n">15</b><span class="v__u">분</span></span><span class="st st--normal">보통</span></span>
               </li>
               <li class="vr">
                 <span class="vr__code">C-01</span>
                 <span class="vr__body"><span class="vr__name">생성형 AI 음악 놀이터</span><span class="vr__org">인천한빛중학교</span></span>
-                <span class="vr__right"><span class="v"><b class="v__n">30</b><span class="v__u">분</span></span><span class="st st--busy"><i class="sq"></i>혼잡</span></span>
+                <span class="vr__right"><span class="v"><b class="v__n">30</b><span class="v__u">분</span></span><span class="st st--busy">혼잡</span></span>
               </li>
               <li class="vr">
                 <span class="vr__code">D-03</span>
                 <span class="vr__body"><span class="vr__name">피지컬 AI 메이커</span><span class="vr__org">인천한울고등학교</span></span>
-                <span class="vr__right"><span class="st st--pause"><i class="sq sq--hollow"></i>잠시 중단</span></span>
+                <span class="vr__right"><span class="st st--pause">잠시 중단</span></span>
               </li>
               <li class="vr is-closed">
                 <span class="vr__code">E-01</span>
@@ -69,9 +93,10 @@
           </div>
 
           <div class="card__foot">
-            <a class="cta" href="/" target="_blank" rel="noopener noreferrer">관람객 화면 보기<span aria-hidden="true">&#x2197;&#xFE0E;</span><span class="sr-only"> (새 탭에서 열림)</span></a>
+            <a class="cta" href="/?demo=1" target="_blank" rel="noopener noreferrer">관람객 화면 체험하기<span aria-hidden="true">&#x2197;&#xFE0E;</span><span class="sr-only"> (협의용 예시 화면, 새 탭에서 열림)</span></a>
             <dl class="facts">
-              <div class="facts__row"><dt>주소</dt><dd>incheon-live.vercel.app</dd></div>
+              <div class="facts__row"><dt>체험 화면</dt><dd>예시 부스 · 실제 대기 정보와 섞이지 않음</dd></div>
+              <div class="facts__row"><dt>실제 주소</dt><dd>incheon-live.vercel.app</dd></div>
               <div class="facts__row"><dt>로그인</dt><dd>필요 없음</dd></div>
             </dl>
           </div>
@@ -82,9 +107,27 @@
           <h2 class="card__title" id="ctrl-title">대기시간 입력</h2>
           <p class="card__text">각 부스 담당자가 QR 또는 PIN으로 접속해 현재 대기시간을 직접 입력하는 화면입니다.</p>
 
-          <div class="card__pv cp" role="img" aria-label="부스 운영자 화면 미리보기. 대기시간 단추(바로, 5분부터 60분 이상까지)와 운영 상태 단추(잠시 중단, 오늘 운영 마감)가 있고, 지금 저장된 값(5분)이 보라색으로 표시됩니다.">
-            <p class="cp__eyebrow"><span class="cp__code">A-01</span><span class="cp__role">부스 운영자</span></p>
-            <p class="cp__name">AI 그림책 만들기</p>
+          <div class="card__pv cp" role="img" aria-label="부스 운영자 화면 미리보기. 위에 부스 번호(A-01)와 부스 이름, 운영기관, 구역이 있고, 현재 대기(5분, 여유)와 마지막 입력 시각, 변동 없음 · 지금 확인 단추가 있습니다. 아래에 대기시간 단추(바로, 5분부터 60분 이상까지)와 운영 상태 단추(잠시 중단, 오늘 운영 마감)가 있고, 지금 저장된 값(5분)이 보라색으로 표시됩니다.">
+            <div class="cp__head">
+              <p class="cp__code">A-01</p>
+              <div class="cp__id">
+                <p class="cp__name">AI 그림책 만들기</p>
+                <p class="cp__meta">
+                  <span class="cp__metai"><svg class="cp__ic" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 21V5a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v16M15 9h3a2 2 0 0 1 2 2v10M2.5 21h19M8 7.5h3M8 11.5h3M8 15.5h3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>인천가온초등학교</span>
+                  <span class="cp__metai"><svg class="cp__ic" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 21.5s-7-6.1-7-11.6a7 7 0 0 1 14 0c0 5.5-7 11.6-7 11.6z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="12" cy="9.8" r="2.6" fill="none" stroke="currentColor" stroke-width="2"/></svg>A 구역</span>
+                </p>
+              </div>
+            </div>
+
+            <div class="cp__now">
+              <p class="cp__nowcap">현재 대기</p>
+              <div class="cp__nowmain">
+                <span class="cp__nowwait"><b class="cp__nownum">5</b><span class="cp__nowunit">분</span></span>
+                <span class="cp__nowstate">여유</span>
+              </div>
+              <p class="cp__nowwhen">마지막 입력 · 2분 전</p>
+            </div>
+            <span class="cp__still"><span class="cp__stillt">변동 없음 · 지금 확인</span><span class="cp__stills">값은 그대로 두고 확인한 시각만 새로 저장해요</span></span>
 
             <div class="cp__pad">
               <div class="cp__padhead">
@@ -113,10 +156,11 @@
           </div>
 
           <div class="card__foot">
-            <a class="cta" href="/booth-ctrl" target="_blank" rel="noopener noreferrer">부스 운영자 화면 보기<span aria-hidden="true">&#x2197;&#xFE0E;</span><span class="sr-only"> (새 탭에서 열림)</span></a>
+            <a class="cta" href="/booth-ctrl?demo=1" target="_blank" rel="noopener noreferrer">부스 운영자 화면 체험하기<span aria-hidden="true">&#x2197;&#xFE0E;</span><span class="sr-only"> (협의용 예시 화면, 새 탭에서 열림)</span></a>
             <dl class="facts">
-              <div class="facts__row"><dt>주소</dt><dd>incheon-live.vercel.app/booth-ctrl</dd></div>
-              <div class="facts__row"><dt>확인용 PIN</dt><dd class="facts__pin">123456</dd></div>
+              <div class="facts__row"><dt>체험 화면</dt><dd>예시 부스 · 예시 PIN은 화면에서 안내</dd></div>
+              <div class="facts__row"><dt>실제 주소</dt><dd>incheon-live.vercel.app/booth-ctrl</dd></div>
+              <div class="facts__row"><dt>로그인</dt><dd>부스별 운영자 QR 또는 운영본부에서 받은 PIN</dd></div>
             </dl>
           </div>
         </section>
@@ -125,7 +169,7 @@
       <section class="flow" aria-labelledby="flow-title">
         <div>
           <h2 class="flow__title" id="flow-title">이렇게 연결됩니다</h2>
-          <p class="flow__text">부스 운영자가 입력한 대기시간은 관람객 화면에 반영됩니다.</p>
+          <p class="flow__text">부스 운영자가 입력한 대기시간은 관람객 화면에 자동으로 반영됩니다. 체험 화면도 같은 브라우저라면 운영자 예시에서 누른 값이 관람객 예시에 반영됩니다(관람객 예시를 새로 고치면 바로 보입니다).</p>
         </div>
         <ol class="steps">
           <li class="step"><span class="step__who">부스 운영자</span><span class="step__what">대기시간 입력</span></li>

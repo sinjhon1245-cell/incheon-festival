@@ -10,9 +10,11 @@
 
      바탕 · 카드 · 단추     부스 운영자 화면 (회백 바탕 · 16px 카드 · 12px 단추)
      관람객 미리보기        관람객 화면 (보라 띠 · 모서리 없음 · 네모 상태 표시)
-     운영자 미리보기        부스 운영자 화면 (대기시간 단추 · 운영 상태 단추)
+     운영자 미리보기        부스 운영자 화면 (부스 머리 · 현재 대기 · 대기시간 단추 · 운영 상태 단추)
 
-   상태 색은 두 화면과 같은 셋(여유 초록 · 보통 갈색 · 혼잡 빨강)과
+   '체험하기' 단추는 협의용 예시 화면(?demo=1)으로 보냅니다. 공개 페이지라 PIN 같은 접속 정보는 적지 않습니다.
+
+   상태 색은 두 화면과 같은 셋(여유 초록 · 보통 노랑 · 혼잡 빨강)과
    중단 · 마감의 회색뿐이고, 늘 낱말과 함께 씁니다. 대기시간 → 상태 규칙도
    두 화면과 같습니다(10분 이하 여유 · 25분 이하 보통 · 그 위 혼잡).
    =================================================================== */
@@ -119,7 +121,7 @@ ul, ol { padding: 0; list-style: none; }
   line-height: 1.3;
   letter-spacing: -0.03em;
 }
-.top__lead { margin-top: 6px; font-size: 15px; line-height: 1.6; color: var(--muted); }
+.top__lead { max-width: 46em; margin-top: 6px; font-size: 15px; line-height: 1.6; color: var(--muted); }
 
 /* ── 두 화면 카드 ──────────────────────────────────────────────── */
 .cards { display: grid; gap: 16px; }
@@ -179,23 +181,19 @@ ul, ol { padding: 0; list-style: none; }
 .facts__row { display: flex; align-items: baseline; gap: 12px; min-height: 28px; }
 .facts dt { flex: none; width: 5.6em; font-size: 13px; font-weight: 700; color: var(--muted); }
 .facts dd { min-width: 0; font-size: 14px; color: var(--ink-2); }
-/* PIN 숫자 — 운영자 화면의 PIN 글자 규칙(700 · 남색 · 비례 숫자 · 자간 조금)을 글줄 크기로 */
-.facts__pin {
-  font-size: 17px;
-  font-weight: 700;
-  letter-spacing: 0.03em;
-  font-variant-numeric: normal;
-  color: var(--ink);
-}
 
-/* ── 관람객 미리보기 — visitor.css 의 띠 · 목록 줄을 줄인 것 ──────── */
+/* ── 관람객 미리보기 — visitor.css 의 띠 · 큰 숫자 · 구역 탭 · 목록 줄을 줄인 것 ──── */
 .vp {
   border: 1px solid var(--line);
   background: #fff;
   font-variant-numeric: tabular-nums;
 }
 .vp__band { padding: 12px 16px 13px; background: var(--accent); color: #fff; }
+.vp__bandrow { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .vp__title { font-size: 17px; font-weight: 700; line-height: 24px; letter-spacing: -0.03em; }
+/* 오른쪽 '자동 갱신' — 관람객 화면 띠의 흰 네모 + 글 */
+.vp__sync { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; white-space: nowrap; }
+.vp__syncsq { display: inline-block; width: 7px; height: 7px; background: #fff; }
 .vp__event {
   font-size: 12px;
   line-height: 17px;
@@ -204,9 +202,47 @@ ul, ol { padding: 0; list-style: none; }
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* 큰 숫자 — 관람객 화면 .hero 의 '지금 여유로운 부스' (숫자 · 분포 막대 · 상태별 수) */
+.vp__hero { padding: 16px 14px 14px; }
+.vp__label { font-size: 12.5px; font-weight: 600; color: var(--muted); }
+.vp__fig { display: flex; align-items: flex-end; justify-content: space-between; gap: 10px; margin-top: 6px; }
+.vp__big { display: flex; align-items: baseline; gap: 3px; line-height: .86; }
+.vp__num { font-size: 48px; font-weight: 800; letter-spacing: -0.055em; }
+.vp__unit { font-size: 15px; font-weight: 700; }
+.vp__total { margin-bottom: 1px; font-size: 12.5px; font-weight: 600; color: var(--muted); white-space: nowrap; }
+.vp__total b { color: var(--ink); font-weight: 700; }
+/* 분포 막대: 칸 너비는 부스 수에 비례(이 그림은 여유 1 · 보통 1 · 혼잡 1 · 중단마감 2 로 고정) */
+.vp__dist { display: flex; gap: 2px; height: 6px; margin-top: 12px; }
+.dist { flex: 1 1 0; min-width: 4px; }
+.dist--free   { background: var(--v-free); }
+.dist--normal { background: var(--v-normal); }
+.dist--busy   { background: var(--v-busy); }
+.dist--off    { flex-grow: 2; background: var(--off-mark); }
+.vp__counts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); column-gap: 8px; margin-top: 12px; }
+.cnt { display: flex; flex-direction: column; gap: 4px; min-width: 0; padding-top: 7px; border-top: 2px solid var(--line); }
+.cnt__w { display: flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 600; line-height: 1.2; white-space: nowrap; }
+.cnt__n { font-size: 18px; font-weight: 800; line-height: 1; letter-spacing: -0.02em; }
+/* 상태 네모(관람객 화면의 유일한 무늬). 샛노랑은 흰 바탕에서 가장자리가 흐려 옅은 남색 테두리 한 줄 */
+.vp .cnt .sq { display: inline-block; flex: none; width: 8px; height: 8px; }
+.sq--free   { background: var(--v-free); }
+.sq--normal { background: var(--v-normal); box-shadow: inset 0 0 0 1px rgba(22, 32, 60, .28); }
+.sq--busy   { background: var(--v-busy); }
+.sq--off    { background: var(--off-mark); }
+/* 구역 탭 — 실제 화면은 옆으로 밀어 보는 줄이라 그림에서도 넘치는 탭은 잘라 둡니다 */
+.vp__tabs {
+  display: flex;
+  gap: 16px;
+  padding: 0 14px;
+  border-bottom: 1px solid var(--line);
+  overflow: hidden;
+  white-space: nowrap;
+}
+.vp__tab { flex: none; padding: 8px 0 7px; border-bottom: 2px solid transparent; font-size: 13px; font-weight: 700; color: var(--muted); }
+.vp__tab.is-on { border-bottom-color: var(--ink); color: var(--ink); }
+.vp__tabn { font-weight: 600; color: var(--muted-2); }
 .vp__rows { padding: 0 14px; }
 @media (min-width: 600px) {
-  .vp__rows { padding: 0 16px; }
+  .vp__hero, .vp__tabs, .vp__rows { padding-left: 16px; padding-right: 16px; }
 }
 .vr {
   display: grid;
@@ -268,13 +304,12 @@ ul, ol { padding: 0; list-style: none; }
   white-space: nowrap;
 }
 /* 관람객 화면의 상태 칩(visitor.css 의 .st 와 같은 칠). 대기 분 숫자는 남색 그대로입니다 */
-.vp .st .sq { display: none; }
 .st--free   { background: var(--v-free);   color: #fff; }
 .st--normal { background: var(--v-normal); color: var(--ink); }
 .st--busy   { background: var(--v-busy);   color: #fff; }
 .st--pause  { background: #fff; box-shadow: inset 0 0 0 1px var(--off-mark); color: var(--v-off); }
 
-/* ── 운영자 미리보기 — booth-ctrl.css 의 머리 · 대기시간 · 운영 상태 ── */
+/* ── 운영자 미리보기 — booth-ctrl.css 의 머리 · 현재 대기 · 대기시간 · 운영 상태 ── */
 .cp {
   padding: 16px 12px;
   border: 1px solid var(--line);
@@ -284,11 +319,66 @@ ul, ol { padding: 0; list-style: none; }
 @media (min-width: 600px) {
   .cp { padding: 16px; }
 }
-.cp__eyebrow { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 8px; }
-.cp__code { font-size: 15px; font-weight: 700; color: var(--accent-d); font-variant-numeric: tabular-nums; }
-.cp__role { font-size: 13px; font-weight: 600; color: var(--muted); }
-.cp__role::before { content: '·'; margin-right: 8px; color: var(--line-2); }
-.cp__name { margin-top: 2px; font-size: 20px; font-weight: 800; line-height: 1.3; letter-spacing: -0.03em; }
+/* 부스 식별 머리: 왼쪽 번호 판(보라 → 파랑) │ 오른쪽 이름 + 운영기관 · 구역(booth-ctrl.css .head 를 휴대폰 크기로) */
+.cp__head {
+  display: flex;
+  align-items: center;
+  padding: 12px 14px;
+  border: 1px solid #E4E2F3;
+  border-radius: 20px;
+  background: linear-gradient(100deg, #FFFFFF 0%, #F8F8FD 48%, #F2F1FC 100%);
+  box-shadow: 0 1px 2px rgba(22, 32, 60, .04), 0 1px 3px -1px rgba(22, 32, 60, .05);
+}
+.cp__code {
+  position: relative;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 84px;
+  min-height: 60px;
+  margin-right: 20px;
+  padding: 0 .4em;
+  border-radius: 10px;
+  background: linear-gradient(135deg, var(--accent) 0%, #4560F0 100%);
+  color: var(--on);
+  font-size: 24px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  white-space: nowrap;
+}
+.cp__code::after { content: ''; position: absolute; top: 10%; bottom: 10%; right: -10px; width: 1px; background: #CBC7E6; }
+.cp__id { flex: 1; min-width: 0; }
+.cp__name { font-size: 18px; font-weight: 800; line-height: 1.22; letter-spacing: -0.035em; color: #0B1939; }
+.cp__meta { display: flex; flex-wrap: wrap; gap: 2px 1em; margin-top: 4px; font-size: 12.5px; font-weight: 600; line-height: 1.4; color: #445075; }
+.cp__metai { display: inline-flex; align-items: center; gap: .32em; min-width: 0; }
+.cp__ic { flex: none; width: 1.05em; height: 1.05em; color: var(--accent); opacity: .7; }
+
+/* 현재 대기 — 숫자 옆 작은 상태 글자판(여유 초록 · 흰 글자) */
+.cp__now { margin-top: 10px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 20px; background: var(--panel); }
+.cp__nowcap { font-size: 12px; font-weight: 700; color: var(--muted); }
+.cp__nowmain { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin-top: 2px; }
+.cp__nowwait { display: inline-flex; align-items: baseline; gap: 2px; }
+.cp__nownum { font-size: 40px; font-weight: 800; line-height: 1; letter-spacing: -0.045em; font-variant-numeric: tabular-nums; }
+.cp__nowunit { font-size: 17px; font-weight: 700; color: var(--ink-2); }
+.cp__nowstate { display: inline-flex; padding: 3px 9px; border-radius: 999px; background: var(--free); color: var(--on); font-size: 13px; font-weight: 700; line-height: 1.35; }
+.cp__nowwhen { margin-top: 4px; font-size: 12.5px; color: var(--muted); }
+/* 변동 없음 · 지금 확인(값은 그대로 · 확인 시각만 새로) */
+.cp__still {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  margin-top: 8px;
+  padding: 7px 10px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-btn);
+  background: var(--panel);
+  text-align: center;
+}
+.cp__stillt { font-size: 14px; font-weight: 700; color: var(--ink-2); }
+.cp__stills { font-size: 11.5px; line-height: 1.4; color: var(--muted); }
 
 .cp__pad { margin-top: 16px; }
 .cp__padhead {
