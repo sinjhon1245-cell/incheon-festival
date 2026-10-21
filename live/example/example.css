@@ -503,7 +503,7 @@ ul, ol { padding: 0; list-style: none; }
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  justify-content: center;
+  justify-content: flex-start;   /* 운영자 화면과 같게 위에서부터 — 한쪽 설명만 줄바꿈되어도 제목 줄이 나란히 */
   gap: 2px;
   min-width: 0;
   min-height: 64px;
