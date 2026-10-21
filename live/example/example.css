@@ -218,6 +218,19 @@ ul, ol { padding: 0; list-style: none; }
   font-variant-numeric: tabular-nums;
 }
 .pinhint__d { white-space: nowrap; }
+/* 넓어질수록 크게 — 숫자가 먼저 보이게 숫자 > 라벨 > 사용 기간 순. 휴대폰(600px 미만)은 위 크기로 한 줄을 지킵니다.
+   600px 이상은 한 단계, 1024px 이상(두 카드 나란히 · 카드 폭이 한 줄을 받는 곳)은 운영자 카드 아래 남는 높이를 채우게
+   숫자 30px · 배지 48px. 860~1023px(두 카드지만 카드가 좁음)은 한 줄을 지키려 가운데 단계를 그대로 씁니다. */
+@media (min-width: 600px) {
+  .pinhint { gap: 4px 8px; font-size: 14px; line-height: 22px; }
+  .pinhint__k { font-size: 14px; }
+  .pinhint__v { padding: 0 calc(14px - 0.05em) 0 14px; font-size: 24px; line-height: 36px; }
+}
+@media (min-width: 1024px) {
+  .pinhint { gap: 6px 10px; font-size: 16px; line-height: 24px; }
+  .pinhint__k { font-size: 18px; }
+  .pinhint__v { padding: 0 calc(18px - 0.05em) 0 18px; font-size: 30px; line-height: 46px; }
+}
 
 /* 두 카드 나란히(860px 이상): 카드 여섯 칸(머리 셋 · 미리보기 · 보조 줄 · 단추와 안내 줄)을 바깥 격자의 줄에 맞춰
    머리 · 미리보기 시작 · 단추가 두 카드에서 같은 줄에 옵니다. 미리보기 줄(4)은 운영자 미리보기 높이만큼만 잡고,
