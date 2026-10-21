@@ -51,14 +51,16 @@ node --max-old-space-size=8192 scripts/booth-data/test-qr-e2e.mjs $A --live-dir 
 node --max-old-space-size=8192 scripts/booth-data/test-gate4r.mjs $A --main-dir ../incheon-festival-main --live-dir ../incheon-festival-live --qr-dir $D/qrlib
 node --max-old-space-size=8192 scripts/booth-data/test-reset-removed.mjs $A --main-dir ../incheon-festival-main
 node --max-old-space-size=8192 scripts/booth-data/test-pin-status.mjs $A --main-dir ../incheon-festival-main
-node scripts/booth-data/test-example-page.mjs --live-dir ../incheon-festival-live --pptr-dir <pptr/node_modules/puppeteer-core 가 든 폴더> [--base-ref 3b9d1a3]
+node scripts/booth-data/test-example-page.mjs --live-dir ../incheon-festival-live --main-dir ../incheon-festival-main --pptr-dir <pptr/node_modules/puppeteer-core 가 든 폴더> [--base-ref 0f47c88]
 ```
 
 - `test-example-page.mjs`(/example/ 화면 안내): booth-live 작업 폴더를 `sh live/build.sh` 로 빌드해 Edge(puppeteer-core)로 엽니다.
-  공개 페이지에 PIN 이 없는지 · 관람객 단추가 실제 관람객 화면(`/`)을, 운영자 단추가 `/booth-ctrl?demo=1` 예시 화면(Supabase · `/api` 요청 0)을 여는지 ·
-  안내 문구가 ‘운영자 체험 값은 실제 관람객 화면에 반영되지 않음’ 을 말하는지 · 미리보기 말이 지금 두 화면에 있는지 ·
+  두 단추가 실제 운영 화면(`/` · `/booth-ctrl`, `?demo` 없음)을 여는지 · 공개 PIN 이 운영자 카드의 리허설 공통 PIN 안내 한 곳뿐인지
+  (값 = booth-ctrl 의 공통 PIN 값 · 그 밖의 6자리 숫자 없음) · 안내 글이 main 의 리허설 SQL 조건과 같은지(공통 PIN 기한 · 개별 PIN 부스 제외 ·
+  23:00 초기화는 `booth_live` 만 지움 — 초기화로 PIN 이 끝난다고 말하지 않음) · PIN 숫자 크기 · 대비 · 미리보기 말이 지금 두 화면에 있는지 ·
   배포본에서 `example/` 말고는 `--base-ref` 빌드와 바이트 같은지 봅니다. 실제 관람객 화면에는 시험용 스냅샷(`GET /api/live-snapshot`, 부스 A-01 하나)을
-  돌려주고, 그 화면의 요청이 조회뿐인지 · 같은 브라우저에서 운영자 예시에서 누른 값이 그 화면에 나타나지 않는지 봅니다. 행사 명칭은 `--official`(기본 settings.event_title 값).
+  돌려주고, Supabase 는 사전 확인(OPTIONS)만 통과시키고 실제 요청은 세고 막습니다 — 두 실제 화면을 열기만 했을 때 요청이 조회뿐인지
+  (관람객 `GET /api/live-snapshot` · 운영자 Supabase GET settings · zones · booths, RPC · 로그인 없음) 봅니다. 행사 명칭은 `--official`(기본 settings.event_title 값).
 
 - `test-reset-removed.mjs`(A-1): 인쇄 화면에서 ‘실시간 값 모두 지우기’ 를 뺀 판 기준. 예전 판은 `--old-ref`(기본 6a34872)로 git 에서 읽습니다.
   D4-3 은 README 가 ‘단추만 뺐고 DB 함수 · 관리자 RPC 실행 권한은 그대로’ 라고 적는지, D4-4 는 복제 DB 에서 그 권한이 그대로인지
@@ -80,3 +82,5 @@ node scripts/booth-data/test-example-page.mjs --live-dir ../incheon-festival-liv
   바꾸기 전 판(63d260b)에서는 새 항목만 실패(4 / 11).
 - 2026-10-21 결과(/example/ 관람객 실제 화면 링크 0f47c88 · 기준 3b9d1a3): 화면 안내 12 · 관람객 48 · 운영자 29 · 공통 PIN 61 · QR 종단 30 — 180 / 180 통과.
   바꾸기 전 판(3b9d1a3)에서는 링크 · 문구 · 변경 · 새 탭 연결 항목만 실패(8 / 12 — X2 · X2b · X7 · X9).
+- 2026-10-21 결과(/example/ 두 단추 실제 화면 · 리허설 공통 PIN 안내 3212ef7 · 기준 0f47c88 · main f3b61b1): 화면 안내 13 · 관람객 48 · 운영자 29 ·
+  공통 PIN 61 · QR 종단 30 — 181 / 181 통과. 바꾸기 전 판(0f47c88)에서는 PIN 안내 · 링크 · 문구 · 변경 · 화면 · 새 탭 항목만 실패(5 / 13).

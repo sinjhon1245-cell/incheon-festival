@@ -1,15 +1,16 @@
 /* ===================================================================
    /example/ 화면 안내 페이지 시험 (booth-live 의 live/example)
    ───────────────────────────────────────────────────────────────────
-   · 정적: 스크립트 없음 · 확인용 PIN(123456 등 숫자 PIN) 없음 · 관람객 단추 = 실제 화면(/) · 운영자 단추 = ?demo=1 · 안내 문구
-     (운영자 체험 값은 실제 관람객 화면에 반영되지 않음) · 행사 명칭 · 미리보기 문구가 실제 두 화면에 있는 말인지 · 색 값
+   · 정적: 스크립트 없음 · 공개 PIN 은 리허설 공통 PIN 안내 한 곳뿐(값 = 운영자 화면의 공통 PIN 값 · 그 밖의 6자리 숫자 없음)
+     · PIN 안내 = 서버의 실제 사용 조건(main 의 리허설 SQL: 기한 · 개별 PIN 부스 제외 · 23:00 초기화는 대기시간만)
+     · 두 단추 = 실제 운영 화면(/ · /booth-ctrl, ?demo 없음) · 안내 문구 · 행사 명칭 · 미리보기 문구가 실제 두 화면에 있는 말인지 · 색 값
    · 빌드: sh live/build.sh 통과(운영 포털 흔적 검사 포함) · 배포본에서 example/ 말고는 기준 판(--base-ref) 빌드와 바이트 동일
-   · 브라우저(Edge · 390 / 1440): 가로 넘침 · 오류 · 데이터 요청 0 · 관람객 단추 → 실제 관람객 화면(협의용 예시 띠 없음)
-     · 운영자 단추 → 협의용 예시(띠 있음 · 데이터 요청 0) · 실제 관람객 화면의 요청은 조회(GET /api/live-snapshot)뿐
-     · 같은 브라우저에서 운영자 예시에서 누른 값이 실제 관람객 화면에 나타나지 않음(관람객 예시에는 나타남 — 누른 값이 저장됐다는 확인)
+   · 브라우저(Edge · 390 / 1440): 가로 넘침 · 오류 · 데이터 요청 0 · PIN 숫자 크기 · 대비 · 1440 두 단추 같은 높이
+     · 관람객 단추 → 실제 관람객 화면 · 운영자 단추 → 실제 운영자 화면(둘 다 협의용 예시 띠 없음 · 예시 저장소 안 만듦)
+     · 두 실제 화면을 열기만 했을 때의 요청은 조회뿐(관람객 GET /api/live-snapshot · 운영자 Supabase GET — 로그인 · 쓰기 · RPC 없음)
    빌드 결과를 incheon-live.vercel.app 주소로 띄웁니다. GET /api/live-snapshot 에는 시험용 스냅샷(부스 A-01 하나)을 돌려주고,
    다른 /api · Supabase 요청은 모두 막고 셉니다(Production 접속 없음).
-   node test-example-page.mjs --live-dir <booth-live 작업 폴더> --pptr-dir <puppeteer-core 가 든 폴더> [--base-ref 3b9d1a3] [--official "…"]
+   node test-example-page.mjs --live-dir <booth-live 작업 폴더> --main-dir <main 작업 폴더> --pptr-dir <puppeteer-core 가 든 폴더> [--base-ref 0f47c88] [--official "…"]
    =================================================================== */
 import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync, statSync, mkdtempSync } from 'node:fs';
 import { join, resolve, dirname, extname, relative } from 'node:path';
@@ -21,7 +22,8 @@ import { fileURLToPath } from 'node:url';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const arg = (n, d) => { const i = process.argv.indexOf(`--${n}`); return i > 0 ? process.argv[i + 1] : d; };
 const LIVE = resolve(arg('live-dir'));
-const BASE_REF = arg('base-ref', '3b9d1a3');
+const BASE_REF = arg('base-ref', '0f47c88');
+const MAIN = resolve(arg('main-dir'));   // main 작업 폴더 — 리허설 공통 PIN · 초기화 SQL(supabase/) 을 읽습니다
 const OFFICIAL = arg('official', '2026 인천 AI미래채움 교육페스티벌');   // settings.event_title (Production 읽기 확인 2026-10-21)
 const VENUE = arg('venue', '인천 상상플랫폼');
 const puppeteer = createRequire(join(resolve(arg('pptr-dir')), 'pptr', 'package.json'))('puppeteer-core');
@@ -39,24 +41,54 @@ const textOf = h => h.replace(/<!--[\s\S]*?-->/g, ' ').replace(/<[^>]+>/g, ' ').
 const TEXT = textOf(HTML);
 
 // ── 1. 정적 ─────────────────────────────────────────────────────
-t('X1 스크립트 없음 · 확인용 PIN 없음 — 123456 도, 6자리 숫자 PIN 도, “확인용 PIN” 글도 없음(주석 포함)',
-  !/<script/i.test(HTML) && !/123456/.test(HTML) && !/\b\d{6}\b/.test(HTML) && !/확인용 PIN/.test(HTML) && !/facts__pin|123456/.test(CSS),
-  [/<script/i.test(HTML), /123456/.test(HTML), (HTML.match(/\b\d{6}\b/g) || []).length, /확인용 PIN/.test(HTML)].join(' '));
+// 공개 PIN 은 운영 요청(2026-10-21)으로 리허설 공통 PIN 하나만 — 운영자 카드의 .pinnote 한 곳에 · 운영자 화면이 쓰는 공통 PIN 값과 같게.
+// 그 밖의 6자리 숫자(개별 PIN 처럼 보이는 값) · 예시 PIN · ‘확인용 PIN’ 은 여전히 없어야 합니다.
+const COMMON = (CTRL.match(/var COMMON_PIN_HINT = '(\d+)';/) || [])[1];
+const six = HTML.match(/\b\d{6}\b/g) || [];
+const ctrlCard = HTML.split('id="ctrl-who"')[1] || '';
+const PINNOTE = (HTML.match(/<section class="pinnote"[\s\S]*?<\/section>/g) || []);
+t('X1 스크립트 없음 · 공개 PIN 은 운영자 카드의 리허설 공통 PIN 안내 한 곳뿐 — 6자리 숫자는 그 값 하나(주석 포함) · 값 = 운영자 화면의 공통 PIN 값(booth-ctrl COMMON_PIN_HINT) · ‘확인용 PIN’ · 예시 PIN 없음 · CSS 에 6자리 숫자 없음(색 값 #xxxxxx 제외)',
+  !/<script/i.test(HTML) && !!COMMON && /^\d{6}$/.test(COMMON) && six.length === 1 && six[0] === COMMON &&
+  PINNOTE.length === 1 && PINNOTE[0].includes(`<b class="pinnote__v">${COMMON}</b>`) && ctrlCard.includes(PINNOTE[0]) &&
+  !/확인용 PIN|예시 PIN/.test(HTML) && !/facts__pin/.test(CSS) && !/\b\d{6}\b/.test(CSS.replace(/#[0-9A-Fa-f]{3,8}\b/g, '')),
+  JSON.stringify({ script: /<script/i.test(HTML), COMMON, six, notes: PINNOTE.length, inCtrl: PINNOTE[0] ? ctrlCard.includes(PINNOTE[0]) : false }));
+// PIN 안내 글 = 서버의 실제 조건(main 의 SQL). 기한 · 개별 PIN 부스 제외는 공통 PIN 함수에서, 23:00 초기화가 대기시간만 지운다는 것은 초기화 함수에서 읽습니다.
+const msql = p => readFileSync(join(MAIN, 'supabase', p), 'utf8').replace(/\r/g, '');
+const PIN_SQL = msql('migration-booth-rehearsal-pin.sql'), REH_SQL = msql('migration-booth-rehearsal.sql');
+const untilLit = (PIN_SQL.match(/rehearsal_common_pin_until\(\)\s*returns[\s\S]*?least\(timestamptz '(\d{4})-(\d\d)-(\d\d) (\d\d):(\d\d):00\+09'/) || []);
+const untilKo = untilLit.length ? `${untilLit[1]}년 ${Number(untilLit[2])}월 ${Number(untilLit[3])}일 ${untilLit[4]}:${untilLit[5]}까지` : '(SQL 에서 못 읽음)';
+const openFn = (PIN_SQL.match(/function private\.rehearsal_common_pin_open\(p_booth uuid\)[\s\S]*?\$\$;/) || [''])[0];
+const resetFn = (REH_SQL.match(/function private\.rehearsal_live_reset\(\)[\s\S]*?\$function\$;/) || [''])[0];
+const NOTE = textOf(PINNOTE[0] || '');
+const CTRL_PIN_LEN = (CTRL.match(/var PIN_LEN = isMock \? (\d) : (\d);/) || []);
+t(`X1b PIN 안내 = 실제 인증 조건 — 기한 “${untilKo}”(공통 PIN 함수의 기한) · 개별 PIN 이 생긴 부스는 공통 PIN 불가(함수: booth_pin 행 · 발급 · 재발급 · 끄기 기록이 있으면 닫힘) · 입력값은 관람객 화면에 반영 · 공개 위험 안내 · 23:00 초기화는 대기시간만(함수: booth_live 만 지움)이고 초기화로 PIN 이 끝난다고 말하지 않음 · 자릿수 = 실제 운영자 화면 PIN 칸(6)`,
+  untilLit.length > 0 && NOTE.includes(untilKo) &&
+  /not exists \(select 1 from public\.booth_pin p where p\.booth_id = p_booth\)/.test(openFn) && /'pin_issued', 'pin_reissued', 'pin_disabled'/.test(openFn) &&
+  NOTE.includes('리허설 기간 중 실제 부스 운영자 로그인에 사용하는 공통 PIN입니다') &&
+  NOTE.includes('개별 PIN이 발급된 부스는 해당 개별 PIN을 사용합니다. 그 부스에서는 공통 PIN으로 로그인할 수 없습니다') &&
+  NOTE.includes('실제 운영 화면에서 입력한 대기시간은 관람객 화면에도 반영됩니다') &&
+  NOTE.includes('이 페이지는 누구나 볼 수 있습니다') && NOTE.includes('이 PIN을 아는 사람은 리허설 기간 동안 실제 부스의 대기시간을 바꿀 수 있고') &&
+  /delete from public\.booth_live as l where l\.booth_id = any \(private\.rehearsal_booth_ids\(\)\)/.test(resetFn) && !/booth_pin|booth_session|booth_access/.test(resetFn) &&
+  NOTE.includes('매일 23:00에 대기시간만 초기화됩니다') && NOTE.includes('초기화와 관계없이 PIN은 위 기한까지 쓰입니다') &&
+  !/초기화[^.]*(PIN|핀)[^.]*(끝|무효|만료|쓸 수 없|사용할 수 없|막히|중지)/.test(TEXT) && !/(PIN|핀)[^.]*초기화(되|하)/.test(TEXT.replace('초기화와 관계없이 PIN은', '')) &&
+  CTRL_PIN_LEN[2] === String(COMMON.length),
+  JSON.stringify({ untilKo, openFn: openFn.length, resetFn: resetFn.length, pinLen: CTRL_PIN_LEN.slice(1), NOTE: NOTE.slice(0, 200) }));
 const links = [...HTML.matchAll(/<a\s[^>]*>/g)].map(m => m[0]);
 const href = a => (a.match(/href="([^"]*)"/) || [])[1];
 const ctaText = a => textOf((HTML.split(a)[1] || '').split('</a>')[0]);
-t('X2 단추 둘 — 관람객 “관람객 실제 화면 보기” = 실제 관람객 화면(/ · ?demo 없음) · 운영자 “부스 운영자 화면 체험하기” = 협의용 예시(/booth-ctrl?demo=1) · 새 탭 · noopener · 다른 링크 없음(운영 포털로 가는 링크 없음)',
-  links.length === 2 && href(links[0]) === '/' && href(links[1]) === '/booth-ctrl?demo=1' &&
+t('X2 단추 둘 = 실제 운영 화면 — 관람객 “관람객 실제 화면 보기” → / · 운영자 “부스 운영자 실제 화면 열기” → /booth-ctrl(?demo 없음) · 새 탭 · noopener · 다른 링크 없음(운영 포털로 가는 링크 없음)',
+  links.length === 2 && href(links[0]) === '/' && href(links[1]) === '/booth-ctrl' && links.every(a => !/demo/.test(href(a))) &&
   links.every(a => /target="_blank"/.test(a) && /rel="[^"]*noopener/.test(a)) &&
-  /^관람객 실제 화면 보기 /.test(ctaText(links[0])) && /^부스 운영자 화면 체험하기 /.test(ctaText(links[1])) && !/관람객 화면 체험하기/.test(TEXT),
+  /^관람객 실제 화면 보기 /.test(ctaText(links[0])) && /^부스 운영자 실제 화면 열기 /.test(ctaText(links[1])) && !/체험하기/.test(TEXT),
   JSON.stringify(links.map(a => [href(a), ctaText(a)])));
 const LEAD = textOf((HTML.match(/<p class="top__lead">([\s\S]*?)<\/p>/) || [])[1] || '');
 const FLOW = textOf((HTML.match(/<p class="flow__text">([\s\S]*?)<\/p>/) || [])[1] || '');
-t('X2b 안내 문구 — 머리: 관람객 단추는 실제 대기 현황 화면 · 운영자 체험 값은 실제 대기시간과 관람객 화면에 반영되지 않음 · 미리보기는 예시 / 연결 안내: 실제 행사의 연결과 체험 화면을 나눠 적음 · 예전 ‘관람객 예시에 반영’ 문구 없음',
-  /‘관람객 실제 화면 보기’는 누구나 로그인 없이 보는 실제 대기 현황 화면/.test(LEAD) && /실제 대기시간과 관람객 화면에는 반영되지 않습니다/.test(LEAD) &&
-  /미리보기의 부스 정보와 숫자는 예시입니다/.test(LEAD) && /^실제 행사에서는 .*관람객 화면에 자동으로 반영됩니다/.test(FLOW) &&
-  /‘부스 운영자 화면 체험하기’는 예시 부스만 쓰는 체험 화면이라, 거기서 누른 값은 실제 관람객 화면에 나타나지 않습니다/.test(FLOW) &&
-  !/관람객 예시/.test(TEXT) && !/새로 고치면/.test(TEXT),
+t('X2b 안내 문구 — 머리 · 연결 안내 모두: 두 단추 = 실제 운영 화면 · 운영자 입력 → 실제 관람객 화면 반영 · 미리보기의 부스명 · 대기시간은 예시 · 리허설 값은 시험용 · 23:00 초기화 / 지금 연결과 맞지 않는 글(협의용 예시 · 체험 · 바뀌지 않음 · 관람객 예시) 없음',
+  /두 단추 모두 실제 운영 화면을 새 탭에서 엽니다/.test(LEAD) && /부스 운영자가 입력한 대기시간은 실제 관람객 화면에 반영됩니다/.test(LEAD) &&
+  /미리보기에 보이는 부스명과 대기시간은 예시입니다/.test(LEAD) && /리허설 중 입력한 값은 시험용이며 매일 23:00에 초기화됩니다/.test(LEAD) &&
+  /운영자 화면에 입력한 대기시간은 실제 관람객 화면에 자동으로 반영됩니다/.test(FLOW) && /리허설 기간에 입력한 값은 시험용이며 매일 23:00에 초기화됩니다/.test(FLOW) &&
+  /미리보기의 부스명과 대기시간은 예시입니다/.test(FLOW) &&
+  !/협의용 예시|체험 화면|체험하기|바뀌지 않|반영되지 않|나타나지 않|관람객 예시|새로 고치면/.test(TEXT),
   JSON.stringify({ LEAD, FLOW }));
 const names = [...TEXT.matchAll(/20\d\d ?인천[^·]{0,30}?(?:페스티벌|축제)/g)].map(m => m[0].trim());
 t(`X3 행사 명칭 = 공식 명칭 “${OFFICIAL}”(머리 · 관람객 미리보기 띠 모두) · 장소 “${VENUE}” · 다른 표기 없음`,
@@ -129,7 +161,12 @@ function guard(p, log) {
       const f = join(DIST, REWRITE[u.pathname] || u.pathname.replace(/^\//, ''));
       return existsSync(f) ? req.respond({ status: 200, contentType: TYPES[extname(f)] || 'application/octet-stream', body: readFileSync(f) }) : req.respond({ status: 404, body: 'nf' });
     }
-    if (u.hostname.endsWith('supabase.co')) { log.data.push(req.method() + ' supabase' + u.pathname); return req.respond({ status: 503, body: 'blocked' }); }
+    // Supabase: 브라우저의 사전 확인(OPTIONS)은 통과시켜 실제 요청(GET · POST …)이 나가게 하고, 그 실제 요청을 세고 막습니다.
+    if (u.hostname.endsWith('supabase.co')) {
+      const CORS = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': '*', 'Access-Control-Allow-Methods': 'GET, POST, PATCH, DELETE, OPTIONS' };
+      if (req.method() === 'OPTIONS') return req.respond({ status: 204, headers: CORS, body: '' });
+      log.data.push(req.method() + ' supabase' + u.pathname); return req.respond({ status: 503, headers: CORS, body: 'blocked' });
+    }
     if (!/cdn\.jsdelivr\.net/.test(u.hostname)) log.other.push(u.hostname);
     return req.continue();
   });
@@ -142,18 +179,26 @@ async function page(ctx, vp, path) {
   return { p, log };
 }
 const geo = {};
-const realLogs = [];   // 실제 관람객 화면(/)이 보낸 데이터 요청 전부(X11)
+const realLogs = { vis: [], ctrl: [] };   // 실제 두 화면이 보낸 데이터 요청 전부(X10 · X11)
+const rgb = s => (s.match(/\d+(\.\d+)?/g) || []).slice(0, 3).map(Number);
+const lum = c => { const [r, g, b] = c.map(v => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+const contrast = (a, b) => { const [x, y] = [lum(rgb(a)), lum(rgb(b))].sort((m, n) => n - m); return (x + 0.05) / (y + 0.05); };
 for (const vp of ['m', 'd']) {
   const ctx = await browser.createBrowserContext();
   const { p, log } = await page(ctx, vp, '/example/');
   const g = await p.evaluate(() => {
     const r = s => document.querySelector(s).getBoundingClientRect();
     const ctas = [...document.querySelectorAll('.cta')].map(a => Math.round(a.getBoundingClientRect().top + scrollY));
-    return { sw: document.documentElement.scrollWidth, iw: innerWidth, ctas, two: r('.cards > .card:nth-child(2)').top < r('.cards > .card:first-child').bottom - 10 };
+    const pn = document.querySelector('.pinnote'), v = document.querySelector('.pinnote__v'), cs = v && getComputedStyle(v);
+    const ctrlFacts = document.querySelectorAll('.card')[1].querySelector('.facts').getBoundingClientRect();
+    return { sw: document.documentElement.scrollWidth, iw: innerWidth, ctas, two: r('.cards > .card:nth-child(2)').top < r('.cards > .card:first-child').bottom - 10,
+      pin: v ? { text: v.textContent, fs: parseFloat(cs.fontSize), fw: Number(cs.fontWeight), color: cs.color, bg: getComputedStyle(pn).backgroundColor,
+        shown: v.getBoundingClientRect().width > 0 && getComputedStyle(pn).display !== 'none' && getComputedStyle(pn).visibility !== 'hidden',
+        fits: pn.scrollWidth <= pn.clientWidth && pn.getBoundingClientRect().right <= innerWidth, belowFacts: pn.getBoundingClientRect().top >= ctrlFacts.bottom - 1 } : null };
   });
   await p.screenshot({ path: `${OUT}/example-${vp}.jpg`, type: 'jpeg', quality: 82, fullPage: true });
   geo[vp] = { ...g, log };
-  // 단추 → 새 탭(관람객: 실제 화면 · 운영자: 협의용 예시)
+  // 단추 → 새 탭(둘 다 실제 운영 화면). 운영자 화면은 열기만 합니다(로그인 · 입력 없음).
   const tabs = [];
   for (const i of [0, 1]) {
     const target = new Promise(res => browser.once('targetcreated', res));
@@ -161,54 +206,37 @@ for (const vp of ['m', 'd']) {
     const tg = await target; const np = await tg.page();
     await np.setViewport(VP[vp]); await np.setRequestInterception(true);
     const nlog = { data: [], other: [], err: [] }; guard(np, nlog);
-    await np.reload({ waitUntil: 'networkidle0' }); await wait(800);
-    tabs.push({ url: new URL(np.url()).pathname + new URL(np.url()).search, demo: await np.evaluate(() => { const b = document.getElementById('demobar'); return !!b && !b.hidden && /협의용 예시/.test(b.textContent); }),
-      fx: await np.evaluate(() => /시험용 실제 부스/.test(document.body.innerText)), log: nlog });
-    realLogs.push(...(i === 0 ? nlog.data : []));
+    await np.reload({ waitUntil: 'networkidle0' }); await wait(1000);
+    tabs.push({ url: new URL(np.url()).pathname + new URL(np.url()).search,
+      ...(await np.evaluate(() => {
+        const b = document.getElementById('demobar'), pd = document.getElementById('pin-demo');
+        let store = null; try { store = localStorage.getItem('aisw-booth-demo-v3'); } catch (e) { store = 'err'; }
+        return { demo: !!b && !b.hidden, demoPin: !!pd && !pd.hidden, store: store !== null, fx: /시험용 실제 부스/.test(document.body.innerText) };
+      })), log: nlog });
+    realLogs[i ? 'ctrl' : 'vis'].push(...nlog.data);
+    await np.screenshot({ path: `${OUT}/example-${vp}-${i ? 'ctrl' : 'visitor'}-tab.jpg`, type: 'jpeg', quality: 78 });
     await np.close();
   }
   geo[vp].tabs = tabs;
   await ctx.close();
 }
 const L = v => `${v.sw}/${v.iw} data=${v.log.data.length} err=${v.log.err.length} other=${v.log.other.length}`;
-t('X8 /example/ 390 · 1440 — 가로 넘침 없음 · 페이지 오류 0 · 데이터 요청 0 · 1440 은 두 카드 나란히 · 두 체험 단추 높이 같음',
-  ['m', 'd'].every(vp => geo[vp].sw <= geo[vp].iw && !geo[vp].log.err.length && !geo[vp].log.data.length) && geo.d.two && geo.d.ctas[0] === geo.d.ctas[1],
-  `m ${L(geo.m)} · d ${L(geo.d)} two=${geo.d.two} ctas=${geo.d.ctas}`);
-t('X9 단추 → 새 탭: 관람객 = 실제 관람객 화면(/ · 협의용 예시 띠 없음 · 시험용 스냅샷의 부스를 그림) · 운영자 = 협의용 예시(/booth-ctrl?demo=1 · 띠 있음 · 데이터 요청 0) · 두 화면 오류 0(390 · 1440)',
-  ['m', 'd'].every(vp => geo[vp].tabs.length === 2 && geo[vp].tabs[0].url === '/' && geo[vp].tabs[1].url === '/booth-ctrl?demo=1' &&
-    !geo[vp].tabs[0].demo && geo[vp].tabs[0].fx && geo[vp].tabs[0].log.data.length > 0 &&
-    geo[vp].tabs[1].demo && !geo[vp].tabs[1].log.data.length && geo[vp].tabs.every(x => !x.log.err.length)),
-  JSON.stringify(['m', 'd'].map(vp => geo[vp].tabs.map(x => [x.url, x.demo, x.fx, x.log.data.length, x.log.err.length]))));
-// 같은 브라우저: 실제 관람객 화면(/)을 연 채로 운영자 예시에서 A-01 을 30분으로 → 실제 관람객 화면(그대로 둔 탭 · 새로 고침 · 새로 연 탭)
-{
-  const ctx = await browser.createBrowserContext();
-  const real = await page(ctx, 'm', '/');
-  const a01 = pg => pg.evaluate(() => { const r = [...document.querySelectorAll('.row')].find(x => /A-01/.test((x.querySelector('.row__code') || {}).textContent || '')); return r ? r.textContent.replace(/\s+/g, ' ').trim() : ''; });
-  const bar = pg => pg.evaluate(() => { const b = document.getElementById('demobar'); return !!b && !b.hidden; });
-  const before = await a01(real.p);
-  const ctl = await page(ctx, 'm', '/booth-ctrl?demo=1');
-  await ctl.p.evaluate(() => { const b = [...document.querySelectorAll('[data-act="demo-direct"]')].find(x => x.offsetParent !== null); b && b.click(); });
-  await wait(1200);
-  const code = await ctl.p.evaluate(() => (document.getElementById('h-code') || {}).textContent);
-  await ctl.p.evaluate(() => { const b = document.querySelector('#waits [data-wait="30"]'); b && b.click(); });
-  await wait(1500);
-  await real.p.bringToFront(); await wait(6500);   // 보이는 동안 · 5초가 지나면 다시 읽는 길(visitor.html resume)도 지나게 둡니다
-  const kept = await a01(real.p);
-  await real.p.reload({ waitUntil: 'networkidle0' }); await wait(600);
-  const reloaded = await a01(real.p), reloadedBar = await bar(real.p);
-  const stored = await real.p.evaluate(() => { try { return /"wait_minutes":30/.test(localStorage.getItem('aisw-booth-demo-v3') || ''); } catch (e) { return false; } });
-  const fresh = await page(ctx, 'm', '/'); const after = await a01(fresh.p), freshBar = await bar(fresh.p);
-  const demo = await page(ctx, 'm', '/?demo=1'); const demoA01 = await a01(demo.p);   // 누른 값이 이 브라우저의 예시 저장소에 들어갔다는 확인
-  realLogs.push(...real.log.data, ...fresh.log.data);
-  t('X10 운영자 체험 값은 실제 관람객 화면에 나타나지 않음 — 같은 브라우저에서 운영자 예시 A-01 에 30분을 눌러도 실제 관람객 화면(그대로 둔 탭 · 새로 고침 · 새로 연 탭)의 A-01 은 실제 값(여유 5분) 그대로 · 협의용 예시 띠 없음 · 같은 사이트 저장소에 예시 값 30분이 있고 관람객 예시에는 30분 혼잡(누른 값이 저장된 것) · 운영자 예시 데이터 요청 0',
-    code === 'A-01' && /5\s*분.*여유/.test(before) && kept === before && reloaded === before && after === before && !/30\s*분/.test(after) &&
-    !reloadedBar && !freshBar && stored && /30\s*분.*혼잡/.test(demoA01) && !ctl.log.data.length && !demo.log.data.length,
-    JSON.stringify({ code, before, kept, reloaded, after, reloadedBar, freshBar, stored, demoA01, data: [ctl.log.data.length, demo.log.data.length] }));
-  await ctx.close();
-}
-const realBad = realLogs.filter(x => x !== 'GET /api/live-snapshot');
+t('X8 /example/ 390 · 1440 — 가로 넘침 없음 · 페이지 오류 0 · 데이터 요청 0 · 1440 은 두 카드 나란히 · 두 단추 높이 같음 · PIN 숫자가 보이고(28px 이상 · 굵게 · 바탕 대비 7:1 이상) 카드 안에 들어가며 운영자 안내 줄 아래에 있음',
+  ['m', 'd'].every(vp => { const q = geo[vp], k = q.pin; return q.sw <= q.iw && !q.log.err.length && !q.log.data.length && k && k.text === COMMON && k.shown && k.fits && k.belowFacts && k.fs >= 28 && k.fw >= 700 && contrast(k.color, k.bg) >= 7; }) &&
+    geo.d.two && geo.d.ctas[0] === geo.d.ctas[1],
+  `m ${L(geo.m)} · d ${L(geo.d)} two=${geo.d.two} ctas=${geo.d.ctas} pin=${JSON.stringify(['m', 'd'].map(vp => geo[vp].pin && { ...geo[vp].pin, cr: contrast(geo[vp].pin.color, geo[vp].pin.bg).toFixed(1) }))}`);
+t('X9 단추 → 새 탭 = 실제 운영 화면(390 · 1440) — 관람객 / (시험용 스냅샷의 부스를 그림) · 운영자 /booth-ctrl · 둘 다 협의용 예시 띠 없음 · 예시 PIN 상자 없음 · 예시 저장소를 만들지 않음 · 페이지 오류 0',
+  ['m', 'd'].every(vp => geo[vp].tabs.length === 2 && geo[vp].tabs[0].url === '/' && geo[vp].tabs[1].url === '/booth-ctrl' && geo[vp].tabs[0].fx &&
+    geo[vp].tabs.every(x => !x.demo && !x.demoPin && !x.store && !x.log.err.length)),
+  JSON.stringify(['m', 'd'].map(vp => geo[vp].tabs.map(x => [x.url, x.demo, x.demoPin, x.store, x.fx, x.log.data.length, x.log.err.length]))));
+// 열기만 했을 때 운영자 화면이 보내는 요청: Supabase REST GET(설정 · 구역 · 부스)뿐이어야 합니다 — PIN 로그인(booth_pin_login) · 대기시간 저장(booth_ctrl_set · touch) 같은 RPC(POST) 없음.
+const ctrlBad = realLogs.ctrl.filter(x => !/^GET supabase\/rest\/v1\/(settings|zones|booths)$/.test(x));
+t('X10 실제 운영자 화면(/booth-ctrl)을 열기만 하면 조회뿐 — 데이터 요청이 모두 Supabase GET(settings · zones · booths) · RPC · 로그인 · 쓰기 0(이 시험은 Supabase 를 막고 셉니다)',
+  realLogs.ctrl.length > 0 && !ctrlBad.length, `${realLogs.ctrl.length}건 ${JSON.stringify([...new Set(realLogs.ctrl)])} · 그 밖 ${JSON.stringify(ctrlBad)}`);
+console.log(`  (기록) 운영자 화면 요청 ${realLogs.ctrl.length}건: ${JSON.stringify([...new Set(realLogs.ctrl)])} · 관람객 화면 요청 ${realLogs.vis.length}건: ${JSON.stringify([...new Set(realLogs.vis)])}`);
+const realBad = realLogs.vis.filter(x => x !== 'GET /api/live-snapshot');
 t('X11 실제 관람객 화면의 요청은 조회뿐 — 모든 데이터 요청이 GET /api/live-snapshot(같은 사이트 · CDN 캐시 주소) · Supabase 직접 요청 0 · 쓰기(POST · PATCH · PUT · DELETE) 0',
-  realLogs.length > 0 && !realBad.length, `${realLogs.length}건 · 그 밖 ${JSON.stringify(realBad)}`);
+  realLogs.vis.length > 0 && !realBad.length, `${realLogs.vis.length}건 · 그 밖 ${JSON.stringify(realBad)}`);
 await browser.close();
 
 const ok = results.filter(r => r.ok).length;
