@@ -13,7 +13,7 @@
      운영자 미리보기        부스 운영자 화면 (부스 머리 · 현재 대기 · 대기시간 단추 · 운영 상태 단추)
 
    두 단추 모두 실제 운영 화면(관람객 / · 부스 운영자 /booth-ctrl)으로 보냅니다.
-   리허설 기간에만 운영자 단추 위에 리허설 공통 PIN 보조 줄(.pinhint)을 둡니다. 그 밖의 접속 정보는 적지 않습니다.
+   리허설 기간에만 운영자 단추 위에 운영자 공통 PIN 보조 줄(.pinhint)을 둡니다. 그 밖의 접속 정보는 적지 않습니다.
 
    상태 색은 두 화면과 같은 셋(여유 초록 · 보통 노랑 · 혼잡 빨강)과
    중단 · 마감의 회색뿐이고, 늘 낱말과 함께 씁니다. 대기시간 → 상태 규칙도
@@ -34,8 +34,8 @@
   --muted-2:  #6B7490;
   --accent:   #5B45E0;
   --accent-d: #4634BE;
-  --accent-t: #F1EEFE;   /* 연보라 바탕(PIN 띠) */
-  --accent-l: #D8D0FB;   /* 연보라 테두리 */
+  --accent-t: #F1EEFE;   /* 은은한 보라 바탕(PIN 숫자 배지) */
+  --accent-l: #D8D0FB;   /* 은은한 보라 테두리(PIN 숫자 배지) */
   --on:       #FFFFFF;
 
   /* 상태색은 두 벌입니다. 이 페이지는 두 화면을 미리 보여 주고, 두 화면의 색이 다르기 때문입니다.
@@ -185,43 +185,39 @@ ul, ol { padding: 0; list-style: none; }
 .facts dt { flex: none; width: 5.6em; font-size: 14px; font-weight: 700; color: var(--muted); }
 .facts dd { min-width: 0; font-size: 15px; color: var(--ink-2); }
 
-/* 단추 바로 위 운영자 공통 PIN 띠. 아래로 붙여 단추와 한 묶음으로 보이게 합니다(미리보기와의 간격은 위 .cp 아래 여백) */
+/* 단추 바로 위 운영자 공통 PIN 한 줄. 아래로 붙여 단추와 한 묶음으로 보이게 합니다(미리보기와의 간격은 위 .cp 아래 여백) */
 .card__note { margin-top: auto; }
 .card__pv.cp { margin-bottom: 18px; }
 .card__note + .card__foot { margin-top: 0; padding-top: 12px; }
 
-/* 운영자 공통 PIN — 연보라 띠 하나. 숫자가 가장 크고(굵게 · 넓은 자간), 라벨은 보라 작은 글자, 사용 기간은 옅은 글자.
-   단추(보라 칠)보다 옅은 바탕이라 단추가 먼저 보입니다. 좁은 화면은 두 줄(라벨 + 숫자 / 사용 기간)로 둡니다. */
+/* 운영자 공통 PIN — 보조 한 줄(라벨 · 숫자 배지 · 사용 기간). 줄 전체는 바탕 없이 두고, 숫자만 작은 둥근 배지
+   (은은한 보라 바탕 · 테두리) 안에 크고 굵게 둡니다. 라벨은 진한 회남색, 사용 기간은 옅은 글자.
+   한 줄을 지키되 자리가 모자랄 때만 사용 기간이 다음 줄로 내려갑니다. */
 .pinhint {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: center;
-  gap: 2px 10px;
-  padding: 10px 14px;
-  border: 1px solid var(--accent-l);
-  border-radius: var(--r-btn);
-  background: var(--accent-t);
+  gap: 4px 7px;
   font-size: 13px;
   line-height: 20px;
   color: var(--muted);
   text-align: center;
 }
-.pinhint__k { font-size: 13.5px; font-weight: 800; letter-spacing: -0.01em; color: var(--accent-d); }
+.pinhint__k { font-weight: 700; color: var(--ink-2); }
 .pinhint__v {
-  margin-right: -0.14em;   /* 마지막 숫자 뒤 자간만큼 당겨 가운데를 맞춥니다 */
-  font-size: 22px;
+  padding: 0 calc(10px - 0.05em) 0 10px;   /* 마지막 숫자 뒤 자간만큼 오른쪽을 줄여 숫자를 배지 가운데에 */
+  border: 1px solid var(--accent-l);
+  border-radius: 999px;
+  background: var(--accent-t);
+  color: var(--ink);
+  font-size: 20px;
   font-weight: 800;
   line-height: 28px;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.05em;
   font-variant-numeric: tabular-nums;
-  color: var(--ink);
 }
-.pinhint__d { font-weight: 600; white-space: nowrap; }
-@media (max-width: 599px) {
-  .pinhint__d { flex-basis: 100%; }
-  .pinhint__sep { display: none; }
-}
+.pinhint__d { white-space: nowrap; }
 
 /* 두 카드 나란히(860px 이상): 운영자 카드에만 단추 위 보조 줄이 있어도 머리 · 미리보기 · 단추가 두 카드에서
    같은 줄에 오게, 카드 여섯 칸(머리 셋 · 미리보기 · 보조 줄 · 단추와 안내 줄)을 바깥 격자의 줄에 맞춥니다.
