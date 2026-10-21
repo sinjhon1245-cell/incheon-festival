@@ -1857,9 +1857,9 @@
 
     function phaseNote(info) {
       if (!info) return '';
-      if (rehearsalShown(info)) {
-        return '행사 전 리허설이에요. 누른 값은 관람객 화면에 ‘리허설 중’ 안내와 함께 보여요.';
-      }
+      // 행사 전(리허설)에는 카드 아래 안내를 두지 않습니다(운영 요청, 2026-10-21). 리허설 값 처리와
+      // 저장 알림('관람객 화면에 ‘리허설 중’ 안내와 함께 보여요') · 관람객 화면의 '리허설 중' 띠는 그대로입니다.
+      if (rehearsalShown(info)) return '';
       if (info.phase === 'preopen' && info.openTime) {
         return '문 열기 전이에요. ' + info.openTime + '에 문을 열면 대기 시간을 한 번 더 눌러 주세요.';
       }

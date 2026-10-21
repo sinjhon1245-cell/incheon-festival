@@ -646,9 +646,13 @@ button {
 }
 
 /* ── 현재 대기: 이 화면에서 가장 큰 것 ──────────────────────────── */
+/* 세 단: 라벨(작게) · 대기 분 또는 운영 상태(가장 크게) · 마지막 입력(보조). 넓은 화면에서 카드가 오른쪽
+   단추 묶음 높이만큼 늘어나면 가운데 단이 그만큼 받아 숫자가 가운데에 옵니다(상태가 바뀌어도 카드 높이는 그대로). */
 .now {
   --c: var(--off);
   --ct: var(--off-t);
+  display: flex;
+  flex-direction: column;
   margin-top: 12px;
   padding: 16px 18px;
   border: 1px solid var(--line);
@@ -664,9 +668,10 @@ button {
 .now--closed { --c: var(--off);    --ct: var(--off-t); }
 .now--none   { --c: var(--muted);  --ct: var(--sink); }
 
-.now__cap { font-size: 13px; font-weight: 700; color: var(--muted); }
+.now__cap { font-size: 14px; font-weight: 700; line-height: 1.4; color: var(--muted); }
 .now__main {
   display: flex;
+  flex: 1 0 auto;
   flex-wrap: wrap;
   align-items: center;
   gap: 4px 12px;
@@ -704,7 +709,7 @@ button {
 }
 .now--closed .now__wait[hidden] + .now__state { color: var(--off); }   /* 마감은 상태(회청색) — 관람객 화면과 같게 */
 .now--none .now__wait[hidden] + .now__state { color: var(--muted); font-size: 24px; }
-.now__when { margin-top: 6px; font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.now__when { margin-top: 6px; font-size: 14.5px; line-height: 1.4; color: var(--muted); font-variant-numeric: tabular-nums; }
 .now__when.is-warn { color: var(--warn); font-weight: 700; }
 .now__note { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); font-size: 13.5px; line-height: 1.5; color: var(--ink-2); }
 
@@ -795,11 +800,12 @@ button {
 .offsec { margin-top: 20px; }
 .offsec__title { margin-bottom: 8px; font-size: 13px; font-weight: 700; color: var(--muted); }
 .offs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+/* 글은 위에서부터 둡니다 — 한쪽 둘째 줄만 줄바꿈되어 두 단추 높이가 같이 늘어나도 제목 줄이 나란히 남습니다 */
 .off {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 2px;
   min-width: 0;
   min-height: 64px;
@@ -903,6 +909,23 @@ button {
   .pad__head { min-height: var(--pad-head); }
   .main > .col:first-child { padding-top: calc(var(--pad-head) + 8px); }
   .screen { max-width: 480px; margin: 0 auto; }
+  /* 두 칸을 같은 줄 격자에 얹습니다: ① 대기시간 제목 줄 ② 현재 대기 ↔ 대기시간 단추 8개 ③ (20분 알림) ↔ 운영 상태 제목
+     ④ 변동 없음 · 지금 확인 ↔ 운영 상태 단추 2개 ⑤ (마감 확인). 그래서 두 칸의 시작 · 끝 · 사이 간격이 같은 줄에서 맞습니다.
+     현재 대기 카드는 단추 묶음 높이만큼(상태가 바뀌어도 같은 높이), 변동 없음은 운영 상태 단추 높이만큼 섭니다.
+     subgrid 를 모르는 브라우저는 위의 두 칸(위 맞춤)을 그대로 씁니다. */
+  @supports (grid-template-rows: subgrid) {
+    .main { grid-template-rows: repeat(5, auto); row-gap: 0; margin-top: 12px; }
+    .main > .col { display: grid; grid-row: 1 / span 5; grid-template-rows: subgrid; }
+    .main > .col:first-child { padding-top: 0; }
+    .pad { display: grid; grid-row: 1 / span 2; grid-template-rows: subgrid; margin-top: 0; }
+    .offsec { display: grid; grid-row: 3 / span 3; grid-template-rows: subgrid; margin-top: 0; }
+    .offsec__title { align-self: end; padding-top: 20px; }
+    .now { grid-row: 2; margin-top: 0; }
+    .nudge { grid-row: 3; align-self: start; margin-bottom: 8px; }
+    .still { grid-row: 4; margin-top: 0; }
+    .waits { align-self: start; }
+    .w { min-height: 70px; }
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

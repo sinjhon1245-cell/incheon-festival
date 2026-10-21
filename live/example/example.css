@@ -34,6 +34,8 @@
   --muted-2:  #6B7490;
   --accent:   #5B45E0;
   --accent-d: #4634BE;
+  --accent-t: #F1EEFE;   /* 연보라 바탕(PIN 띠) */
+  --accent-l: #D8D0FB;   /* 연보라 테두리 */
   --on:       #FFFFFF;
 
   /* 상태색은 두 벌입니다. 이 페이지는 두 화면을 미리 보여 주고, 두 화면의 색이 다르기 때문입니다.
@@ -114,15 +116,15 @@ ul, ol { padding: 0; list-style: none; }
 
 /* ── 머리 ──────────────────────────────────────────────────────── */
 .top { padding-bottom: 20px; }
-.top__event { font-size: 13px; font-weight: 700; color: var(--muted); }
+.top__event { font-size: 15px; font-weight: 700; color: var(--ink-2); }
 .top__title {
   margin-top: 6px;
-  font-size: clamp(24px, 5vw, 28px);
+  font-size: clamp(28px, 6.4vw, 34px);
   font-weight: 800;
-  line-height: 1.3;
+  line-height: 1.25;
   letter-spacing: -0.03em;
 }
-.top__lead { max-width: 46em; margin-top: 6px; font-size: 15px; line-height: 1.6; color: var(--muted); }
+.top__lead { max-width: 46em; margin-top: 8px; font-size: 16px; line-height: 1.65; color: var(--muted); }
 
 /* ── 두 화면 카드 ──────────────────────────────────────────────── */
 .cards { display: grid; gap: 16px; }
@@ -141,15 +143,15 @@ ul, ol { padding: 0; list-style: none; }
 @media (min-width: 600px) {
   .card { padding: 24px; }
 }
-.card__who { font-size: 14px; font-weight: 700; color: var(--accent-d); }
+.card__who { font-size: 15px; font-weight: 700; color: var(--accent-d); }
 .card__title {
   margin-top: 2px;
-  font-size: 22px;
+  font-size: 24px;
   font-weight: 800;
   line-height: 1.3;
   letter-spacing: -0.03em;
 }
-.card__text { margin-top: 8px; font-size: 15px; line-height: 1.6; color: var(--ink-2); }
+.card__text { margin-top: 8px; font-size: 16px; line-height: 1.6; color: var(--ink-2); }
 .card__pv { margin-top: 20px; }
 /* 미리보기 높이가 달라도 두 카드의 단추 · 안내 줄이 같은 높이에 오게 아래로 붙입니다 */
 .card__foot { margin-top: auto; padding-top: 20px; }
@@ -179,35 +181,46 @@ ul, ol { padding: 0; list-style: none; }
   padding-top: 10px;
   border-top: 1px solid var(--line);
 }
-.facts__row { display: flex; align-items: baseline; gap: 12px; min-height: 28px; }
-.facts dt { flex: none; width: 5.6em; font-size: 13px; font-weight: 700; color: var(--muted); }
-.facts dd { min-width: 0; font-size: 14px; color: var(--ink-2); }
+.facts__row { display: flex; align-items: baseline; gap: 12px; min-height: 30px; }
+.facts dt { flex: none; width: 5.6em; font-size: 14px; font-weight: 700; color: var(--muted); }
+.facts dd { min-width: 0; font-size: 15px; color: var(--ink-2); }
 
-/* 단추 바로 위 작은 보조 줄(운영자 카드의 리허설 공통 PIN). 아래로 붙여 단추와 한 묶음으로 보이게 합니다 */
-.card__note { margin-top: auto; padding-top: 20px; }
+/* 단추 바로 위 운영자 공통 PIN 띠. 아래로 붙여 단추와 한 묶음으로 보이게 합니다(미리보기와의 간격은 위 .cp 아래 여백) */
+.card__note { margin-top: auto; }
+.card__pv.cp { margin-bottom: 18px; }
 .card__note + .card__foot { margin-top: 0; padding-top: 12px; }
 
+/* 운영자 공통 PIN — 연보라 띠 하나. 숫자가 가장 크고(굵게 · 넓은 자간), 라벨은 보라 작은 글자, 사용 기간은 옅은 글자.
+   단추(보라 칠)보다 옅은 바탕이라 단추가 먼저 보입니다. 좁은 화면은 두 줄(라벨 + 숫자 / 사용 기간)로 둡니다. */
 .pinhint {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: center;
-  gap: 2px 6px;
+  gap: 2px 10px;
+  padding: 10px 14px;
+  border: 1px solid var(--accent-l);
+  border-radius: var(--r-btn);
+  background: var(--accent-t);
   font-size: 13px;
   line-height: 20px;
   color: var(--muted);
   text-align: center;
 }
-.pinhint__k { font-weight: 600; }
+.pinhint__k { font-size: 13.5px; font-weight: 800; letter-spacing: -0.01em; color: var(--accent-d); }
 .pinhint__v {
-  padding: 0 8px;
-  border: 1px solid var(--line-2);
-  border-radius: 999px;
-  background: var(--sink);
-  color: var(--ink-2);
-  font-weight: 700;
+  margin-right: -0.14em;   /* 마지막 숫자 뒤 자간만큼 당겨 가운데를 맞춥니다 */
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 28px;
+  letter-spacing: 0.14em;
   font-variant-numeric: tabular-nums;
-  letter-spacing: 0.06em;
+  color: var(--ink);
+}
+.pinhint__d { font-weight: 600; white-space: nowrap; }
+@media (max-width: 599px) {
+  .pinhint__d { flex-basis: 100%; }
+  .pinhint__sep { display: none; }
 }
 
 /* 두 카드 나란히(860px 이상): 운영자 카드에만 단추 위 보조 줄이 있어도 머리 · 미리보기 · 단추가 두 카드에서
@@ -218,7 +231,7 @@ ul, ol { padding: 0; list-style: none; }
     .cards { grid-template-rows: repeat(6, auto); }
     .card { display: grid; grid-row: span 6; grid-template-rows: subgrid; row-gap: 0; }
     .card__pv { align-self: start; }
-    .card__note { grid-row: 5; align-self: end; margin-top: 0; padding-top: 16px; }
+    .card__note { grid-row: 5; align-self: end; margin-top: 0; }
     .card__foot { grid-row: 6; margin-top: 0; padding-top: 12px; }
   }
 }
@@ -231,7 +244,7 @@ ul, ol { padding: 0; list-style: none; }
 }
 .vp__band { padding: 12px 16px 13px; background: var(--accent); color: #fff; }
 .vp__bandrow { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-.vp__title { font-size: 17px; font-weight: 700; line-height: 24px; letter-spacing: -0.03em; }
+.vp__title { font-size: 18px; font-weight: 800; line-height: 24px; letter-spacing: -0.03em; }
 /* 오른쪽 '자동 갱신' — 관람객 화면 띠의 흰 네모 + 글 */
 .vp__sync { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; white-space: nowrap; }
 .vp__syncsq { display: inline-block; width: 7px; height: 7px; background: #fff; }
@@ -287,23 +300,23 @@ ul, ol { padding: 0; list-style: none; }
 }
 .vr {
   display: grid;
-  grid-template-columns: 48px minmax(0, 1fr) 76px;
+  grid-template-columns: 52px minmax(0, 1fr) 84px;
   column-gap: 12px;
-  align-items: center;
-  min-height: 64px;
-  padding: 12px 0;
+  align-items: start;
+  min-height: 68px;
+  padding: 14px 0;
   border-bottom: 1px solid var(--line);
 }
 .vr:last-child { border-bottom: 0; }
-.vr__code { align-self: baseline; font-size: 13px; font-weight: 600; line-height: 1.3; color: var(--muted-2); white-space: nowrap; }
+.vr__code { font-size: 14px; font-weight: 700; line-height: 24px; color: var(--ink-2); white-space: nowrap; }
 /* 부스 이름 아래 운영기관(학교 · 기관) 한 줄(관람객 화면 .row__body · .row__org 와 같은 모양) */
-.vr__body { align-self: baseline; min-width: 0; }
+.vr__body { min-width: 0; }
 .vr__org {
   display: block;
-  margin-top: 4px;
-  font-size: 13.5px;
+  margin-top: 3px;
+  font-size: 14px;
   font-weight: 500;
-  line-height: 1.35;
+  line-height: 1.4;
   letter-spacing: -0.01em;
   color: var(--muted);
   white-space: nowrap;
@@ -311,9 +324,9 @@ ul, ol { padding: 0; list-style: none; }
   text-overflow: ellipsis;
 }
 .vr__name {
-  font-size: 15.5px;
-  font-weight: 600;
-  line-height: 1.38;
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 24px;
   letter-spacing: -0.02em;
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -325,21 +338,20 @@ ul, ol { padding: 0; list-style: none; }
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  justify-content: center;
-  gap: 5px;
-  min-height: 40px;
+  justify-content: flex-start;
+  gap: 6px;
   text-align: right;
 }
 .v { display: flex; align-items: baseline; gap: 1px; line-height: .9; white-space: nowrap; }
-.v__n { font-size: 28px; font-weight: 800; letter-spacing: -0.04em; }
-.v__u { font-size: 13px; font-weight: 600; color: var(--ink-2); }
-.v--word { font-size: 17px; font-weight: 700; letter-spacing: -0.02em; color: var(--v-off); }
+.v__n { font-size: 32px; font-weight: 800; letter-spacing: -0.04em; }
+.v__u { font-size: 14px; font-weight: 700; color: var(--ink-2); }
+.v--word { font-size: 18px; font-weight: 700; letter-spacing: -0.02em; color: var(--v-off); }
 .st {
   display: inline-flex;
   align-items: center;
-  padding: 3px 7px;
+  padding: 3px 8px;
   border-radius: 4px;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
   line-height: 1.2;
   white-space: nowrap;
@@ -520,8 +532,8 @@ ul, ol { padding: 0; list-style: none; }
 @media (min-width: 860px) {
   .flow { grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); align-items: center; gap: 24px; margin-top: 20px; }
 }
-.flow__title { font-size: 17px; font-weight: 800; letter-spacing: -0.02em; }
-.flow__text { margin-top: 4px; font-size: 15px; line-height: 1.6; color: var(--ink-2); }
+.flow__title { font-size: 19px; font-weight: 800; letter-spacing: -0.02em; }
+.flow__text { margin-top: 6px; font-size: 16px; line-height: 1.65; color: var(--ink-2); }
 
 .steps { display: grid; row-gap: 28px; }
 @media (min-width: 600px) {
@@ -534,8 +546,8 @@ ul, ol { padding: 0; list-style: none; }
   border-radius: var(--r-btn);
   background: var(--sink);
 }
-.step__who { display: block; font-size: 13px; font-weight: 700; color: var(--muted); }
-.step__what { display: block; font-size: 16px; font-weight: 800; letter-spacing: -0.02em; }
+.step__who { display: block; font-size: 14px; font-weight: 700; color: var(--muted); }
+.step__what { display: block; font-size: 17px; font-weight: 800; letter-spacing: -0.02em; }
 /* 두 칸 사이 화살표. 뜻은 목록 순서와 위 문장이 전하므로 화면 낭독기에는 읽히지 않게 합니다 */
 .step + .step::before {
   content: '\2193';
