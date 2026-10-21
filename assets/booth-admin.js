@@ -277,6 +277,8 @@
     if (!(Date.now() < end)) l1 = esc(endTxt) + '에 끝났어요';
     else if (!data.creds) l1 = esc(endTxt) + '까지 · 부스별 상태를 읽지 못했어요';
     else if (data.pinOn === false) l1 = 'PIN 보조 로그인이 꺼져 있어 지금은 쓸 수 없어요(관리자 → 기본정보)';
+    // 설정을 못 읽으면 서버가 받을지 알 수 없어 수를 세지 않습니다(‘사용 가능’ 으로 단정하지 않음).
+    else if (data.pinOn !== true) l1 = '상태 확인 불가 — PIN 보조 로그인 설정을 읽지 못했어요(끝나는 때 ' + esc(endTxt) + ')';
     else l1 = esc(endTxt) + '까지 · 사용 가능 <b>' + s.open + '곳</b>' +
       (s.closed ? ' · 개별 PIN 발급으로 닫힘 ' + s.closed + '곳' : '') + (s.hidden ? ' · 비공개라 못 씀 ' + s.hidden + '곳' : '');
     var l2 = !data.creds ? '상태를 읽지 못했어요'

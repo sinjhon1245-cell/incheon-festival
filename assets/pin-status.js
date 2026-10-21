@@ -43,12 +43,15 @@
        target   : 리허설 대상인가(admin_rehearsal_status.target_ids) · undefined/null = 대상 목록을 모름
        shown    : 부스 공개 · 구역 공개 · 번호 있음
        pinState : 'on' | 'off' | 'none' | null(모름)
-       switchOn : true | false | null(모름 — 서버에서 막힐 수 있으나 여기서는 막지 않음)
+       switchOn : true | false | null(설정을 못 읽음 — 서버가 받을지 알 수 없으므로 '사용 가능' 으로 세지 않음)
      돌려줌 key: 'open'(사용 가능) · 'closed'(개별 PIN 발급으로 닫힘) · 'ended'(끝나는 때가 지남) ·
-                'hidden'(비공개라 못 씀) · 'off'(PIN 보조 로그인 꺼짐) · 'na'(리허설 대상 아님) · 'unknown'(판단할 자료 없음) */
+                'hidden'(비공개라 못 씀) · 'off'(PIN 보조 로그인 꺼짐) · 'unchecked'(PIN 보조 로그인 설정을 못 읽어 확인 불가) ·
+                'na'(리허설 대상 아님) · 'unknown'(판단할 자료 없음)
+     'open' 은 스위치가 켜졌다고 확인한 때(switchOn === true)만 — 서버 인증 결과와 화면의 ‘사용 가능’ 수가 어긋나지 않게. */
   var COMMON = {
     open: '리허설 공통 PIN 사용 가능', closed: '리허설 공통 PIN 닫힘(개별 PIN 발급)', ended: '리허설 공통 PIN 끝남',
-    hidden: '리허설 공통 PIN 못 씀(비공개)', off: '리허설 공통 PIN 못 씀(PIN 보조 로그인 꺼짐)', na: '', unknown: ''
+    hidden: '리허설 공통 PIN 못 씀(비공개)', off: '리허설 공통 PIN 못 씀(PIN 보조 로그인 꺼짐)',
+    unchecked: '리허설 공통 PIN 상태 확인 불가(PIN 보조 로그인 설정을 읽지 못함)', na: '', unknown: ''
   };
   function common(o) {
     var k;
@@ -59,18 +62,19 @@
     else if (o.pinState !== 'none') k = 'unknown';
     else if (!o.shown) k = 'hidden';
     else if (o.switchOn === false) k = 'off';
+    else if (o.switchOn !== true) k = 'unchecked';
     else k = 'open';
     return { key: k, label: COMMON[k] };
   }
 
   // 여러 부스 셈. items = [{ target, pinState, common: { key } }]
   function summarize(items) {
-    var s = { target: 0, open: 0, closed: 0, ended: 0, hidden: 0, off: 0, on: 0, none: 0, offPin: 0, unk: 0 };
+    var s = { target: 0, open: 0, closed: 0, ended: 0, hidden: 0, off: 0, unchecked: 0, on: 0, none: 0, offPin: 0, unk: 0 };
     items.forEach(function (x) {
       if (!x.target) return;
       s.target++;
       var k = x.common && x.common.key;
-      if (k === 'open' || k === 'closed' || k === 'ended' || k === 'hidden' || k === 'off') s[k]++;
+      if (k === 'open' || k === 'closed' || k === 'ended' || k === 'hidden' || k === 'off' || k === 'unchecked') s[k]++;
       if (x.pinState === 'on') s.on++;
       else if (x.pinState === 'off') s.offPin++;
       else if (x.pinState === 'none') s.none++;

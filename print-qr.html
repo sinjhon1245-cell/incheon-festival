@@ -3079,11 +3079,20 @@
       return PinStatus.common({ target: P.rh ? !!P.rh.ids[b.id] : null, shown: !!b.shown, pinState: stateOf(b.id),
                                 switchOn: P.sw.pin, end: rhEnd(), now: Date.now() });
     }
-    // 끝나는 때가 하루 안이면 그 순간 한 번 더 그려, 열어 둔 화면도 '사용 가능' → '끝남' 으로 바뀌게 합니다.
+    // 끝나는 때에 한 번 더 그려, 열어 둔 화면도 '사용 가능' → '끝남' 으로 바뀌게 합니다. 남은 시간이 길면(며칠 전부터 열어 둠)
+    // 브라우저 타이머 한도 · 컴퓨터 잠자기를 피하려고 6시간씩 나눠 다시 예약하고, 화면으로 돌아오거나 창을 다시 고를 때도 다시 봅니다.
+    var RH_STEP = 6 * 3600e3;
     function planRhRedraw() {
       clearTimeout(P.rhTimer);
-      var left = P.rh ? rhEnd() - Date.now() : -1;
-      if (left > 0 && left < 864e5) P.rhTimer = setTimeout(function () { render(); }, left + 500);
+      if (!P.rh) return;
+      var left = rhEnd() - Date.now();
+      if (left <= 0) return;
+      P.rhTimer = setTimeout(function () { render(); planRhRedraw(); }, Math.min(left + 500, RH_STEP));
+    }
+    function recheckRh() {
+      if (document.hidden || !P.rh) return;
+      render();
+      planRhRedraw();
     }
     function stats() {
       var s = { total: P.rows.length, qrOn: 0, qrOff: 0, qrNone: 0, on: 0, none: 0, off: 0, unk: 0 };
@@ -3164,6 +3173,8 @@
         return '리허설 공통 PIN은 ' + endTxt + '에 끝났어요. 개별 PIN이 없는 실제 부스 ' + s.none + '곳은 운영자 QR로만 열 수 있어요.';
       }
       if (P.sw.pin === false) return '리허설 공통 PIN: PIN 보조 로그인이 꺼져 있어 지금은 쓸 수 없어요(끝나는 때 ' + endTxt + ').';
+      // 설정을 못 읽으면 쓸 수 있는 수를 세지 않습니다(서버가 받을지 알 수 없음).
+      if (P.sw.pin !== true) return '리허설 공통 PIN: 상태 확인 불가 — PIN 보조 로그인 설정을 읽지 못했어요(끝나는 때 ' + endTxt + '). 새로 고쳐 다시 확인해 주세요.';
       return '리허설 공통 PIN: 실제 부스 ' + s.target + '곳 중 ' + s.open + '곳이 ' + endTxt + '까지 쓸 수 있어요' +
         (s.closed ? '(개별 PIN 발급으로 닫힘 ' + s.closed + '곳)' : '') +
         '. 개별 PIN을 발급하면 그 부스는 바로 공통 PIN이 닫히고, 공통 PIN 세션도 끝나요.';
@@ -3846,6 +3857,9 @@
 
     /* ── 이벤트 ──────────────────────────────────────────────────── */
     function bind() {
+      // 화면으로 돌아오거나 창을 다시 고르면 리허설 공통 PIN 표시를 지금 시각으로 다시 봅니다(잠자기 · 숨김 동안 멈춘 타이머 대신).
+      document.addEventListener('visibilitychange', recheckRh);
+      window.addEventListener('focus', recheckRh);
       $('pinx-toggle').addEventListener('click', function () {
         P.open = !P.open;
         render();
