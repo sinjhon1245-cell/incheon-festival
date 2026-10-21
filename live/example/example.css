@@ -12,8 +12,8 @@
      관람객 미리보기        관람객 화면 (보라 띠 · 모서리 없음 · 네모 상태 표시)
      운영자 미리보기        부스 운영자 화면 (부스 머리 · 현재 대기 · 대기시간 단추 · 운영 상태 단추)
 
-   관람객 단추는 실제 관람객 화면(/), 운영자 단추는 협의용 예시 화면(/booth-ctrl?demo=1)으로 보냅니다.
-   공개 페이지라 PIN 같은 접속 정보는 적지 않습니다.
+   두 단추 모두 실제 운영 화면(관람객 / · 부스 운영자 /booth-ctrl)으로 보냅니다.
+   리허설 기간에만 운영자 카드에 리허설 공통 PIN 안내(.pinnote)를 둡니다. 그 밖의 접속 정보는 적지 않습니다.
 
    상태 색은 두 화면과 같은 셋(여유 초록 · 보통 노랑 · 혼잡 빨강)과
    중단 · 마감의 회색뿐이고, 늘 낱말과 함께 씁니다. 대기시간 → 상태 규칙도
@@ -182,6 +182,59 @@ ul, ol { padding: 0; list-style: none; }
 .facts__row { display: flex; align-items: baseline; gap: 12px; min-height: 28px; }
 .facts dt { flex: none; width: 5.6em; font-size: 13px; font-weight: 700; color: var(--muted); }
 .facts dd { min-width: 0; font-size: 14px; color: var(--ink-2); }
+
+/* 두 카드 나란히(860px 이상): 운영자 카드에만 PIN 안내가 붙어 아래 칸 높이가 달라도
+   머리 · 미리보기 · 단추가 두 카드에서 같은 줄에 오게, 카드 다섯 칸을 바깥 격자의 줄에 맞춥니다.
+   subgrid 를 모르는 브라우저는 위의 세로 쌓기(아래로 붙이기)를 그대로 씁니다. */
+@media (min-width: 860px) {
+  @supports (grid-template-rows: subgrid) {
+    .cards { grid-template-rows: repeat(5, auto); }
+    .card { display: grid; grid-row: span 5; grid-template-rows: subgrid; row-gap: 0; }
+    .card__pv { align-self: start; }
+    .card__foot { margin-top: 0; }
+  }
+}
+
+/* 리허설 공통 PIN 안내 — 운영자 카드 안내 줄 아래. 숫자가 주인공이고, 위험 안내는 마감 빨강 낱말로 시작합니다 */
+.pinnote {
+  margin-top: 14px;
+  padding: 16px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-btn);
+  background: var(--sink);
+}
+.pinnote__head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 2px 12px; }
+.pinnote__title { margin: 0; font-size: 14px; font-weight: 800; letter-spacing: -0.02em; color: var(--ink); }
+.pinnote__until { font-size: 13px; font-weight: 700; color: var(--accent-d); }
+.pinnote__pin { margin-top: 6px; line-height: 1; }
+.pinnote__v {
+  display: inline-block;
+  font-size: 34px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+.pinnote__list { display: grid; gap: 4px; margin-top: 12px; }
+.pinnote__list li { position: relative; padding-left: 14px; font-size: 14px; line-height: 1.55; color: var(--ink-2); }
+.pinnote__list li::before {
+  content: '';
+  position: absolute;
+  left: 2px;
+  top: 0.62em;
+  width: 5px;
+  height: 5px;
+  background: var(--accent);
+}
+.pinnote__warn {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--ink-2);
+}
+.pinnote__warnt { display: block; margin-bottom: 2px; font-weight: 800; color: var(--danger); }
 
 /* ── 관람객 미리보기 — visitor.css 의 띠 · 큰 숫자 · 구역 탭 · 목록 줄을 줄인 것 ──── */
 .vp {
