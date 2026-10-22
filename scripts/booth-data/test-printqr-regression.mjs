@@ -195,14 +195,20 @@ const html = (P, kind) => new Map(itemsOf(P, kind).map(el => [el.getAttribute('d
 // 예시 카드에서 '인쇄에 포함' 상태(is-off · checked)만 떼고 견줌 — 그 밖의 글자는 같아야 함
 // (jsdom 은 체크 상태를 checked="" 로 적습니다)
 const unpick = s => s.replace(/ is-off(?=[ "])/g, '').replace(/(data-act="pick") checked(="")?/g, '$1');
+// ① 카드 아래 문구 · 발급 줄만 바뀜(10-22): 예전 판 글을 새 글로 옮겨 놓고 견줍니다 — 발급 시각 숫자는 그대로여야 하고 열쇠 끝자리는 빠집니다
+const OLD_HAND = '교대할 때 이 카드를 다음 담당자에게 넘겨 주세요 · 잃어버리면 운영본부에 문의해 주세요';
+const NEW_HAND = '담당자가 교대할 때 이 QR 안내문을 다음 담당자에게 전달해 주세요. 분실 시 운영본부에 문의해 주세요.';
+const cardWording = s => s.split(OLD_HAND).join(NEW_HAND)
+  .replace(/<p class="card__meta">발급 (\d{2})\.(\d{2}) (\d{2}:\d{2}) · 끝자리 [A-Za-z0-9_-]{4}<\/p>/, '<p class="card__meta">QR 발급 $1.$2. $3</p>');
 for (const kind of ['ops', 'signs']) {
-  const o = html(oldP, kind), n = html(newP, kind);
+  const o0 = html(oldP, kind), n = html(newP, kind);
+  const o = new Map([...o0].map(([k, v]) => [k, kind === 'ops' ? cardWording(v) : v]));
   const realSame = REAL.filter(id => o.get(id) && o.get(id) === n.get(id)).length;
   const exSame = EX.filter(id => o.get(id) && unpick(o.get(id)) === unpick(n.get(id))).length;
   const exOffNew = EX.filter(id => itemEl(newP, kind, id).classList.contains('is-off')).length;
   const exOffOld = EX.filter(id => itemEl(oldP, kind, id).classList.contains('is-off')).length;
   const label = kind === 'ops' ? '① 운영자 카드' : '② 부스 앞 안내';
-  t(`R1-${kind} ${label} 134장: 실제 84장 HTML 글자 하나까지 같음 · 예시 50장은 ‘인쇄에 포함’ 표시(is-off · 체크)만 다름(새 판 50장 꺼짐 · 예전 판 0)`,
+  t(`R1-${kind} ${label} 134장: 실제 84장 HTML 글자 하나까지 같음${kind === 'ops' ? '(아래 문구 · ‘QR 발급 MM.DD. HH:MM’ 줄만 새 글 — 발급 시각 같음 · 끝자리 빠짐)' : ''} · 예시 50장은 ‘인쇄에 포함’ 표시(is-off · 체크)만 다름(새 판 50장 꺼짐 · 예전 판 0)`,
     o.size === 134 && n.size === 134 && realSame === 84 && exSame === 50 && exOffNew === 50 && exOffOld === 0, `${o.size}/${n.size} 실제 ${realSame} 예시 ${exSame} 꺼짐 ${exOffOld}→${exOffNew}`);
 }
 const poster = P => (P.d.getElementById('panel-poster') || {}).innerHTML || '';
@@ -454,6 +460,19 @@ section = 'Q 한 장에 몇 장 · 범례 색';
     '.grid--signs[data-per="2"] .sign__qr .qr__host { margin-top: 4mm; }'];
   t('Q9 기본 배치(① 4장 92 × 134mm · QR 칸 50mm · 여백 4mm / ② 2장 136 × 186mm · QR 칸 78mm / 포스터 130mm)의 CSS 는 지금 Production main(f3b61b1)과 같음 · 다른 장 수의 인쇄 칸 · 높이 규칙이 있음',
     KEEP.every(s => oldCss.includes(s) && newCss.includes(s)) && PER.every(s => newCss.includes(s)), JSON.stringify({ keepMissing: KEEP.filter(s => !(oldCss.includes(s) && newCss.includes(s))), perMissing: PER.filter(s => !newCss.includes(s)) }));
+  // ① 카드 아래 문구 · 발급 줄(10-22): 종이에는 열쇠 끝자리가 없고, 화면 전용 ‘QR 크게 보기’ 만 끝자리를 보여 줌
+  const realOps = REAL.map(id => itemEl(Q, 'ops', id));
+  const hands = realOps.map(el => text(el.querySelector('.card__hand'))), metas = realOps.map(el => text(el.querySelector('.card__meta')));
+  t('Q11 ① 실제 84장: 아래 문구 = “담당자가 교대할 때 이 QR 안내문을 다음 담당자에게 전달해 주세요. 분실 시 운영본부에 문의해 주세요.” · 발급 줄 = ‘QR 발급 MM.DD. HH:MM’ · 카드 목록 어디에도 ‘끝자리’ 없음',
+    hands.every(h => h === NEW_HAND) && metas.every(m => /^QR 발급 \d{2}\.\d{2}\. \d{2}:\d{2}$/.test(m)) && !/끝자리/.test(Q.d.getElementById('grid-ops').textContent),
+    JSON.stringify({ hand: [...new Set(hands)].slice(0, 2), meta: metas.slice(0, 2).map(m => m.replace(/\d/g, '#')) }));
+  click(Q.w, realOps[0].querySelector('[data-act="big"]'));
+  await until(() => !Q.d.getElementById('ov').hidden && /\S/.test(Q.d.getElementById('ov-meta').textContent), 15000); await wait(100);
+  const ovMeta = text(Q.d.getElementById('ov-meta'));
+  click(Q.w, Q.d.getElementById('ov-close')); await wait(60);
+  t('Q12 화면 전용 ‘QR 크게 보기’ 는 예전처럼 발급 · 끝자리를 보여 줌(관리자 확인용 · 인쇄 CSS 에서 .ov 숨김) · 카드 발급 시각과 같은 분',
+    /^발급 \d{2}\.\d{2} \d{2}:\d{2} · 끝자리 \S{4}$/.test(ovMeta) && SRC.new.html.includes('.tb, .no-print, .lead, .ctl, .acts, .confirm, .fix, .now, .note, .ov,') &&
+    ovMeta.slice(3, 14).replace(' ', '. ') === metas[0].slice(6), ovMeta.replace(/끝자리 \S+/, '끝자리 ••••').replace(/\d/g, '#'));
   t('Q10 이 화면 오류 없음', !Q.errors.length, Q.errors.join(' | '));
   Q.dom.window.close();
 }
