@@ -190,8 +190,8 @@ ul, ol { padding: 0; list-style: none; }
 .card__pv.cp { margin-bottom: 18px; }
 .card__note + .card__foot { margin-top: 0; padding-top: 12px; }
 
-/* 운영자 공통 PIN — 보조 한 줄(라벨 · 숫자 배지 · 사용 기간). 줄 전체는 바탕 없이 두고, 숫자만 작은 둥근 배지
-   (은은한 보라 바탕 · 테두리) 안에 크고 굵게 둡니다. 라벨은 진한 회남색, 사용 기간은 옅은 글자.
+/* 운영자 공통 PIN — 보조 한 줄(라벨 · 숫자 배지 · 사용 기간). 줄 전체는 바탕 없이 두고, 숫자만 모서리가 살짝 둥근
+   직사각형 배지(은은한 보라 바탕 · 테두리, 그림자 없음) 안에 크고 굵게 둡니다. 라벨은 진한 회남색, 사용 기간은 옅은 글자.
    한 줄을 지키되 자리가 모자랄 때만 사용 기간이 다음 줄로 내려갑니다. */
 .pinhint {
   display: flex;
@@ -208,7 +208,7 @@ ul, ol { padding: 0; list-style: none; }
 .pinhint__v {
   padding: 0 calc(10px - 0.05em) 0 10px;   /* 마지막 숫자 뒤 자간만큼 오른쪽을 줄여 숫자를 배지 가운데에 */
   border: 1px solid var(--accent-l);
-  border-radius: 999px;
+  border-radius: 6px;
   background: var(--accent-t);
   color: var(--ink);
   font-size: 20px;
