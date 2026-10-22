@@ -1233,6 +1233,14 @@
       var when = fmtIssued(a.issued_at);
       return (when ? '발급 ' + when + ' · ' : '') + '끝자리 ' + tailOf(a);
     }
+    // ① 카드 맨 아래 줄(종이에 찍힘): 'QR 발급 10.16. 11:26'. 열쇠 끝자리는 카드에 적지 않습니다 —
+    // 화면의 'QR 크게 보기'(issuedLine)에서만 봅니다. 꺼진 열쇠 카드는 인쇄되지 않아 그 줄을 그대로 씁니다.
+    function cardIssuedLine(a) {
+      if (!a) return '';
+      if (isOff(a)) return issuedLine(a);
+      var p = BC.kstParts(a.issued_at);
+      return p ? 'QR 발급 ' + pad2(p.m) + '.' + pad2(p.d) + '. ' + pad2(p.hh) + ':' + pad2(p.mi) : '';
+    }
     // 열쇠가 바뀌었는지 견줄 때 쓰는 표시. 끈 부스는 token 이 null 이라 token 만 견주면
     // '없음 → 꺼짐' 을 놓칠 수 있어 꺼짐 여부를 함께 봅니다.
     function keySig(a) { return a ? (a.disabled ? 'off' : 'on:' + (a.token || '')) : ''; }
@@ -1667,8 +1675,9 @@
                     '<li><b>③</b><span>쉬는 동안 “잠시 중단”, 끝나면 “오늘 마감”</span></li>' +
                   '</ol>' +
                 '</div>' +
-                '<p class="card__hand">교대할 때 이 카드를 다음 담당자에게 넘겨 주세요 · 잃어버리면 ' + esc(helpLine) + '</p>') +
-            '<p class="card__meta">' + esc(issuedLine(a)) + '</p>' +
+                '<p class="card__hand">담당자가 교대할 때 이 QR 안내문을 다음 담당자에게 전달해 주세요. 분실 시 ' +
+                  esc(String(helpLine).replace(/[.\s]+$/, '')) + '.</p>') +
+            '<p class="card__meta">' + esc(cardIssuedLine(a)) + '</p>' +
           '</div>' +
         '</article>' +
         kstHtml(b) +
