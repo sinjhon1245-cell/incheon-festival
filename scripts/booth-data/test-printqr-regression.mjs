@@ -198,8 +198,11 @@ const unpick = s => s.replace(/ is-off(?=[ "])/g, '').replace(/(data-act="pick")
 // ① 카드 아래 문구 · 발급 줄만 바뀜(10-22): 예전 판 글을 새 글로 옮겨 놓고 견줍니다 — 발급 시각 숫자는 그대로여야 하고 열쇠 끝자리는 빠집니다
 const OLD_HAND = '교대할 때 이 카드를 다음 담당자에게 넘겨 주세요 · 잃어버리면 운영본부에 문의해 주세요';
 const NEW_HAND = '담당자가 교대할 때 이 QR 안내문을 다음 담당자에게 전달해 주세요. 분실 시 운영본부에 문의해 주세요.';
+// 그리고 이 화면에서 ‘대기 값 직접 고치기’(단추 · 칸)와 그 ‘지금:’ 줄이 빠짐(10-22) — 예전 판의 그 셋만 지우고 견줍니다
+const FIX_BTN = '<button type="button" class="btn" data-act="fix" aria-expanded="false">대기 값 직접 고치기</button>';
 const cardWording = s => s.split(OLD_HAND).join(NEW_HAND)
-  .replace(/<p class="card__meta">발급 (\d{2})\.(\d{2}) (\d{2}:\d{2}) · 끝자리 [A-Za-z0-9_-]{4}<\/p>/, '<p class="card__meta">QR 발급 $1.$2. $3</p>');
+  .replace(/<p class="card__meta">발급 (\d{2})\.(\d{2}) (\d{2}:\d{2}) · 끝자리 [A-Za-z0-9_-]{4}<\/p>/, '<p class="card__meta">QR 발급 $1.$2. $3</p>')
+  .split(FIX_BTN).join('').replace(/<p class="now" data-now=""><\/p>/, '').replace(/<div class="fix" data-fix="" hidden=""><\/div>/, '');
 for (const kind of ['ops', 'signs']) {
   const o0 = html(oldP, kind), n = html(newP, kind);
   const o = new Map([...o0].map(([k, v]) => [k, kind === 'ops' ? cardWording(v) : v]));
@@ -227,11 +230,11 @@ const chips = (P, kind) => [...P.d.querySelectorAll(`.zchip[data-list="${kind}"]
 t('R5 구역 칩 같음(① · ② 모두 “전체 134 · A~E · R1~R4 21”)', chips(oldP, 'ops') === chips(newP, 'ops') && chips(oldP, 'signs') === chips(newP, 'signs') &&
   /^전체134 \| A6 \| B20 \| C10 \| D8 \| E6 \| R121 \| R221 \| R321 \| R421$/.test(chips(newP, 'ops')), chips(newP, 'ops'));
 const issueAll = P => { const b = P.d.getElementById('issue-all'); return b ? (b.hidden ? '숨김' : text(b)) : '없음'; };
-t('R6 QR 일괄 발급 단추 · 카드 단추(발급 · 교체 · 끄기 · 직접 고치기) 같음',
+t('R6 QR 일괄 발급 단추 · 카드 단추(발급 · 크게 보기 · 교체 · 끄기) 같음 — ‘대기 값 직접 고치기’ 만 빠짐(예전 판에서 그 하나를 빼면 같은 차례)',
   issueAll(oldP) === issueAll(newP) && itemsOf(newP, 'ops').every(el => {
     const o = itemEl(oldP, 'ops', el.getAttribute('data-id'));
-    const acts = x => [...x.querySelectorAll('[data-act]')].map(b => b.getAttribute('data-act')).join(',');
-    return acts(o) === acts(el);
+    const acts = x => [...x.querySelectorAll('[data-act]')].map(b => b.getAttribute('data-act')).filter(a => a !== 'fix').join(',');
+    return acts(o) === acts(el) && !el.querySelector('[data-act="fix"]');
   }), `${issueAll(oldP)} → ${issueAll(newP)}`);
 const WRITES = /^admin_(issue_booth_tokens|rotate_booth_token|disable_booth_token|set_booth_live|reset_booth_live|issue_booth_pin|issue_booth_pin_checked|disable_booth_pin|rehearsal_set_live)$/;
 const readsOf = P => [...new Set(P.calls.map(c => c.name))].sort().join(',');
@@ -470,9 +473,18 @@ section = 'Q 한 장에 몇 장 · 범례 색';
   await until(() => !Q.d.getElementById('ov').hidden && /\S/.test(Q.d.getElementById('ov-meta').textContent), 15000); await wait(100);
   const ovMeta = text(Q.d.getElementById('ov-meta'));
   click(Q.w, Q.d.getElementById('ov-close')); await wait(60);
-  t('Q12 화면 전용 ‘QR 크게 보기’ 는 예전처럼 발급 · 끝자리를 보여 줌(관리자 확인용 · 인쇄 CSS 에서 .ov 숨김) · 카드 발급 시각과 같은 분',
-    /^발급 \d{2}\.\d{2} \d{2}:\d{2} · 끝자리 \S{4}$/.test(ovMeta) && SRC.new.html.includes('.tb, .no-print, .lead, .ctl, .acts, .confirm, .fix, .now, .note, .ov,') &&
-    ovMeta.slice(3, 14).replace(' ', '. ') === metas[0].slice(6), ovMeta.replace(/끝자리 \S+/, '끝자리 ••••').replace(/\d/g, '#'));
+  const ovQr = !!Q.qr.get('ov-qr') || [...Q.qr.keys()].some(k => /ov/.test(k));
+  t('Q12 ‘QR 크게 보기’ 도 열쇠 끝자리 없이 카드와 같은 줄 ‘QR 발급 MM.DD. HH:MM’ · QR 은 그대로 그림 · 인쇄 CSS 에서 .ov 숨김',
+    /^QR 발급 \d{2}\.\d{2}\. \d{2}:\d{2}$/.test(ovMeta) && ovMeta === metas[0] && !/끝자리/.test(ovMeta) && ovQr &&
+    SRC.new.html.includes('.tb, .no-print, .lead, .ctl, .acts, .confirm, .note, .ov,'), ovMeta.replace(/\d/g, '#'));
+  // 이 화면에서 ‘대기 값 직접 고치기’ 는 없음(값 고치기는 부스 운영 현황의 관리자 긴급 수정) · 끝자리는 어디에도 없음
+  // 화면 글만(시험이 끼워 넣은 assets 스크립트 · 스타일의 주석은 빼고)
+  const vis = Q.d.body.cloneNode(true); vis.querySelectorAll('script, style').forEach(x => x.remove());
+  const all = vis.textContent, src = SRC.new.html;
+  t('Q13 ‘대기 값 직접 고치기’ 단추 · 칸 · ‘지금:’ 줄이 이 화면에 없음 · 값 쓰기 함수(admin_set_booth_live)를 부르는 코드 없음 · 화면 어디에도 ‘끝자리’ 없음 · 열쇠 끄기 뒤 안내는 ‘부스 운영 현황’ 을 가리킴',
+    !Q.d.querySelector('[data-act="fix"], [data-fix], [data-now], .fix, .now') && !/직접 고치기/.test(all) && !/끝자리/.test(all) &&
+    !src.includes("rpc('admin_set_booth_live'") && !/data-act="set"/.test(src) && src.includes('‘부스 운영 현황’의 관리자 긴급 수정으로만 바꿀 수 있어요') &&
+    !Q.calls.some(c => c.name === 'admin_set_booth_live'), JSON.stringify({ fix: !!Q.d.querySelector('[data-act="fix"]'), tail: /끝자리/.test(all), rpc: src.includes("rpc('admin_set_booth_live'") }));
   t('Q10 이 화면 오류 없음', !Q.errors.length, Q.errors.join(' | '));
   Q.dom.window.close();
 }
@@ -499,10 +511,12 @@ const fnDiff = FLOW.filter(n => { const a = termNorm(fnBody(SRC.old.html, n)), b
 const WRITE_RPC = ['admin_issue_booth_pin_checked', 'admin_issue_booth_pin', 'admin_disable_booth_pin', 'admin_issue_booth_tokens',
   'admin_rotate_booth_token', 'admin_disable_booth_token', 'admin_set_booth_live'];
 const siteN = (s, n) => (s.match(new RegExp("rpc\\('" + n + "'", 'g')) || []).length;
-const sitesSame = WRITE_RPC.every(n => siteN(SRC.old.html, n) === siteN(SRC.new.html, n));
+// 대기 값 쓰기(admin_set_booth_live)는 ‘대기 값 직접 고치기’ 를 이 화면에서 뺀 뒤(10-22) 0 이어야 합니다(부스 운영 현황에만 남음).
+const sitesSame = WRITE_RPC.filter(n => n !== 'admin_set_booth_live').every(n => siteN(SRC.old.html, n) === siteN(SRC.new.html, n));
+const setGone = siteN(SRC.new.html, 'admin_set_booth_live') === 0;
 const resetOk = siteN(SRC.new.html, 'admin_reset_booth_live') <= siteN(SRC.old.html, 'admin_reset_booth_live');
-t(`I1 소스: 발급 · 재발급 흐름 함수 ${FLOW.length}개 본문이 예전 판과 글자 하나까지 같음 · 쓰기 함수(발급 · 재발급 · 끄기 · 열쇠 · 대기 값)를 부르는 곳 수 같음 · 전체 값 지우기는 늘지 않음`,
-  fnDiff.length === 0 && sitesSame && resetOk,
+t(`I1 소스: 발급 · 재발급 흐름 함수 ${FLOW.length}개 본문이 예전 판과 글자 하나까지 같음 · 쓰기 함수(발급 · 재발급 · 끄기 · 열쇠)를 부르는 곳 수 같음 · 대기 값 쓰기는 이 화면에서 0 · 전체 값 지우기는 늘지 않음`,
+  fnDiff.length === 0 && sitesSame && setGone && resetOk,
   `다름 ${fnDiff.join(',')} | 쓰기 호출 ${WRITE_RPC.map(n => n + ' ' + siteN(SRC.old.html, n) + '→' + siteN(SRC.new.html, n)).join(' ')}`);
 // I2 · I3 동작: 복제 DB 두 벌 — 예전 판은 '임시구역' 찾기 + 찾은 84곳 모두 선택(예전 길), 새 판은 '실제 부스 84곳 선택'
 async function runJob(P, kind) {
