@@ -10,10 +10,12 @@
    S  PIN ‘실제 부스 N곳 선택’ — 예시 제외 · 수는 데이터에서 셈
    K  찾기 · 구역과 충돌 없음(인쇄 목록 · PIN 목록)
    I  PIN 발급 · 재발급 그대로 — 함수 본문 · 부르는 DB 함수 · 확인 창 · 결과가 예전 판과 같음(복제 DB 두 벌에서 따로)
+   Q  A4 한 장에 몇 장(① · ② 1 · 2 · 4장) — 기본값 · 쪽수 · 종이 방향 · 탭마다 기억 · 구역별 새 페이지 · 찾기 · 구역 칩과 함께 · QR 다시 그리지 않음,
+      포스터 범례 색 = 관람객 사이트(--visitor-ref, 기본 e314ee8 의 assets/visitor.css) · 기본 배치 CSS = --base-ref(기본 f3b61b1)
    ⚠️ 네트워크 · Production 접속 없음. 열쇠 · PIN 은 복제 DB 의 가짜 값이고 출력하지 않습니다(개수와 참 · 거짓만).
    쓰는 법
      node --max-old-space-size=8192 scripts/booth-data/test-printqr-regression.mjs --pglite-dir <PGlite 0.4.4> --jsdom-dir <jsdom 30> \
-          --new <새 print-qr.html> [--old-ref 56c3138] [--assets-dir <새 판 저장소 폴더 — 기본은 --new 의 폴더>]
+          --new <새 print-qr.html> [--old-ref 56c3138] [--assets-dir <새 판 저장소 폴더 — 기본은 --new 의 폴더>] [--base-ref f3b61b1] [--visitor-ref e314ee8]
    결과: out/gate3c/printqr-regression-report.md
    =================================================================== */
 
@@ -120,12 +122,13 @@ const click = (w, el) => el && el.dispatchEvent(new w.MouseEvent('click', { bubb
 async function openPage(which, ctx) {
   const { client, log, calls } = adminClient(ctx);
   const qr = new Map();
+  let qrCalls = 0;   // QR 을 그린 횟수 — 장 수를 바꿀 때 다시 그리지 않는지(Q7)
   const dom = new JSDOM(pageHtml(which), {
     url: 'https://sinjhon1245-cell.github.io/incheon-festival/print-qr.html', runScripts: 'dangerously', pretendToBeVisual: true, virtualConsole: quiet(),
     beforeParse(w) {
       w.supabase = { createClient: () => client };
       // QR 그림 대신 넣은 주소만 기억합니다(메모리에만 · 출력 안 함).
-      function QRCode(el, o) { const item = el.closest('[data-id]'); const key = item ? item.className.split(' ')[1] + ':' + item.getAttribute('data-id') : (el.id || 'poster'); qr.set(key, o.text); }
+      function QRCode(el, o) { qrCalls++; const item = el.closest('[data-id]'); const key = item ? item.className.split(' ')[1] + ':' + item.getAttribute('data-id') : (el.id || 'poster'); qr.set(key, o.text); }
       QRCode.CorrectLevel = { L: 1, M: 0, Q: 3, H: 2 };
       w.QRCode = QRCode;
       w.matchMedia = () => ({ matches: false, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {} });
@@ -142,7 +145,7 @@ async function openPage(which, ctx) {
   const d = dom.window.document, w = dom.window;
   await until(() => d.querySelectorAll('#grid-ops .item--ops').length >= 134 && calls.some(c => c.name === 'admin_booth_access'), 30000);
   await wait(400);
-  return { which, dom, d, w, log, calls, qr, errors };
+  return { which, dom, d, w, log, calls, qr, errors, qrCalls: () => qrCalls };
 }
 async function openPin(P) {
   click(P.w, P.d.getElementById('pinx-toggle'));
@@ -203,7 +206,12 @@ for (const kind of ['ops', 'signs']) {
     o.size === 134 && n.size === 134 && realSame === 84 && exSame === 50 && exOffNew === 50 && exOffOld === 0, `${o.size}/${n.size} 실제 ${realSame} 예시 ${exSame} 꺼짐 ${exOffOld}→${exOffNew}`);
 }
 const poster = P => (P.d.getElementById('panel-poster') || {}).innerHTML || '';
-t('R2 ③ 입구 포스터 HTML 같음', poster(oldP) === poster(newP) && poster(newP).length > 0);
+// 범례 네모 넷만 관람객 사이트 색 클래스로 바뀜(인쇄 개선) — 예전 판의 그 네 줄을 새 표기로 옮겨 놓고 견주면 글자 하나 다르지 않아야 합니다
+const LEGEND_MAP = { 'st-free': 'lg--free', 'st-normal': 'lg--normal', 'st-busy': 'lg--busy', 'st-off-mark': 'lg--off' };
+const legendNew = s => s.replace(/<i style="background:var\(--(st-free|st-normal|st-busy|st-off-mark)\)"><\/i>/g, (m, k) => `<i class="${LEGEND_MAP[k]}"></i>`);
+t('R2 ③ 입구 포스터 HTML 같음 — 범례 네모 넷의 색 지정(--st-* → lg--* 클래스)만 다름',
+  legendNew(poster(oldP)) === poster(newP) && poster(newP).length > 0 && (poster(oldP).match(/<i style="background:var\(--st-/g) || []).length === 4 &&
+  (poster(newP).match(/<i class="lg--(free|normal|busy|off)"><\/i>/g) || []).length === 4);
 const qrSame = [...oldP.qr].every(([k, v]) => newP.qr.get(k) === v) && oldP.qr.size === newP.qr.size;
 t('R3 QR 에 넣는 주소가 모두 같음(운영자 134 · 안내문 134 · 포스터)', oldP.qr.size >= 269 && qrSame, `${oldP.qr.size} → ${newP.qr.size}`);
 t('R4 운영자 QR = booth-ctrl.html#k=(열쇠 # 뒤 24자) · 안내문 QR = 관람객 화면 ?b=UUID(열쇠 없음)',
@@ -356,6 +364,97 @@ t('K4 고른 뒤 찾기나 구역을 바꾸면 선택을 풂(“검색어가 바
   k4o[0] === 0 && k4o[1] === k4a[1], JSON.stringify([k4a, k4b, k4o]));
 pinSearch(newP, ''); await wait(40);
 oldP.dom.window.close(); newP.dom.window.close();
+
+// ══ Q A4 한 장에 몇 장 · 포스터 범례 색(인쇄 개선) ═══════════════════════════
+// 쪽수는 화면 수 줄의 ‘A4 N쪽’ 으로 봅니다. 실제 PDF 쪽수 · 칸 배치 · QR 읽힘은 브라우저로 따로 확인합니다(jsdom 은 배치를 하지 않음).
+section = 'Q 한 장에 몇 장 · 범례 색';
+{
+  const Q = await openPage('new', A);
+  const qrN0 = Q.qrCalls(), qrMap0 = new Map(Q.qr);
+  const perBtn = (kind, n) => Q.d.querySelector(`button[data-per="${n}"][data-list="${kind}"]`);
+  const setPer = (kind, n) => click(Q.w, perBtn(kind, n));
+  const pressed = kind => [...Q.d.querySelectorAll(`button[data-per][data-list="${kind}"]`)].filter(b => b.getAttribute('aria-pressed') === 'true').map(b => b.getAttribute('data-per')).join();
+  const gridPer = kind => Q.d.getElementById('grid-' + kind).getAttribute('data-per');
+  const rule = () => text(Q.d.getElementById('page-rule'));
+  const pages = kind => Number((countTxt(Q, kind).match(/A4 (\d+)쪽/) || [])[1]);
+  const lead = kind => text(Q.d.getElementById('per-lead-' + kind));
+  const ok = el => !['is-filtered', 'is-off', 'is-keyoff', 'is-nokey'].some(c => el.classList.contains(c));
+  const zoneSum = (kind, n) => [...Q.d.querySelectorAll(`#grid-${kind} .zsect`)].map(s => [...s.querySelectorAll('.item')].filter(ok).length).reduce((a, x) => a + Math.ceil(x / n), 0);
+  const setZone = on => { const z = Q.d.getElementById('opt-zonebreak'); z.checked = on; z.dispatchEvent(new Q.w.Event('change', { bubbles: true })); };
+
+  t('Q1 기본값은 지금과 같음 — ① 4장 · ② 2장(단추 · 그리드 data-per) · @page A4 · “A4 21쪽” · “인쇄하기 (84장)”',
+    pressed('ops') === '4' && pressed('signs') === '2' && gridPer('ops') === '4' && gridPer('signs') === '2' && /size: A4;/.test(rule()) && pages('ops') === 21 && btnTxt(Q) === '인쇄하기 (84장)',
+    JSON.stringify([pressed('ops'), pressed('signs'), rule(), countTxt(Q, 'ops')]));
+  const q2 = {};
+  for (const n of [1, 2, 4]) { setPer('ops', n); await wait(30); q2[n] = { pages: pages('ops'), btn: btnTxt(Q), lead: lead('ops'), rule: rule(), grid: gridPer('ops'), pressed: pressed('ops') }; }
+  t('Q2 ① 1 · 2 · 4장 → 실제 84장이 A4 84 · 42 · 21쪽 · 인쇄 단추 장 수 그대로(84장) · @page A4 세로 · 안내 첫머리도 바뀜',
+    q2[1].pages === 84 && q2[2].pages === 42 && q2[4].pages === 21 && [1, 2, 4].every(n => q2[n].btn === '인쇄하기 (84장)' && /size: A4;/.test(q2[n].rule) && q2[n].grid === String(n) && q2[n].pressed === String(n)) &&
+    q2[1].lead === 'A4 한 장에 1장.' && /^A4 한 장에 2장/.test(q2[2].lead) && q2[4].lead === 'A4 한 장에 4장.', JSON.stringify(q2));
+  tab(Q, 'signs'); await wait(30);
+  const q3 = {};
+  for (const n of [1, 2, 4]) { setPer('signs', n); await wait(30); q3[n] = { pages: pages('signs'), rule: rule(), lead: lead('signs') }; }
+  t('Q3 ② 1 · 2 · 4장 → A4 84 · 42 · 21쪽 · 종이 방향 1장 · 4장 A4 세로, 2장 A4 가로(지금과 같음)',
+    q3[1].pages === 84 && q3[2].pages === 42 && q3[4].pages === 21 && /size: A4;/.test(q3[1].rule) && /size: A4 landscape;/.test(q3[2].rule) && /size: A4;/.test(q3[4].rule) &&
+    /^A4 세로 한 장에 1장/.test(q3[1].lead) && /^A4 가로 한 장에 2장\(A5 세로\)/.test(q3[2].lead) && /^A4 세로 한 장에 4장/.test(q3[4].lead), JSON.stringify(q3));
+  setPer('signs', 1); tab(Q, 'ops'); await wait(30); setPer('ops', 2); tab(Q, 'poster'); await wait(30);
+  const onPoster = { btns: Q.d.querySelectorAll('#panel-poster button[data-per]').length, rule: rule() };
+  tab(Q, 'signs'); await wait(30); const backS = { pressed: pressed('signs'), grid: gridPer('signs'), rule: rule(), pages: pages('signs') };
+  tab(Q, 'ops'); await wait(30); const backO = { pressed: pressed('ops'), grid: gridPer('ops'), rule: rule(), pages: pages('ops') };
+  // 단추 표시뿐 아니라 실제 인쇄 배치를 정하는 그리드 data-per 도 그대로여야 합니다
+  t('Q4 탭마다 따로 기억 — ① 2장 · ② 1장을 고르고 ③ 을 다녀와도 그대로(단추 · 그리드 data-per · 쪽수 · 종이, 초기화 없음) · ③ 포스터 칸에는 장 수 고르기가 없고 @page 는 포스터 종이',
+    onPoster.btns === 0 && /size: A4;/.test(onPoster.rule) && backS.pressed === '1' && backS.grid === '1' && /size: A4;/.test(backS.rule) && backS.pages === 84 &&
+    backO.pressed === '2' && backO.grid === '2' && /size: A4;/.test(backO.rule) && backO.pages === 42, JSON.stringify({ onPoster, backS, backO }));
+  setZone(true); await wait(30);
+  const q5 = {};
+  for (const kind of ['ops', 'signs']) { tab(Q, kind); await wait(20); for (const n of [1, 2, 4]) { setPer(kind, n); await wait(30); q5[kind + n] = [pages(kind), zoneSum(kind, n), /\(구역별 새 페이지\)/.test(countTxt(Q, kind))]; } }
+  setZone(false); await wait(30);
+  t('Q5 구역별로 새 페이지 + 1 · 2 · 4장: 쪽수 = 구역마다 따로 올림해 더한 값(① · ②) · 수 줄에 ‘(구역별 새 페이지)’',
+    Object.values(q5).every(([a, b, c]) => a === b && c) && q5.ops4[0] === 24 && q5.ops1[0] === 84, JSON.stringify(q5));
+  tab(Q, 'ops'); setPer('ops', 2); searchList(Q, 'ops', 'R2'); await wait(40);
+  const f1 = [printIds(Q, 'ops').length, pages('ops')];
+  searchList(Q, 'ops', ''); chip(Q, 'ops', 'R3'); setPer('ops', 1); await wait(40);
+  const f2 = [printIds(Q, 'ops').length, pages('ops')];
+  pickAll(Q, 'ops', false); await wait(30);
+  const f3 = [printIds(Q, 'ops').length, pages('ops'), Q.d.getElementById('print-btn').disabled];
+  pickAll(Q, 'ops', true); chip(Q, 'ops', 'R3'); setPer('ops', 4); await wait(40);
+  const f4 = [printIds(Q, 'ops').length, pages('ops')];
+  t('Q6 찾기 · 구역 칩 · 모두 해제와 함께 — R2 찾기 + 2장 → 쪽수 = 올림(장 수 / 2) / R3 칩 + 1장 → 21장 · 21쪽 / 모두 해제 → 0장 · 0쪽 · 인쇄 단추 꺼짐 / 다시 모두 선택 · 칩 풀고 4장 → 84장 · 21쪽',
+    f1[0] >= 21 && f1[1] === Math.ceil(f1[0] / 2) && f2[0] === 21 && f2[1] === 21 && f3[0] === 0 && f3[1] === 0 && f3[2] === true && f4[0] === 84 && f4[1] === 21, JSON.stringify({ f1, f2, f3, f4 }));
+  t('Q7 장 수를 몇 번 바꿔도 QR 을 다시 그리지 않음(그린 횟수 그대로) · QR 에 넣은 주소 그대로 · 쓰기 호출 없음',
+    Q.qrCalls() === qrN0 && qrN0 >= 269 && [...qrMap0].every(([k, v]) => Q.qr.get(k) === v) && newP.qr.size === Q.qr.size && [...newP.qr].every(([k, v]) => Q.qr.get(k) === v) &&
+    !Q.calls.some(c => WRITES.test(c.name) && c.args.p_booth_id !== null), `${qrN0} → ${Q.qrCalls()}`);
+  // 범례 색: 관람객이 실제로 보는 부스 Live 사이트(booth-live 의 visitor.css) 값과 같아야 함 · 이 화면의 --st-* 는 그대로
+  const VIS_REF = arg('visitor-ref', 'e314ee8');
+  const visCss = git('show', `${VIS_REF}:assets/visitor.css`);
+  const tok = (s, name) => ((s.match(new RegExp(`${name}:\\s*([^;]+);`)) || [])[1] || '').trim().toUpperCase();
+  // 견주는 기준: 지금 Production main(f3b61b1)의 print-qr.html
+  const BASE_REF = arg('base-ref', 'f3b61b1');
+  const newCss = SRC.new.html, oldCss = git('show', `${BASE_REF}:print-qr.html`);
+  const want = { '--lg-free': tok(visCss, '--st-free'), '--lg-normal': tok(visCss, '--st-normal'), '--lg-busy': tok(visCss, '--st-busy'), '--lg-off': tok(visCss, '--st-off-mark'), '--lg-edge': tok(visCss, '--st-edge') };
+  const legendTxt = [...Q.d.querySelectorAll('#panel-poster .legend li')].map(li => li.querySelector('i').className + ':' + text(li)).join(',');
+  t(`Q8 포스터 범례 색 = 관람객 사이트(${VIS_REF}:assets/visitor.css) — 여유 ${want['--lg-free']} · 보통 ${want['--lg-normal']}(흰 종이용 테두리 ${want['--lg-edge']}) · 혼잡 ${want['--lg-busy']} · 중단·마감 ${want['--lg-off']} · 이 화면의 --st-* · 인쇄 색 그대로 찍기 규칙은 ${BASE_REF} 와 같음`,
+    Object.entries(want).every(([k, v]) => v && tok(newCss, k) === v) && want['--lg-free'] === '#08773F' && want['--lg-normal'] === '#F4D400' && want['--lg-busy'] === '#E52521' && want['--lg-off'] === '#8A93AB' &&
+    /\.lg--free \{ background: var\(--lg-free\); \}/.test(newCss) && /\.lg--normal \{ background: var\(--lg-normal\); border: calc\(0\.3mm \* var\(--k\)\) solid var\(--lg-edge\); \}/.test(newCss) &&
+    /\.lg--busy \{ background: var\(--lg-busy\); \}/.test(newCss) && /\.lg--off \{ background: var\(--lg-off\); \}/.test(newCss) &&
+    legendTxt === 'lg--free:여유,lg--normal:보통,lg--busy:혼잡,lg--off:중단·마감' &&
+    ['--st-free', '--st-normal', '--st-busy', '--st-off', '--st-off-mark'].every(k => tok(newCss, k) === tok(oldCss, k)) &&
+    newCss.includes('* { -webkit-print-color-adjust: exact; print-color-adjust: exact; }'), JSON.stringify({ want, legendTxt }));
+  // 기본 배치(① 4장 · ② 2장)의 크기는 예전 판과 글자 하나 다르지 않음 — 검증된 QR 크기 그대로
+  const KEEP = ['.qr { padding: 4mm; background: #FFFFFF; width: 100%; max-width: 100%; }', '.card__qr { flex: none; width: 50mm; margin: 0; }',
+    'height: 134mm; background: #FFFFFF; border: 0.3mm dashed var(--cut);', '.item { position: relative; width: 92mm; max-width: 100%; }', '.item--sign { width: 136mm; }',
+    '.sign__qr { width: 78mm; max-width: 100%; margin: auto auto 0; padding-top: 4mm; }', '.grid--ops { grid-template-columns: repeat(2, 92mm); gap: 5mm 6mm; }',
+    '.grid--signs { grid-template-columns: repeat(2, 136mm); gap: 0 3mm; }', '.sign { height: 186mm; min-height: 0; }', '.poster__qr { width: calc(130mm * var(--k));',
+    '.grid--ops.is-zoned .zsect { grid-template-columns: repeat(2, 92mm); gap: 5mm 6mm; }', '.grid--signs.is-zoned .zsect { grid-template-columns: repeat(2, 136mm); gap: 0 3mm; }',
+    '.grid.is-zoned .zsect:not(.is-lead) { break-before: page; page-break-before: always; }', '.item { width: auto; max-width: none; break-inside: avoid; page-break-inside: avoid; }'];
+  const PER = ['.grid--ops[data-per="2"], .grid--ops[data-per="2"].is-zoned .zsect { grid-template-columns: 190mm; gap: 5mm 0; }',
+    '.grid--signs[data-per="1"], .grid--signs[data-per="1"].is-zoned .zsect { grid-template-columns: 190mm; gap: 0; }',
+    '.grid--signs[data-per="4"], .grid--signs[data-per="4"].is-zoned .zsect { grid-template-columns: repeat(2, 92mm); gap: 5mm 6mm; }',
+    '.grid--ops[data-per="1"] .card { height: 270mm; }', '.grid--signs[data-per="4"] .sign { height: 134mm; }', '.grid--signs[data-per="1"] .sign { height: 270mm; }'];
+  t('Q9 기본 배치(① 4장 92 × 134mm · QR 칸 50mm · 여백 4mm / ② 2장 136 × 186mm · QR 칸 78mm / 포스터 130mm)의 CSS 는 지금 Production main(f3b61b1)과 같음 · 다른 장 수의 인쇄 칸 · 높이 규칙이 있음',
+    KEEP.every(s => oldCss.includes(s) && newCss.includes(s)) && PER.every(s => newCss.includes(s)), JSON.stringify({ keepMissing: KEEP.filter(s => !(oldCss.includes(s) && newCss.includes(s))), perMissing: PER.filter(s => !newCss.includes(s)) }));
+  t('Q10 이 화면 오류 없음', !Q.errors.length, Q.errors.join(' | '));
+  Q.dom.window.close();
+}
 
 // ══ I PIN 발급 · 재발급 그대로 ════════════════════════════════════════════
 section = 'I PIN 발급 · 재발급';
