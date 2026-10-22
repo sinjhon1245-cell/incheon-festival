@@ -449,7 +449,9 @@ section = 'Q 한 장에 몇 장 · 범례 색';
   const PER = ['.grid--ops[data-per="2"], .grid--ops[data-per="2"].is-zoned .zsect { grid-template-columns: 190mm; gap: 5mm 0; }',
     '.grid--signs[data-per="1"], .grid--signs[data-per="1"].is-zoned .zsect { grid-template-columns: 190mm; gap: 0; }',
     '.grid--signs[data-per="4"], .grid--signs[data-per="4"].is-zoned .zsect { grid-template-columns: repeat(2, 92mm); gap: 5mm 6mm; }',
-    '.grid--ops[data-per="1"] .card { height: 270mm; }', '.grid--signs[data-per="4"] .sign { height: 134mm; }', '.grid--signs[data-per="1"] .sign { height: 270mm; }'];
+    '.grid--ops[data-per="1"] .card { height: 270mm; }', '.grid--signs[data-per="4"] .sign { height: 134mm; }', '.grid--signs[data-per="1"] .sign { height: 270mm; }',
+    // ② 2장: QR 크기 · 배치는 그대로, 아래 주소 글만 4mm 떼어 QR 아래 흰 여백 4칸 이상(실제 PDF 에서 네 변을 따로 잼)
+    '.grid--signs[data-per="2"] .sign__qr .qr__host { margin-top: 4mm; }'];
   t('Q9 기본 배치(① 4장 92 × 134mm · QR 칸 50mm · 여백 4mm / ② 2장 136 × 186mm · QR 칸 78mm / 포스터 130mm)의 CSS 는 지금 Production main(f3b61b1)과 같음 · 다른 장 수의 인쇄 칸 · 높이 규칙이 있음',
     KEEP.every(s => oldCss.includes(s) && newCss.includes(s)) && PER.every(s => newCss.includes(s)), JSON.stringify({ keepMissing: KEEP.filter(s => !(oldCss.includes(s) && newCss.includes(s))), perMissing: PER.filter(s => !newCss.includes(s)) }));
   t('Q10 이 화면 오류 없음', !Q.errors.length, Q.errors.join(' | '));
