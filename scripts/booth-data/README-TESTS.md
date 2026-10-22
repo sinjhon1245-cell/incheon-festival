@@ -58,10 +58,12 @@ node scripts/booth-data/test-example-page.mjs --live-dir ../incheon-festival-liv
   두 단추가 실제 운영 화면(`/` · `/booth-ctrl`, `?demo` 없음)을 여는지 · 공개 PIN 이 운영자 단추 위 PIN 줄(`.pinhint`) 한 곳뿐인지
   (값 = booth-ctrl 의 공통 PIN 값 · 그 밖의 6자리 숫자 없음 · 예전 큰 PIN 상자 `.pinnote` 없음) · 줄에 적은 사용 기간이 main 의 리허설 SQL 기한보다
   늦지 않은지 · 23:00 초기화는 `booth_live` 만 지우고 페이지가 초기화로 PIN 이 끝난다고 말하지 않는지 · PIN 줄(한 줄 구조 · 줄 전체 바탕 · 테두리 · 여백 없음 ·
-  390 · 1440 한 줄 · 높이 = 숫자 배지 · 숫자 배지 20~22px · 굵게 · 자간 · 둥근 알약 · 은은한 보라 바탕 · 테두리 · 대비 7:1 · 라벨이 사용 기간보다 굵고 진함) ·
-  운영자 미리보기 바로 아래 16~24px(넓은 화면에서 남는 높이는 PIN 아래로) · 단추 위 8px 이상(390 은 8~24px) · 두 단추 같은 높이 ·
-  미리보기 말이 지금 두 화면에 있는지 · 배포본에서 `--expect-changed`(쉼표, 자산 지문 뗀 이름 · 기본 example/ 둘) 말고는 `--base-ref` 빌드와 바이트 같은지 봅니다.
-  UI 최종(PR #21, b64c279)은 `--base-ref 0e065b3 --expect-changed "assets/booth-ctrl.css,assets/visitor.css,booth-ctrl.html,example/example.css,index.html"`.
+  390 · 1440 한 줄 · 높이 = 숫자 배지 · 숫자 배지 굵게 · 자간 · 모서리가 살짝 둥근 직사각형(4~8px · 그림자 · 그라데이션 없음) · 은은한 보라 바탕 · 테두리 ·
+  대비 7:1 · 라벨이 사용 기간보다 굵고 진함 · 크기 390: 숫자 20~22px · 배지 32px 이하 / 1440: 라벨 17~18px 굵게 · 숫자 28~30px · 배지 44~48px · 기간 15~16px ·
+  숫자가 라벨의 1.5배 이상) · 1440 은 운영자 미리보기와 단추 사이 남는 높이의 가운데(위아래 여백 차 4px 이하 · 20~30px) · 두 단추 위 · 아래 끝과 크기 같음 ·
+  390 은 미리보기 아래 16~24px · 단추 위 8~24px · 미리보기 말이 지금 두 화면에 있는지 ·
+  배포본에서 `--expect-changed`(쉼표, 자산 지문 뗀 이름 · 기본 example/ 둘) 말고는 `--base-ref` 빌드와 바이트 같은지 봅니다.
+  UI 최종(PR #21, e314ee8)은 `--base-ref 0e065b3 --expect-changed "assets/booth-ctrl.css,assets/visitor.css,booth-ctrl.html,example/example.css,index.html"`.
 - `test-rehearsal.mjs` D1(UI 최종): 행사 전 운영자 화면에 값이 보이고 현재 대기 카드 아래 리허설 안내가 없어야 합니다(리허설 처리는 D2 저장 알림이 확인).
 - `test-ctrl-school.mjs` S1-6 · S6-7(UI 최종): 운영자 CSS 는 UI 최종 규칙 16개(현재 대기 세 단 · 운영 상태 위 맞춤 · 860px 이상 subgrid 줄 격자)를
   선언 · 순서까지 못 박고 그 밖의 규칙은 앞 판과 하나씩 같아야 하며, booth-ctrl.html 은 리허설 안내를 뺀 정해 둔 여섯 줄만 더 바뀔 수 있습니다. 실제 관람객 화면에는 시험용 스냅샷(`GET /api/live-snapshot`, 부스 A-01 하나)을
@@ -100,3 +102,5 @@ node scripts/booth-data/test-example-page.mjs --live-dir ../incheon-festival-liv
   booth-core.js 한 줄 → 안내 X7 이 각각 실패. 바꾸기 전 판(0e065b3)은 안내 X7 · X8, 리허설 D1 만 실패.
 - 2026-10-21 결과(PR #21 후속 — PIN 처음 한 줄 구조 + 숫자 배지 강조 964d74f · 넓은 화면 PIN 을 운영자 미리보기 바로 아래로 b64c279):
   두 판 모두 426 / 426 통과. 보호 규칙 확인(964d74f 사본)도 위와 같게 실패. 직전 판 964d74f(PIN 이 미리보기에서 86px)에 새 안내 시험 → X8 만 실패(12 / 13).
+- 2026-10-22 결과(PR #21 후속 — 넓은 화면 PIN 을 남는 높이 가운데로 bd7241f · PIN 확대 0b443de · 숫자 배지 모서리 6px 직사각형 e314ee8):
+  세 판 모두 426 / 426 통과. 새 안내 시험을 바로 앞 판에 돌리면 각각 X8 만 실패(b64c279 · bd7241f · 0b443de, 12 / 13).

@@ -193,18 +193,19 @@ for (const vp of ['m', 'd']) {
   const g = await p.evaluate(() => {
     const r = s => document.querySelector(s).getBoundingClientRect();
     const ctas = [...document.querySelectorAll('.cta')].map(a => Math.round(a.getBoundingClientRect().top + scrollY));
+    const ctaBox = [...document.querySelectorAll('.cta')].map(a => { const b = a.getBoundingClientRect(); return [Math.round(b.bottom + scrollY), Math.round(b.width), Math.round(b.height)]; });
     const card = document.querySelectorAll('.card')[1], h = card.querySelector('.pinhint');
     const cta = card.querySelector('.cta'), cp = card.querySelector('.cp');
     const st = e => getComputedStyle(e), R = e => e.getBoundingClientRect();
     const v = h && h.querySelector('.pinhint__v'), kk = h && h.querySelector('.pinhint__k'), dd = h && h.querySelector('.pinhint__d');
     const hb = h && R(h), hc = h && st(h);
     return { sw: document.documentElement.scrollWidth, iw: innerWidth, ctas, two: r('.cards > .card:nth-child(2)').top < r('.cards > .card:first-child').bottom - 10,
-      bigBox: !!document.querySelector('.pinnote'),
+      ctaBox, bigBox: !!document.querySelector('.pinnote'),
       pin: v && kk && dd ? { text: v.textContent,
         vfs: parseFloat(st(v).fontSize), vfw: Number(st(v).fontWeight), vls: parseFloat(st(v).letterSpacing) || 0, vcolor: st(v).color, vlines: Math.round(R(v).height / parseFloat(st(v).lineHeight)),
         kfs: parseFloat(st(kk).fontSize), kfw: Number(st(kk).fontWeight), kcolor: st(kk).color, dfs: parseFloat(st(dd).fontSize), dfw: Number(st(dd).fontWeight), dcolor: st(dd).color,
         bg: hc.backgroundColor, bw: parseFloat(hc.borderTopWidth) || 0, padT: parseFloat(hc.paddingTop), padB: parseFloat(hc.paddingBottom), cardBg: st(card).backgroundColor,
-        vbg: st(v).backgroundColor, vborder: st(v).borderTopColor, vbw: parseFloat(st(v).borderTopWidth) || 0, vradius: parseFloat(st(v).borderTopLeftRadius) || 0, vh: Math.round(R(v).height),
+        vbg: st(v).backgroundColor, vborder: st(v).borderTopColor, vbw: parseFloat(st(v).borderTopWidth) || 0, vradius: parseFloat(st(v).borderTopLeftRadius) || 0, vshadow: st(v).boxShadow, vbgimg: st(v).backgroundImage, vh: Math.round(R(v).height),
         lines: new Set([kk, v, dd].map(e => Math.round((R(e).top + R(e).height / 2) / 6))).size,
         height: Math.round(hb.height), ctaH: Math.round(R(cta).height), ctaBg: st(cta).backgroundColor, ctaFs: parseFloat(st(cta).fontSize),
         shown: hb.width > 0 && hc.display !== 'none' && hc.visibility !== 'hidden', fits: h.scrollWidth <= h.clientWidth && hb.right <= innerWidth,
@@ -237,21 +238,25 @@ for (const vp of ['m', 'd']) {
 const L = v => `${v.sw}/${v.iw} data=${v.log.data.length} err=${v.log.err.length} other=${v.log.other.length}`;
 console.log(`  (기록) PIN 줄 ${JSON.stringify(['m', 'd'].map(vp => geo[vp].pin && { vp, ...geo[vp].pin, crV: +contrast(geo[vp].pin.vcolor, geo[vp].pin.vbg).toFixed(1), crK: +contrast(geo[vp].pin.kcolor, geo[vp].pin.cardBg).toFixed(1), crD: +contrast(geo[vp].pin.dcolor, geo[vp].pin.cardBg).toFixed(1), ctas: geo[vp].ctas }))}`);
 // PIN 줄(2026-10-21 PR #21 후속 — 처음 한 줄 구조로 되돌리고 숫자만 강조): 줄 전체는 바탕 · 테두리 · 안쪽 여백 없음(큰 띠 없음) ·
-// 390 · 1440 모두 한 줄이고 줄 높이 = 숫자 배지 높이 · 숫자 배지는 작고 둥근 알약(20~22px · 굵게 · 자간 · 은은한 보라 바탕 · 보라 테두리 · 대비 7:1) ·
+// 390 · 1440 모두 한 줄이고 줄 높이 = 숫자 배지 높이 · 숫자 배지는 모서리가 살짝 둥근 직사각형(4~8px · 그림자 · 그라데이션 없음 · 굵게 · 자간 · 은은한 보라 바탕 · 보라 테두리 · 대비 7:1) ·
+// 크기: 390 은 숫자 20~22px · 배지 32px 이하(한 줄 유지) / 1440 은 라벨 17~18px 굵게 · 숫자 28~30px · 배지 44~48px · 사용 기간 15~16px · 숫자가 라벨의 1.5배 이상 ·
 // 라벨(굵게 · 진하게)이 사용 기간(옅게)보다 위계가 높고 둘 다 숫자보다 작으며 흰 바탕 대비 4.5:1 · 배지가 보라 칠 단추보다 옅음 ·
-// 운영자 미리보기 바로 아래(16~24px) — 넓은 화면에서 오른쪽이 짧아 남는 높이는 PIN 아래 · 단추 위로(단추 위 8px 이상), 390 은 단추 바로 위(8~24px).
+// 넓은 화면(1440): 운영자 미리보기와 단추 사이 남는 높이의 가운데(위아래 여백 차 4px 이하 · 둘 다 20~30px) · 두 단추 위 · 아래 끝 · 크기 같음.
+// 390: 운영자 미리보기 바로 아래(16~24px) · 단추 바로 위(8~24px) — 세로 쌓기 그대로.
 const clear = c => /rgba\(0, 0, 0, 0\)|transparent/.test(c);
 const lilac = c => { const [r, g, b] = rgb(c); return b > r && b > g && lum(rgb(c)) > 0.75 && lum(rgb(c)) < 0.97; };
 const violet = c => { const [r, g, b] = rgb(c); return b > r && b > g; };
-t('X8 /example/ 390 · 1440 — 가로 넘침 없음 · 페이지 오류 0 · 데이터 요청 0 · 1440 은 두 카드 나란히 · 두 단추 높이 같음 · 큰 PIN 상자 · 띠 없음 · PIN 줄: 바탕 · 테두리 · 안쪽 여백 없는 한 줄(높이 = 숫자 배지) · 숫자 배지 20~22px · 굵게 · 자간 · 둥근 알약 · 은은한 보라 바탕과 테두리 · 대비 7:1 · 라벨이 사용 기간보다 굵고 진함(둘 다 숫자보다 작고 대비 4.5:1) · 배지가 단추보다 옅음 · 운영자 미리보기 바로 아래(16~24px — 남는 높이는 PIN 위가 아니라 아래로) · 단추 위 8px 이상(390 은 8~24px)',
+t('X8 /example/ 390 · 1440 — 가로 넘침 없음 · 페이지 오류 0 · 데이터 요청 0 · 1440 은 두 카드 나란히 · 두 단추 높이 같음 · 큰 PIN 상자 · 띠 없음 · PIN 줄: 바탕 · 테두리 · 안쪽 여백 없는 한 줄(높이 = 숫자 배지) · 숫자 배지 굵게 · 자간 · 모서리가 살짝 둥근 직사각형(4~8px) · 그림자 · 그라데이션 없음 · 은은한 보라 바탕과 테두리 · 대비 7:1 · 크기(390: 숫자 20~22px · 배지 32px 이하 / 1440: 라벨 17~18px 굵게 · 숫자 28~30px · 배지 44~48px · 기간 15~16px) · 숫자가 라벨의 1.5배 이상 · 라벨이 사용 기간보다 굵고 진함(둘 다 숫자보다 작고 대비 4.5:1) · 배지가 단추보다 옅음 · 1440 은 운영자 미리보기와 단추 사이 남는 높이의 가운데(위아래 여백 차 4px 이하 · 20~30px) · 두 단추 위 · 아래 끝과 크기 같음 · 390 은 미리보기 아래 16~24px · 단추 위 8~24px',
   ['m', 'd'].every(vp => { const q = geo[vp], k = q.pin; return q.sw <= q.iw && !q.log.err.length && !q.log.data.length && !q.bigBox && k && k.text === COMMON && k.shown && k.fits &&
     clear(k.bg) && k.bw === 0 && k.padT === 0 && k.padB === 0 && k.lines === 1 && k.height <= k.vh + 2 &&
-    k.vfs >= 20 && k.vfs <= 22 && k.vfw >= 700 && k.vls > 0 && k.vlines === 1 && k.vh <= 32 && k.vradius >= k.vh / 2 &&
+    (vp === 'd' ? (k.vfs >= 28 && k.vfs <= 30 && k.vh >= 44 && k.vh <= 48 && k.kfs >= 17 && k.kfs <= 18 && k.kfw >= 700 && k.dfs >= 15 && k.dfs <= 16)
+                : (k.vfs >= 20 && k.vfs <= 22 && k.vh <= 32)) && k.vfs >= 1.5 * k.kfs &&
+    k.vfw >= 700 && k.vls > 0 && k.vlines === 1 && k.vradius >= 4 && k.vradius <= 8 && k.vshadow === 'none' && k.vbgimg === 'none' &&
     lilac(k.vbg) && k.vbw >= 1 && violet(k.vborder) && k.vborder !== k.vbg && contrast(k.vcolor, k.vbg) >= 7 &&
     k.kfs < k.vfs && k.dfs < k.vfs && k.kfw > k.dfw && contrast(k.kcolor, k.cardBg) > contrast(k.dcolor, k.cardBg) &&
     contrast(k.kcolor, k.cardBg) >= 4.5 && contrast(k.dcolor, k.cardBg) >= 4.5 &&
-    lum(rgb(k.vbg)) > lum(rgb(k.ctaBg)) + 0.5 && k.gapFromPv >= 16 && k.gapFromPv <= 24 && k.gapToCta >= 8 && (vp === 'd' || k.gapToCta <= 24); }) &&
-    geo.d.two && geo.d.ctas[0] === geo.d.ctas[1],
+    lum(rgb(k.vbg)) > lum(rgb(k.ctaBg)) + 0.5 && (vp === 'd' ? (Math.abs(k.gapFromPv - k.gapToCta) <= 4 && k.gapFromPv >= 20 && k.gapFromPv <= 30 && k.gapToCta >= 20 && k.gapToCta <= 30) : (k.gapFromPv >= 16 && k.gapFromPv <= 24 && k.gapToCta >= 8 && k.gapToCta <= 24)); }) &&
+    geo.d.two && geo.d.ctas[0] === geo.d.ctas[1] && JSON.stringify(geo.d.ctaBox[0]) === JSON.stringify(geo.d.ctaBox[1]),
   `m ${L(geo.m)} · d ${L(geo.d)} two=${geo.d.two} ctas=${geo.d.ctas} pin=${JSON.stringify(['m', 'd'].map(vp => geo[vp].pin))}`);
 t('X9 단추 → 새 탭 = 실제 운영 화면(390 · 1440) — 관람객 / (시험용 스냅샷의 부스를 그림) · 운영자 /booth-ctrl · 둘 다 협의용 예시 띠 없음 · 예시 PIN 상자 없음 · 예시 저장소를 만들지 않음 · 페이지 오류 0',
   ['m', 'd'].every(vp => geo[vp].tabs.length === 2 && geo[vp].tabs[0].url === '/' && geo[vp].tabs[1].url === '/booth-ctrl' && geo[vp].tabs[0].fx &&
