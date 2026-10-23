@@ -6,7 +6,8 @@
 --   3. Vault 에 보관한 인쇄용 PIN(이름 booth_pin_print_*)을 모두 무작위 표시로 덮어씁니다.
 --      이 프로젝트의 postgres 는 vault.secrets 를 지울 수 없어(권한 없음) Supabase 가 준 vault.update_secret 으로 덮어씁니다.
 --      덮어쓴 뒤에는 보관한 PIN 을 다시 꺼낼 수 없습니다.
---   4. 보관 도우미 함수를 지웁니다. 조회 기록 표(private.booth_pin_print_audit)는 남깁니다(PIN 값 없음 · 이력).
+--   4. 보관 도우미 함수를 지웁니다. 조회 기록 표(private.booth_pin_print_audit)와 PIN 인쇄 담당자 표
+--      (private.booth_pin_printers)는 남깁니다(PIN 값 없음 · 이력 · 다시 적용할 때 지정 그대로).
 --
 --   그대로인 것: 개별 PIN 해시(지금 PIN 으로 계속 로그인 · 되돌린 뒤 발급부터는 다시 ‘한 번만 공개’) · QR · 세션 ·
 --               보안 기록 · 대기 값 · 부스 정보 · 로그인 · 조건부 발급 · 상태 조회
