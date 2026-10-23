@@ -3552,7 +3552,7 @@
       if (P.sw.pin !== true) return '리허설 공통 PIN: 상태 확인 불가 — PIN 보조 로그인 설정을 읽지 못했어요(끝나는 때 ' + endTxt + '). 새로 고쳐 다시 확인해 주세요.';
       return '리허설 공통 PIN: 실제 부스 ' + s.target + '곳 중 ' + s.open + '곳이 ' + endTxt + '까지 쓸 수 있어요' +
         (s.closed ? '(개별 PIN 꺼짐으로 차단 ' + s.closed + '곳)' : '') +
-        '. 11월 4일 23:00까지 개별 PIN과 공통 PIN을 함께 쓸 수 있어요. PIN을 끈 부스는 공통 PIN도 차단돼요.';
+        '. 개별 PIN을 발급해도 그때까지 공통 PIN을 함께 쓸 수 있어요. PIN을 끈 부스는 공통 PIN도 막혀요.';
     }
     // 여러 부스 PIN 작업을 켜도 되는가: 조건부 발급 함수가 있다고 확인됐을 때만(시연은 서버를 부르지 않으므로 늘 됨).
     function bulkReady() { return isMock || P.checked === true; }
@@ -4042,7 +4042,8 @@
         if (it.status === 'ok') {
           right = '<span class="pinres__pin">' + esc(fmtPin(it.pin)) + '</span>';
           if (it.anomaly) why = '<p class="pinres__why is-unk">예상과 달리 PIN 로그인 기기 ' + it.revoked + '대가 로그아웃됐어요. 다른 관리자가 방금 이 부스 PIN을 발급했다면 그 PIN은 이제 쓸 수 없어요 — 위의 새 PIN을 쓰세요.</p>';
-          else if (it.common) why = '<p class="pinres__why">공통 PIN으로 연 기기 ' + it.revoked + '대가 로그아웃됐어요. 11월 4일 23:00까지 공통 PIN 또는 위의 새 PIN으로 다시 로그인할 수 있어요.</p>';
+          else if (it.common) why = '<p class="pinres__why">공통 PIN으로 연 기기 ' + it.revoked + '대가 로그아웃됐어요. ' +
+            (P.rh && Date.now() < rhEnd() ? esc(PinStatus.endText(rhEnd())) + '까지는 공통 PIN 또는 위의 새 PIN으로 다시 로그인할 수 있어요.' : '이제 이 부스는 위의 새 PIN으로 들어가요.') + '</p>';
           else if (it.revoked) why = '<p class="pinres__why">예전 PIN으로 연 기기 ' + it.revoked + '대가 로그아웃됐어요.</p>';
           if (sameOf[it.code]) why += '<p class="pinres__why is-unk">' + esc(sameOf[it.code]) + ' 부스와 같은 PIN이에요.</p>';
         } else if (it.status === 'unknown') {
