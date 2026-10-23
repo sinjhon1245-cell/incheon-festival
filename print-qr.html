@@ -1948,7 +1948,10 @@
       // Always fetch latest PIN at print time. CSV remains a backward-compatible fallback
       // only when the secure RPC is unavailable. Never print an unverified PIN.
       var getMap = PIN.latest ? PIN.latest(ids).then(function (rows) {
-        var m = {};
+        // Existing pre-migration PINs cannot be recovered from hashes. Allow a
+        // manually imported legacy-compatible CSV only when its PIN issue time
+        // still matches the server (pinVerify below); newer Vault PINs win.
+        var m = PIN.csv && PIN.csv.byId ? Object.assign({}, PIN.csv.byId) : {};
         (rows || []).forEach(function (r) {
           if (r.booth_id && pinUsable(r.pin) && pinAtKey(r.issued_at))
             m[r.booth_id] = { pin: String(r.pin), at: pinAtKey(r.issued_at) };
