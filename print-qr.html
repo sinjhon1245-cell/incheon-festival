@@ -863,7 +863,8 @@
           <button type="button" class="btn btn--quiet" id="pinp-clear" hidden>불러온 PIN 지우기</button>
         </div>
         <p class="pinp__hint">PIN 발급 결과 창에서 내려받은 CSV(부스ID · PIN발급시각 칸이 있는 것)만 쓸 수 있어요. 파일은 이 브라우저 안에서만 읽고 서버로 보내거나 저장하지 않아요.
-          서버의 지금 PIN과 발급 시각이 같은 부스만 인쇄해요 — 다시 발급된 부스는 빠져요. 화면에는 ●●● ●●●로 가리고, ‘인쇄하기’로 인쇄하는 동안만 실제 PIN이 들어가요.
+          서버에서 PIN이 켜져 있고 발급 시각이 CSV와 같은 부스만 인쇄해요 — 다시 발급된 부스는 빠져요. PIN 숫자 자체는 서버가 확인할 수 없으니 CSV는 내려받은 그대로 고치지 말고 보관해 주세요.
+          화면에는 ●●● ●●●로 가리고, ‘인쇄하기’로 인쇄하는 동안만 실제 PIN이 들어가요.
           종이로만 인쇄하고 PDF로 저장하거나 사진 · 파일로 공유하지 마세요.</p>
         <p class="pinp__msg" id="pinp-msg" role="status" aria-live="polite"></p>
         <ul class="pinp__list" id="pinp-list" hidden></ul>
@@ -2080,7 +2081,8 @@
           PIN.busy = false;
           paintPinPanel();
           pinMsg(res.ok.length ? 'is-ok' : 'is-err',
-            '‘' + name + '’: 서버의 지금 PIN과 발급 시각이 같은 ' + res.ok.length + '곳을 확인했어요' + (out.length ? ' · 제외 ' + out.length + '곳' : '') + '.' +
+            '‘' + name + '’: PIN 상태 · 발급 시각이 서버와 맞는 ' + res.ok.length + '곳을 확인했어요' + (out.length ? ' · 제외 ' + out.length + '곳' : '') + '.' +
+            ' PIN 숫자 자체는 서버가 확인하지 않아요 — CSV는 내려받은 그대로 써 주세요.' +
             (moved ? ' 부스 번호가 바뀐 ' + moved + '곳은 부스ID로 맞췄어요.' : '') +
             (res.ok.length ? ' ‘개별 PIN 함께 인쇄’를 켜면 카드에 넣어 인쇄해요.' : ' 인쇄에 쓸 수 있는 PIN이 없어요.'));
           pinList(out.map(function (o) { return { code: o.code, text: PIN_WHY[o.why] || PIN_WHY.format }; }));
