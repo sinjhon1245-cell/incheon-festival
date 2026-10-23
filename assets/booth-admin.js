@@ -234,7 +234,7 @@
   }
   // 줄에 띄울 '손이 가야 할 표시' — 정상은 쓰지 않습니다. 빨강: QR 꺼짐 · PIN 실패 많음,
   // 주황: QR 미발급(발급하면 되는 준비 일), 회색: 개별 PIN 미발급 · 개별 PIN 꺼짐(QR 이 기본 길이라 약하게).
-  // 리허설 공통 PIN 을 쓸 수 있는 동안(실제 부스 · 11-05 23:00 까지 · 개별 PIN 없음)의 '개별 PIN 미발급' 은 정상이라
+  // 리허설 공통 PIN 을 쓸 수 있는 동안(실제 부스 · 11-04 23:00 까지 · 개별 PIN 병행)의 '개별 PIN 미발급' 은 정상이라
   // 줄에 띄우지 않습니다 — 위 요약 줄과 펼친 상세(접속)에는 그대로 보입니다. 끝나는 때가 지나면 다시 띄웁니다.
   function flag(text, kind) { return '<span class="flag flag--' + kind + '">' + esc(text) + '</span>'; }
   function commonEnd() { return rh.st ? PS.endOf(rh.st.cutoff) : 0; }
@@ -280,7 +280,7 @@
     // 설정을 못 읽으면 서버가 받을지 알 수 없어 수를 세지 않습니다(‘사용 가능’ 으로 단정하지 않음).
     else if (data.pinOn !== true) l1 = '상태 확인 불가 — PIN 보조 로그인 설정을 읽지 못했어요(끝나는 때 ' + esc(endTxt) + ')';
     else l1 = esc(endTxt) + '까지 · 사용 가능 <b>' + s.open + '곳</b>' +
-      (s.closed ? ' · 개별 PIN 발급으로 닫힘 ' + s.closed + '곳' : '') + (s.hidden ? ' · 비공개라 못 씀 ' + s.hidden + '곳' : '');
+      (s.closed ? ' · 개별 PIN 꺼짐으로 차단 ' + s.closed + '곳' : '') + (s.hidden ? ' · 비공개라 못 씀 ' + s.hidden + '곳' : '');
     var l2 = !data.creds ? '상태를 읽지 못했어요'
       : '실제 부스 ' + s.target + '곳 중 발급 <b>' + s.on + '곳</b> · 미발급 ' + s.none + '곳 · 꺼짐 ' + s.offPin + '곳' +
         (s.unk ? ' · 확인 불가 ' + s.unk + '곳' : '') +
