@@ -862,8 +862,8 @@
           <input type="file" id="pinp-file" accept=".csv,text/csv" hidden />
           <button type="button" class="btn btn--quiet" id="pinp-clear" hidden>불러온 PIN 지우기</button>
         </div>
-        <p class="pinp__hint">PIN 발급 결과 창에서 내려받은 CSV(부스ID · PIN발급시각 칸이 있는 것)만 쓸 수 있어요. 파일은 이 브라우저 안에서만 읽고 서버로 보내거나 저장하지 않아요.
-          서버에서 PIN이 켜져 있고 발급 시각이 CSV와 같은 부스만 인쇄해요 — 다시 발급된 부스는 빠져요. PIN 숫자 자체는 서버가 확인할 수 없으니 CSV는 내려받은 그대로 고치지 말고 보관해 주세요.
+        <p class="pinp__hint">관리자 인증 상태에서는 서버에서 최신 개별 PIN을 인쇄 직전에 자동 확인해요. 브라우저를 닫고 다시 열어도 CSV 없이 인쇄할 수 있어요. 서버 보안 업데이트 이전에 발급된 PIN은 재발급해야 자동 조회할 수 있어요. 필요하면 기존 CSV도 불러올 수 있어요. 파일은 이 브라우저 안에서만 읽고 서버로 보내거나 저장하지 않아요.
+          인쇄 직전 서버의 최신 상태를 확인하고 새 PIN만 출력해요. 서버의 복호화 인증이 실패하면 인쇄를 중단해요. PIN 숫자 자체는 서버가 확인할 수 없으니 CSV는 내려받은 그대로 고치지 말고 보관해 주세요.
           화면에는 ●●● ●●●로 가리고, ‘인쇄하기’로 인쇄하는 동안만 실제 PIN이 들어가요.
           종이로만 인쇄하고 PDF로 저장하거나 사진 · 파일로 공유하지 마세요.</p>
         <p class="pinp__msg" id="pinp-msg" role="status" aria-live="polite"></p>
@@ -1817,7 +1817,8 @@
       busy: false,      // 서버 확인 · 인쇄 중(단추 잠금)
       filled: false,    // 지금 카드에 실제 숫자가 들어 있음
       bare: false,      // 옵션을 켠 채 브라우저 메뉴로 인쇄함 — 그 종이에는 PIN 이 없음
-      creds: null,      // PIN 관리 모듈이 넘겨준 ‘서버 상태 새로 읽기’ 함수(PIN 값 없음)
+      creds: null,      // PIN 관리 모듈이 넘겨준 ‘서버 상태 새로 읽기’ 함수(PIN 값 없음),
+      latest: null,     // 관리자 인증하에 서버에서 최신 PIN을 요청하는 함수
       gen: 0            // 지우기 · 로그아웃마다 올림 — 그 전에 시작한 확인의 답은 버립니다
     };
     var PIN_MASK = '●●● ●●●';
@@ -1940,12 +1941,23 @@
     function printOpsWithPins() {
       var ids = pinTargets();
       if (!ids.length || PIN.busy) return;
-      var map = pinMap() || {};
       var gen = PIN.gen;
       PIN.busy = true;
       updatePrintBtn();
-      pinMsg('', '서버의 지금 PIN 상태를 확인하는 중이에요…');
-      pinVerify(ids, map).then(function (res) {
+      pinMsg('', '서버에서 최신 PIN을 안전하게 확인하는 중이에요…');
+      // Always fetch latest PIN at print time. CSV remains a backward-compatible fallback
+      // only when the secure RPC is unavailable. Never print an unverified PIN.
+      var getMap = PIN.latest ? PIN.latest(ids).then(function (rows) {
+        var m = {};
+        (rows || []).forEach(function (r) {
+          if (r.booth_id && pinUsable(r.pin) && pinAtKey(r.issued_at))
+            m[r.booth_id] = { pin: String(r.pin), at: pinAtKey(r.issued_at) };
+        });
+        return m;
+      }) : Promise.resolve(pinMap() || {});
+      getMap.then(function (map) {
+        if (gen !== PIN.gen) return;
+        return pinVerify(ids, map).then(function (res) {
         if (gen !== PIN.gen) return;
         PIN.busy = false;
         // 그새 다시 발급 · 꺼진 부스는 불러온 PIN 에서도 뺍니다(다음 인쇄에 다시 쓰이지 않게).
@@ -1960,11 +1972,12 @@
         pinMsg('', '');
         pinList([]);
         pinPrint(ids, map, function () { updatePrintBtn(); });
-      }, function (err) {
+        });
+      }).catch(function () {
         if (gen !== PIN.gen) return;
         PIN.busy = false;
         updatePrintBtn();
-        pinMsg('is-err', '서버의 지금 PIN 상태를 확인하지 못해 인쇄하지 않았어요. 연결을 확인한 뒤 다시 눌러 주세요.');
+        pinMsg('is-err', '서버의 최신 PIN을 안전하게 확인하지 못해 인쇄를 중단했어요. 관리자 권한 또는 서버 보안 업데이트를 확인해 주세요.');
       });
     }
     function pinBlock(bad) {
@@ -1985,7 +1998,7 @@
     function paintPinPanel() {
       var box = $('pinp');
       box.hidden = !(S.ops.state === 'ready' && S.booths && S.booths.length);
-      var has = !!(PIN.csv && PIN.csv.n > 0);
+      var has = !!(PIN.csv && PIN.csv.n > 0) || !!PIN.latest;
       var opt = $('opt-pin');
       if (!has && PIN.on) { PIN.on = false; paintPinSlots(); }
       opt.disabled = !has || PIN.busy;
@@ -2162,6 +2175,7 @@
     // 두 모듈 사이 다리. PIN 을 넘겨받기만 하고 돌려주는 길은 없습니다(읽기 함수 없음).
     window.QrPinPrint = Object.freeze({
       useCreds: function (fn) { if (typeof fn === 'function' && !PIN.creds) PIN.creds = fn; },
+      useLatest: function (fn) { if (typeof fn === 'function' && !PIN.latest) { PIN.latest = fn; paintPinPanel(); } },
       printIssued: printIssued
     });
 
@@ -2987,7 +3001,7 @@
       });
       // 개별 PIN 함께 인쇄(① · 기본 꺼짐)
       $('opt-pin').addEventListener('change', function () {
-        PIN.on = this.checked && !!(PIN.csv && PIN.csv.n > 0);
+        PIN.on = this.checked && (!!PIN.latest || !!(PIN.csv && PIN.csv.n > 0));
         this.checked = PIN.on;
         pinList([]);
         pinMsg('', '');
@@ -4401,7 +4415,13 @@
       render();
       if (!isMock && Core && Core.isConfigured() && window.supabase) watchAuth();
       // ① ‘개별 PIN 함께 인쇄’ 가 인쇄 직전에 서버의 지금 PIN 상태(on · 발급 시각, 값 없음)를 다시 읽을 때 씁니다.
-      if (window.QrPinPrint) window.QrPinPrint.useCreds(function () { return withTimeout(readCreds(), WAIT_CHECK_MS); });
+      if (window.QrPinPrint) {
+        window.QrPinPrint.useCreds(function () { return withTimeout(readCreds(), WAIT_CHECK_MS); });
+        if (!isMock) window.QrPinPrint.useLatest(function (ids) {
+          // One admin-only RPC; plaintext is response-only, never saved or logged.
+          return withTimeout(Core.rpc('admin_print_booth_pins', { p_booth_ids: ids }), WAIT_CHECK_MS);
+        });
+      }
       load();
     }
     init();
