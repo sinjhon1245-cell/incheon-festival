@@ -505,7 +505,17 @@ function fnBody(src, name) {
 }
 // 용어만 ‘개별 PIN’ 으로 바꾼 글(A-4)은 같게 봅니다 — 그 밖의 글자 · 로직은 한 글자도 달라지면 안 됨
 const termNorm = s => s && s.replace(/개별 PIN /g, 'PIN ');
-const fnDiff = FLOW.filter(n => { const a = termNorm(fnBody(SRC.old.html, n)), b = termNorm(fnBody(SRC.new.html, n)); return !a || a !== b; });
+// ① 개별 PIN 함께 인쇄(10-23): 발급 응답의 서버 발급 시각을 it.pinAt 에 두고(CSV · ‘QR카드와 함께 인쇄’ 가 서버의 지금 PIN 과 견줌),
+// 결과 창 상태에 cardsOpened · cardsBusy 를 더했습니다. 그 함수에서 꼭 이 줄 · 글자만 빼고 견줍니다 — 나머지는 한 글자도 달라지면 안 됩니다.
+const PIN_CARD = {
+  sendOne: s => s.split('\n').filter(l => ![
+    "        // 서버가 이 PIN 에 매긴 발급 시각(글자 그대로) — CSV · ‘QR카드와 함께 인쇄’ 가 서버의 지금 PIN 과 같은지 견줄 때 씁니다.",
+    "        var at = r && r.issued_at ? String(r.issued_at) : '';",
+    "        it.pinAt = at;"].includes(l)).join('\n'),
+  showResult: s => s.replace('job.printOpened = false; job.cardsOpened = false; job.cardsBusy = false; job.ack = false;', 'job.printOpened = false; job.ack = false;'),
+  askClose: s => s.replace('var started = job.csvStarted || job.printOpened || job.cardsOpened;', 'var started = job.csvStarted || job.printOpened;')
+};
+const fnDiff = FLOW.filter(n => { const a = termNorm(fnBody(SRC.old.html, n)), b0 = termNorm(fnBody(SRC.new.html, n)), b = b0 && PIN_CARD[n] ? PIN_CARD[n](b0) : b0; return !a || a !== b; });
 // 쓰기 함수(발급 · 재발급 · 끄기 · 열쇠 · 대기 값)를 부르는 곳의 수. 전체 값 지우기는 인쇄 화면에서 뺄 수 있고(A-1 — 늘어나면 안 됨),
 // 읽기 전용 함수(상태 · 조회)는 세지 않습니다.
 const WRITE_RPC = ['admin_issue_booth_pin_checked', 'admin_issue_booth_pin', 'admin_disable_booth_pin', 'admin_issue_booth_tokens',
