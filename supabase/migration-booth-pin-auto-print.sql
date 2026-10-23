@@ -47,10 +47,14 @@
 -- 0. 선행 조건 검사 (아무것도 바꾸지 않습니다)
 --    아래 함수들이 2026-10-23 Production 과 같은 판일 때만 맞게 동작합니다. 다르면 멈춥니다.
 --    (지문 = 줄 끝 CR 을 뺀 pg_get_functiondef 의 md5. 발급 · 끄기는 원래 판 또는 이 파일의 판 — 다시 실행)
+--    Vault 는 권한(지금 계정 · 발급 · 끄기 함수 소유자)과 실제 동작(시험 비밀을 만들고 · 고치고 · 읽은 뒤 되돌림)을 확인합니다.
 -- ═══════════════════════════════════════════════════════════════
 do $preflight$
 declare
-  v_fp text;
+  v_fp  text;
+  v_own oid;
+  v_id  uuid;
+  v_val text;
 begin
   if to_regclass('public.booth_pin') is null or to_regclass('public.booth_session') is null
      or to_regclass('public.booth_auth_event') is null
@@ -74,6 +78,30 @@ begin
      or not has_table_privilege(current_user, 'vault.secrets', 'SELECT') then
     raise exception '지금 계정(%)에 Vault 사용 권한이 없습니다. SQL Editor(postgres)에서 실행하세요.', current_user;
   end if;
+  -- 발급 · 끄기 함수는 create or replace 해도 소유자가 그대로이고, 그 소유자 권한으로 Vault 에 씁니다.
+  for v_own in select p.proowner from pg_catalog.pg_proc p
+                where p.oid in ('public.admin_issue_booth_pin(uuid)'::regprocedure, 'public.admin_disable_booth_pin(uuid)'::regprocedure) loop
+    if not has_function_privilege(v_own, 'vault.create_secret(text, text, text, uuid)', 'EXECUTE')
+       or not has_function_privilege(v_own, 'vault.update_secret(uuid, text, text, text, uuid)', 'EXECUTE')
+       or not has_table_privilege(v_own, 'vault.secrets', 'SELECT') then
+      raise exception '발급 · 끄기 함수의 소유자(%)에게 Vault 사용 권한이 없습니다. 아무것도 바꾸지 않고 멈춥니다.', pg_catalog.pg_get_userbyid(v_own);
+    end if;
+  end loop;
+  -- 실제 Vault 자가 시험: 시험 비밀을 만들고 · 고치고 · 복호화해 읽은 뒤 되돌립니다(아무것도 남지 않음).
+  -- Vault 가 실제로 암호화 · 복호화하지 못하면 여기서 멈춥니다(그대로 적용하면 PIN 발급 · 재발급이 모두 실패하기 때문).
+  begin
+    v_id := vault.create_secret('selftest-a', 'booth_pin_selftest_' || encode(extensions.gen_random_bytes(8), 'hex'), 'migration-booth-pin-auto-print preflight');
+    perform vault.update_secret(v_id, 'selftest-b');
+    select s.decrypted_secret into v_val from vault.decrypted_secrets s where s.id = v_id;
+    if v_val is distinct from 'selftest-b' then
+      raise exception using errcode = 'P0001', message = 'vault_selftest_bad';
+    end if;
+    raise exception using errcode = 'P0001', message = 'vault_selftest_ok';   -- 시험 비밀을 되돌리려고 일부러 멈춤
+  exception when others then
+    if sqlerrm <> 'vault_selftest_ok' then
+      raise exception 'Supabase Vault 자가 시험 실패(%). 아무것도 바꾸지 않고 멈춥니다.', sqlerrm;
+    end if;
+  end;
 
   select string_agg(left(md5(replace(pg_catalog.pg_get_functiondef(f::regprocedure), E'\r', '')), 8), ' ' order by o)
     into v_fp
