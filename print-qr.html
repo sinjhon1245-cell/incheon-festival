@@ -242,6 +242,16 @@
     /* 아래 안내는 크기를 키우면 4장 카드에서 한 줄이 늘어 긴 이름 카드가 넘칩니다 — 크기는 두고 진한 색으로 또렷하게 */
     .card__hand { margin: 2mm 0 0; padding-top: 2.5mm; border-top: 0.3mm solid var(--line-3); font-size: 8.5pt; line-height: 1.5; color: var(--ink); }
     .card__meta { margin: 1mm 0 0; font-size: 8.5pt; font-weight: 600; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+    /* 개별 PIN 함께 인쇄(① 만 · 기본 꺼짐). 옵션을 켰을 때만 발급 줄 오른쪽 끝에 ‘개별 PIN 123 456’ 칸을 덧붙입니다 —
+       끄면 카드 HTML 이 예전과 같습니다. 칸은 발급 줄 안에 떠 있어(absolute) 발급 줄 높이 · QR · 순서 · 아래 안내 자리가
+       움직이지 않습니다. 화면에는 가린 글(●●● ●●●)만, 숫자는 ‘인쇄하기’ 가 서버 상태를 다시 확인한 뒤 인쇄하는 동안만 넣고
+       종이에서만 보입니다(아래 @media print). */
+    .grid--ops.is-pinon .card__meta { position: relative; }
+    .card__pin { position: absolute; right: 0; top: 50%; transform: translateY(-50%); display: flex; align-items: baseline; gap: 1.5mm;
+      line-height: 1; white-space: nowrap; color: var(--ink); }
+    .card__pin-k { font-size: 7.5pt; font-weight: 700; color: var(--ink-2); }
+    .card__pin-m, .card__pin-v { font-size: 10.5pt; font-weight: 800; letter-spacing: 0.04em; font-variant-numeric: tabular-nums; }
+    .card__pin-v { display: none; }
 
     /* 열쇠를 끈 부스. QR 자리를 비우고 왜 비었는지 적습니다. 이 카드는 인쇄되지 않습니다
        — 꺼진 열쇠는 QR 로 찍어도 열리지 않으니 종이로 나갈 이유가 없습니다. */
@@ -276,6 +286,21 @@
     .issue__msg:empty { display: none; }
     .issue__msg.is-ok { color: var(--st-free); }
     .issue__msg.is-err { color: var(--danger); }
+
+    /* ── ① 개별 PIN 함께 인쇄 (화면에만 · 인쇄 · 인쇄 화면으로 보기에서는 숨김) ── */
+    .pinp { margin: -6px 0 18px; padding: 10px 12px; border: 1px solid var(--line); border-left: 3px solid var(--navy); background: #FFFFFF; }
+    .pinp__row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+    .pinp__hint { margin: 8px 0 0; font-size: 13px; line-height: 1.55; color: var(--muted); max-width: 92ch; }
+    .pinp__msg { margin: 8px 0 0; font-size: 14px; font-weight: 600; line-height: 1.55; }
+    .pinp__msg:empty { display: none; }
+    .pinp__msg.is-ok { color: var(--st-free); }
+    .pinp__msg.is-err { color: var(--danger); }
+    .pinp__list { margin: 6px 0 0; padding: 0; list-style: none; max-height: 220px; overflow: auto; border-top: 1px solid var(--line); }
+    .pinp__list li { display: flex; gap: 10px; padding: 5px 2px; border-bottom: 1px solid var(--line); font-size: 13.5px; line-height: 1.45; }
+    .pinp__list b { flex: none; min-width: 52px; font-variant-numeric: tabular-nums; }
+    .pinp__list span { color: var(--ink-2); }
+    .card__pin.is-miss { font-size: 8.5pt; font-weight: 800; color: var(--danger); }
+    body.is-printview .pinp { display: none !important; }
 
     /* ── ① 카드 아래 관리 단추 (화면에만) ── */
     .acts--more { margin-top: 0; }
@@ -382,6 +407,8 @@
       .grid--ops[data-per="2"] .card__off { grid-row: 5; align-self: start; font-size: 11pt; }
       .grid--ops[data-per="2"] .card__hand { grid-row: 8; margin-top: 0; font-size: 10.5pt; }
       .grid--ops[data-per="2"] .card__meta { grid-row: 9; font-size: 9.5pt; }
+      .grid--ops[data-per="2"] .card__pin-k { font-size: 8.5pt; }
+      .grid--ops[data-per="2"] .card__pin-m, .grid--ops[data-per="2"] .card__pin-v { font-size: 12pt; }
       /* 열쇠를 끈 카드 · 발급 전 카드(화면에만)는 QR 칸이 없어 한 칸으로 */
       .grid--ops[data-per="2"] .item.is-keyoff .card__body > *,
       .grid--ops[data-per="2"] .item.is-nokey .card__body > * { grid-column: 1 / -1; }
@@ -413,6 +440,9 @@
       .grid--ops[data-per="1"] .card__off b { font-size: 16pt; }
       .grid--ops[data-per="1"] .card__hand { grid-row: 10; margin-top: 0; padding-top: 4mm; font-size: 11.5pt; }
       .grid--ops[data-per="1"] .card__meta { grid-row: 11; margin-top: 2mm; font-size: 11pt; }
+      .grid--ops[data-per="1"] .card__pin { gap: 2mm; }
+      .grid--ops[data-per="1"] .card__pin-k { font-size: 10pt; }
+      .grid--ops[data-per="1"] .card__pin-m, .grid--ops[data-per="1"] .card__pin-v { font-size: 14pt; }
 
       /* ② 2장(기본 · A4 가로): 배치 · QR 크기는 그대로 두고, QR 아래 주소 글만 4mm 떼어
          네 변 모두 흰 여백이 QR 칸 4개 이상이 되게 합니다(주소 글이 0.5mm 아래 있어 아래쪽만 2.7칸이었음). */
@@ -489,6 +519,8 @@
       .card__name { font-size: 15px; }
       .card__org, .card__bid { font-size: 13px; }
       .card__meta { font-size: 12px; }
+      .card__pin-k { font-size: 11px; }
+      .card__pin-m { font-size: 13px; }
       .card__mid, .card__hand { display: none; }
       .card__off { margin-top: 8px; padding: 8px 10px; font-size: 13.5px; }
       .card__off b { font-size: 15px; }
@@ -520,6 +552,11 @@
       .kst, .kst__hint, .unassigned, .issue { display: none !important; }
       .wrap { max-width: none; margin: 0; padding: 0; }
       .item.is-off, .item.is-filtered, .item.is-keyoff, .item.is-nokey { display: none !important; }
+      /* 개별 PIN: 종이에는 가린 글 대신 숫자. 숫자는 ‘인쇄하기’ 가 서버 확인을 마치고 채운 동안만(is-pinfill) 있습니다 —
+         브라우저 메뉴(Ctrl+P)로 인쇄하면 PIN 칸 없이 예전 카드 그대로 나갑니다. ‘PIN 없음’ 표시는 화면에만. */
+      .card__pin-m, .card__pin.is-miss { display: none !important; }
+      .card__pin-v { display: inline; }
+      body:not(.is-pinfill) .card__pin { display: none !important; }
       .item { width: auto; max-width: none; break-inside: avoid; page-break-inside: avoid; }
       .grid { display: grid; justify-content: center; }
       /* 2 × 134mm + 5mm = 273mm. 여백 10mm 를 뺀 A4 높이(277mm)에 두 줄이 들어갑니다. */
@@ -815,6 +852,21 @@
           </span>
         </div>
         <span class="ctl__count" id="count-ops" aria-live="polite"></span>
+      </div>
+      <!-- 개별 PIN 함께 인쇄(기본 꺼짐 · 기억하지 않음). PIN 은 PIN 발급 결과 창에서 내려받은 CSV 를 이 브라우저 안에서만
+           읽어 서버의 지금 PIN 상태 · 발급 시각과 맞는 부스에만 씁니다. 서버로 보내거나 어디에도 저장하지 않습니다. -->
+      <div class="pinp no-print" id="pinp" hidden>
+        <div class="pinp__row">
+          <label class="opt"><input type="checkbox" id="opt-pin" disabled /> 개별 PIN 함께 인쇄</label>
+          <button type="button" class="btn" id="pinp-load">PIN CSV 불러오기</button>
+          <input type="file" id="pinp-file" accept=".csv,text/csv" hidden />
+          <button type="button" class="btn btn--quiet" id="pinp-clear" hidden>불러온 PIN 지우기</button>
+        </div>
+        <p class="pinp__hint">PIN 발급 결과 창에서 내려받은 CSV(부스ID · PIN발급시각 칸이 있는 것)만 쓸 수 있어요. 파일은 이 브라우저 안에서만 읽고 서버로 보내거나 저장하지 않아요.
+          서버의 지금 PIN과 발급 시각이 같은 부스만 인쇄해요 — 다시 발급된 부스는 빠져요. 화면에는 ●●● ●●●로 가리고, ‘인쇄하기’로 인쇄하는 동안만 실제 PIN이 들어가요.
+          종이로만 인쇄하고 PDF로 저장하거나 사진 · 파일로 공유하지 마세요.</p>
+        <p class="pinp__msg" id="pinp-msg" role="status" aria-live="polite"></p>
+        <ul class="pinp__list" id="pinp-list" hidden></ul>
       </div>
       <!-- 운영자 QR 일괄 발급. 페이지를 열기만 해서는 발급하지 않습니다 — 사람이 눌러야 만듭니다. -->
       <div class="issue" id="issue-box" hidden>
@@ -1562,9 +1614,9 @@
     }
     function updatePrintBtn() {
       var btn = $('print-btn');
-      btn.disabled = !canPrint();
+      btn.disabled = !canPrint() || (S.tab === 'ops' && PIN.busy);
       if (S.tab === 'poster' || btn.disabled) { btn.textContent = '인쇄하기'; return; }
-      btn.textContent = '인쇄하기 (' + printableCount(S.tab) + '장)';
+      btn.textContent = '인쇄하기 (' + printableCount(S.tab) + '장' + (S.tab === 'ops' && PIN.on ? ' · 개별 PIN 함께' : '') + ')';
     }
 
     /* ── ① 부스 운영자용 카드 ──────────────────────────────────────── */
@@ -1726,8 +1778,10 @@
         items('ops').forEach(drawOpsQr);
         $('ctl-ops').hidden = false;
         renderZoneChips('ops');
+        paintPinSlots();
         applyFilter('ops');
       }
+      paintPinPanel();
       updatePrintBtn();
     }
 
@@ -1740,9 +1794,374 @@
       if (old.classList.contains('is-filtered')) el.classList.add('is-filtered');
       old.parentNode.replaceChild(el, old);
       drawOpsQr(el);
+      paintPinSlots();
       updateCount('ops');
       return el;
     }
+
+    /* ── ① 개별 PIN 함께 인쇄 ───────────────────────────────────────
+       PIN 원문은 서버에 없습니다(해시만). 그래서 이 화면은 PIN 을 서버에서 읽지도 · 새로 만들지도 · 다시 발급하지도 않고,
+       관리자가 가진 두 곳에서만 받습니다.
+         A. PIN 발급 결과 창의 ‘QR카드와 함께 인쇄’ — 방금 받은 PIN(그 인쇄 한 번 동안만 PIN.run).
+         B. ‘PIN CSV 불러오기’ — 결과 창에서 내려받은 CSV 를 이 브라우저에서 읽어 메모리에만(PIN.csv).
+       어느 쪽이든 부스 ID 로 맞추고, 인쇄 직전에 서버의 지금 상태(admin_booth_credentials: on · 발급 시각, 값 없음)를
+       다시 읽어 ‘켜짐 + 발급 시각이 같음’ 인 부스만 씁니다. 다시 발급된 부스는 시각이 달라 빠집니다.
+       고른 카드 가운데 하나라도 확인된 PIN 이 없으면 PIN 포함 인쇄를 통째로 막고 그 부스를 알려 줍니다.
+       PIN 은 저장소 · 주소 · 콘솔에 넣지 않고, 화면 카드에는 가린 글만 그립니다. 숫자는 인쇄 직전에 넣고
+       인쇄 창이 닫히면 바로 지웁니다(숫자 칸은 화면에서 늘 숨어 있습니다 — CSS). 옵션을 끄면 카드 HTML 이 예전과 같습니다. */
+    var PIN = {
+      on: false,        // ‘개별 PIN 함께 인쇄’(기억하지 않음 — 새로 열면 꺼짐)
+      csv: null,        // { name, byId: {부스 id: {pin, at}}, n } — 불러온 CSV 가운데 서버와 맞은 PIN(메모리에만)
+      run: null,        // A: 결과 창에서 넘겨받은 PIN — 그 인쇄 한 번 동안만 {부스 id: {pin, at}}
+      busy: false,      // 서버 확인 · 인쇄 중(단추 잠금)
+      filled: false,    // 지금 카드에 실제 숫자가 들어 있음
+      bare: false,      // 옵션을 켠 채 브라우저 메뉴로 인쇄함 — 그 종이에는 PIN 이 없음
+      creds: null,      // PIN 관리 모듈이 넘겨준 ‘서버 상태 새로 읽기’ 함수(PIN 값 없음)
+      gen: 0            // 지우기 · 로그아웃마다 올림 — 그 전에 시작한 확인의 답은 버립니다
+    };
+    var PIN_MASK = '●●● ●●●';
+    var PIN_MAX_BYTES = 512 * 1024;
+    var PIN_WHY = {
+      nopin: '불러온 PIN이 없어요',
+      none: '서버에 개별 PIN이 없어요(발급 전)',
+      off: '서버에서 PIN이 꺼져 있어요',
+      stale: 'PIN이 다시 발급돼 이 PIN은 오래됐어요',
+      gone: '지금 부스 목록에 없는 부스예요',
+      dup: 'CSV에 같은 부스가 두 번 이상 있어요',
+      format: '부스ID · PIN · 발급 시각의 모양이 맞지 않아요',
+      noqr: 'QR카드가 없어(QR 미발급 · 열쇠 꺼짐) 카드로 인쇄할 수 없어요'
+    };
+    // 서버가 주는 발급 시각(timestamptz 글자)을 마이크로초까지 같은 값으로 견줄 수 있게 바꿉니다. 모양이 다르면 null.
+    function pinAtKey(s) {
+      var m = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,6}))?(Z|[+-]\d{2}(?::?\d{2})?)$/.exec(String(s == null ? '' : s).trim());
+      if (!m) return null;
+      var ms = Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]);
+      if (isNaN(ms)) return null;
+      if (m[8] !== 'Z') {
+        var z = m[8].replace(':', ''), sign = z.charAt(0) === '-' ? -1 : 1;
+        ms -= sign * (Number(z.slice(1, 3)) * 60 + Number(z.slice(3, 5) || 0)) * 60000;
+      }
+      return ms + '.' + ((m[7] || '') + '000000').slice(0, 6);
+    }
+    // 서버가 만들지 않는 PIN(같은 숫자 · 반복 · 연속, migration-booth-pin.sql booth_pin_weak 와 같은 규칙)은 받지 않습니다.
+    // 예시 화면은 운영자 시연 화면이 받는 4자리 예시 PIN 을 씁니다.
+    function pinUsable(p) {
+      p = String(p == null ? '' : p);
+      if (isMock) return /^\d{4,6}$/.test(p);
+      return /^\d{6}$/.test(p) && !/^(\d)\1{5}$/.test(p) && !/^(\d{2})\1\1$/.test(p) && !/^(\d{3})\1$/.test(p) &&
+        '01234567890'.indexOf(p) < 0 && '09876543210'.indexOf(p) < 0;
+    }
+    function pinText(p) { p = String(p); return p.length === 6 ? p.slice(0, 3) + ' ' + p.slice(3) : p; }
+    function pinMap() { return PIN.run || (PIN.on && PIN.csv ? PIN.csv.byId : null); }
+
+    // 카드마다 PIN 칸을 붙이거나 뗍니다(카드는 다시 그리지 않음 — QR 그대로). 옵션이 꺼져 있고 A 인쇄 중도 아니면 칸 · 표시를 모두 뗍니다.
+    function paintPinSlots() {
+      var grid = $('grid-ops'), map = pinMap(), on = !!map;
+      grid.classList.toggle('is-pinon', on);
+      items('ops').forEach(function (el) {
+        var meta = el.querySelector('.card__meta');
+        if (!meta) return;
+        var old = meta.querySelector('.card__pin');
+        var want = on && !noPrint(el) ? (map[el.getAttribute('data-id')] ? 'pin' : 'miss') : '';
+        var have = old ? (old.classList.contains('is-miss') ? 'miss' : 'pin') : '';
+        if (want === have) return;
+        if (old) meta.removeChild(old);
+        if (!want) return;
+        var s = document.createElement('span');
+        if (want === 'miss') {
+          s.className = 'card__pin is-miss';
+          s.textContent = '개별 PIN 없음';
+        } else {
+          s.className = 'card__pin';
+          s.innerHTML = '<span class="card__pin-k">개별 PIN</span><span class="card__pin-m">' + PIN_MASK + '</span><span class="card__pin-v" data-pin-v></span>';
+        }
+        meta.appendChild(s);
+      });
+    }
+    // 인쇄할 ① 카드(찾기 · 인쇄에 포함 · 열쇠 있음)
+    function pinTargets() {
+      return shownItems('ops').filter(printable).map(function (el) { return el.getAttribute('data-id'); });
+    }
+    function boothCode(id) { var b = S.byId[id]; return b ? codeText(b) : String(id).slice(0, 8); }
+    function boothName(id) { var b = S.byId[id]; return b ? (b.name || '') : ''; }
+
+    // 서버의 지금 상태와 맞춰 봅니다. 답: { ok: [부스 id], bad: [{id, why}] } · 서버를 못 읽으면 거절(err.pinCreds).
+    function pinVerify(ids, map) {
+      if (!PIN.creds) { var e0 = new Error('nocreds'); e0.pinCreds = true; return Promise.reject(e0); }
+      var gen = PIN.gen;
+      return PIN.creds().then(function (cred) {
+        if (gen !== PIN.gen) { var e1 = new Error('stale'); e1.pinGone = true; throw e1; }
+        if (!cred) { var e2 = new Error('nocreds'); e2.pinCreds = true; throw e2; }
+        var ok = [], bad = [];
+        ids.forEach(function (id) {
+          var x = map && map[id], c = cred[id];
+          if (!x) bad.push({ id: id, why: 'nopin' });
+          else if (!c || c.pin_state === 'none' || !c.pin_state) bad.push({ id: id, why: c ? 'none' : 'gone' });
+          else if (c.pin_state === 'off') bad.push({ id: id, why: 'off' });
+          else if (c.pin_state !== 'on' || pinAtKey(c.pin_issued_at) !== x.at) bad.push({ id: id, why: 'stale' });
+          else ok.push(id);
+        });
+        return { ok: ok, bad: bad };
+      }, function (err) {
+        if (err && (err.pinGone || err.pinCreds)) throw err;
+        var e3 = new Error('nocreds'); e3.pinCreds = true; throw e3;
+      });
+    }
+
+    // 실제 숫자를 넣고 인쇄합니다. 인쇄 창이 닫히면(인쇄 · 취소 모두) 숫자를 지우고 after 를 부릅니다.
+    // 크롬 · 엣지는 인쇄 창이 닫힐 때까지 window.print() 에서 기다리므로 돌아오자마자 지웁니다 — afterprint · 인쇄 매체
+    // 끝 알림도 같은 정리를 부릅니다(한 번만). 숫자 칸은 화면에서 늘 숨어 있어 정리 전에도 화면에는 보이지 않습니다.
+    function pinPrint(ids, map, after) {
+      var mq = window.matchMedia ? window.matchMedia('print') : null, done = false;
+      function onMq(e) { if (!e.matches) end(); }
+      function end() {
+        if (done) return;
+        done = true;
+        window.removeEventListener('afterprint', end);
+        if (mq && mq.removeListener) mq.removeListener(onMq);
+        [].slice.call($('grid-ops').querySelectorAll('[data-pin-v]')).forEach(function (v) { v.textContent = ''; });
+        document.body.classList.remove('is-pinfill');
+        PIN.filled = false;
+        if (after) after();
+      }
+      ids.forEach(function (id) {
+        var el = findItem('ops', id), v = el ? el.querySelector('[data-pin-v]') : null;
+        if (v && map[id]) v.textContent = pinText(map[id].pin);
+      });
+      PIN.filled = true;
+      document.body.classList.add('is-pinfill');
+      window.addEventListener('afterprint', end);
+      if (mq && mq.addListener) mq.addListener(onMq);
+      try { window.print(); } finally { end(); }
+    }
+
+    // B: 위 ‘인쇄하기’ (옵션을 켰을 때만 이 길 — 끄면 예전처럼 바로 window.print())
+    function printOpsWithPins() {
+      var ids = pinTargets();
+      if (!ids.length || PIN.busy) return;
+      var map = pinMap() || {};
+      var gen = PIN.gen;
+      PIN.busy = true;
+      updatePrintBtn();
+      pinMsg('', '서버의 지금 PIN 상태를 확인하는 중이에요…');
+      pinVerify(ids, map).then(function (res) {
+        if (gen !== PIN.gen) return;
+        PIN.busy = false;
+        // 그새 다시 발급 · 꺼진 부스는 불러온 PIN 에서도 뺍니다(다음 인쇄에 다시 쓰이지 않게).
+        res.bad.forEach(function (b) { if (b.why !== 'nopin' && PIN.csv && PIN.csv.byId[b.id]) { delete PIN.csv.byId[b.id]; PIN.csv.n--; } });
+        if (res.bad.length) {
+          paintPinSlots();
+          paintPinPanel();
+          updatePrintBtn();
+          pinBlock(res.bad);
+          return;
+        }
+        pinMsg('', '');
+        pinList([]);
+        pinPrint(ids, map, function () { updatePrintBtn(); });
+      }, function (err) {
+        if (gen !== PIN.gen) return;
+        PIN.busy = false;
+        updatePrintBtn();
+        pinMsg('is-err', '서버의 지금 PIN 상태를 확인하지 못해 인쇄하지 않았어요. 연결을 확인한 뒤 다시 눌러 주세요.');
+      });
+    }
+    function pinBlock(bad) {
+      pinMsg('is-err', '확인된 최신 PIN이 없는 카드가 ' + bad.length + '장 있어 PIN 포함 인쇄를 막았어요. ' +
+        '이 부스들을 ‘인쇄에 포함’에서 빼거나, QR카드만 인쇄하려면 ‘개별 PIN 함께 인쇄’를 끄세요. PIN을 새로 만들거나 다시 발급하지 않아요.');
+      pinList(bad.map(function (b) { return { code: boothCode(b.id), text: boothName(b.id) + ' — ' + (PIN_WHY[b.why] || PIN_WHY.nopin) }; }));
+    }
+    function pinMsg(cls, text) {
+      var m = $('pinp-msg');
+      m.className = 'pinp__msg' + (cls ? ' ' + cls : '');
+      m.textContent = text;
+    }
+    function pinList(rows) {
+      var ul = $('pinp-list');
+      ul.hidden = !rows.length;
+      ul.innerHTML = rows.map(function (r) { return '<li><b>' + esc(r.code) + '</b><span>' + esc(r.text) + '</span></li>'; }).join('');
+    }
+    function paintPinPanel() {
+      var box = $('pinp');
+      box.hidden = !(S.ops.state === 'ready' && S.booths && S.booths.length);
+      var has = !!(PIN.csv && PIN.csv.n > 0);
+      var opt = $('opt-pin');
+      if (!has && PIN.on) { PIN.on = false; paintPinSlots(); }
+      opt.disabled = !has || PIN.busy;
+      opt.checked = PIN.on;
+      $('pinp-clear').hidden = !PIN.csv;
+      $('pinp-load').disabled = PIN.busy;
+    }
+    // 불러온 PIN 을 모두 지웁니다(단추 · 로그아웃 · 그 밖에 상태를 모를 때).
+    function dropPins(msg) {
+      PIN.gen++;
+      PIN.csv = null;
+      PIN.on = false;
+      PIN.busy = false;
+      paintPinSlots();
+      paintPinPanel();
+      pinList([]);
+      pinMsg('', msg || '');
+      updatePrintBtn();
+    }
+
+    // CSV 한 파일을 줄 · 칸으로 나눕니다(큰따옴표 · "" · 줄바꿈 칸 · CRLF · 앞의 BOM).
+    function csvRows(text) {
+      var rows = [], row = [], cell = '', q = false, i = 0, c;
+      text = String(text).replace(/^﻿/, '');
+      for (; i < text.length; i++) {
+        c = text.charAt(i);
+        if (q) {
+          if (c === '"') { if (text.charAt(i + 1) === '"') { cell += '"'; i++; } else q = false; }
+          else cell += c;
+        } else if (c === '"') q = true;
+        else if (c === ',') { row.push(cell); cell = ''; }
+        else if (c === '\r') { /* CRLF 의 CR */ }
+        else if (c === '\n') { row.push(cell); rows.push(row); row = []; cell = ''; }
+        else cell += c;
+      }
+      if (cell !== '' || row.length) { row.push(cell); rows.push(row); }
+      return rows.filter(function (r) { return r.some(function (x) { return x.trim() !== ''; }); });
+    }
+    function readPinCsv(file) {
+      if (!file) return;
+      var gen = ++PIN.gen;   // 앞에서 불러오던 확인은 버립니다
+      PIN.csv = null; PIN.on = false;
+      paintPinSlots();
+      pinList([]);
+      if (file.size > PIN_MAX_BYTES) { pinMsg('is-err', '파일이 너무 커요. PIN 발급 결과 창에서 내려받은 CSV만 불러와 주세요.'); paintPinPanel(); return; }
+      var name = String(file.name || '').slice(0, 80);
+      PIN.busy = true;
+      paintPinPanel();
+      pinMsg('', '‘' + name + '’을 이 브라우저 안에서 읽는 중이에요…');
+      var fr = new FileReader();
+      fr.onerror = function () { if (gen !== PIN.gen) return; PIN.busy = false; paintPinPanel(); pinMsg('is-err', '파일을 읽지 못했어요.'); };
+      fr.onload = function () {
+        if (gen !== PIN.gen) return;
+        var rows = csvRows(fr.result || '');
+        fr = null;
+        var head = (rows.shift() || []).map(function (h) { return String(h).trim(); });
+        var col = function (test) { for (var j = 0; j < head.length; j++) if (test(head[j])) return j; return -1; };
+        var cId = col(function (h) { return h.indexOf('부스ID') === 0; }), cAt = col(function (h) { return h.indexOf('PIN발급시각') === 0; }),
+            cPin = col(function (h) { return h === 'PIN'; }), cCode = col(function (h) { return h === '부스번호'; });
+        if (cId < 0 || cAt < 0 || cPin < 0) {
+          rows = null;
+          PIN.busy = false; paintPinPanel();
+          pinMsg('is-err', '이 CSV에는 부스ID · PIN발급시각 칸이 없어 쓸 수 없어요. 예전 형식이거나, 엑셀 등에서 다시 저장해 모양이 바뀐 파일일 수 있어요 — ' +
+            'PIN 발급 결과 창에서 내려받은 그대로의 CSV만 불러올 수 있어요.');
+          return;
+        }
+        var seen = {}, cand = {}, out = [], code = {};
+        rows.forEach(function (r) {
+          var id = String(r[cId] || '').trim().toLowerCase(), at = pinAtKey(r[cAt]), pin = String(r[cPin] || '').replace(/\s+/g, '');
+          var shown = String(r[cCode] || '').trim();
+          // 부스 ID 는 uuid(협의용 예시는 예시 목록의 ex-a01 같은 이름)
+          var idOk = isMock ? /^[a-z0-9-]{3,64}$/.test(id) : /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(id);
+          if (!idOk || !at || !pinUsable(pin)) {
+            out.push({ code: shown || '(부스 모름)', why: 'format' }); return;
+          }
+          seen[id] = (seen[id] || 0) + 1;
+          cand[id] = { pin: pin, at: at };
+          code[id] = shown;
+        });
+        rows = null;
+        Object.keys(seen).forEach(function (id) {
+          if (seen[id] > 1) { delete cand[id]; out.push({ code: code[id] || id.slice(0, 8), why: 'dup' }); }
+          else if (!S.byId[id]) { delete cand[id]; out.push({ code: code[id] || id.slice(0, 8), why: 'gone' }); }
+        });
+        var ids = Object.keys(cand);
+        pinVerify(ids, cand).then(function (res) {
+          if (gen !== PIN.gen) return;
+          var byId = {}, moved = 0;
+          res.ok.forEach(function (id) { byId[id] = cand[id]; if (code[id] && code[id] !== boothCode(id)) moved++; });
+          res.bad.forEach(function (b) { out.push({ code: code[b.id] || boothCode(b.id), why: b.why }); });
+          cand = null;
+          PIN.csv = { name: name, byId: byId, n: res.ok.length };
+          PIN.busy = false;
+          paintPinPanel();
+          pinMsg(res.ok.length ? 'is-ok' : 'is-err',
+            '‘' + name + '’: 서버의 지금 PIN과 발급 시각이 같은 ' + res.ok.length + '곳을 확인했어요' + (out.length ? ' · 제외 ' + out.length + '곳' : '') + '.' +
+            (moved ? ' 부스 번호가 바뀐 ' + moved + '곳은 부스ID로 맞췄어요.' : '') +
+            (res.ok.length ? ' ‘개별 PIN 함께 인쇄’를 켜면 카드에 넣어 인쇄해요.' : ' 인쇄에 쓸 수 있는 PIN이 없어요.'));
+          pinList(out.map(function (o) { return { code: o.code, text: PIN_WHY[o.why] || PIN_WHY.format }; }));
+        }, function () {
+          if (gen !== PIN.gen) return;
+          cand = null;
+          PIN.busy = false;
+          paintPinPanel();
+          pinMsg('is-err', '서버의 지금 PIN 상태를 확인하지 못해 CSV를 쓰지 않았어요. 연결을 확인한 뒤 다시 불러와 주세요.');
+        });
+      };
+      fr.readAsText(file, 'utf-8');
+    }
+
+    // A: PIN 발급 결과 창에서 부릅니다. list = [{id, pin, at}] — 방금 받은 PIN. 그 부스 카드만 골라 인쇄하고,
+    // 끝나면 ① 의 ‘인쇄에 포함’ · 찾기 · 구역 · 탭을 그대로 되돌립니다. PIN 은 이 인쇄 한 번 동안만 씁니다.
+    function printIssued(list) {
+      if (PIN.busy) return Promise.resolve({ err: '앞의 인쇄 준비가 아직 끝나지 않았어요.' });
+      if (op.blocked || S.ops.state !== 'ready' || !S.booths) return Promise.resolve({ err: '① 운영자 카드가 아직 준비되지 않았어요. 카드가 나온 뒤 다시 눌러 주세요.' });
+      var map = {}, ids = [], skipped = [], bad = [];
+      (list || []).forEach(function (x) {
+        if (!x || !x.id) return;
+        var el = findItem('ops', x.id);
+        if (!el || noPrint(el)) { skipped.push({ id: x.id, code: boothCode(x.id), why: 'noqr' }); return; }
+        var at = pinAtKey(x.at), pin = String(x.pin == null ? '' : x.pin);
+        if (!at || !pinUsable(pin)) { bad.push({ id: x.id, why: 'format' }); return; }
+        map[x.id] = { pin: pin, at: at };
+        ids.push(x.id);
+      });
+      list = null;
+      if (bad.length) return Promise.resolve({ blocked: bad.map(function (b) { return { code: boothCode(b.id), why: PIN_WHY[b.why] }; }), skipped: skipped });
+      if (!ids.length) return Promise.resolve({ err: 'QR카드로 인쇄할 부스가 없어요(모두 QR 미발급 · 열쇠 꺼짐).', skipped: skipped });
+      var gen = PIN.gen;
+      PIN.busy = true;
+      updatePrintBtn();
+      return pinVerify(ids, map).then(function (res) {
+        PIN.busy = false;
+        if (gen !== PIN.gen) return { err: '로그아웃되어 인쇄하지 않았어요.' };
+        if (res.bad.length) {
+          updatePrintBtn();
+          return { blocked: res.bad.map(function (b) { return { code: boothCode(b.id), why: PIN_WHY[b.why] }; }), skipped: skipped };
+        }
+        var keep = { off: S.lists.ops.off, q: S.lists.ops.q, zone: S.lists.ops.zone, tab: S.tab }, want = {};
+        ids.forEach(function (id) { want[id] = true; });
+        S.lists.ops.off = {};
+        items('ops').forEach(function (el) { setPicked('ops', el, !!want[el.getAttribute('data-id')]); });
+        S.lists.ops.q = ''; $('q-ops').value = ''; S.lists.ops.zone = '';
+        renderZoneChips('ops');
+        showTab('ops');
+        PIN.run = map;
+        paintPinSlots();
+        applyFilter('ops');
+        pinPrint(ids, map, function () {
+          PIN.run = null;
+          S.lists.ops.off = keep.off;
+          items('ops').forEach(function (el) {
+            if (noPrint(el)) return;
+            var on = !keep.off[el.getAttribute('data-id')];
+            el.classList.toggle('is-off', !on);
+            var box = el.querySelector('input[data-act="pick"]');
+            if (box) box.checked = on;
+          });
+          S.lists.ops.q = keep.q; $('q-ops').value = keep.q; S.lists.ops.zone = keep.zone;
+          renderZoneChips('ops');
+          paintPinSlots();
+          applyFilter('ops');
+          showTab(keep.tab);
+        });
+        map = null;
+        return { printed: ids.length, skipped: skipped };
+      }, function () {
+        PIN.busy = false;
+        updatePrintBtn();
+        return { err: '서버의 지금 PIN 상태를 확인하지 못해 인쇄하지 않았어요. 연결을 확인한 뒤 다시 눌러 주세요.' };
+      });
+    }
+    // 두 모듈 사이 다리. PIN 을 넘겨받기만 하고 돌려주는 길은 없습니다(읽기 함수 없음).
+    window.QrPinPrint = Object.freeze({
+      useCreds: function (fn) { if (typeof fn === 'function' && !PIN.creds) PIN.creds = fn; },
+      printIssued: printIssued
+    });
 
     /* ── ② 부스 앞 안내 ────────────────────────────────────────────── */
     function signItemHtml(b) {
@@ -2065,6 +2484,7 @@
       S.ops.lockedOut = true;
       S.ops.lockMsg = msg || MSG.SIGNED_OUT;
       closeBig();
+      dropPins();
       renderOps();
     }
 
@@ -2557,7 +2977,35 @@
         showTab(TABS[i], true);
       });
 
-      $('print-btn').addEventListener('click', function () { if (canPrint()) window.print(); });
+      $('print-btn').addEventListener('click', function () {
+        if (!canPrint()) return;
+        // ‘개별 PIN 함께 인쇄’ 를 켠 ① 만 서버 확인을 거칩니다. 꺼져 있거나 ② · ③ 이면 예전과 똑같이 바로 인쇄합니다.
+        if (S.tab === 'ops' && PIN.on) printOpsWithPins();
+        else window.print();
+      });
+      // 개별 PIN 함께 인쇄(① · 기본 꺼짐)
+      $('opt-pin').addEventListener('change', function () {
+        PIN.on = this.checked && !!(PIN.csv && PIN.csv.n > 0);
+        this.checked = PIN.on;
+        pinList([]);
+        pinMsg('', '');
+        paintPinSlots();
+        updatePrintBtn();
+      });
+      $('pinp-load').addEventListener('click', function () { if (!PIN.busy) $('pinp-file').click(); });
+      $('pinp-file').addEventListener('change', function () {
+        var f = this.files && this.files[0];
+        this.value = '';   // 같은 파일을 다시 고를 수 있게 · 파일 칸에 남지 않게
+        readPinCsv(f);
+      });
+      $('pinp-clear').addEventListener('click', function () { dropPins('불러온 PIN을 지웠어요. 다시 쓰려면 CSV를 불러와 주세요.'); });
+      // 옵션을 켠 채 브라우저 메뉴(Ctrl+P)로 인쇄하면 숫자를 넣지 않습니다(CSS 가 PIN 칸을 숨김) — 끝난 뒤 알려 줍니다.
+      window.addEventListener('beforeprint', function () { if (S.tab === 'ops' && PIN.on && !PIN.filled) PIN.bare = true; });
+      window.addEventListener('afterprint', function () {
+        if (!PIN.bare) return;
+        PIN.bare = false;
+        pinMsg('is-err', '브라우저 메뉴로 인쇄하면 PIN이 들어가지 않아요 — 방금 인쇄물에는 PIN이 없어요. PIN을 넣으려면 위 ‘인쇄하기’ 단추로 인쇄해 주세요.');
+      });
 
       ['ops', 'signs'].forEach(function (kind) {
         $('q-' + kind).addEventListener('input', function () {
@@ -3450,10 +3898,13 @@
         var r = isArr(rows) ? rows[0] : rows;
         var pin = r && pinOk(r.pin) ? String(r.pin) : null;
         var revoked = (r && Number(r.revoked_sessions)) || 0;
+        // 서버가 이 PIN 에 매긴 발급 시각(글자 그대로) — CSV · ‘QR카드와 함께 인쇄’ 가 서버의 지금 PIN 과 같은지 견줄 때 씁니다.
+        var at = r && r.issued_at ? String(r.issued_at) : '';
         r = null; rows = null;
         if (!pin) { it.status = 'unknown'; it.why = 'nopin'; P.stop = true; return; }
         it.status = 'ok';
         it.pin = pin;
+        it.pinAt = at;
         pin = null;
         it.revoked = revoked;
         // 미발급 부스의 PIN 세션은 운영 준비용 공통 PIN(예시 부스 · 행사 전 리허설)으로 연 것뿐입니다 — 첫 발급이 끊는 게 정상.
@@ -3540,13 +3991,16 @@
     function resultActsHtml(job) {
       var has = job.items.some(function (it) { return it.status === 'ok'; });
       if (!has) return '<button type="button" class="btn btn--primary" data-ov="close">닫기</button>';
-      var started = job.csvStarted || job.printOpened;
+      var started = job.csvStarted || job.printOpened || job.cardsOpened;
       return '<p class="pinov__status" id="pinov-status" role="status" aria-live="polite">' + esc(job.status || '') + '</p>' +
         '<label class="pinov__ack' + (started ? '' : ' is-off') + '"><input type="checkbox" id="pinov-ack"' +
           (job.ack ? ' checked' : '') + (started ? '' : ' disabled') + ' /> 내려받은 CSV 파일이나 인쇄물에서 PIN을 직접 확인했어요</label>' +
-        (started ? '' : '<p class="pinov__ackhint">CSV를 내려받거나 배부표 인쇄 창을 연 뒤 체크할 수 있어요.</p>') +
+        (started ? '' : '<p class="pinov__ackhint">CSV를 내려받거나 배부표 · QR카드 인쇄 창을 연 뒤 체크할 수 있어요.</p>') +
         '<button type="button" class="btn" data-ov="csv">' + (job.csvStarted ? 'CSV 다시 내려받기' : 'CSV 내려받기') + '</button>' +
         '<button type="button" class="btn" data-ov="print">' + (job.printOpened ? '배부표 인쇄 창 다시 열기' : 'PIN 배부표 인쇄') + '</button>' +
+        // ① 운영자 카드에 이 창의 PIN 을 넣어 인쇄(서버 상태를 다시 확인한 뒤 · 다시 발급하지 않음). ① 모듈이 없으면 그리지 않습니다.
+        (window.QrPinPrint ? '<button type="button" class="btn" data-ov="cards"' + (job.cardsBusy ? ' disabled' : '') + '>' +
+          (job.cardsBusy ? 'QR카드 인쇄 준비 중…' : job.cardsOpened ? 'QR카드 인쇄 창 다시 열기' : 'QR카드와 함께 인쇄') + '</button>' : '') +
         '<button type="button" class="btn btn--primary" data-ov="close">닫기</button>';
     }
     function paintResultActs(job, focusSel) {
@@ -3569,7 +4023,7 @@
     }
     function showResult(job) {
       job.phase = 'result';
-      job.csvStarted = false; job.printOpened = false; job.ack = false; job.status = '';
+      job.csvStarted = false; job.printOpened = false; job.cardsOpened = false; job.cardsBusy = false; job.ack = false; job.status = '';
       var same = samePinGroups(job.items), sameOf = {};
       job.same = same.map(function (g) { return g.join(' · '); });
       same.forEach(function (g) { g.forEach(function (c) { sameOf[c] = g.filter(function (x) { return x !== c; }).join(' · '); }); });
@@ -3620,7 +4074,7 @@
       var has = job.items.some(function (it) { return it.status === 'ok'; });
       if (!has || job.ack) { closeResult(); return; }
       job.phase = 'closeask';
-      var started = job.csvStarted || job.printOpened;
+      var started = job.csvStarted || job.printOpened || job.cardsOpened;
       var acts = $('pinov-acts');
       acts.innerHTML = '<div class="pinov__warn" style="flex-basis:100%;margin:0" role="alert">' +
           (started
@@ -3636,7 +4090,7 @@
       var job = P.job;
       if (!job) return;
       job.phase = 'result';
-      paintResultActs(job, (job.csvStarted || job.printOpened) ? '#pinov-ack' : '[data-ov="csv"]');
+      paintResultActs(job, (job.csvStarted || job.printOpened || job.cardsOpened) ? '#pinov-ack' : '[data-ov="csv"]');
     }
     // 결과 창을 닫습니다. PIN 원문을 담은 변수 · 화면 · 배부표를 모두 비우고, 패널에는 숫자 요약만 남깁니다.
     function closeResult() {
@@ -3675,10 +4129,12 @@
       if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
       return '"' + s.replace(/"/g, '""') + '"';
     }
+    // 뒤 두 칸(부스ID · PIN발급시각)은 ① ‘PIN CSV 불러오기’ 가 부스를 부스ID로 맞추고, 서버의 지금 PIN 발급 시각과 같을 때만
+    // 인쇄하려고 둡니다(다시 발급되면 시각이 달라 그 부스는 빠짐). 발급 시각은 서버가 준 글자 그대로 적습니다.
     function csvText(items) {
-      var lines = [['부스번호', '부스명', '운영기관', '구역', 'PIN'].map(csvCell).join(',')];
+      var lines = [['부스번호', '부스명', '운영기관', '구역', 'PIN', '부스ID(인쇄 확인용)', 'PIN발급시각(인쇄 확인용)'].map(csvCell).join(',')];
       items.forEach(function (it) {
-        lines.push([it.code, it.name, it.org, it.zone, fmtPin(it.pin)].map(csvCell).join(','));
+        lines.push([it.code, it.name, it.org, it.zone, fmtPin(it.pin), it.id, it.pinAt || ''].map(csvCell).join(','));
       });
       return '﻿' + lines.join('\r\n') + '\r\n';
     }
@@ -3742,6 +4198,37 @@
       job.status = '인쇄 창을 열었어요. 인쇄물에 PIN이 제대로 찍혔는지 확인한 뒤 아래에 체크해 주세요 — 이 화면은 실제로 인쇄됐는지 알 수 없어요.';
       paintResultActs(job, '[data-ov="print"]');
       window.print();
+    }
+
+    // ‘QR카드와 함께 인쇄’: 이 창에서 받은 PIN 을 부스 ID · 발급 시각과 함께 ① 모듈에 넘깁니다. ① 모듈이 서버의 지금 상태를
+    // 다시 읽어 모두 맞을 때만 그 부스 카드를 인쇄합니다(다시 발급하지 않음). PIN 은 그 인쇄 한 번 동안만 쓰고 돌려받지 않습니다.
+    function printCards() {
+      var job = P.job, bridge = window.QrPinPrint;
+      if (!job || job.phase !== 'result' || job.cardsBusy || !bridge) return;
+      var list = job.items.filter(function (it) { return it.status === 'ok' && it.pin; })
+        .map(function (it) { return { id: it.id, pin: it.pin, at: it.pinAt || '' }; });
+      if (!list.length) return;
+      var gen = P.gen;
+      job.cardsBusy = true;
+      job.status = '서버의 지금 PIN 상태를 확인하는 중이에요…';
+      paintResultActs(job, null);
+      bridge.printIssued(list).then(function (res) {
+        list = null;
+        if (gen !== P.gen || P.job !== job) return;
+        job.cardsBusy = false;
+        var skip = (res && res.skipped) || [];
+        var skipText = skip.length ? ' QR카드가 없는 ' + skip.length + '곳(' + skip.map(function (s) { return s.code; }).join(' · ') + ')은 빠졌어요 — 이 부스는 배부표로 전해 주세요.' : '';
+        if (res && res.printed) {
+          job.cardsOpened = true;
+          job.status = 'QR카드 ' + res.printed + '장 인쇄 창을 열었어요. 카드마다 PIN이 제대로 찍혔는지 확인한 뒤 아래에 체크해 주세요 — 이 화면은 실제로 인쇄됐는지 알 수 없어요.' + skipText;
+        } else if (res && res.blocked) {
+          job.status = 'QR카드를 인쇄하지 않았어요 — 서버의 지금 PIN과 맞지 않는 부스 ' + res.blocked.length + '곳: ' +
+            res.blocked.map(function (b) { return b.code + '(' + b.why + ')'; }).join(' · ') + '. 이 창의 PIN을 다시 발급하지 않아요.' + skipText;
+        } else {
+          job.status = ((res && res.err) || 'QR카드를 인쇄하지 못했어요.') + skipText;
+        }
+        paintResultActs(job, '[data-ov="cards"]');
+      });
     }
 
     /* ── 로그아웃 따라가기 ────────────────────────────────────────── */
@@ -3871,7 +4358,7 @@
       // '파일 · 인쇄물에서 PIN 을 확인했어요' 체크
       $('pinov').addEventListener('change', function (e) {
         if (!e.target || e.target.id !== 'pinov-ack' || !P.job) return;
-        P.job.ack = !!e.target.checked && !!(P.job.csvStarted || P.job.printOpened);
+        P.job.ack = !!e.target.checked && !!(P.job.csvStarted || P.job.printOpened || P.job.cardsOpened);
         e.target.checked = P.job.ack;
       });
       $('pinov').addEventListener('click', function (e) {
@@ -3887,6 +4374,7 @@
         } else if (a === 'stop') { P.stop = true; t.disabled = true; t.textContent = '멈추는 중…'; }
         else if (a === 'csv') saveCsv();
         else if (a === 'print') printSheet();
+        else if (a === 'cards') printCards();
         else if (a === 'close') askClose();
         else if (a === 'back') backFromClose();
         else if (a === 'discard') closeResult();
@@ -3910,6 +4398,8 @@
       bind();
       render();
       if (!isMock && Core && Core.isConfigured() && window.supabase) watchAuth();
+      // ① ‘개별 PIN 함께 인쇄’ 가 인쇄 직전에 서버의 지금 PIN 상태(on · 발급 시각, 값 없음)를 다시 읽을 때 씁니다.
+      if (window.QrPinPrint) window.QrPinPrint.useCreds(function () { return withTimeout(readCreds(), WAIT_CHECK_MS); });
       load();
     }
     init();
