@@ -1824,7 +1824,6 @@
       creds: null,      // PIN 관리 모듈이 넘겨준 ‘서버 상태 새로 읽기’ 함수(PIN 값 없음)
       latest: null,     // PIN 관리 모듈이 넘겨준 ‘서버에서 최신 PIN 받기’ 함수(관리자 전용 · 응답에만 있음)
       missing: false,   // 서버에 조회 함수가 없음(SQL 적용 전 · 되돌림) — 서버 길만 쉼
-      notPrinter: false, // 이 관리자 계정은 PIN 인쇄 담당자가 아님(서버가 거절) — 서버 길만 쉼 · 로그아웃하면 다시 확인
       srv: null,        // 화면 미리보기용 부스별 상태 {부스 id: 'on' · 'off' · 'none' · 'no_copy' · 'mismatch'} — 숫자 없음
       srvAt: null,      // 서버 조회에서 no_copy · mismatch 를 본 부스의 그때 발급 시각(미리보기 이어 두기용)
       gen: 0           // 지우기 · 로그아웃마다 올림 — 그 전에 시작한 확인의 답은 버립니다
@@ -1866,7 +1865,7 @@
     function pinText(p) { p = String(p); return p.length === 6 ? p.slice(0, 3) + ' ' + p.slice(3) : p; }
     // 화면 PIN 칸에 쓰는 표. 인쇄 중이면 그 인쇄의 PIN, 아니면 미리보기 — CSV 로 맞춘 부스 · 서버에 켜진 PIN 이 있는 부스
     // (숫자 없음 · 가린 글만). 서버 길에서는 숫자를 인쇄할 때만 받으므로 미리보기는 상태(켜짐)로만 그립니다.
-    function srvOk() { return !!PIN.latest && !PIN.missing && !PIN.notPrinter; }
+    function srvOk() { return !!PIN.latest && !PIN.missing; }
     function pinMap() {
       if (PIN.run) return PIN.run;
       if (!PIN.on) return null;
@@ -1986,8 +1985,6 @@
       var fetchLatest = srvOk() ? PIN.latest(ids).then(null, function (err) {
         // 조회 함수가 없음(SQL 적용 전 · 되돌림): 서버 길만 쉬고 CSV · 결과 창 길로 계속합니다.
         if (err && err.pinMissing) { PIN.missing = true; PIN.srv = null; return null; }
-        // PIN 인쇄 담당자가 아닌 관리자: 서버 길만 쉬고 CSV · 결과 창 길로 계속합니다(서버 숫자는 받지 않음).
-        if (err && err.pinNotPrinter) { PIN.notPrinter = true; PIN.srv = null; return null; }
         throw err;
       }) : Promise.resolve(null);
       fetchLatest.then(function (rows) {
@@ -2013,7 +2010,6 @@
             updatePrintBtn();
             pinBlock(res.bad.map(function (b) { return b.why === 'nopin' && srvWhy[b.id] ? { id: b.id, why: srvWhy[b.id] } : b; }));
             if (!srvOk() && PIN.latest && PIN.missing) pinMsg('is-err', $('pinp-msg').textContent + ' 서버 자동 조회는 아직 쓸 수 없어요(서버 설정 전) — CSV를 불러오면 그 PIN으로 인쇄할 수 있어요.');
-            else if (PIN.latest && PIN.notPrinter) pinMsg('is-err', $('pinp-msg').textContent + ' 이 계정은 PIN 인쇄 담당자로 지정되지 않아 서버에서 최신 PIN을 받을 수 없어요 — 운영본부 PIN 인쇄 담당자 계정으로 인쇄하거나, 그때 받은 CSV를 불러와 주세요.');
             return;
           }
           pinMsg('', '');
@@ -2072,7 +2068,6 @@
       PIN.busy = false;
       PIN.srv = null;
       PIN.srvAt = null;
-      PIN.notPrinter = false;
       paintPinSlots();
       paintPinPanel();
       pinList([]);
@@ -3511,8 +3506,7 @@
         out = null;
         var k = errKind(err), e = new Error('latest');
         e.pinMissing = k === 'db';
-        e.pinNotPrinter = String((err && err.hint) || '') === 'booth_pin_print_not_printer';
-        e.pinLogin = k === 'login' && !e.pinNotPrinter;
+        e.pinLogin = k === 'login';
         throw e;
       });
     }

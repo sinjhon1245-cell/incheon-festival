@@ -15,9 +15,8 @@
 --     · Vault 는 Supabase 가 준 함수(vault.create_secret · vault.update_secret)와 복호화 보기(vault.decrypted_secrets)로만
 --       씁니다. vault 표를 직접 잠그거나 고치지 않습니다(이 프로젝트의 postgres 에는 vault.secrets 수정 권한이 없음).
 --     · 돌려준 PIN 마다 누가 · 언제 · 어느 부스를 봤는지 private.booth_pin_print_audit 에 남깁니다(PIN 값은 남기지 않음).
---     · anon · authenticated 는 vault · 보관 도우미 · 기록 표 · 담당자 표에 손댈 수 없습니다. 조회 함수는 authenticated 에만
---       열고, 안에서 is_admin() 과 PIN 인쇄 담당자 지정(private.booth_pin_printers)을 함께 확인합니다.
---       담당자 표는 처음에 비어 있어, 운영본부가 SQL Editor 로 담당자를 지정하기 전에는 아무도 PIN 을 받지 못합니다.
+--     · anon · authenticated 는 vault · 보관 도우미 · 기록 표에 손댈 수 없습니다. 조회 함수는 authenticated 에만 열고
+--       안에서 is_admin() 을 다시 확인합니다.
 --     · 한 번에 25곳까지만 받습니다(부스마다 bcrypt 대조 — authenticated 의 statement_timeout 8초 안에 끝나게).
 --
 --   이 파일 전에 발급한 PIN(2026-10-23 Production 2곳 — 예시 부스 A-01 · A-03)은 해시만 있어 원문을 되살릴 수 없습니다.
@@ -30,22 +29,13 @@
 --   이 파일이 더하는 것
 --     private.booth_pin_vault_name(uuid) · private.booth_pin_vault_put(uuid, text) · private.booth_pin_vault_revoke(uuid)
 --     private.booth_pin_print_audit           조회 기록(PIN 값 없음)
---     private.booth_pin_printers              PIN 인쇄 담당자(관리자 중 지정한 계정 · 처음엔 비어 있음)
---     public.admin_print_booth_pins(uuid[])   PIN 인쇄 담당자용 최신 PIN 조회
+--     public.admin_print_booth_pins(uuid[])   관리자 인쇄용 최신 PIN 조회
 --   그대로인 것
 --     표 · 칸 · 제약 · RLS · 설정 · QR 열쇠 · 기존 PIN 해시 · 세션 · 보안 기록 · 대기 값 · 부스 정보 ·
 --     PIN 로그인 · 세션 확인 · 공통 PIN · 조건부 발급(admin_issue_booth_pin_checked) · 상태 조회(admin_booth_credentials)
 --
 -- 사용법: Supabase 대시보드 → SQL Editor → 전체 붙여넣고 Run. 여러 번 실행해도 같은 결과입니다.
 --         맨 아래 확인 표의 '기대' 와 '실제' 가 모두 같아야 합니다.
--- PIN 인쇄 담당자 지정(SQL Editor · 이메일만 바꿔 실행 — 관리자 계정만 지정됨):
---     insert into private.booth_pin_printers (user_id, note)
---     select p.id, '운영본부 PIN 인쇄 담당' from public.staff_profiles p
---      where p.role = 'admin' and lower(p.email) = lower('담당자@example.com')
---     on conflict (user_id) do nothing;
---   해제: delete from private.booth_pin_printers w using public.staff_profiles p
---          where p.id = w.user_id and lower(p.email) = lower('담당자@example.com');
---   확인: select p.email, w.note, w.added_at from private.booth_pin_printers w join public.staff_profiles p on p.id = w.user_id;
 -- 되돌리기: supabase/rollback-booth-pin-auto-print.sql(원래 두 함수로 되돌리고 조회 함수를 지우며, 보관한 PIN 을 모두 덮어씀)
 -- 순서: 이 파일 → print-qr.html 배포. 되돌릴 때는 print-qr.html 을 먼저 되돌리고 되돌리기 SQL.
 --       (화면이 먼저 배포돼도 조회 함수가 없으면 자동 PIN 만 막고 CSV · 결과 창 인쇄는 그대로 됩니다.)
@@ -148,16 +138,6 @@ create table if not exists private.booth_pin_print_audit (
 alter table private.booth_pin_print_audit enable row level security;
 revoke all on table private.booth_pin_print_audit from public, anon, authenticated;
 revoke all on sequence private.booth_pin_print_audit_id_seq from public, anon, authenticated;
-
--- 1-1. PIN 인쇄 담당자 — 관리자 가운데 이 표에 있는 계정만 인쇄용 최신 PIN 을 받습니다. 처음에는 비어 있어
---      지정하기 전에는 아무도 받지 못합니다(맨 위 사용법의 지정 · 해제 SQL). 관리자 자격을 잃으면 표에 있어도 못 받습니다.
-create table if not exists private.booth_pin_printers (
-  user_id  uuid primary key references public.staff_profiles(id) on delete cascade,
-  note     text not null default '',
-  added_at timestamptz not null default now()
-);
-alter table private.booth_pin_printers enable row level security;
-revoke all on table private.booth_pin_printers from public, anon, authenticated;
 
 
 -- ═══════════════════════════════════════════════════════════════
@@ -340,8 +320,7 @@ $$;
 
 -- ═══════════════════════════════════════════════════════════════
 -- 4. admin_print_booth_pins(부스 id 배열) — 관리자 인쇄용 최신 PIN 조회
---    부를 수 있는 사람: 로그인한 관리자(is_admin) 가운데 PIN 인쇄 담당자(private.booth_pin_printers)만.
---      관리자지만 담당자가 아니면 42501 · hint booth_pin_print_not_printer. anon 은 실행 권한 자체가 없습니다.
+--    부를 수 있는 사람: 로그인한 관리자(is_admin)만. anon 은 실행 권한 자체가 없습니다.
 --    받는 것: 부스 id 1 ~ 25개(겹치면 한 번만). 표 전체를 돌려주는 길은 없습니다.
 --    돌려주는 것: 받은 부스마다 한 줄 — state 와, state 가 'ok' 일 때만 pin.
 --      ok        켜진 PIN · 보관값이 지금 로그인 해시와 bcrypt 로 맞음 → pin · issued_at
@@ -366,9 +345,6 @@ declare
 begin
   if v_uid is null or not public.is_admin() then
     raise exception '관리자만 인쇄용 PIN 을 볼 수 있습니다.' using errcode = '42501';
-  end if;
-  if not exists (select 1 from private.booth_pin_printers w where w.user_id = v_uid) then
-    raise exception 'PIN 인쇄 담당자로 지정된 관리자만 인쇄용 PIN 을 받을 수 있습니다.' using errcode = '42501', hint = 'booth_pin_print_not_printer';
   end if;
   if p_booth_ids is null or cardinality(p_booth_ids) = 0 then
     return;
@@ -452,12 +428,6 @@ select v."순서", v."항목", v."기대", v."실제"
     (7, '개별 PIN 줄(이 파일은 바꾸지 않음)', '2',
         (select count(*) from public.booth_pin)::text),
     (8, '인쇄용 보관 PIN(이 파일은 만들지 않음 — 다음 발급부터)', '0',
-        (select count(*) from vault.secrets s where s.name like 'booth_pin_print_%')::text),
-    (9, 'PIN 인쇄 담당자 표 — anon · authenticated 읽기 · 쓰기', 'false',
-        (has_table_privilege('anon', 'private.booth_pin_printers', 'SELECT') or has_table_privilege('authenticated', 'private.booth_pin_printers', 'SELECT')
-         or has_table_privilege('anon', 'private.booth_pin_printers', 'INSERT') or has_table_privilege('authenticated', 'private.booth_pin_printers', 'INSERT'))::text),
-    (10, '지정된 PIN 인쇄 담당자 중 관리자가 아닌 계정', '0',
-        (select count(*) from private.booth_pin_printers w join public.staff_profiles p on p.id = w.user_id
-          where p.role is distinct from 'admin')::text)
+        (select count(*) from vault.secrets s where s.name like 'booth_pin_print_%')::text)
   ) as v("순서", "항목", "기대", "실제")
  order by v."순서";
