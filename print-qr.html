@@ -1971,7 +1971,15 @@
         }
         pinMsg('', '');
         pinList([]);
-        pinPrint(ids, map, function () { updatePrintBtn(); });
+        // Build masked PIN slots only for the duration of this print, even when
+        // no CSV was imported and the browser was reopened.
+        PIN.run = map;
+        paintPinSlots();
+        pinPrint(ids, map, function () {
+          PIN.run = null;
+          paintPinSlots();
+          updatePrintBtn();
+        });
         });
       }).catch(function () {
         if (gen !== PIN.gen) return;
