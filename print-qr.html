@@ -3528,7 +3528,8 @@
       copyBusy: false,     // ‘보관 상태 확인’ 중
       peek: null,          // ‘보기’ 로 잠깐 보이는 PIN 하나 { id, pin, at } — 가리면 바로 비움
       peekT: 0,
-      peekBusy: ''         // ‘보기’ 를 누르고 답을 기다리는 부스 id
+      peekBusy: '',        // ‘보기’ 를 누르고 답을 기다리는 부스 id
+      peekSeq: 0           // ‘보기’ 요청 번호 — 가릴 때마다 올려, 그 전에 보낸 요청의 늦은 답은 버립니다
     };
     var PEEK_MS = 30000;   // ‘보기’ 로 연 PIN 을 저절로 가리기까지
 
@@ -4160,12 +4161,15 @@
     /* ── 기존 PIN 다시 보기(‘보기’) ─────────────────────────────────
        누를 때마다 서버(admin_print_booth_pins · 관리자 권한을 서버가 다시 확인 · 조회 기록)에서 그 부스의 최신 PIN 을 받아
        한 부스만 잠깐 보여 줍니다. 가리기 · PEEK_MS · 고르기 바꿈 · 범위 · 찾기 · 패널 닫기 · 창 열기 · 로그아웃 · 화면 숨김 ·
-       인쇄 시작 · 그 부스 상태가 바뀜(재발급 · 끄기) 때 숫자를 지웁니다. 저장소 · 주소 · 콘솔에는 넣지 않습니다. */
+       인쇄 시작 · 그 부스 상태가 바뀜(재발급 · 끄기) 때 숫자를 지웁니다. 저장소 · 주소 · 콘솔에는 넣지 않습니다.
+       답을 기다리는 중에 같은 일이 생기면 그 요청을 무효로 합니다 — 늦게 온 답은 그리지도 기억하지도 않습니다. */
     function hidePeek(redraw) {
       clearTimeout(P.peekT); P.peekT = 0;
-      if (!P.peek) return;
-      P.peek.pin = null;
-      P.peek = null;
+      P.peekSeq++;
+      var waiting = !!P.peekBusy;
+      P.peekBusy = '';
+      if (!P.peek && !waiting) return;
+      if (P.peek) { P.peek.pin = null; P.peek = null; }
       // 목록을 다시 그리지 않는 길(패널 닫기 · 로그아웃 등)에서도 숫자가 DOM 에 남지 않게 그 자리를 바로 비웁니다.
       [].slice.call($('pinx-list').querySelectorAll('.prow__pin')).forEach(function (el) { el.textContent = ''; });
       if (redraw !== false && P.open && !$('pinx-main').hidden) renderList();
@@ -4174,12 +4178,13 @@
       var c = credOf(id), b = P.byId[id];
       if (P.busy || P.peekBusy || !c || c.pin_state !== 'on' || !b) return;
       hidePeek(false);
-      var gen = P.gen;
+      var gen = P.gen, seq = P.peekSeq;
       P.peekBusy = id;
       setMsg('', '');
       renderList();
       latestPins([id]).then(function (rows) {
-        if (gen !== P.gen) return;
+        // 기다리는 사이 가리기 · 닫기 · 찾기 · 구역 · 범위 · 고르기 · 로그아웃 · 인쇄 시작이 있었으면 받은 숫자를 버립니다.
+        if (gen !== P.gen || seq !== P.peekSeq) { (rows || []).forEach(function (x) { if (x) x.pin = null; }); rows = null; return; }
         P.peekBusy = '';
         var r = rows && rows[0];
         learn(rows);
@@ -4198,7 +4203,7 @@
         r = null; rows = null;
         if (P.open) { renderStats(); renderList(); }
       }, function (err) {
-        if (gen !== P.gen) return;
+        if (gen !== P.gen || seq !== P.peekSeq) return;
         P.peekBusy = '';
         if (window.console) console.warn('[print-qr PIN] 보기 실패', err && err.kind);
         setMsg('is-err', b.code + ': ' + lookupErr(err));
@@ -5231,7 +5236,7 @@
         if (t.checked) P.sel[id] = true; else delete P.sel[id];
         setMsg('', '');
         // 고르기를 바꾸면 보이던 PIN 을 가립니다(목록을 다시 그림).
-        if (P.peek) { hidePeek(); renderBar(); return; }
+        if (P.peek || P.peekBusy) { hidePeek(); renderBar(); return; }
         var li = t.closest('.prow');
         if (li) li.classList.toggle('is-sel', t.checked);
         renderBar();
