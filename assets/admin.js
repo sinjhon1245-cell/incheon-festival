@@ -436,8 +436,57 @@
   function pinRefresh(row) {
     return loadCreds().then(function () { renderPanel(); reopenMore(row.id); });
   }
-  // 방금 만든 PIN 을 한 번만 보여 줍니다. 창을 닫으면 원문을 담은 변수도 비웁니다.
-  function showPinOnce(row, pin, revoked, before) {
+  // 발급 시각(timestamptz 글자)을 마이크로초까지 같은 값으로 견줄 수 있게(print-qr 의 pinAtKey 와 같은 규칙). 모양이 다르면 null.
+  function pinAtKey(s) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,6}))?(Z|[+-]\d{2}(?::?\d{2})?)$/.exec(String(s == null ? '' : s).trim());
+    if (!m) return null;
+    var ms = Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]);
+    if (isNaN(ms)) return null;
+    if (m[8] !== 'Z') {
+      var z = m[8].replace(':', ''), sign = z.charAt(0) === '-' ? -1 : 1;
+      ms -= sign * (Number(z.slice(1, 3)) * 60 + Number(z.slice(3, 5) || 0)) * 60000;
+    }
+    return ms + '.' + ((m[7] || '') + '000000').slice(0, 6);
+  }
+  function pinClock() {
+    var d = new Date(new Date().getTime() + 9 * 3600000);
+    function z(n) { return (n < 10 ? '0' : '') + n; }
+    return z(d.getUTCHours()) + ':' + z(d.getUTCMinutes()) + ':' + z(d.getUTCSeconds());
+  }
+  /* 한 부스 발급 뒤 서버 대조(admin_print_booth_pins — 관리자 권한을 서버가 다시 확인 · 조회 기록).
+     { state: 'ok' 정상 · 'bad' 다름(why) · 'unk' 묻지 못함 · 'legacy' 보관 · 조회 기능 없는 서버, clock } — PIN 은 돌려주지 않습니다. */
+  function pinVerifyOne(id, pin, at) {
+    var clock = pinClock();
+    return pinWait(C.rpc('admin_print_booth_pins', { p_booth_ids: [id] }), PIN_WAIT_MS).then(function (rows) {
+      var x = Object.prototype.toString.call(rows) === '[object Array]' ? rows[0] : null;
+      var v = !x ? { state: 'unk', clock: clock }
+        : x.state !== 'ok' ? { state: 'bad', why: x.state, clock: clock }
+        : (String(x.pin) !== pin || !pinAtKey(at) || pinAtKey(x.issued_at) !== pinAtKey(at)) ? { state: 'bad', why: 'changed', clock: clock }
+        : { state: 'ok', clock: clock };
+      x = null; rows = null;
+      return v;
+    }, function (e) {
+      console.error('[admin] 발급 뒤 서버 대조 실패', e && (e.code || e.message));
+      if (e && (e.code === 'PGRST202' || e.code === '42883')) return { state: 'legacy', clock: clock };
+      return { state: 'unk', clock: clock };
+    });
+  }
+  var PIN_V_WHY = {
+    none: '서버에 개별 PIN이 없어요', off: '그 사이 PIN이 꺼졌어요', no_copy: '서버에 보관값이 없어요',
+    mismatch: '서버 보관값이 로그인 PIN과 맞지 않아요', changed: '그 사이 다른 곳에서 다시 발급됐어요'
+  };
+  function pinVerifyHtml(v) {
+    if (!v || v.state === 'legacy') return '<p class="pinshow__warn">이 PIN은 다시 확인할 수 없습니다. 분실하면 새 PIN을 발급해 주세요.</p>';
+    if (v.state === 'ok') {
+      return '<p class="pinshow__note pinshow__ok"><b>서버 확인 정상</b> · ' + esc(v.clock) +
+        ' — 서버 보관값 · 로그인 PIN · 발급 시각이 모두 맞아요. 이 PIN은 QR · PIN 관리의 ‘보기’로 다시 볼 수 있어요.</p>';
+    }
+    return '<p class="pinshow__warn"><b>서버 확인 필요</b> · ' + esc(v.clock) + ' — ' +
+      esc(v.state === 'bad' ? (PIN_V_WHY[v.why] || PIN_V_WHY.changed) : '서버에 대조하지 못했어요(연결 · 권한)') +
+      '. 이 PIN을 배부하기 전에 QR · PIN 관리에서 ‘보기’로 서버의 최신 PIN을 확인해 주세요.</p>';
+  }
+  // 방금 만든 PIN 을 보여 줍니다. 창을 닫으면 원문을 담은 변수도 비웁니다(서버 보관값은 QR · PIN 관리의 ‘보기’ 로).
+  function showPinOnce(row, pin, revoked, before, v) {
     UI.reveal({
       title: before === 'none' ? '운영자 PIN 발급' : '운영자 PIN 새로 발급',
       closeLabel: '확인했어요 · 닫기',
@@ -447,7 +496,7 @@
           '<p class="pinshow__label">운영자 PIN</p>' +
           '<p class="pinshow__pin" id="pin-once">' + esc(pin.slice(0, 3) + ' ' + pin.slice(3)) + '</p>' +
           '<button class="btn btn--ghost btn--sm" type="button" id="pin-copy">복사</button>' +
-          '<p class="pinshow__warn">이 PIN은 다시 확인할 수 없습니다. 분실하면 새 PIN을 발급해 주세요.</p>' +
+          pinVerifyHtml(v) +
           (revoked ? '<p class="pinshow__note">예전 PIN으로 연 기기 ' + revoked + '대는 로그아웃됐습니다.</p>' : '') +
           '<p class="pinshow__note">운영자에게 알려 줄 것: ' + esc(opSite()) + ' → “부스 번호와 PIN으로 시작” → 구역 → 부스 → PIN 6자리. ' +
             'QR 카드는 그대로 쓸 수 있습니다.</p>' +
@@ -537,17 +586,21 @@
         var r = Object.prototype.toString.call(rows) === '[object Array]' ? rows[0] : rows;
         var pin = r && /^\d{6}$/.test(String(r.pin || '')) ? String(r.pin) : null;
         var revoked = (r && r.revoked_sessions) || 0;
+        var at = r && r.issued_at ? String(r.issued_at) : '';
         r = null; rows = null;
         if (!pin) {
           return pinRefresh(row).then(function () {
             return pinNotice('결과 확인 필요',
-              '서버 응답에 PIN이 없었어요. “' + label + '”의 PIN이 바뀌었을 수 있고, 그랬다면 그 PIN은 다시 볼 수 없어요. ' +
-              '목록에서 지금 상태를 확인한 뒤 필요하면 재발급해 주세요.');
+              '서버 응답에 PIN이 없었어요. “' + label + '”의 PIN이 바뀌었을 수 있어요. ' +
+              '목록에서 지금 상태를 확인하고, QR · PIN 관리의 ‘보기’로 서버의 최신 PIN을 확인해 주세요.');
           });
         }
-        showPinOnce(row, pin, revoked, c.pin_state);
-        pin = null;
-        return loadCreds().then(function () { renderPanel(); });
+        // 서버 대조: 보관값 = 지금 로그인 PIN · 같은 숫자 · 같은 발급 시각인지 보고 결과를 창에 함께 적습니다.
+        return pinVerifyOne(row.id, pin, at).then(function (v) {
+          showPinOnce(row, pin, revoked, c.pin_state, v);
+          pin = null;
+          return loadCreds().then(function () { renderPanel(); });
+        });
       }, function (e) {
         console.error('[admin] PIN 발급 실패', e && (e.code || e.message), e && e.hint);
         var hint = (e && e.hint) || '';
@@ -870,6 +923,9 @@
       // 맨 위 요약 카드(실제 · 예시 같음) — 누르면 그 부스만 거릅니다(아래 filters 의 quick).
       // 줄의 ⋯: 예시는 QR · 대기 입력 흉내, 실제는 운영자 PIN 발급 · 재발급 · 끄기(QR 은 부스 QR 인쇄 화면).
       summary: boothSummary,
+      // 범위: 실제 부스(기본) · 예시 · 보관 부스('[예시]' 기관 — 리허설 · 시험용). 지우거나 공개를 바꾸지 않고 목록에서만 나눕니다.
+      scope: { test: isSampleBooth, real: '실제 부스', sample: '예시 · 보관 부스',
+               note: '리허설 · 시험용 예시 부스예요. 실제 부스 목록 · 요약과 따로 보여 주고, 데이터와 공개 상태는 그대로예요.' },
       moreHtml: DEMO ? demoMore : credMore,
       // 목록에서 바로 켜고 끄는 공개 단추(quickHtml · onQuick).
       quick: function (r) { return { on: !!r.is_published, label: '공개', what: '부스' }; },
@@ -1483,6 +1539,8 @@
   }
   /* 목록 검색 · 걸러 보기 상태. 다른 화면으로 옮기면 지웁니다. */
   var listQ = '', listStatus = '전체', listF = {};
+  // 목록 범위(항목 정의에 scope 가 있을 때만 — 부스: 'real' 실제 부스(기본) · 'sample' 예시 · 보관). 화면을 옮겨도 그대로 둡니다.
+  var listScope = {};
   // 휴대폰의 걸러 보기 패널이 열려 있나. 다른 화면으로 옮기면 닫습니다.
   var listSheet = false;
 
@@ -1829,6 +1887,26 @@
     if (ent.single) { renderSingle(ent, head, host); return; }
 
     var all = cache[key] || [];
+    // 줄 번호(data-i)는 늘 범위를 나누기 전 전체 목록(cache) 기준입니다 — 누를 때 cache[key][i] 로 줄을 찾기 때문.
+    var full = all;
+
+    /* 범위 — 항목 정의의 scope 가 있으면(부스) 실제 · 예시 · 보관을 나눠 그 범위만 요약 · 걸러 보기 · 수 · 목록에 씁니다.
+       둘 다 있을 때만 단추를 그리고 기본은 실제 부스입니다. 데이터(삭제 · 공개)는 바꾸지 않습니다. */
+    var scopeHtml = '';
+    if (listEnt.scope) {
+      var exRows = all.filter(listEnt.scope.test), nReal = all.length - exRows.length;
+      if (exRows.length && nReal) {
+        var cur = listScope[key] === 'sample' ? 'sample' : 'real';
+        all = cur === 'sample' ? exRows : all.filter(function (r) { return !listEnt.scope.test(r); });
+        scopeHtml = '<div class="scopebar" role="group" aria-label="' + esc(listEnt.label) + ' 범위">' +
+          [['real', listEnt.scope.real, nReal], ['sample', listEnt.scope.sample, exRows.length]].map(function (o) {
+            var on = cur === o[0];
+            return '<button class="chip' + (on ? ' is-on' : '') + '" type="button" data-listscope="' + o[0] + '" aria-pressed="' + on + '">' +
+              esc(o[1]) + '<span class="chip__n">' + o[2] + '</span></button>';
+          }).join('') +
+          (cur === 'sample' ? '<span class="scopebar__note">' + esc(listEnt.scope.note) + '</span>' : '') + '</div>';
+      }
+    }
 
     /* 요약 숫자 — 정의한 항목에서만. 카드가 걸러 보기를 겸합니다.
          { all: true }        누르면 요약이 거는 조건을 모두 풉니다('전체')
@@ -1885,7 +1963,7 @@
       (filtered ? ' <button class="linkreset" type="button" data-listreset>초기화</button>' : '') + '</p>';
 
     if (!rows.length) {
-      host.innerHTML = '<div class="page">' + head + tabsHtml + sumHtml + toolsHtml +
+      host.innerHTML = '<div class="page">' + head + tabsHtml + scopeHtml + sumHtml + toolsHtml +
         '<div class="state state--empty"><span class="state__icon">' + ICON_EMPTY + '</span>' +
         '<p class="state__title">조건에 맞는 항목이 없습니다.</p>' +
         '<p class="state__hint">검색어나 걸러 보기를 바꿔 보세요.</p>' +
@@ -1908,16 +1986,16 @@
         return '<h2 class="listgroup">' + esc(g.label) +
           '<span class="listgroup__n">' + g.items.length + '</span></h2>' +
           '<div class="list">' + g.items.map(function (r) {
-            return listRow(listEnt, r, all.indexOf(r), all.length);
+            return listRow(listEnt, r, full.indexOf(r), full.length);
           }).join('') + '</div>';
       }).join('');
     } else {
       body = '<div class="list">' + rows.map(function (r) {
-        return listRow(listEnt, r, all.indexOf(r), all.length);
+        return listRow(listEnt, r, full.indexOf(r), full.length);
       }).join('') + '</div>';
     }
 
-    host.innerHTML = '<div class="page">' + head + tabsHtml + sumHtml + toolsHtml + countHtml + body + '</div>';
+    host.innerHTML = '<div class="page">' + head + tabsHtml + scopeHtml + sumHtml + toolsHtml + countHtml + body + '</div>';
     fitPlaceholder();
     paintNav();
   }
@@ -2640,6 +2718,17 @@
       var ls = t.closest('[data-liststatus]');
       if (ls) { listStatus = ls.dataset.liststatus; renderPanel(); return; }
 
+      // 범위(부스: 실제 부스 · 예시 · 보관). 범위마다 구역 · 요약이 달라 걸러 보기는 풉니다(검색어는 그대로).
+      var sc = t.closest('button[data-listscope]');
+      if (sc) {
+        var scKey = listKey();
+        if (listScope[scKey] !== sc.dataset.listscope) { listScope[scKey] = sc.dataset.listscope; listStatus = '전체'; listF = {}; }
+        renderPanel();
+        var scAgain = $('#view button[data-listscope="' + sc.dataset.listscope + '"]');
+        if (scAgain) scAgain.focus();
+        return;
+      }
+
       // 걸러 보기 칩(날짜 · 구역). 고른 칩을 다시 누르면 '전체' 로 돌아갑니다.
       var lf = t.closest('button[data-listf]');
       if (lf) {
@@ -2687,7 +2776,8 @@
         var key = listKey();
         var i = Number(rowEl.dataset.i);
         var row = (cache[key] || [])[i];
-        if (!row) return;
+        // 줄의 id 와 다르면(목록이 그사이 바뀌었거나 번호가 어긋남) 엉뚱한 줄에 작업하지 않고 멈춥니다.
+        if (!row || String(row.id) !== rowEl.dataset.id) return;
 
         /* ⋯ 는 그 줄의 나머지 작업을 펼칩니다. 삭제와 순서 바꾸기를
            늘 꺼내 두면 자주 쓰는 '수정' 이 묻히고, 실수로 누르기도
