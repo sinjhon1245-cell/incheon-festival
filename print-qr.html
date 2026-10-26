@@ -2024,10 +2024,11 @@
       paintPinChips();
       paintPinPanel();
     }
-    // 인쇄 방식을 바꿀 때 · 인쇄를 마친 뒤 상태를 새로 읽습니다(읽은 결과는 PIN 관리 모듈이 noteStates 로 건넴).
+    // 인쇄 방식을 바꿀 때 · 인쇄를 마친 뒤 상태를 새로 읽어 바로 반영합니다(페이지를 열 때는 PIN 관리 모듈이 읽은 것을 noteStates 로 받음).
     function refreshPinPreview() {
       if (!PIN.creds || S.ops.state !== 'ready' || !S.booths) return;
-      PIN.creds().then(null, function () { /* 상태 표만 못 그림 — 인쇄는 그때 다시 확인 */ });
+      var gen = PIN.gen;
+      PIN.creds().then(function (cred) { if (gen === PIN.gen) applyStates(cred); }, function () { /* 상태 표만 못 그림 — 인쇄는 그때 다시 확인 */ });
     }
     // 카드 아래(화면에만 · 인쇄 · 인쇄 화면으로 보기에서 숨는 .kst) PIN 상태 표. 카드(article)는 건드리지 않습니다.
     var PIN_CHIP = { on: ['발급됨', 'is-on'], off: ['꺼짐', 'is-off'], none: ['미발급', 'is-no'] };
