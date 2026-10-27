@@ -407,11 +407,12 @@
      ST = 운영 상태 여섯 칸(마지막 입력 기준, 서로 겹치지 않음). 열쇠는 tone() 과 같은 값입니다. */
   var ST = [['free', '여유'], ['normal', '보통'], ['busy', '혼잡'], ['pause', '일시 중단'], ['closed', '운영 종료'], ['missing', '미입력']];
   function stateCount(rs) {
-    var c = { total: rs.length, stale: 0, staleOpen: 0, stalePause: 0, qr: 0, pin: 0 };
+    var c = { total: rs.length, hid: 0, stale: 0, staleOpen: 0, stalePause: 0, qr: 0, pin: 0 };
     ST.forEach(function (x) { c[x[0]] = { n: 0, old: 0 }; });
     rs.forEach(function (r) {
       var k = c[tone(r)] ? tone(r) : 'missing';
       c[k].n++;
+      if (!r.shown) c.hid++;
       if (r.stale) { c[k].old++; c.stale++; if (r.state === 'open') c.staleOpen++; else if (r.state === 'pause') c.stalePause++; }
       if (r.qrIssue) c.qr++;
       if (r.pinIssue) c.pin++;
@@ -445,10 +446,14 @@
       '</button>';
     }).join('');
     var allOn = ui.view === 'live' && ui.quick === 'all';
+    // 셈의 범위를 이름에 씁니다 — 평소 '공개 부스', 비공개 · 미배정도 볼 때 '전체 부스' + 몇 곳이 섞였는지(구역 현황에서도 끌 수 있게)
+    var hid = ui.hidden
+      ? '<button class="ost__hid" type="button" data-hidden-off>비공개 · 미배정 <b>' + c.hid + '</b>곳 포함<span>공개 부스만 보기</span></button>' : '';
     return '<section class="opanel ost" aria-label="운영 상태">' +
       '<div class="opanel__head"><h2 class="opanel__t">운영 상태</h2>' +
-        '<span class="opanel__cap">마지막 입력 기준 · <span class="dashkey">점선</span> = ' + mins + '분 넘게 그대로</span>' +
-        '<button class="ost__all' + (allOn ? ' is-on' : '') + '" type="button" data-quick="all" aria-pressed="' + allOn + '">전체 부스 <b>' + c.total + '</b>곳</button></div>' +
+        '<span class="opanel__cap">마지막 입력 기준 · <span class="dashkey">점선</span> = ' + mins + '분 넘게 그대로</span>' + hid +
+        '<button class="ost__all' + (allOn ? ' is-on' : '') + '" type="button" data-quick="all" aria-pressed="' + allOn + '">' +
+          (ui.hidden ? '전체 부스' : '공개 부스') + ' <b>' + c.total + '</b>곳</button></div>' +
       '<div class="ost__grid" role="group" aria-label="운영 상태로 걸러 보기">' + cells + '</div>' +
       stBar(c) +
     '</section>';
@@ -470,9 +475,9 @@
         (c.qr || ui.quick === 'qr' ? todoBtn('qr', 'QR 준비 필요', c.qr, 'QR이 없거나 꺼져 있고 PIN도 없음', 'qr') : '') +
         (c.pin || ui.quick === 'pin' ? todoBtn('pin', 'PIN 확인', c.pin, '1시간 PIN 실패 ' + PIN_FAIL_WARN + '번 이상', 'pin') : '') +
       '</div>' +
-      // 아직 없는 기능 — 누를 수 없고 '준비 중' 이라고 씁니다(확인 시각 전용 DB 함수 · 알림 저장/발송 승인 뒤 구현)
+      // 아직 없는 기능 — 누를 수 없고 '준비 중' 이라고 씁니다(관리자 확인 기록 DB 함수 · 알림 저장/발송 승인 뒤 구현)
       '<div class="oact__soon">' +
-        '<button class="soon" type="button" disabled title="확인 시각만 바꾸는 DB 함수 승인 뒤 구현">일괄 확인<span>준비 중</span></button>' +
+        '<button class="soon" type="button" disabled title="관리자 확인 기록(현황 값 · 입력 시각은 그대로) DB 함수 승인 뒤 구현">일괄 확인<span>준비 중</span></button>' +
         '<button class="soon" type="button" disabled title="알림 저장 · 발송 기능 승인 뒤 구현">운영자 알림<span>준비 중</span></button>' +
       '</div>' +
     '</section>';
@@ -588,7 +593,10 @@
     var q = QUICK.concat([['qr', 'QR 준비 필요'], ['pin', 'PIN 확인']]).filter(function (o) { return o[0] === ui.quick; })[0];
     if (ui.quick !== 'all' && q) {
       act.hidden = false;
-      act.innerHTML = '<span class="lvactive__t"><b>' + esc(q[1]) + '</b>만 보는 중 · ' + rows.length + '곳</span>' +
+      // 여유 · 보통 · 혼잡 · 중단은 마지막 입력 기준이라 30분 넘은 값이 섞일 수 있습니다 — 몇 곳인지 함께 씁니다.
+      var oldN = ui.quick === 'stale' ? 0 : rows.filter(function (r) { return r.stale; }).length;
+      act.innerHTML = '<span class="lvactive__t"><b>' + esc(q[1]) + '</b>만 보는 중 · ' + rows.length + '곳' +
+          (oldN ? '<span class="lvactive__o">그중 확인 필요 ' + oldN + '곳</span>' : '') + '</span>' +
         '<button class="lvactive__x" type="button" data-quick="all">전체 보기</button>';
     } else {
       act.hidden = true;
@@ -1313,6 +1321,7 @@
         return;
       }
       if (t.closest('#lv-hidden')) { ui.hidden = !ui.hidden; paintLive(); return; }
+      if (t.closest('[data-hidden-off]')) { ui.hidden = false; paint(); return; }
       if (t.closest('[data-reset]')) { ui.quick = 'all'; ui.zone = ''; ui.q = ''; var qi = $('#lv-q'); if (qi) qi.value = ''; paint(); return; }
       var qb = t.closest('[data-quick]');
       if (qb) {
