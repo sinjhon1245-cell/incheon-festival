@@ -345,6 +345,17 @@
 .pwbox__eye:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
 .pwbox__eye svg { display: block; }
 
+/* 관리자 전용 메뉴 표시 모드: 부스 전용 / 전체 메뉴 선택기 */
+.menu-mode { display: flex; flex-direction: column; gap: 7px; padding-top: 12px; margin: 4px 0 8px; border-top: 1px solid var(--line-2); }
+.menu-mode__label { margin: 0; font-size: 12px; font-weight: 700; color: var(--muted); }
+.menu-mode__choices { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 3px; padding: 3px; border-radius: 10px; background: var(--bg-sink); }
+.menu-mode__choices button { border: 1px solid transparent; border-radius: 8px; min-height: 36px; padding: 4px 5px; font: inherit; font-size: 12px; font-weight: 700; color: var(--muted); background: transparent; cursor: pointer; }
+.menu-mode__choices button[aria-pressed="true"] { background: #fff; border-color: var(--line); color: var(--primary); box-shadow: 0 1px 3px rgba(20, 30, 60, .08); }
+.menu-mode__choices button:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+.menu-mode__choices button:disabled { opacity: .55; cursor: wait; }
+.menu-mode__hint { margin: 0; font-size: 11px; line-height: 1.5; color: var(--muted-2); }
+.sheet__acct .menu-mode__choices button { min-height: 44px; }
+
 /* ── 더보기 시트의 계정 칸(휴대폰) ─────────────────────────────── */
 .sheet__acct { display: flex; flex-direction: column; gap: 8px; padding-top: 12px; border-top: 1px solid var(--line-2); }
 .sheet__who { margin: 0; font-size: 13px; color: var(--muted); }
