@@ -1122,7 +1122,7 @@
     var kinds = NT_KINDS.map(function (k) {
       var on = notice.kind === k[0];
       return '<button class="ntk' + (on ? ' is-on' : '') + '" type="button" role="radio" aria-checked="' + on + '" data-nkind="' + k[0] + '">' +
-        '<span>' + esc(k[1]) + '</span>' + (k[0] === 'zone' ? '' : '<b>' + cnt[k[0]] + '</b>곳') + '</button>';
+        '<span>' + esc(k[1]) + '</span>' + (k[0] === 'zone' ? '' : '<span class="ntk__n"><b>' + cnt[k[0]] + '</b>곳</span>') + '</button>';
     }).join('');
     var zsel = notice.kind === 'zone'
       ? '<label class="listsel ntzone"><span class="sr-only">구역</span><select class="select select--sm" id="nt-zone"><option value="">구역 고르기</option>' +
