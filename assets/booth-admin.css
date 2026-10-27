@@ -187,27 +187,105 @@
 .lv__links { display: flex; flex-wrap: wrap; gap: 6px; }
 .lv__links .btn { min-height: 40px; }
 
-/* ── 구역 현황 ─────────────────────────────────────────────── */
-.zgrid { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+/* ── 구역 현황 ─────────────────────────────────────────────────
+   카드 한 장 = 한 구역. 위에서 아래로 시선이 흐르는 순서대로
+     구역 코드 · 부스 수 → 혼잡 · 최장 대기(가장 큰 두 숫자) → 최장 대기 부스(한 줄) → 상태 막대 → 상태 수 2×2 → 확인 필요 띠
+   어느 카드든 칸의 높이가 같아(긴 이름은 한 줄에서 …) 네 구역을 가로로 견주기 쉽습니다.
+   색: 혼잡 · 확인 필요 = 빨강, 미입력 = 주황, 중단 · 마감 = 회색, 운영 중 = 초록 — 부스 운영 현황과 같은 뜻. 0 은 흐리게. */
+.zgrid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); }
+/* 구역 4개(리허설 R1~R4): 넓은 화면은 한 줄에 4장, 그보다 좁으면 2장, 휴대폰은 1장 */
+.zgrid--4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (min-width: 1280px) { .zgrid--4 { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+@media (max-width: 560px) { .zgrid--4 { grid-template-columns: minmax(0, 1fr); } }
+
+/* 모든 구역에 같은 이름(리허설 임시구역 안내)을 카드 위에 한 번만 — 리허설 관리 칸과 같은 왼쪽 주황 선 */
+.znote { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; margin: -2px 0 0; padding: 9px 14px;
+  background: #fff; border: 1px solid var(--line); border-left: 3px solid var(--warn); border-radius: 10px;
+  font-size: 13.5px; line-height: 1.5; color: var(--ink-2); }
+.znote b { font-weight: 800; color: var(--ink); letter-spacing: -0.01em; }
+
 .zc {
-  display: flex; flex-direction: column; gap: 10px; min-width: 0; padding: 14px 16px; text-align: left;
+  display: flex; flex-direction: column; min-width: 0; padding: 16px 18px 0; overflow: hidden; text-align: left;
   background: #fff; border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--sh);
   font: inherit; color: var(--ink); cursor: pointer;
 }
+.zc.is-attn { border-color: #E9BCC4; }
 .zc:hover, .zc:focus-visible { border-color: var(--primary); }
-.zc__head { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
-.zc__key { font-size: 22px; font-weight: 800; color: var(--primary); }
-.zc__label { flex: 1; min-width: 0; font-size: 15.5px; font-weight: 700; overflow-wrap: anywhere; }
-.zc__all { font-size: 12.5px; color: var(--muted); white-space: nowrap; }
-.zc__top { font-size: 13.5px; color: var(--ink-2); line-height: 1.5; }
-.zc__top b { font-size: 17px; color: var(--ink); }
-.zc__nums { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
-.zc__n { display: flex; flex-direction: column; padding: 6px 8px; border-radius: 8px; background: var(--bg-sink);
-  font-size: 12px; font-weight: 600; color: var(--muted); }
-.zc__n b { font-size: 17px; font-weight: 800; color: var(--ink-2); font-variant-numeric: tabular-nums; }
-.zc__n.is-ok b { color: var(--ok); }
-.zc__n.is-bad b { color: var(--danger); }
-.zc__n.is-warn b { color: var(--warn); }
+.zc:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.zc > span { display: block; min-width: 0; }
+
+/* 머리: 구역 코드(크게) · 이름 또는 리허설 표 · 부스 수 */
+.zc .zc__head { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; min-height: 34px; }
+.zc__key { font-size: 30px; font-weight: 800; line-height: 1; letter-spacing: -0.04em; color: var(--ink); font-variant-numeric: tabular-nums; }
+.zc__id { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.zc__tag { flex: none; padding: 1px 7px; border-radius: 6px; background: var(--warn-t); color: var(--warn);
+  font-size: 12px; font-weight: 700; line-height: 1.5; }
+.zc__name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14.5px; font-weight: 700; color: var(--ink-2); }
+.zc__all { font-size: 13px; font-weight: 600; color: var(--ink-2); white-space: nowrap; }
+.zc__all b { font-size: 15px; font-weight: 800; color: var(--ink); font-variant-numeric: tabular-nums; }
+
+/* 가장 큰 두 숫자: 혼잡 부스 수 · 최장 대기 */
+.zc .zc__kpis { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line-2); }
+.zk { display: flex; flex-direction: column; gap: 2px; min-width: 0; container-type: inline-size; }
+.zk + .zk { padding-left: 14px; border-left: 1px solid var(--line-2); }
+.zk__l { font-size: 13px; font-weight: 700; color: var(--ink-2); }
+.zk__v { display: flex; align-items: baseline; gap: 2px; min-height: 44px; white-space: nowrap; }
+.zk__v b { font-size: 40px; font-weight: 800; line-height: 1.1; letter-spacing: -0.045em; color: var(--ink); font-variant-numeric: tabular-nums; }
+.zk__v.is-word b { font-size: 30px; letter-spacing: -0.03em; }
+.zk__v small { font-size: 14px; font-weight: 700; color: var(--ink-2); }
+/* '60분 이상' 은 칸이 좁을 때(4열 · 1280px 안팎)만 조금 작게 — 넘치지 않게 */
+@container (max-width: 96px) {
+  .zk__v.is-over b { font-size: 31px; }
+  .zk__v.is-over small { font-size: 12.5px; }
+}
+.zk__s { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; font-weight: 600; color: var(--muted); }
+.zk--busy.is-on b { color: var(--danger); }
+.zk--busy.is-zero b, .zk--t-none b { color: var(--muted-2); }
+.zk--t-busy b { color: var(--danger); }
+.zk--t-free b { color: var(--ok); }
+/* 보통은 노랑이 흰 바탕 글자로 읽히지 않아 남색(부스 줄과 같음) */
+.zk--t-normal b { color: var(--ink); }
+
+/* 최장 대기 부스 — 한 줄. 길면 … (전체 이름은 title · 카드를 눌러 그 구역 목록에서) */
+.zc .zc__top { display: flex; align-items: baseline; gap: 6px; margin-top: 12px; padding: 7px 10px; overflow: hidden; white-space: nowrap;
+  border-radius: 8px; background: var(--bg-soft); font-size: 13.5px; line-height: 1.45; }
+.zc__topk { flex: none; font-size: 12px; font-weight: 700; color: var(--muted); }
+.zc__topc { flex: none; font-weight: 800; color: var(--ink); font-variant-numeric: tabular-nums; }
+.zc__topn { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-weight: 600; color: var(--ink-2); }
+
+/* 상태 막대 — 부스 한 곳 = 한 칸(혼잡은 운영 중 칸의 앞쪽) */
+.zc .zbar { display: flex; gap: 2px; height: 8px; margin-top: 14px; border-radius: 4px; overflow: hidden; background: var(--line-2); }
+.zbar__s { display: block; min-width: 3px; }
+.zbar__s--busy { background: var(--danger); }
+.zbar__s--open { background: var(--ok); }
+.zbar__s--stale { background: repeating-linear-gradient(135deg, var(--danger) 0 3px, #E8A2AD 3px 6px); }
+.zbar__s--missing { background: #E3A93B; }
+.zbar__s--pause { background: var(--off); }
+.zbar__s--closed { background: #BCC4D6; }
+
+/* 상태 수 2×2 — 막대와 같은 색 네모 + 글자 */
+.zc .zc__sts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 14px; margin-top: 10px; }
+.zst { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 13px; font-weight: 600; color: var(--ink-2); white-space: nowrap; }
+.zst i { flex: none; width: 8px; height: 8px; border-radius: 2px; background: var(--c, var(--off)); }
+.zst b { margin-left: auto; font-size: 15px; font-weight: 800; color: var(--ink); font-variant-numeric: tabular-nums; }
+.zst--open { --c: var(--ok); }
+.zst--pause { --c: var(--off); }
+.zst--closed { --c: #BCC4D6; }
+.zst--missing { --c: #E3A93B; }
+.zst--missing:not(.is-zero) b { color: var(--warn); }
+.zst.is-zero, .zst.is-zero b { color: var(--muted-2); }
+.zst.is-zero i { opacity: .45; }
+
+/* 확인 필요 — 1곳 이상이면 카드 아래 빨간 띠(둘째 줄 = 그 안의 운영 중 · 중단, 위 상태 수에서 제외), 0 이면 조용히.
+   띠 높이는 두 줄 기준으로 늘 같습니다(같은 줄의 카드 높이를 맞춤). */
+.zc .zc__attn { display: flex; flex-direction: column; justify-content: center; gap: 2px; min-height: 60px; margin: 14px -18px 0; padding: 8px 18px;
+  border-top: 1px solid var(--line-2); font-size: 13px; font-weight: 600; color: var(--muted-2); white-space: nowrap; overflow: hidden; }
+.zc .zc__attn.is-on { background: var(--danger-t); border-top-color: #F3D3D8; color: var(--danger); font-weight: 700; }
+.zc__attnr { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+.zc__attn b { font-size: 16px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.zc__attnh { margin-left: auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 12px; font-weight: 600; }
+.zc__attnx { font-size: 12.5px; font-weight: 600; color: #8E2233; }
+.zc__attnx b { font-size: 13.5px; }
 
 /* ── 데스크톱: 표처럼 한 줄(약 64px) ─────────────────────────────────
    옆 메뉴가 생기는 1024px 부터. 부스 · 운영상태 · 대기시간 · 마지막 입력 · 확인할 것 · 관리.
