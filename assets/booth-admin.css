@@ -24,21 +24,94 @@
 .lvpin b { font-weight: 700; color: var(--ink-2); font-variant-numeric: tabular-nums; }
 .lvpin a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
 
-/* 요약 숫자 = 걸러 보기 단추. 화면을 덮지 않게 작게. */
-.sumgrid { grid-template-columns: repeat(auto-fit, minmax(84px, 1fr)); gap: 6px; }
-.sum { padding: 8px 10px; min-height: 56px; border-radius: 10px; }
-.sum .mini__n { font-size: 19px; }
-.sum .mini__l { font-size: 12.5px; }
-.sum--ok .mini__n { color: var(--ok); }
-.sum--warn .mini__n { color: var(--warn); }
-.sum--danger .mini__n { color: var(--danger); }
-.sum--normal .mini__n { color: var(--ink); }
-/* 여유 · 보통 · 혼잡(최근 확인) — 낱말 앞 작은 네모(줄의 표 · 구역 현황 막대와 같은 색) */
-.sum[data-quick="free"] .mini__l::before, .sum[data-quick="normal"] .mini__l::before, .sum[data-quick="busy"] .mini__l::before {
-  content: ''; display: inline-block; width: 8px; height: 8px; margin-right: 5px; border-radius: 2px; vertical-align: 1px; background: var(--ok); }
-.sum[data-quick="normal"] .mini__l::before { background: #F2E600; box-shadow: inset 0 0 0 1px rgba(22, 32, 60, .28); }
-.sum[data-quick="busy"] .mini__l::before { background: var(--danger); }
-.sum.is-zero .mini__l::before { opacity: .45; }
+/* 흰 바탕 — 회색 판 위에 흰 카드를 겹치지 않고, 칸은 테두리와 상태색 윗선으로만 나눕니다(뿌옇지 않게) */
+body { background: #fff; }
+
+/* ── 운영 상태 · 관리 조치(부스 운영 현황 · 구역 현황 맨 위) ──────────────
+   상태색: 여유 초록 · 보통 노랑(수는 남색) · 혼잡 빨강 · 중단 회색 · 종료 옅은 회색 · 미입력 주황.
+   30분 넘게 그대로인 값은 막대에서 옅은 색, 칸 아래 점선 '확인 필요 ○', 칸의 부스가 모두 그렇다면 수를 흐리게. */
+.st--free, .zst--free       { --c: var(--ok);     --cn: var(--ok);     --co: #A9D6C3; }
+.st--normal, .zst--normal   { --c: #F2E600;       --cn: var(--ink);    --co: #F6EE9A; }
+.st--busy, .zst--busy       { --c: var(--danger); --cn: var(--danger); --co: #E9AAB4; }
+.st--pause, .zst--pause     { --c: var(--off);    --cn: var(--ink);    --co: #BCC3D3; }
+.st--closed, .zst--closed   { --c: #BCC4D6;       --cn: var(--ink-2);  --co: #DDE2EC; }
+.st--missing, .zst--missing { --c: #E3A93B;       --cn: var(--warn);   --co: #F1D29A; }
+
+.odash { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+@media (min-width: 1280px) { .odash { grid-template-columns: minmax(0, 1fr) minmax(300px, 340px); align-items: start; } }
+.opanel { min-width: 0; padding: 16px 18px; background: #fff; border: 1px solid var(--line); border-radius: 12px; }
+.opanel__head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; margin-bottom: 12px; }
+.opanel__t { margin: 0; font-size: 17px; font-weight: 800; letter-spacing: -0.02em; color: var(--ink); }
+.opanel__cap { font-size: 13px; font-weight: 600; color: var(--ink-2); }
+.dashkey { display: inline-block; padding: 0 6px; border: 1.5px dashed var(--ink-2); border-radius: 4px; line-height: 1.4; }
+
+/* 전체 부스 — 머리 오른쪽의 큰 수(누르면 걸러 보기 해제) */
+.ost__all { margin-left: auto; display: inline-flex; align-items: baseline; gap: 4px; min-height: 36px; padding: 2px 12px;
+  background: #fff; border: 1px solid var(--line); border-radius: 999px; font: inherit; font-size: 14px; font-weight: 700; color: var(--ink-2); cursor: pointer; }
+.ost__all b { font-size: 22px; font-weight: 800; letter-spacing: -0.03em; color: var(--ink); font-variant-numeric: tabular-nums; }
+.ost__all:hover { border-color: var(--primary); }
+.ost__all.is-on { border-color: var(--primary); background: var(--primary-t); }
+
+/* 상태 여섯 칸 — 윗선 = 상태색, 큰 수, 아래 점선 '확인 필요 ○'(있을 때만) */
+.ost__grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+@media (min-width: 700px) { .ost__grid { grid-template-columns: repeat(6, minmax(0, 1fr)); } }
+.st { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 0; min-height: 96px; padding: 10px 12px;
+  text-align: left; background: #fff; border: 1px solid var(--line); border-top: 4px solid var(--c); border-radius: 10px;
+  font: inherit; color: var(--ink); cursor: pointer; }
+.st:hover { border-color: var(--primary); border-top-color: var(--c); }
+.st:focus-visible, .todo:focus-visible, .ost__all:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.st.is-on { background: var(--primary-t); border-color: var(--primary); border-top-color: var(--c); }
+.st__l { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; overflow: hidden; white-space: nowrap; font-size: 14px; font-weight: 700; color: var(--ink); }
+.st__l i { flex: none; width: 9px; height: 9px; border-radius: 2px; background: var(--c); }
+.st--normal .st__l i, .zst--normal { box-shadow: inset 0 0 0 1px rgba(22, 32, 60, .28); }
+.st__n { font-size: 32px; font-weight: 800; line-height: 1.08; letter-spacing: -0.04em; color: var(--cn); font-variant-numeric: tabular-nums; }
+.st__o { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 6px; border: 1.5px dashed var(--muted-2);
+  border-radius: 4px; font-size: 12px; font-weight: 700; line-height: 1.5; color: var(--ink-2); }
+.st__o:empty { visibility: hidden; }
+.st.is-zero { border-top-color: var(--line); }
+.st.is-zero .st__n, .st.is-old .st__n { color: var(--muted-2); }
+.st.is-zero .st__l { color: var(--ink-2); }
+.st.is-zero .st__l i { opacity: .4; }
+
+/* 상태 막대 — 칸마다 최근 확인(진한 색) · 30분 넘은 값(옅은 색) */
+.stbar { display: flex; gap: 2px; height: 10px; margin-top: 12px; border-radius: 5px; overflow: hidden; background: var(--line-2); }
+.stbar__s { display: block; min-width: 3px; }
+.stbar__s--free { background: var(--ok); }
+.stbar__s--normal { background: #F2E600; }
+.stbar__s--busy { background: var(--danger); }
+.stbar__s--pause { background: var(--off); }
+.stbar__s--closed { background: #BCC4D6; }
+.stbar__s--missing { background: #E3A93B; }
+.stbar__s--free-old { background: #A9D6C3; }
+.stbar__s--normal-old { background: #F6EE9A; }
+.stbar__s--busy-old { background: #E9AAB4; }
+.stbar__s--pause-old { background: #BCC3D3; }
+.stbar__s--closed-old { background: #DDE2EC; }
+
+/* 관리 조치 — 한 줄 = 할 일 하나(누르면 그 부스만). 왼쪽 선 = 주황(데이터 점검) · 빨강(PIN 장애) */
+.oact__list { display: grid; gap: 8px; }
+/* 운영 상태 아래에 놓일 때(1279px 이하)는 할 일을 가로로 나란히 — 세로로 길어지지 않게 */
+@media (min-width: 700px) and (max-width: 1279px) { .oact__list { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); } }
+.todo { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "l n" "s go"; align-items: baseline; gap: 0 12px;
+  min-width: 0; padding: 10px 14px; text-align: left; background: #fff; border: 1px solid var(--line); border-left: 4px solid var(--c);
+  border-radius: 10px; font: inherit; color: var(--ink); cursor: pointer; }
+.todo:hover { border-color: var(--primary); border-left-color: var(--c); }
+.todo.is-on { background: var(--primary-t); border-color: var(--primary); border-left-color: var(--c); }
+.todo--stale, .todo--missing, .todo--qr { --c: var(--warn); --cn: var(--warn); }
+.todo--missing { --c: #E3A93B; }
+.todo--pin { --c: var(--danger); --cn: var(--danger); }
+.todo.is-zero { --c: var(--line); --cn: var(--muted-2); }
+.todo__l { grid-area: l; font-size: 15px; font-weight: 800; color: var(--ink); }
+.todo__n { grid-area: n; justify-self: end; font-size: 28px; font-weight: 800; line-height: 1.1; letter-spacing: -0.03em; color: var(--cn); font-variant-numeric: tabular-nums; }
+.todo__n::after { content: '곳'; margin-left: 2px; font-size: 13px; font-weight: 700; letter-spacing: 0; color: var(--ink-2); }
+.todo__s { grid-area: s; min-width: 0; font-size: 12.5px; font-weight: 600; line-height: 1.45; color: var(--ink-2); }
+.todo__go { grid-area: go; justify-self: end; font-size: 13px; font-weight: 700; color: var(--primary); white-space: nowrap; }
+/* 아직 없는 기능 — 누를 수 없음 · '준비 중' */
+.oact__soon { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--line); }
+.soon { display: inline-flex; align-items: center; gap: 8px; min-height: 36px; padding: 4px 10px; background: #fff; border: 1px dashed var(--line);
+  border-radius: 8px; font: inherit; font-size: 13.5px; font-weight: 700; color: var(--muted); cursor: not-allowed; }
+.soon span { padding: 0 6px; border-radius: 4px; background: var(--bg-soft); font-size: 11.5px; font-weight: 700; line-height: 1.6; color: var(--ink-2); }
+
 /* 운영 시간 밖(행사 전 · 문 열기 전 · 운영 끝 · 행사 끝) — 까닭 한 줄 + 확인 필요를 주황 대신 회색으로(수 · 판정은 그대로) */
 .lvoff { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; margin: -4px 0 0; padding: 9px 14px;
   background: var(--bg-soft); border-left: 3px solid var(--off); border-radius: 8px; font-size: 13px; line-height: 1.5; color: var(--muted); }
@@ -46,14 +119,7 @@
 .lvoff b { font-weight: 800; color: var(--ink-2); }
 .lvpage.is-off .flag--stale { background: var(--bg-sink); color: var(--muted); font-weight: 600; }
 .lvpage.is-off .is-stale .lv__agov { color: var(--ink-2); font-weight: 600; }
-.lvpage.is-off .sum[data-quick="stale"] .mini__n { color: var(--ink-2); }
-.lvpage.is-off .zi--stale.is-on { background: var(--bg-soft); }
-.lvpage.is-off .zi--stale.is-on .zi__n, .lvpage.is-off .zi--stale.is-on .zi__l { color: var(--ink-2); }
-.lvpage.is-off .zi--stale.is-on .zi__s { color: var(--muted); }
-/* 요약 위 한 줄 — 여유 · 보통 · 혼잡이 무엇을 세는지 */
-.lvsumcap { margin: -6px 2px -4px; font-size: 12.5px; color: var(--muted); }
-.lvsumcap b { font-weight: 700; color: var(--ink-2); }
-.sum.is-zero .mini__n { color: var(--muted-2); }
+.lvpage.is-off .todo--stale:not(.is-zero) { --c: var(--off); --cn: var(--ink-2); }
 
 /* 검색 · 구역 · 정렬 */
 .lvtools { gap: 8px; }
@@ -245,90 +311,6 @@
   font-size: 13.5px; line-height: 1.5; color: var(--ink-2); }
 .znote b { font-weight: 800; color: var(--ink); letter-spacing: -0.01em; }
 
-/* 색 — 막대 칸 · 네모 표가 같은 값을 씁니다 */
-.lvpage { --z-open: var(--ok); --z-old: #A9D6C3; --z-busy: var(--danger); --z-pause: var(--off); --z-closed: #BCC4D6; --z-missing: #E3A93B; }
-
-/* 상태 막대 */
-.zbar { display: flex; gap: 2px; height: 8px; border-radius: 4px; overflow: hidden; background: var(--line-2); }
-.zbar__s { display: block; min-width: 3px; }
-.zbar__s--busy { background: var(--z-busy); }
-.zbar__s--open { background: var(--z-open); }
-.zbar__s--old { background: var(--z-old); }
-.zbar__s--pause { background: var(--z-pause); }
-.zbar__s--closed { background: var(--z-closed); }
-.zbar__s--missing { background: var(--z-missing); }
-
-/* 상태 수 한 칸 — 네모 + 낱말 + 수 */
-.zs { display: flex; align-items: center; gap: 6px; min-width: 0; white-space: nowrap; }
-.zs__l { display: inline-flex; align-items: center; gap: 6px; min-width: 0; font-size: 13px; font-weight: 600; color: var(--ink-2); }
-.zs__l i { flex: none; width: 8px; height: 8px; border-radius: 2px; background: var(--c); }
-.zs__n { margin-left: auto; font-size: 17px; font-weight: 800; color: var(--ink); font-variant-numeric: tabular-nums; }
-.zs--open { --c: var(--z-open); }
-.zs--pause { --c: var(--z-pause); }
-.zs--closed { --c: var(--z-closed); }
-.zs--missing { --c: var(--z-missing); }
-.zs--missing:not(.is-zero) .zs__n { color: var(--warn); }
-.zs.is-zero .zs__l, .zs.is-zero .zs__n { color: var(--muted-2); }
-.zs.is-zero i { opacity: .45; }
-
-/* 겹치는 지표 한 칸 — 혼잡(최근 확인) · 확인 필요(30분 이상 미갱신) */
-.zi { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "l n" "s s"; align-items: baseline; gap: 0 8px;
-  min-width: 0; margin: 0; padding: 8px 10px; border-radius: 8px; background: var(--bg-soft); }
-.zi__l { grid-area: l; font-size: 13px; font-weight: 700; color: var(--ink-2); white-space: nowrap; }
-.zi__n { grid-area: n; font-size: 20px; font-weight: 800; line-height: 1.15; color: var(--muted-2); font-variant-numeric: tabular-nums; }
-.zi__s { grid-area: s; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 600; color: var(--muted); }
-.zi--busy.is-on .zi__n { color: var(--danger); }
-.zi--stale.is-on { background: var(--warn-t); }
-.zi--stale.is-on .zi__n, .zi--stale.is-on .zi__l { color: var(--warn); }
-.zi--stale.is-on .zi__s { color: #7A4E05; }
-
-/* ── 전체 부스 현황 ── 관람객 첫 화면 요약(큰 수 · 분포 막대 · 네모 표)의 관리자판 */
-.zov { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; padding: 16px 18px;
-  background: #fff; border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--sh); }
-.zov__base { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
-.zov__head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 12px; }
-.zov__title { margin: 0; font-size: 17px; font-weight: 800; letter-spacing: -0.02em; color: var(--ink); }
-.zov__total { margin: 0; font-size: 13.5px; font-weight: 600; color: var(--ink-2); }
-.zov__total b { font-size: 22px; font-weight: 800; color: var(--ink); font-variant-numeric: tabular-nums; letter-spacing: -0.03em; }
-.zov__cap { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; margin: -4px 0 -4px; font-size: 12.5px; color: var(--muted); }
-.zov__cap b { font-size: 13px; font-weight: 800; color: var(--ink-2); }
-.zs__sub { font-size: 12px; font-weight: 600; color: var(--muted); white-space: nowrap; }
-.zs__sub b { font-weight: 800; color: var(--ink-2); font-variant-numeric: tabular-nums; }
-.zov__sts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
-.zs--lg { flex-direction: column; align-items: flex-start; gap: 2px; padding: 8px 10px; border-radius: 8px; background: var(--bg-soft); }
-.zs--lg .zs__n { margin-left: 0; font-size: 30px; line-height: 1.1; letter-spacing: -0.04em; }
-.zs--lg .zs__l { font-size: 13px; }
-.zov .zbar { height: 10px; border-radius: 5px; }
-.zov__key { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: -4px 0 0; font-size: 12.5px; font-weight: 600; color: var(--muted); }
-.zov__key span { display: inline-flex; align-items: center; gap: 6px; }
-.zov__key span:last-child { margin-left: auto; }
-.zsw { width: 14px; height: 8px; border-radius: 2px; }
-.zsw--open { background: var(--z-open); }
-.zsw--old { background: var(--z-old); }
-/* 겹치는 지표 — 왼쪽 점선으로 '상태와 다른 축' 임을 자리로 보입니다 */
-.zov__ind { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; align-content: start; min-width: 0;
-  padding-top: 12px; border-top: 1px dashed var(--line); }
-.zov__indh { grid-column: 1 / -1; margin: 0; font-size: 12.5px; font-weight: 700; color: var(--muted); }
-.zi--lg { padding: 10px 12px; }
-.zi--lg .zi__n { font-size: 28px; letter-spacing: -0.03em; }
-.zi--lg .zi__l { font-size: 14px; }
-.zi--lg .zi__s { white-space: normal; font-size: 12.5px; }
-.zov__terms { grid-column: 1 / -1; margin: -4px 0 -6px; font-size: 13px; color: var(--ink-2); }
-.zov__terms summary { display: inline-flex; align-items: center; min-height: 32px; font-weight: 700; color: var(--primary); cursor: pointer; }
-.zov__terms dl { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 4px 18px; margin: 4px 0 8px; }
-.zov__terms dl div { display: grid; grid-template-columns: 5.2em minmax(0, 1fr); gap: 8px; }
-.zov__terms dt { font-weight: 800; color: var(--ink); }
-.zov__terms dd { margin: 0; color: var(--ink-2); line-height: 1.5; }
-@media (min-width: 1024px) {
-  .zov { grid-template-columns: minmax(0, 1fr) minmax(260px, 340px); column-gap: 22px; }
-  .zov__ind { grid-template-columns: minmax(0, 1fr); padding: 0 0 0 20px; border-top: 0; border-left: 1px dashed var(--line); }
-}
-@media (max-width: 560px) {
-  .zov { padding: 14px; }
-  .zov__sts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .zov__key span:last-child { margin-left: 0; }
-}
-
 /* ── 구역 카드 ── */
 .zc {
   display: flex; flex-direction: column; min-width: 0; padding: 16px 18px 0; overflow: hidden; text-align: left;
@@ -349,15 +331,19 @@
 .zc__all { font-size: 13px; font-weight: 600; color: var(--ink-2); white-space: nowrap; }
 .zc__all b { font-size: 15px; font-weight: 800; color: var(--ink); font-variant-numeric: tabular-nums; }
 
-/* 마지막 입력 기준 — 막대 + 상태 수 2×2 */
-.zc .zc__cap { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line-2); font-size: 12px; font-weight: 700; color: var(--muted); }
-.zc .zbar { display: flex; margin-top: 8px; }
-.zc .zc__sts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 14px; margin-top: 10px; }
-
-/* 겹치는 지표 두 줄 — 한 줄에 낱말 · 설명 · 수(4열 카드에서도 '운영 중 19 · 중단 1' 이 잘리지 않게) */
-.zc .zc__ind { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; margin-top: 12px; }
-.zc .zi { grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "l s n"; align-items: center; gap: 0 8px; padding: 6px 10px; }
-.zc .zi__n { font-size: 18px; }
+/* 여유 · 보통 · 혼잡 · 중단 · 종료 다섯 칸(윗선 = 상태색) + 막대 + 미입력 · 확인 필요(회색, 강조 없음) */
+.zc .zc__sts { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; margin-top: 14px; }
+.zst { display: flex; flex-direction: column; gap: 2px; min-width: 0; padding-top: 6px; border-top: 3px solid var(--c); }
+.zst--normal { box-shadow: none; }
+.zst__l { overflow: hidden; white-space: nowrap; font-size: 13px; font-weight: 700; color: var(--ink); }
+.zst__l i { display: none; }
+.zst__n { font-size: 24px; font-weight: 800; line-height: 1.1; letter-spacing: -0.03em; color: var(--cn); font-variant-numeric: tabular-nums; }
+.zst.is-zero { border-top-color: var(--line); }
+.zst.is-zero .zst__n, .zst.is-old .zst__n { color: var(--muted-2); }
+.zc .stbar { display: flex; height: 8px; margin-top: 10px; }
+.zc .zc__foot { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 10px; font-size: 13px; font-weight: 600; color: var(--muted); }
+.zc__foot b { font-weight: 800; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.zc__miss.is-on, .zc__miss.is-on b { color: var(--warn); }
 
 /* 최장 대기 — 최근 확인된 값만 크게, 없으면 '최근 확인된 대기 없음' + 흐린 참고. 두 줄 높이 고정(카드 높이 맞춤) */
 .zc .zc__top { display: flex; flex-direction: column; justify-content: center; gap: 2px; min-height: 58px; margin: 14px -18px 0; padding: 8px 18px;
@@ -412,10 +398,10 @@
   font-size: 13.5px; font-weight: 700; color: var(--ink-2); cursor: pointer; }
 .zlong__ref summary span { font-size: 12.5px; font-weight: 600; color: var(--muted); }
 /* 펼침 표시(▸ 닫힘 · ▾ 열림) — summary 를 flex 로 두면 브라우저 기본 표시가 사라져 직접 그립니다 */
-.zlong__ref summary, .zov__terms summary { list-style: none; }
-.zlong__ref summary::-webkit-details-marker, .zov__terms summary::-webkit-details-marker { display: none; }
-.zlong__ref summary::before, .zov__terms summary::before { content: '▸'; display: inline-block; width: 1em; margin-right: 2px; color: var(--muted); }
-.zlong__ref[open] summary::before, .zov__terms[open] summary::before { content: '▾'; }
+.zlong__ref summary { list-style: none; }
+.zlong__ref summary::-webkit-details-marker { display: none; }
+.zlong__ref summary::before { content: '▸'; display: inline-block; width: 1em; margin-right: 2px; color: var(--muted); }
+.zlong__ref[open] summary::before { content: '▾'; }
 @media (min-width: 900px) {
   .zl { grid-template-columns: 64px minmax(0, 1fr) 44px 128px 132px 112px; grid-template-areas: "code name zone wait meta fresh"; min-height: 48px; }
   .zl__wait { justify-self: end; }
@@ -476,13 +462,12 @@
 }
 /* 1024~1279px: 옆 메뉴(224px)와 스크롤 막대를 빼면 표가 쓸 폭이 700px 안팎이라 칸을 좁힙니다. */
 @media (min-width: 1024px) and (max-width: 1279.98px) {
-  .lvpage { --lv-cols: minmax(140px, 2fr) 84px 76px 88px minmax(104px, 1.4fr) 118px; }
+  /* 대기 칸은 '45분 혼잡' 이 한 줄에 들어가게 96px(76px 이면 숫자가 한 자씩 줄바꿈되던 것을 고침) */
+  .lvpage { --lv-cols: minmax(130px, 2fr) 80px 96px 84px minmax(96px, 1.3fr) 118px; }
   .lvhead { gap: 10px; }
   .lv { gap: 0 10px; }
-}
-
-@media (max-width: 360px) {
-  .sumgrid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .lv__wait { gap: 4px; }
+  .lv__num { white-space: nowrap; }
 }
 
 /* 휴대폰: 문제 부스가 빨리 보이게 머리 설명을 줄입니다. */
@@ -491,9 +476,11 @@
   .lvpage .page__title { font-size: 21px; }
 }
 
-/* 휴대폰: 요약 카드 3칸 */
+/* 휴대폰: 운영 상태 · 관리 조치 칸의 안쪽 여백을 줄입니다 */
 @media (max-width: 560px) {
-  .sumgrid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .opanel { padding: 14px; }
+  .st { min-height: 88px; padding: 8px 10px; }
+  .st__n { font-size: 28px; }
 }
 
 /* 휴대폰: 머리의 작은 단추(새로 고침 · 부스 정보 관리)도 엄지로 누르기 쉬운 높이(44px)로 */
