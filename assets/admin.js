@@ -1650,7 +1650,7 @@
       ADMIN_MENU_MODE = storedMenuMode();
       toast(next === 'full' ? '전체 메뉴를 표시합니다. 다른 기기는 새로고침하면 반영됩니다.'
         : '부스 전용 메뉴를 표시합니다. 다른 기기는 새로고침하면 반영됩니다.');
-      if (next === 'booth-only' && !DEMO_KEYS.includes(current)) {
+      if (next === 'booth-only' && BOOTH_ONLY_TABS.indexOf(current) < 0) {
         // 감춘 페이지를 보고 있었다면 부스 관리로 이동합니다. 데이터는 그대로입니다.
         if (location.hash !== '#booths') location.hash = '#booths'; else go();
       } else paintNav();
