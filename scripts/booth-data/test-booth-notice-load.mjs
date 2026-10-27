@@ -80,14 +80,14 @@ async function onOps(jobsPerBooth) {
 await refill();
 const fp0 = await fp();
 const n1send = await send(A, 'all', '부하 시험 알림');
-const nid = n1send.find(r => r.status === 'queued').notice_id;
+const nid = Number(n1send.find(r => r.status === 'queued').notice_id);   // pg 는 bigint 를 글자로 돌려줌 — jsonb 의 id(숫자)와 견주려고 숫자로
 const lat = []; let errs = 0;
 const t0 = Date.now();
 await onOps(async (c, id) => {
   const o = [];
   for (let k = 0; k < POLLS; k++) {
     const s = Date.now(); const r = await settle(op(c, id, 'list')); lat.push(Date.now() - s);
-    if (!r.ok || !r.v.enabled || !r.v.notices.some(n => n.id === nid)) errs++;
+    if (!r.ok || !r.v.enabled || !r.v.notices.some(n => Number(n.id) === nid)) errs++;
     if (k === 0) { const r2 = await settle(op(c, id, 'shown', nid)); if (!r2.ok || !r2.v.ok) errs++; }
   }
   const r3 = await settle(op(c, id, 'ack', nid)); if (!r3.ok || !r3.v.ok) errs++;
