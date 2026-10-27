@@ -5,6 +5,7 @@
    공개 · 기관 · 담당자 · QR · PIN)은 관리자 화면(admin.html)이 맡고, 이 화면은
    대기 시간 · 혼잡 · 마지막 입력 · 미입력 · 확인 필요 · 중단 · 마감을 봅니다.
    고칠 수 있는 것은 하나뿐입니다 — 관리자 긴급 수정(admin_set_booth_live, 기록에 'admin').
+   '확인 필요' 일괄 확인(admin_confirm_booth_live)은 값을 고치지 않고 관리자 확인 기록(booth_live_check)만 남깁니다(아래 batch*).
    준비 기간 '예시 현황 채우기 · 비우기' 도 같은 함수를 [예시] 부스마다 부를 뿐입니다(아래 runExamples).
    행사 전 '리허설 관리'(실제 부스 84곳 채우기 · 비우기)는 같은 도구를 admin_rehearsal_set_live 로 부릅니다
    — 84곳 · 행사 전만 통과시키고 안에서 admin_set_booth_live 를 부르는 문지기 함수입니다(아래 runRehearsal).
@@ -14,6 +15,7 @@
 
    읽는 것 (실제 모드)
      · booth_live            15초마다(±20%, 화면이 가려지면 쉼) — 관람객 화면(60초)보다 빠르게
+     · admin_booth_live_checks()  booth_live 와 함께 — 관리자 확인 기록(함수가 없으면 일괄 확인 '준비 중')
      · zones · booths · admin_booth_credentials()   60초마다 — 관리자가 부스를 고칠 수 있어
        관람객 화면(5분)보다 자주. QR · PIN 은 '상태' 만 받습니다(열쇠 · PIN · 해시 없음).
      Realtime 은 쓰지 않습니다(관람객 · 운영자 화면과 같은 까닭 — booth-core.js 머리말).
@@ -53,7 +55,7 @@
          여섯 칸의 합 = 전체 부스. 30분 넘게 그대로인 값(확인 필요)도 마지막 상태로 세되 칸 아래 점선 '확인 필요 ○' 로 따로 쓰고,
          칸의 부스가 모두 오래된 값이면 수를 흐리게 — 오래된 값이 지금 확인된 값처럼 보이지 않게 합니다.
        관리 조치 — 확인 필요 · 미입력(데이터 점검, 주황)과, 있을 때만 QR 준비 필요(주황) · PIN 확인(빨강).
-         일괄 확인 · 운영자 알림은 DB 함수 · 발송 기능 승인 전이라 '준비 중'(누를 수 없음)으로만 둡니다.
+         일괄 확인은 확인 기록 함수가 있을 때만 누를 수 있고(없으면 '준비 중'), 운영자 알림은 발송 기능 승인 전이라 '준비 중'(누를 수 없음)입니다.
      빨강 = 혼잡과 장애, 주황 = 데이터 점검, 회색 = 중단 · 마감. 운영 시간 밖이면 확인 필요도 회색(offHours).
      QR 준비 필요 = 공개 부스인데 쓸 수 있는 QR(미발급 · 꺼짐)도 PIN 도 없음 — 장애가 아니라 '발급할 일' 이라 주황. */
   var QUICK = [
@@ -64,10 +66,12 @@
 
   // pinOn: PIN 보조 로그인 스위치(settings.booth_pin_enabled) — true · false · null(모름)
   // event: 행사 날짜 · 시간(settings.event_start · event_end · time_label) — 운영 시간 밖 표시에만 씁니다(못 읽으면 null = 운영 중으로 봄)
-  var data = { zones: [], booths: [], live: {}, creds: null, pinOn: null, event: null, liveAt: null, masterAt: null, failAt: null };
+  // checks: 관리자 일괄 확인 기록(admin_booth_live_checks, 부스 id → 지금 값에 붙은 오늘의 마지막 확인) · checkFn: 'ok' · 'missing'(함수 없음) · 'error' · ''(아직)
+  var data = { zones: [], booths: [], live: {}, creds: null, pinOn: null, event: null, liveAt: null, masterAt: null, failAt: null, checks: null, checkFn: '' };
   // 기본 정렬은 부스번호순(R1-01, R1-02 …). 고른 정렬은 새로 읽어도 그대로입니다(ui 에만 두고 다시 그릴 때 바꾸지 않음).
   // zref: 구역 현황 '최장 대기 부스' 의 참고 값 펼침(15초마다 다시 그려도 열린 채로)
-  var ui = { view: 'live', quick: 'all', zone: '', q: '', sort: 'code', hidden: false, more: '', zref: false };
+  // batch: 일괄 확인 진행(null = 안 함) — { step: 'select' · 'preview' · 'sending' · 'result', sel: { id: true }, items: 미리보기에서 고정한 부스, res, err, dropped }
+  var ui = { view: 'live', quick: 'all', zone: '', q: '', sort: 'code', hidden: false, more: '', zref: false, batch: null };
   var busy = {};
   var stops = [];
   var started = false;
@@ -111,6 +115,21 @@
       data.live = indexBy(rows || [], 'booth_id');
       data.liveAt = new Date();
       data.failAt = null;
+    });
+  }
+  /* 관리자 일괄 확인 기록 — 함수가 없으면(DB 적용 전 · 되돌린 뒤 · PGRST202) [일괄 확인] 은 '준비 중' 그대로입니다.
+     한 번 못 읽으면 지난 기록으로 그리고(표시만), 확인 여부의 최종 판단은 언제나 서버(admin_confirm_booth_live)가 합니다. */
+  // 함수가 없다고 한 번 확인하면(PGRST202) 이 페이지에서는 다시 묻지 않습니다 — 페이지를 새로 열거나 [새로 고침](force)을 누를 때만 다시 확인.
+  function loadChecks(force) {
+    if (DEMO || (data.checkFn === 'missing' && force !== true)) return Promise.resolve();
+    return C.rpc('admin_booth_live_checks').then(function (rows) {
+      data.checks = indexBy(rows || [], 'booth_id');
+      data.checkFn = 'ok';
+    }, function (e) {
+      var code = e && e.code;
+      if (code === 'PGRST202' || code === '42883') { data.checks = null; data.checkFn = 'missing'; return; }
+      if (data.checkFn !== 'ok') data.checkFn = 'error';
+      console.warn('[booth-admin] 관리자 확인 기록을 읽지 못했습니다', code || (e && e.message));
     });
   }
   function indexBy(rows, k) {
@@ -181,11 +200,20 @@
       };
       r.state = !r.congestion ? 'missing' : (r.congestion === '중단' ? 'pause' : (r.congestion === '마감' ? 'closed' : 'open'));
       r.stale = BC.isStale({ congestion: r.congestion, congestion_updated_at: r.at });
+      r.check = checkOf(r);
       r.qrIssue = !!(cred && shown && cred.qr_state !== 'on' && cred.pin_state !== 'on');
       r.pinIssue = !!(cred && cred.pin_failures_1h >= PIN_FAIL_WARN);
       return r;
     });
   }
+  /* 관리자 확인 — '확인 필요'(r.stale, 30분 넘게 그대로) 판정 · 표시 · 수는 바꾸지 않고, 그 위에 '관리자가 현장에서 확인했다' 만 따로 붙입니다.
+     지금 값(입력 시각이 같은 값)에 붙은 확인이고, 확인한 지 staleMinutes 분 안일 때만. 운영자가 새로 입력하면 저절로 빠집니다. */
+  function checkOf(r) {
+    var c = r.stale && r.at && data.checks ? data.checks[r.id] : null;
+    if (!c || Date.parse(c.live_updated_at) !== Date.parse(r.at)) return null;
+    return (Date.now() - Date.parse(c.checked_at)) / 60000 <= BC.staleMinutes() ? c : null;
+  }
+  function checkWho(c) { return c.checked_by_me ? '나' : (c.checked_by_name || '다른 관리자'); }
   function inQuick(r, q) {
     if (q === 'open') return r.state === 'open' && !r.stale;
     // 여유 · 보통 · 혼잡 = 마지막 입력 기준(운영 상태 칸의 수와 같음). 30분 넘은 값도 들어가며, 줄에서는 점선 표로 구분됩니다.
@@ -193,6 +221,9 @@
     if (q === 'normal') return r.state === 'open' && r.congestion === '보통';
     if (q === 'busy') return r.state === 'open' && r.congestion === '혼잡';
     if (q === 'stale') return r.stale;
+    // 확인 필요를 나눠 보기 — 관리자 확인(최근 30분 안, 지금 값) · 아직 미확인
+    if (q === 'checked') return r.stale && !!r.check;
+    if (q === 'unchecked') return r.stale && !r.check;
     if (q === 'missing') return r.state === 'missing';
     if (q === 'pause') return r.state === 'pause';
     if (q === 'closed') return r.state === 'closed';
@@ -341,12 +372,22 @@
         row('운영기관', BC.displayOrganization(r.org)) + row('프로그램', r.program) + row('구역', r.zone_label) +
         row('접속', credText(r)) +
         row('마지막 입력', r.at ? BC.formatClock(r.at) + ' · ' + BC.formatAgo(r.at) + (r.by && BY[r.by] ? ' · ' + BY[r.by] : '') : '입력 없음') +
+        row('관리자 확인', r.check ? BC.formatClock(r.check.checked_at) + ' · ' + BC.formatAgo(r.check.checked_at) + ' · ' + checkWho(r.check) +
+          ' (현황 값 · 입력 시각은 그대로)' : '') +
       '</dl>' +
       '<div class="lv__links">' +
         '<a class="btn btn--ghost btn--sm" href="' + esc(adminHref(r)) + '">부스 정보 관리</a>' +
         '<a class="btn btn--ghost btn--sm" href="' + esc(adminHref(r)) + '">PIN 관리</a>' +
         (DEMO ? '' : '<a class="btn btn--ghost btn--sm" href="print-qr.html" target="_blank" rel="noopener">QR 관리</a>') +
       '</div>';
+  }
+  // 일괄 확인 고르기 — '확인 필요' 이고 아직 관리자 확인이 없는 줄에만 체크칸(처음엔 모두 빔). 이미 확인한 줄은 '확인함'.
+  function pickable(r) { return !!(r.stale && r.at && !r.check); }
+  function pickHtml(r, name) {
+    if (!ui.batch || ui.batch.step !== 'select' || !r.stale) return '';
+    if (r.check) return '<span class="lv__pick lv__pick--done">확인함</span>';
+    return '<label class="lv__pick"><input type="checkbox" data-bsel="' + esc(r.id) + '"' + (ui.batch.sel[r.id] ? ' checked' : '') +
+      ' aria-label="' + esc(name) + ' — 현장에서 확인함으로 고르기" /></label>';
   }
   function rowHtml(r) {
     var open = ui.more === r.id;
@@ -355,15 +396,17 @@
     var hiddenTag = r.shown ? '' : '<span class="badge badge--' + (r.slot ? 'off' : 'warn') + '">' + (r.slot ? '비공개' : '미배정') + '</span>';
     // 예시 부스('[예시]' 기관)는 이름 뒤 작은 테두리 표 하나로만 알립니다 — 운영 상태보다 앞서 읽히지 않게.
     var sampleTag = BC.isSample(r.b) ? '<span class="badge badge--plain badge--sample lv__ex">예시</span>' : '';
-    return '<article class="lv lv--' + tone(r) + (r.stale ? ' is-stale' : '') + (attn ? ' is-attn' : '') + (open ? ' is-open' : '') +
+    return '<article class="lv lv--' + tone(r) + (r.stale ? ' is-stale' : '') + (r.check ? ' has-check' : '') + (attn ? ' is-attn' : '') + (open ? ' is-open' : '') +
         (r.shown ? '' : ' is-hidden') + '" data-id="' + esc(r.id) + '">' +
-      '<div class="lv__booth">' +
+      '<div class="lv__booth">' + pickHtml(r, name) +
         '<span class="lv__code">' + esc(r.code || '번호 미정') + '</span>' +
         '<span class="lv__name">' + esc(r.name || '(이름 없음)') + '</span>' + sampleTag + hiddenTag +
       '</div>' +
       '<div class="lv__meta">' +
         '<span class="lv__state"><i class="lv__dot" aria-hidden="true"></i>' + esc(stateText(r)) + '</span>' +
         '<span class="lv__flags">' + (r.stale ? '<span class="flag flag--warn flag--stale">확인 필요</span>' : '') +
+          (r.check ? '<span class="flag flag--checked" title="' + esc(checkWho(r.check) + ' · 현장 확인 기록만 · 현황 값과 입력 시각은 그대로') + '">관리자 확인 ' +
+            esc(BC.formatClock(r.check.checked_at)) + '</span>' : '') +
           '<span class="lv__cred">' + credFlags(r) + '</span></span>' +
         '<span class="lv__ago">' + agoHtml(r) + '</span>' +
       '</div>' +
@@ -407,13 +450,13 @@
      ST = 운영 상태 여섯 칸(마지막 입력 기준, 서로 겹치지 않음). 열쇠는 tone() 과 같은 값입니다. */
   var ST = [['free', '여유'], ['normal', '보통'], ['busy', '혼잡'], ['pause', '일시 중단'], ['closed', '운영 종료'], ['missing', '미입력']];
   function stateCount(rs) {
-    var c = { total: rs.length, hid: 0, stale: 0, staleOpen: 0, stalePause: 0, qr: 0, pin: 0 };
+    var c = { total: rs.length, hid: 0, stale: 0, staleOpen: 0, stalePause: 0, checked: 0, qr: 0, pin: 0 };
     ST.forEach(function (x) { c[x[0]] = { n: 0, old: 0 }; });
     rs.forEach(function (r) {
       var k = c[tone(r)] ? tone(r) : 'missing';
       c[k].n++;
       if (!r.shown) c.hid++;
-      if (r.stale) { c[k].old++; c.stale++; if (r.state === 'open') c.staleOpen++; else if (r.state === 'pause') c.stalePause++; }
+      if (r.stale) { c[k].old++; c.stale++; if (r.state === 'open') c.staleOpen++; else if (r.state === 'pause') c.stalePause++; if (r.check) c.checked++; }
       if (r.qrIssue) c.qr++;
       if (r.pinIssue) c.pin++;
     });
@@ -465,19 +508,42 @@
       '<b class="todo__n">' + n + '</b><span class="todo__l">' + esc(label) + '</span>' +
       '<span class="todo__s">' + esc(sub) + '</span><span class="todo__go" aria-hidden="true">' + (n ? '보기 ›' : '') + '</span></button>';
   }
+  /* 확인 필요 나눠 보기 — 확인 기록 함수가 있을 때만(없으면 관리자 확인이란 것이 없음).
+     관리자 확인은 운영 상태 갱신이 아니므로 확인 필요 수를 줄이지 않고, 그 안을 '관리자 확인' · '아직 미확인' 으로 나눕니다.
+     일괄 확인 뒤에도 확인 필요 수가 그대로인 까닭을 한 줄로 함께 씁니다(고장으로 보이지 않게). */
+  function splitHtml(c) {
+    if (DEMO || data.checkFn !== 'ok' || !c.stale) return '';
+    function b(k, label, n, sub) {
+      var on = ui.view === 'live' && ui.quick === k;
+      return '<button class="tsplit__b tsplit__b--' + k + (n ? '' : ' is-zero') + (on ? ' is-on' : '') + '" type="button" data-quick="' + k + '" aria-pressed="' + on + '">' +
+        '<span class="tsplit__l">' + esc(label) + '</span><b class="tsplit__n">' + n + '</b><span class="tsplit__s">' + esc(sub) + '</span></button>';
+    }
+    return '<div class="tsplit" role="group" aria-label="확인 필요 나눠 보기">' +
+      b('checked', '관리자 확인', c.checked, '최근 ' + BC.staleMinutes() + '분 안에 현장 확인') +
+      b('unchecked', '아직 미확인', c.stale - c.checked, '관리자 확인 없음 또는 ' + BC.staleMinutes() + '분 지남') +
+      '<p class="tsplit__note">관리자 확인은 운영 상태 갱신이 아니어서 확인 필요 수는 그대로입니다. 운영자가 새로 입력하면 확인 필요에서 빠집니다.</p>' +
+    '</div>';
+  }
   function actionHtml(c) {
     var mins = BC.staleMinutes();
     return '<section class="opanel oact" aria-label="관리 조치">' +
       '<div class="opanel__head"><h2 class="opanel__t">관리 조치</h2></div>' +
       '<div class="oact__list">' +
-        todoBtn('stale', '확인 필요', c.stale, c.stale ? mins + '분 넘게 그대로 · 운영 중 ' + c.staleOpen + ' · 중단 ' + c.stalePause : mins + '분 안에 모두 입력', 'stale') +
+        // 확인 필요 수는 30분 넘게 그대로인 부스 그대로 — 관리자 확인은 그 안에서 따로 나눠 셉니다(수를 줄이지 않음).
+        '<div class="todo-stack">' +
+          todoBtn('stale', '확인 필요', c.stale, c.stale ? mins + '분 넘게 그대로 · 운영 중 ' + c.staleOpen + ' · 중단 ' + c.stalePause : mins + '분 안에 모두 입력', 'stale') +
+          splitHtml(c) +
+        '</div>' +
         todoBtn('missing', '미입력', c.missing.n, '오늘 입력된 상태 없음', 'missing') +
         (c.qr || ui.quick === 'qr' ? todoBtn('qr', 'QR 준비 필요', c.qr, 'QR이 없거나 꺼져 있고 PIN도 없음', 'qr') : '') +
         (c.pin || ui.quick === 'pin' ? todoBtn('pin', 'PIN 확인', c.pin, '1시간 PIN 실패 ' + PIN_FAIL_WARN + '번 이상', 'pin') : '') +
       '</div>' +
-      // 아직 없는 기능 — 누를 수 없고 '준비 중' 이라고 씁니다(관리자 확인 기록 DB 함수 · 알림 저장/발송 승인 뒤 구현)
+      // 일괄 확인 — 확인 기록 함수(admin_booth_live_checks)를 읽을 수 있을 때만 누를 수 있습니다. 없으면(적용 전 · 되돌린 뒤 · 협의용 예시) '준비 중'.
+      // 운영자 알림은 아직 없는 기능 — 누를 수 없고 '준비 중'(알림 저장/발송 승인 뒤 구현)
       '<div class="oact__soon">' +
-        '<button class="soon" type="button" disabled title="관리자 확인 기록(현황 값 · 입력 시각은 그대로) DB 함수 승인 뒤 구현">일괄 확인<span>준비 중</span></button>' +
+        (!DEMO && data.checkFn === 'ok'
+          ? '<button class="soon soon--on" type="button" data-batch="open" title="현장에서 확인한 부스에 관리자 확인 기록만 남깁니다(현황 값 · 입력 시각은 그대로)">일괄 확인</button>'
+          : '<button class="soon" type="button" disabled title="관리자 확인 기록(현황 값 · 입력 시각은 그대로) DB 함수 적용 뒤 사용 — 적용 뒤에는 [새로 고침]을 누르면 다시 확인합니다">일괄 확인<span>준비 중</span></button>') +
         '<button class="soon" type="button" disabled title="알림 저장 · 발송 기능 승인 뒤 구현">운영자 알림<span>준비 중</span></button>' +
       '</div>' +
     '</section>';
@@ -544,6 +610,7 @@
         '<p class="lvmeta" id="lv-meta" aria-live="polite"></p>' + offHtml(null) +
         '<div class="lvpin" id="lv-pin"></div>' +
         '<div class="odash" id="lv-sum"></div>' +
+        '<section class="card bcpanel" id="lv-batch" aria-live="polite" hidden></section>' +
         // 검색 · 구역 · 정렬 · 지금 걸러 보는 것은 스크롤해도 맨 위에 붙어 있습니다(데스크톱은 표 머리도 함께).
         '<div class="lvbar" id="lv-bar">' +
           '<div class="tools lvtools">' +
@@ -558,6 +625,7 @@
               '</select></label>' +
             '</div>' +
           '</div>' +
+          '<div class="bsel" id="lv-bsel" hidden></div>' +
           '<div class="lvactive" id="lv-active" hidden></div>' +
           '<div class="lvhead" aria-hidden="true"><span>부스</span><span>운영상태</span><span>대기시간</span>' +
             '<span>마지막 입력</span><span>확인할 것</span><span>관리</span></div>' +
@@ -590,11 +658,12 @@
     sel.classList.toggle('is-set', !!ui.zone);
     // 붙박이 줄의 '지금 걸러 보는 것' — 위의 요약 카드가 화면 밖으로 지나가도 무엇을 보고 있는지 알 수 있게
     var act = $('#lv-active');
-    var q = QUICK.concat([['qr', 'QR 준비 필요'], ['pin', 'PIN 확인']]).filter(function (o) { return o[0] === ui.quick; })[0];
+    var q = QUICK.concat([['qr', 'QR 준비 필요'], ['pin', 'PIN 확인'], ['checked', '확인 필요 중 관리자 확인'], ['unchecked', '확인 필요 중 아직 미확인']])
+      .filter(function (o) { return o[0] === ui.quick; })[0];
     if (ui.quick !== 'all' && q) {
       act.hidden = false;
       // 여유 · 보통 · 혼잡 · 중단은 마지막 입력 기준이라 30분 넘은 값이 섞일 수 있습니다 — 몇 곳인지 함께 씁니다.
-      var oldN = ui.quick === 'stale' ? 0 : rows.filter(function (r) { return r.stale; }).length;
+      var oldN = /^(stale|checked|unchecked)$/.test(ui.quick) ? 0 : rows.filter(function (r) { return r.stale; }).length;
       act.innerHTML = '<span class="lvactive__t"><b>' + esc(q[1]) + '</b>만 보는 중 · ' + rows.length + '곳' +
           (oldN ? '<span class="lvactive__o">그중 확인 필요 ' + oldN + '곳</span>' : '') + '</span>' +
         '<button class="lvactive__x" type="button" data-quick="all">전체 보기</button>';
@@ -603,6 +672,7 @@
       act.innerHTML = '';
     }
     document.querySelector('.lvhead').hidden = !rows.length;
+    paintBatch(all);
     $('#lv-list').innerHTML = rows.length ? rows.map(rowHtml).join('') : emptyHtml(all);
     paintExampleBtn(all);
     paintRehearsal(all);
@@ -811,6 +881,182 @@
         console.error('[booth-admin] 현황 수정 실패', e && (e.code || e.message));
         toast(C.dataMessage(e), true);
       });
+  }
+
+  /* ── '확인 필요' 일괄 확인 (admin_confirm_booth_live · supabase/migration-booth-live-check.sql) ──
+     관리자가 현장(전화 · 순회)에서 실제로 확인한 부스에 '이 값을 이 시각에 확인했다' 기록만 남깁니다.
+     현황 값 · 입력 시각(booth_live) · 대기 기록은 바꾸지 않으므로 관람객 · 운영자 화면은 그대로이고,
+     이 화면에서도 '확인 필요'(30분 넘게 그대로) 표시 · 수는 그대로 둔 채 '관리자 확인 HH:MM' 만 따로 붙습니다.
+       고르기   — '확인 필요' 이고 아직 확인 안 한 줄에만 체크칸(처음엔 모두 빔). 구역 단위로 모두 고르기 · 선택 비우기.
+       미리보기 — 고른 부스와 그때의 마지막 상태 · 입력 시각을 고정합니다. 그 사이 새 입력이 오면 줄에 표시(보내도 서버가 제외).
+       보내기   — 미리보기의 입력 시각 그대로 보냅니다. 서버가 부스마다 잠그고 다시 판단해 확인 완료 · 제외(까닭) · 실패로 돌려줍니다.
+       결과     — 실패만 다시 시도(같은 미리보기 값으로 — 그 사이 바뀌었으면 제외). 같은 요청을 두 번 보내도 기록은 한 번입니다. */
+  var BC_WHY = {
+    'skipped:changed': '그 사이 새 입력 · 수정', 'skipped:fresh': '이미 최근 입력(30분 안)', 'skipped:checked': '이미 관리자 확인',
+    'skipped:no_value': '값 없음(미입력 · 초기화)', 'skipped:not_today': '오늘 값이 아님', 'skipped:closed': '오늘 마감',
+    'skipped:duplicate': '같은 부스가 두 번', 'skipped:not_found': '부스를 찾지 못함',
+    'failed:busy': '다른 입력을 처리하는 중 — 다시 시도', failed: '기록하지 못함 — 다시 시도'
+  };
+  function batchOpen() {
+    ui.batch = { step: 'select', sel: {}, items: [], res: null, err: '', dropped: 0 };
+    ui.quick = 'stale'; ui.zone = ''; ui.q = ''; ui.more = '';
+    var qi = $('#lv-q'); if (qi) qi.value = '';
+    if (ui.view !== 'live') { window.location.hash = '#live'; return; }
+    paint();
+  }
+  function batchSet(html, el) { if (el._h !== html) { el.innerHTML = html; el._h = html; } }
+  function paintBatch(all) {
+    var b = ui.batch, bar = $('#lv-bsel'), box = $('#lv-batch');
+    if (!bar || !box) return;
+    if (b && b.step === 'select') {
+      // 고른 뒤 새로 입력됐거나 다른 관리자가 확인해 더는 고를 수 없는 부스는 빼고, 몇 곳 빠졌는지 알립니다.
+      var byId = {};
+      all.forEach(function (r) { byId[r.id] = r; });
+      Object.keys(b.sel).forEach(function (id) { if (!byId[id] || !pickable(byId[id])) { delete b.sel[id]; b.dropped++; } });
+    }
+    bar.hidden = !(b && b.step === 'select');
+    batchSet(bar.hidden ? '' : bselHtml(all), bar);
+    box.hidden = !(b && b.step !== 'select');
+    batchSet(box.hidden ? '' : (b.step === 'result' ? resultHtml() : previewHtml(all)), box);
+  }
+  function bselHtml(all) {
+    var b = ui.batch, n = Object.keys(b.sel).length, zs = {}, order = [];
+    base(all).forEach(function (r) {
+      if (!pickable(r) || !r.zone_key) return;
+      if (!zs[r.zone_key]) { zs[r.zone_key] = { n: 0, rank: r.zone_rank }; order.push(r.zone_key); }
+      zs[r.zone_key].n++;
+    });
+    order.sort(function (a, c) { return zs[a].rank - zs[c].rank; });
+    return '<p class="bsel__t"><b>일괄 확인</b><span>현장에서 실제로 확인한 부스만 고르세요 · 고른 <b>' + n + '</b>곳</span>' +
+        (b.dropped ? '<span class="bsel__drop">새 입력 · 다른 관리자 확인으로 빠진 부스 ' + b.dropped + '곳</span>' : '') + '</p>' +
+      '<div class="bsel__a">' +
+        '<label class="listsel"><span class="sr-only">구역 단위로 고르기</span><select class="select select--sm" id="lv-bzone"' + (order.length ? '' : ' disabled') + '>' +
+          '<option value="">구역 단위로 고르기</option>' + order.map(function (k) {
+            return '<option value="' + esc(k) + '">' + esc(k) + ' · 확인 필요 ' + zs[k].n + '곳 모두 고르기</option>';
+          }).join('') +
+        '</select></label>' +
+        '<button class="btn btn--ghost btn--sm" type="button" data-batch="clear"' + (n ? '' : ' disabled') + '>선택 비우기</button>' +
+        '<button class="btn btn--primary btn--sm" type="button" data-batch="preview"' + (n ? '' : ' disabled') + '>미리보기</button>' +
+        '<button class="btn btn--ghost btn--sm" type="button" data-batch="close">끝내기</button>' +
+      '</div>';
+  }
+  function previewHtml(all) {
+    var b = ui.batch, byId = {}, sending = b.step === 'sending';
+    all.forEach(function (r) { byId[r.id] = r; });
+    var rows = b.items.map(function (it) {
+      var now = byId[it.id], moved = !now || now.at !== it.at;
+      return '<li class="bc__row' + (moved ? ' is-moved' : '') + '">' +
+        '<span class="bc__code">' + esc(it.code) + '</span><span class="bc__name">' + esc(it.name) + '</span>' +
+        '<span class="bc__st">' + esc(it.label) + '</span>' +
+        '<span class="bc__at">' + esc(BC.formatClock(it.at) + ' 입력 · ' + BC.formatAgo(it.at) + (it.by && BY[it.by] ? ' · ' + BY[it.by] : '')) + '</span>' +
+        (moved ? '<span class="bc__moved">그 사이 새 입력 — 보내도 제외됩니다</span>' : '') +
+        (sending ? '' : '<button class="bc__drop" type="button" data-bdrop="' + esc(it.id) + '" aria-label="' + esc(it.code + ' 빼기') + '">빼기</button>') +
+      '</li>';
+    }).join('');
+    return '<div class="bc__head"><h2 class="bc__t">확인 기록 미리보기 · ' + b.items.length + '곳</h2>' +
+        '<p class="bc__note"><b>관리자 확인 기록만 남습니다. 관람객 화면 값과 운영자 입력 시각은 바뀌지 않습니다.</b> ' +
+          '현장(전화 · 순회)에서 이 상태가 맞다고 확인한 부스만 남기세요. 상태가 다르면 빼고 [수정]으로 입력합니다.</p></div>' +
+      (b.err ? '<p class="bc__err" role="alert">' + esc(b.err) + '</p>' : '') +
+      '<ol class="bc__list">' + rows + '</ol>' +
+      '<div class="bc__foot">' +
+        '<button class="btn btn--primary" type="button" data-batch="send"' + (sending || !b.items.length ? ' disabled' : '') + '>' +
+          (sending ? '기록 중…' : '확인 기록 남기기 (' + b.items.length + '곳)') + '</button>' +
+        '<button class="btn btn--ghost" type="button" data-batch="back"' + (sending ? ' disabled' : '') + '>다시 고르기</button>' +
+      '</div>';
+  }
+  function resultHtml() {
+    var b = ui.batch, byId = {}, ok = [], skip = [], fail = [];
+    b.items.forEach(function (it) { byId[it.id] = it; });
+    (b.res || []).forEach(function (x) { (x.status === 'confirmed' ? ok : /^failed/.test(x.status) ? fail : skip).push(x); });
+    function li(x) {
+      var it = byId[x.booth_id] || { code: '', name: x.booth_id };
+      var why = x.status === 'confirmed' ? BC.formatClock(x.checked_at) + ' 기록'
+        : (BC_WHY[x.status] || x.status) + (x.status === 'skipped:checked' && x.checked_at ? ' ' + BC.formatClock(x.checked_at) : '');
+      return '<li><b>' + esc(it.code) + '</b><span class="bc__gn">' + esc(it.name) + '</span><span class="bc__why">' + esc(why) + '</span></li>';
+    }
+    function group(cls, title, list) {
+      return list.length ? '<div class="bc__grp bc__grp--' + cls + '"><h3>' + title + ' ' + list.length + '곳</h3><ul>' + list.map(li).join('') + '</ul></div>' : '';
+    }
+    return '<div class="bc__head"><h2 class="bc__t">일괄 확인 결과</h2>' +
+        '<p class="bc__sum"><b>확인 완료 ' + ok.length + '</b> · 제외 ' + skip.length + ' · 실패 ' + fail.length + '</p>' +
+        '<p class="bc__note">관리자 확인은 운영 상태 갱신이 아니어서 ‘확인 필요’ 수는 그대로이고, 관리 조치의 <b>관리자 확인</b> 수가 늘고 <b>아직 미확인</b> 수가 줄어듭니다. ' +
+          '줄에는 ‘관리자 확인 HH:MM’ 이 따로 붙고, 관람객 화면은 바뀌지 않습니다.</p></div>' +
+      (b.err ? '<p class="bc__err" role="alert">' + esc(b.err) + '</p>' : '') +
+      group('ok', '확인 완료', ok) + group('skip', '제외', skip) + group('fail', '실패', fail) +
+      '<div class="bc__foot">' +
+        (fail.length ? '<button class="btn btn--primary" type="button" data-batch="retry">실패만 다시 시도 (' + fail.length + '곳)</button>' : '') +
+        '<button class="btn btn--ghost" type="button" data-batch="close">닫기</button>' +
+      '</div>';
+  }
+  function batchPreview() {
+    var b = ui.batch, byId = {};
+    rowsNow().forEach(function (r) { byId[r.id] = r; });
+    b.items = Object.keys(b.sel).map(function (id) { return byId[id]; }).filter(function (r) { return r && pickable(r); }).sort(byCode)
+      .map(function (r) { return { id: r.id, code: r.code, name: r.name || '(이름 없음)', label: liveLabel(r), at: r.at, by: r.by }; });
+    b.err = '';
+    b.step = b.items.length ? 'preview' : 'select';
+    paint();
+    var box = $('#lv-batch');
+    if (b.step === 'preview' && box.scrollIntoView) box.scrollIntoView({ block: 'start' });
+  }
+  // items: 미리보기에서 고정한 부스들 — 그때 본 입력 시각(seen_updated_at)을 그대로 보냅니다.
+  function batchSend(items) {
+    var b = ui.batch;
+    if (!b || !items.length) return;
+    b.step = 'sending'; b.err = '';
+    paint();
+    C.rpc('admin_confirm_booth_live', { p_items: items.map(function (it) { return { booth_id: it.id, seen_updated_at: it.at }; }) })
+      .then(function (rows) {
+        var got = rows || [];
+        if (b.res) {   // 실패만 다시 보낸 경우 — 그 부스의 결과만 바꿉니다
+          var m = {};
+          got.forEach(function (x) { m[x.booth_id] = x; });
+          b.res = b.res.map(function (x) { return m[x.booth_id] || x; });
+        } else b.res = got;
+        b.step = 'result';
+        return loadChecks().then(refreshLive);
+      })
+      .catch(function (e) {
+        console.error('[booth-admin] 일괄 확인 실패', e && (e.code || e.message));
+        b.step = b.res ? 'result' : 'preview';
+        b.err = C.dataMessage(e) + ' 결과를 받지 못했습니다 — 새로 읽은 뒤 줄의 ‘관리자 확인’ 으로 기록 여부를 확인해 주세요. 다시 보내도 같은 값은 한 번만 기록됩니다.';
+        loadChecks().then(paint);
+      });
+  }
+  function batchAct(k) {
+    var b = ui.batch;
+    if (k === 'open') { batchOpen(); return; }
+    if (!b) return;
+    if (k === 'close') { ui.batch = null; paint(); return; }
+    if (k === 'clear') { b.sel = {}; b.dropped = 0; paint(); return; }
+    if (k === 'preview') { batchPreview(); return; }
+    if (k === 'back') { b.step = 'select'; b.err = ''; paint(); return; }
+    if (k === 'send' && b.step === 'preview') { batchSend(b.items); return; }
+    if (k === 'retry' && b.step === 'result') {
+      var failed = {};
+      (b.res || []).forEach(function (x) { if (/^failed/.test(x.status)) failed[x.booth_id] = true; });
+      batchSend(b.items.filter(function (it) { return failed[it.id]; }));
+    }
+  }
+  function batchPick(id, on) {
+    var b = ui.batch;
+    if (!b || b.step !== 'select') return;
+    if (on) b.sel[id] = true; else delete b.sel[id];
+    paintBatch(rowsNow());   // 고른 수만 새로 — 줄 목록은 그대로(체크칸 초점 유지)
+  }
+  function batchZone(k) {
+    var b = ui.batch;
+    if (!b || b.step !== 'select' || !k) return;
+    base(rowsNow()).forEach(function (r) { if (r.zone_key === k && pickable(r)) b.sel[r.id] = true; });
+    paint();
+  }
+  function batchDrop(id) {
+    var b = ui.batch;
+    if (!b || b.step !== 'preview') return;
+    b.items = b.items.filter(function (it) { return it.id !== id; });
+    delete b.sel[id];
+    if (!b.items.length) b.step = 'select';
+    paint();
   }
 
   /* ── 준비 기간 예시 현황: 채우기 · 비우기 ───────────────────────────
@@ -1228,16 +1474,17 @@
 
   /* ── 다시 읽기 ─────────────────────────────────────────────── */
   function refreshLive() {
-    return loadLive().then(paint, function (e) {
+    return loadLive().then(loadChecks).then(paint, function (e) {
       data.failAt = new Date();
       console.warn('[booth-admin] 대기 현황을 읽지 못했습니다', e && (e.code || e.message));
       paint();
     });
   }
-  function refreshMaster() {
+  // force: [새로 고침] 을 누른 경우 — 관리자 확인 함수가 없다고 본 뒤에도 한 번 더 확인합니다(그 사이 적용됐을 수 있음).
+  function refreshMaster(force) {
     // 리허설 대상 · 행사 첫날(공통 PIN 요약)도 함께 다시 읽습니다. 못 읽으면 지난 값으로 그립니다.
     if (!DEMO) loadRehearsal().then(null, function () { /* 지난 상태 */ });
-    return loadMaster().then(loadLive).then(paint, function (e) {
+    return loadMaster().then(loadLive).then(function () { return loadChecks(force === true); }).then(paint, function (e) {
       data.failAt = new Date();
       console.warn('[booth-admin] 부스 목록을 읽지 못했습니다', e && (e.code || e.message));
       paint();
@@ -1308,7 +1555,7 @@
       if (t.closest('[data-pwchange]')) { openPasswordChange(); return; }
       if (t.closest('[data-open-sheet]')) { $('#sheet').hidden = false; document.body.style.overflow = 'hidden'; return; }
       if (t.closest('[data-close-sheet]')) { $('#sheet').hidden = true; document.body.style.overflow = ''; return; }
-      if (t.closest('[data-refresh]')) { refreshMaster().then(function () { toast('새로 읽었습니다.'); }); return; }
+      if (t.closest('[data-refresh]')) { refreshMaster(true).then(function () { toast('새로 읽었습니다.'); }); return; }
       var ex = t.closest('[data-example]');
       if (ex) { runExamples(ex.getAttribute('data-example')); return; }
       if (t.closest('[data-rh-toggle]')) { toggleRehearsal(); return; }
@@ -1320,6 +1567,10 @@
         else runRehearsal(rk);
         return;
       }
+      var bt = t.closest('[data-batch]');
+      if (bt) { if (!bt.disabled) batchAct(bt.getAttribute('data-batch')); return; }
+      var bdr = t.closest('[data-bdrop]');
+      if (bdr) { batchDrop(bdr.getAttribute('data-bdrop')); return; }
       if (t.closest('#lv-hidden')) { ui.hidden = !ui.hidden; paintLive(); return; }
       if (t.closest('[data-hidden-off]')) { ui.hidden = false; paint(); return; }
       if (t.closest('[data-reset]')) { ui.quick = 'all'; ui.zone = ''; ui.q = ''; var qi = $('#lv-q'); if (qi) qi.value = ''; paint(); return; }
@@ -1355,7 +1606,8 @@
     document.addEventListener('change', function (e) {
       if (e.target.id === 'lv-zone') { ui.zone = e.target.value; paintLive(); }
       else if (e.target.id === 'lv-sort') { ui.sort = e.target.value; paintLive(); }
-
+      else if (e.target.id === 'lv-bzone') { var zk = e.target.value; e.target.value = ''; batchZone(zk); }
+      else if (e.target.getAttribute && e.target.getAttribute('data-bsel')) batchPick(e.target.getAttribute('data-bsel'), e.target.checked);
     });
     // 구역 현황의 펼침(용어 · 참고 값)을 기억 — 15초마다 다시 그려도 사용자가 연 그대로(toggle 은 거품이 없어 잡기 단계에서)
     document.addEventListener('toggle', function (e) {
@@ -1459,6 +1711,8 @@
       startPolls();
       // 리허설 공통 PIN 요약 · 줄 표시에 쓸 대상 목록. 다 읽으면 다시 그립니다(못 읽으면 예전처럼 '개별 PIN 미발급' 을 띄움).
       if (!DEMO) loadRehearsal().then(paint, function () { /* 리허설 관리 칸이 까닭을 보임 */ });
+      // 관리자 확인 기록 — 첫 화면을 기다리게 하지 않고 따로(못 읽어도 '확인 필요' 판정 · 표시는 그대로)
+      if (!DEMO) loadChecks().then(paint);
     }).catch(function (e) {
       console.error('[booth-admin] 불러오기 실패', e && (e.code || e.message));
       $('#view').innerHTML = '<div class="state state--error">' + esc(C.dataMessage(e)) +
