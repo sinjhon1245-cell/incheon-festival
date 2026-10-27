@@ -47,13 +47,16 @@
 운영자의 ‘변동 없음 · 지금 확인’ 이 `updated_at` 을 옮기는 것은 그대로 둡니다 — 현장에서 본 사람이 누르는 것이라 왜곡이 아닙니다.
 
 ### DB — 새 테이블 1 · 새 함수 2만, 기존 것은 그대로 (`supabase/migration-booth-live-check.sql`)
-1. `booth_live_check` — `id` · `batch_id` · `booth_id` · **`seen_updated_at`**(확인한 값의 입력 시각) · `seen_congestion` · `seen_wait` · `checked_by`(`auth.uid()`) · `checked_at`.
+1. `booth_live_check` — `id` · `batch_id` · `booth_id` · `booth_code` · `booth_name`(그때의 부스번호 · 이름) · **`seen_updated_at`**(확인한 값의 입력 시각) · `seen_congestion` · `seen_wait` · `checked_by`(`auth.uid()`) · `checked_at`.
    RLS 켬 · 정책 없음 · anon/authenticated 표 권한 없음(함수로만). 지우지 않고 쌓기만 합니다(감사 기록).
+   **`booths` 외래 키를 걸지 않습니다.** `on delete cascade` 면 부스를 지울 때 그 부스의 확인 기록이 함께 사라지고(감사 기록 목적에 어긋남),
+   `restrict` 면 관리자 화면의 부스 삭제가 막힙니다. 그래서 키 없이 `booth_id` 와 그때의 부스번호 · 이름을 남깁니다(부스를 지워도 기록만으로 알아봄).
    `booth_live` · `booth_live_log` · 기존 함수 · 정책 · 23:00 예약 작업은 바꾸지 않습니다.
 2. `public.admin_confirm_booth_live(p_items jsonb)` — security definer · `search_path = ''` · `lock_timeout = 3s`.
    anon 실행 권한 없음, authenticated 는 실행할 수 있지만 함수 안 `is_admin()` 이 아니면 42501.
    - 입력: `[{ booth_id, seen_updated_at }]`(미리보기에서 본 마지막 입력 시각) 1~100개. 형식이 하나라도 틀리면 통째로 거절(22023, 아무것도 기록 안 함).
-   - **booth_id 순서로** 부스마다 `booth_live` 줄을 **`FOR UPDATE`** 로 잠근 뒤 판단(부스마다 예외 블록 — 한 부스 오류가 나머지를 막지 않음):
+   - 관리자 일괄 확인끼리는 함수 맨 처음(아직 줄을 하나도 잡지 않은 때) **트랜잭션 advisory 잠금** 하나로 줄을 세웁니다(최대 3초, 넘으면 그 요청 전체 `failed:busy`).
+   - 그다음 **booth_id 순서로** 부스마다 `booth_live` 줄을 **`FOR UPDATE NOWAIT`** 로 잠근 뒤 판단(부스마다 예외 블록 — 한 부스 오류가 나머지를 막지 않음):
      | 상황 | 결과 |
      |---|---|
      | 같은 요청 안에 같은 부스가 또 | `skipped:duplicate`(처음 것만 처리) |
@@ -64,27 +67,33 @@
      | 30분 안에 입력됨 | `skipped:fresh` |
      | 같은 값을 30분 안에 이미 관리자 확인함 | `skipped:checked`(그 확인 시각을 돌려줌) — 같은 요청 두 번 · 다른 관리자 |
      | 그 밖 | `booth_live_check` 한 줄 → `confirmed` |
-     | 3초 안에 못 잠금 · 그 밖 오류 | 그 부스만 `failed:busy` · `failed` |
+     | 그 줄을 운영자 입력 · 관리자 수정 · 23:00 초기화가 잡고 있음 | 그 부스만 `failed:busy`(기다리지 않음 — 운영 쪽 먼저) |
+     | 그 밖 오류 | 그 부스만 `failed` |
    - 돌려주는 값: 부스마다 `(booth_id, status, checked_at, live_updated_at, batch_id)`.
 3. `public.admin_booth_live_checks()` — 관리자 읽기. 부스마다 **지금 값과 `seen_updated_at` 이 같은** 오늘(KST)의 마지막 확인(누가 · 언제 · 나인지).
    운영자가 새로 입력하면 `updated_at` 이 바뀌어 그 확인은 저절로 빠집니다(기록은 남음).
 4. 되돌리기 `supabase/rollback-booth-live-check.sql`: 두 함수만 drop. 기록 표는 남김(아무도 읽거나 쓰지 못함). 다시 적용하면 이어 씀.
 
-### 동시성 — `FOR SHARE` 로는 중복 확인을 못 막습니다
-- `FOR SHARE` 는 공유 잠금끼리 서로 막지 않습니다. 두 관리자(또는 두 번 누른 같은 요청)가 같은 부스를 동시에 잡으면 둘 다 ‘아직 확인 없음’ 을 보고 둘 다 기록합니다.
-  운영자 입력(UPDATE)은 막지만 관리자끼리는 못 막습니다.
-- `FOR UPDATE` 는 관리자끼리 · 운영자 입력(`booth_ctrl_set` · `touch`, `booth_session_*`, `admin_set_booth_live`) · 23:00 초기화(delete) 모두와 차례를 지킵니다.
-  뒤에 온 쪽은 앞 쪽이 끝날 때까지 기다린 뒤 READ COMMITTED 에서 그 줄의 최신 판을 다시 읽고, ‘이미 확인했는가’ 도 새 스냅숏으로 봅니다
-  → 늦은 관리자는 `skipped:checked`, 그 사이 운영자가 입력했으면 `skipped:changed`.
-- 잠그기만 하고 값 · 시각은 바꾸지 않습니다. 운영자 입력은 관리자 요청이 끝날 때까지만(보통 수 ms) 기다립니다.
-- booth_id 순서로 잠가 두 관리자 묶음이 엇갈려 잠그는 교착을 막고, `lock_timeout 3s` 로 오래 걸리는 입력이 있으면 그 부스만 `failed:busy` 로 넘깁니다.
-- 남는 위험(낮음): 23:00 초기화는 84곳을 순서 없이 지웁니다. 그 순간 일괄 확인이 겹치면 PostgreSQL 이 1초 뒤 교착을 풀며 한쪽을 실패시킵니다
-  (관리자 쪽이면 그 부스만 `failed`, 초기화 쪽이면 그날 리허설 초기화가 한 번 빠짐). 23:00 은 운영 시간 밖이고 리허설 초기화는 11-05 까지입니다.
+### 동시성 — 관리자 확인은 운영 쪽 작업(운영자 입력 · 23:00 초기화)을 실패시키지 않습니다
+- `FOR SHARE` 는 공유 잠금끼리 서로 막지 않아, 두 관리자(또는 두 번 누른 같은 요청)가 같은 부스를 동시에 잡으면 둘 다 기록합니다(실제 PostgreSQL 에서 40번 중 40번 중복).
+- 처음 설계의 **‘기다리는’ `FOR UPDATE`** 는 중복은 막지만, 관리자가 앞 부스를 잡은 채 다음 부스를 기다리는 동안 23:00 초기화(84곳 삭제)가 반대로 잡고 있으면
+  교착이 되고 PostgreSQL 이 **초기화 쪽을 끊을 수 있었습니다**(실제 PostgreSQL 반복 시험에서 40번 중 7번 초기화 실패).
+- 그래서 지금 설계는
+  1. 관리자끼리는 **advisory 잠금**으로 줄을 세웁니다 — 아직 아무 줄도 잡지 않은 때만 기다리므로 운영 쪽과 교착이 될 수 없습니다.
+     늦은 관리자는 앞 관리자가 끝난 뒤 그 기록을 보고 `skipped:checked`.
+  2. `booth_live` 줄은 **`FOR UPDATE NOWAIT`** — 관리자는 줄 잠금을 절대 기다리지 않습니다. 운영자 입력 · 관리자 수정 · 23:00 초기화가 잡고 있으면 그 부스만 `failed:busy`.
+  → 관리자 쪽에 ‘줄을 잡은 채 기다리는’ 일이 없으니 운영 쪽과의 대기 고리가 생기지 않습니다. 운영 쪽은 관리자 요청이 잡은 줄을 그 요청이 끝날 때까지(수 ms)만 기다렸다가 저장 · 삭제합니다.
+- 23:00 초기화 작업 · 운영자 입력 함수는 바꾸지 않았습니다. 시간대 차단(22:59~23:01 일괄 확인 금지)도 검토했지만, 위 구조로 교착 자체가 생기지 않아 넣지 않았습니다.
+- 잠그기만 하고 값 · 시각은 바꾸지 않습니다.
 
 ### 관리자 화면에서의 뜻
 - **‘확인 필요’(30분 넘게 그대로) 판정 · 표시 · 수는 그대로**입니다. 관리 조치 ‘확인 필요 N곳’ · 운영 상태 칸의 점선 ‘확인 필요 ○’ 도 줄지 않습니다.
-- 관리자 확인은 그 위에 **따로** 붙습니다: 줄의 ‘확인 필요’ 옆 ‘관리자 확인 14:20’(자세히: 누가 · 언제 · ‘현황 값 · 입력 시각은 그대로’), 관리 조치 설명 줄의 ‘관리자 확인 n’.
+- 관리자 확인은 그 위에 **따로** 붙습니다: 줄의 ‘확인 필요’ 옆 ‘관리자 확인 14:20’(자세히: 누가 · 언제 · ‘현황 값 · 입력 시각은 그대로’).
   확인한 지 30분이 지나거나 운영자가 새로 입력하면 저절로 사라집니다.
+- 관리 조치는 확인 필요 바로 아래에 **관리자 확인 n곳**(최근 30분 안) · **아직 미확인 m곳**(n + m = 확인 필요)을 나눠 보이고(누르면 그 부스만),
+  “관리자 확인은 운영 상태 갱신이 아니어서 확인 필요 수는 그대로입니다. 운영자가 새로 입력하면 확인 필요에서 빠집니다.” 를 함께 씁니다 —
+  일괄 확인 뒤에도 확인 필요 수가 그대로인 것이 고장으로 보이지 않게. 함수가 없으면 이 나눠 보기는 나오지 않습니다.
+- 함수가 없다는 답(PGRST202)을 한 번 받으면 그 페이지에서는 다시 묻지 않습니다(15초 새로 읽기에서 빠짐). 페이지를 새로 열거나 [새로 고침]을 누르면 다시 확인합니다.
 - 관람객 · 운영자 화면은 그대로입니다(관람객에게는 여전히 30분 넘은 값 = ‘정보 없음’). 공개 값까지 새로 하려면 [수정]으로 입력합니다.
 
 `admin_set_booth_live` 를 여러 번 부르는 방식도 **쓰지 않습니다** — ‘관리자가 값을 입력함’ 과 구분되지 않고, 막 바뀐 값을 덮을 수 있습니다.
@@ -102,12 +111,24 @@
 ### 시험
 | 시험 | 어디서 | 결과 |
 |---|---|---|
-| `test-batch-confirm.mjs` — 설치 · 권한 · 판정 · 운영자(QR · 공통 PIN) / 관리자 입력과의 순서 · 중복 요청 · 다른 관리자 · 날짜 · 23:00 초기화 · 운영 기록 무변경 · 화면 · 되돌리기 | 복제 DB(PGlite · 지금 Production 단계) + jsdom | 56/56 |
-| `test-batch-confirm-locks.mjs` — 두 연결의 실제 동시 잠금(FOR UPDATE vs FOR SHARE 비교 · 대기 · lock_timeout · 교착 · 초기화 겹침) | 버려도 되는 로컬 PostgreSQL | **준비만**(이 컴퓨터에 PostgreSQL 없음) |
+| `test-batch-confirm.mjs` — 설치 · 권한 · 판정 · 운영자(QR · 공통 PIN) / 관리자 입력과의 순서 · 중복 요청 · 다른 관리자 · 날짜 · 23:00 초기화 · 운영 기록 무변경 · 화면(나눠 보기 · 함수 없을 때 다시 묻지 않음) · 되돌리기 · 감사 기록 보존 | 복제 DB(PGlite · 지금 Production 단계) + jsdom | 59/59 |
+| `test-batch-confirm-locks.mjs` — 독립 연결 6개(관리자 3 · 운영자 실제 QR 입력 · 실제 23:00 초기화 · 준비)의 동시 잠금 | **GitHub Actions · PostgreSQL 17.11 서비스 컨테이너** | **17/17** |
 
-실제 동시 잠금 시험 돌리는 법(무료): PostgreSQL 14 이상을 설치하고 빈 DB 를 만든 뒤
-`npm i --prefix <폴더> pg@8` → `PGURL=postgres://…/bc_lock_test node scripts/booth-data/test-batch-confirm-locks.mjs --pg-dir <폴더> --main-dir <브랜치> --disposable`.
-스크립트는 Supabase 주소와 `public.booths` 가 이미 있는 DB 를 거절합니다(Production · Supabase 브랜치에는 돌리지 않음).
+실제 PostgreSQL 17 결과(실행 40499692269, 반복 40번):
+| 확인한 것 | 지금 설계 | 비교 |
+|---|---|---|
+| 두 관리자가 같은 부스를 동시에(5곳 × 40번 = 200곳) | confirmed 200 · skipped:checked 200 · 중복 0 | FOR SHARE 사본: 40번 중 40번 중복 |
+| 운영자 입력과 동시에(80번) | 운영자 실패 0 · 운영자 값 유지 80/80 · 남은 관리자 확인 표시 0 (관리자 confirmed 7 · failed:busy 73) | — |
+| 운영자 입력이 잡고 있을 때 | 그 부스만 failed:busy(0~1 ms, 기다리지 않음) · 다른 부스 confirmed · 운영자 저장 뒤 다시 보내면 changed | — |
+| 다른 관리자가 3초 넘게 붙잡을 때 | 3,001 ms 뒤 그 요청 전체 failed:busy(기록 0) · 다시 보내면 confirmed | — |
+| 세 관리자 · 같은 20곳 · 서로 다른 순서(40번) | 교착 0 · 오류 0 · 부스마다 기록 1줄 | — |
+| 23:00 초기화와 일부러 엇갈리게 | 관리자는 그 부스만 failed:busy · 초기화 84곳 삭제 완료(404 ms) | 처음 설계: 초기화가 교착 희생(40P01)으로 실패 |
+| 초기화 + 관리자 세 명 동시(40번) | 초기화 실패 0 · 교착 0 · 남은 값 0 | 처음 설계: 초기화 실패 4번(첫 실행 40499039841 에서는 7번) |
+| 관리자 확인만 한 동안 | booth_live · booth_live_log 지문 그대로 | — |
+
+다시 돌리기: 시험 브랜치 `claude/batch-confirm-tests` 에 push 하거나 Actions 에서 Re-run(`.github/workflows/batch-confirm-locks.yml`). 로컬은 빈 PostgreSQL 14+ 와 `pg@8` 로
+`PGURL=postgres://…/<빈 DB> node scripts/booth-data/test-batch-confirm-locks.mjs --pg-dir <폴더> --main-dir <PR #38 작업 폴더> --disposable`.
+스크립트는 Supabase 주소와 `public.booths` 가 이미 있는 DB 를 거절합니다(Production 에 접속하지 않음).
 
 ---
 
