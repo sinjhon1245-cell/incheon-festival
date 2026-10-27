@@ -1530,6 +1530,12 @@
   ];
   var TABS = ['overview', 'schedule_items', 'booths', 'notices', 'operation_requests'];
 
+  /* 관리자 메뉴 표시 모드. 'full' 로 바꾸면 기존 전체 메뉴가 즉시 복원됩니다.
+     화면에서만 감추며 기능 정의, 데이터 로드, 접근 권한은 변경하지 않습니다. */
+  var ADMIN_MENU_MODE = 'booth-only'; // 'booth-only' | 'full'
+  var BOOTH_ONLY_GROUPS = [{ label: '부스 관리', keys: ['booths', 'zones'] }];
+  var BOOTH_ONLY_TABS = ['booths', 'zones'];
+
   /* 지금 보고 있는 통합 화면의 내부 탭. */
   var subTab = { supplies: 'supply_targets' };
   /* 목록·추가·수정이 실제로 다룰 항목. 통합 화면이면 내부 탭입니다. */
@@ -1576,8 +1582,9 @@
     }
     /* 관리 항목이 늘어 한 줄로 세우면 무엇이 무엇인지 알기 어렵습니다.
        하는 일끼리 묶고 제목을 답니다. 예시 모드는 부스 · 구역만 둡니다. */
-    var groups = DEMO ? [{ label: '협의용 예시', keys: DEMO_KEYS }] : GROUPS;
-    var tabs = DEMO ? DEMO_KEYS : TABS;
+    var groups = DEMO ? [{ label: '협의용 예시', keys: DEMO_KEYS }]
+      : (ADMIN_MENU_MODE === 'booth-only' ? BOOTH_ONLY_GROUPS : GROUPS);
+    var tabs = DEMO ? DEMO_KEYS : (ADMIN_MENU_MODE === 'booth-only' ? BOOTH_ONLY_TABS : TABS);
     $('#sidenav').innerHTML = groups.map(function (g) {
       var keys = g.keys.filter(function (k) { return ENTITIES[k] && !ENTITIES[k].hidden; });
       if (!keys.length) return '';
@@ -2620,7 +2627,9 @@
     if (DEMO) return DEMO_KEYS.indexOf(id) >= 0 ? id : 'booths';
     // 숨긴 항목은 주소로도 들어오지 않게 합니다. 표 이름이 그대로
     // 주소가 되면 메뉴에서 감춘 뜻이 없어집니다.
-    return (ENTITIES[id] && !ENTITIES[id].hidden) ? id : 'overview';
+    // 기존 딥링크는 유지합니다. 메뉴 숨김은 기능 삭제나 접근 권한 변경이 아닙니다.
+    return (ENTITIES[id] && !ENTITIES[id].hidden) ? id
+      : (ADMIN_MENU_MODE === 'booth-only' ? 'booths' : 'overview');
   }
   // 부스 운영 현황(booth-admin.html)의 '부스 정보 관리' 가 admin.html?find=A-01#booths 로 엽니다.
   // 처음 한 번만 부스 검색칸에 넣습니다.
