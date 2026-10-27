@@ -1530,9 +1530,15 @@
   ];
   var TABS = ['overview', 'schedule_items', 'booths', 'notices', 'operation_requests'];
 
-  /* 관리자 메뉴 표시 모드. 'full' 로 바꾸면 기존 전체 메뉴가 즉시 복원됩니다.
-     화면에서만 감추며 기능 정의, 데이터 로드, 접근 권한은 변경하지 않습니다. */
+  /* 관리자/운영 포털 공통 모드(settings.portal_menu_mode).
+     DB를 불러오기 전에는 행사 안전 기본값 'booth-only', 읽은 뒤에는 서버값을 따릅니다.
+     화면 메뉴만 바꿉니다. 기능, URL, 데이터 접근 정책에는 영향을 주지 않습니다. */
   var ADMIN_MENU_MODE = 'booth-only'; // 'booth-only' | 'full'
+  var menuModeSaving = false;
+  function storedMenuMode() {
+    var s = (cache.settings || [])[0];
+    return s && s.portal_menu_mode === 'full' ? 'full' : 'booth-only';
+  }
   var BOOTH_ONLY_GROUPS = [{ label: '부스 관리', keys: ['booths', 'zones'] }];
   var BOOTH_ONLY_TABS = ['booths', 'zones'];
 
@@ -1615,6 +1621,46 @@
     $('#sheet-who').textContent = (me.name || me.email || '') + ' · 관리자';
     $('#topbar-title').textContent = ENTITIES[current].label;
     document.title = (DEMO ? '협의용 예시 · ' : '') + ENTITIES[current].label + ' · 관리자';
+    paintMenuModeControls();
+  }
+
+  /* 두 위치(PC 사이드바, 휴대폰 더보기)의 선택 상태가 항상 같도록 갱신합니다. */
+  function paintMenuModeControls() {
+    Array.prototype.forEach.call(document.querySelectorAll('[data-set-menu-mode]'), function (b) {
+      var active = b.getAttribute('data-set-menu-mode') === ADMIN_MENU_MODE;
+      b.setAttribute('aria-pressed', active ? 'true' : 'false');
+      b.disabled = DEMO || menuModeSaving || !(cache.settings || []).length;
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('[data-menu-mode-hint]'), function (el) {
+      el.textContent = DEMO ? '협의용 예시에서는 변경할 수 없습니다.'
+        : '관리자·운영 포털에 함께 적용됩니다.';
+    });
+  }
+
+  /* 관리자 계정만 settings 한 칸을 바꿉니다(RLS is_admin). 저장 성공 뒤에만 UI를 바꿉니다. */
+  function setMenuMode(next) {
+    if (DEMO || !C.isAdmin() || menuModeSaving || (next !== 'booth-only' && next !== 'full')) return;
+    var s = (cache.settings || [])[0];
+    if (!s) { toast('행사 설정을 불러오지 못했습니다. 새로고침 후 다시 시도해 주세요.', true); return; }
+    if (storedMenuMode() === next) return;
+    menuModeSaving = true;
+    paintMenuModeControls();
+    C.update('settings', s.id, { portal_menu_mode: next }).then(function (saved) {
+      cache.settings[0] = saved;
+      ADMIN_MENU_MODE = storedMenuMode();
+      toast(next === 'full' ? '전체 메뉴를 표시합니다. 다른 기기는 새로고침하면 반영됩니다.'
+        : '부스 전용 메뉴를 표시합니다. 다른 기기는 새로고침하면 반영됩니다.');
+      if (next === 'booth-only' && BOOTH_ONLY_TABS.indexOf(current) < 0) {
+        // 감춘 페이지를 보고 있었다면 부스 관리로 이동합니다. 데이터는 그대로입니다.
+        if (location.hash !== '#booths') location.hash = '#booths'; else go();
+      } else paintNav();
+    }).catch(function (e) {
+      console.error('[admin] 메뉴 표시 모드 변경 실패', e);
+      toast(C.dataMessage(e), true);
+    }).then(function () {
+      menuModeSaving = false;
+      paintMenuModeControls();
+    });
   }
 
   /* ── 대시보드 ───────────────────────────────────────────────── */
@@ -2602,7 +2648,12 @@
       return get(e.table, { order: e.order === false ? false : (e.order || [['sort_order', true]]) })
         .then(function (d) { cache[k] = d; });
     // 운영자 QR · PIN 상태는 함께 읽되, 못 읽어도 목록은 그립니다(loadCreds 는 실패하지 않습니다).
-    }).concat([loadCreds()])).then(renderPanel).catch(function (e) {
+    }).concat([loadCreds()])).then(function () {
+      if (!DEMO) ADMIN_MENU_MODE = storedMenuMode();
+      // 주소에 화면 지정이 없을 때는 저장된 모드의 첫 화면으로 들어갑니다.
+      if (!location.hash) current = routeFromHash();
+      renderPanel();
+    }).catch(function (e) {
       console.error('[admin] 로드 실패', e);
       $('#view').innerHTML = '<div class="state state--error">' + esc(C.dataMessage(e)) +
         '<div class="state__act"><button class="btn btn--ghost btn--sm" type="button" data-retry>다시 시도</button></div></div>';
@@ -2701,6 +2752,8 @@
       var so = t.closest('[data-signout]');
       if (so) { signOutNow(so); return; }
       if (t.closest('[data-pwchange]')) { openPasswordChange(); return; }
+      var mm = t.closest('[data-set-menu-mode]');
+      if (mm) { setMenuMode(mm.getAttribute('data-set-menu-mode')); return; }
       if (t.closest('[data-open-sheet]')) { $('#sheet').hidden = false; document.body.style.overflow = 'hidden'; return; }
       if (t.closest('[data-close-sheet]')) { $('#sheet').hidden = true; document.body.style.overflow = ''; return; }
       if (t.closest('[data-retry]')) { loadAll(); return; }

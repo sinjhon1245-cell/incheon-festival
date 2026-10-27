@@ -45,14 +45,13 @@
   ];
   var NAV_GROUPS = ['운영', '정보'];
 
-  /* 행사 운영 포털의 표시 메뉴만 제어합니다. 숨긴 화면과 기존 링크는 유지합니다.
-     향후 'full' 로 변경하면 기존 전체 메뉴가 돌아옵니다. */
-  var PORTAL_MENU_MODE = 'booth-only'; // 'booth-only' | 'full'
+  /* 관리자 페이지에서 설정한 공통 모드를 settings에서 읽습니다.
+     공개 열람(RLS SELECT)은 가능하지만, 변경은 관리자만 합니다.
+     이전 DB나 응답 지연 상황에서는 기본값 'booth-only'를 유지합니다. */
   var BOOTH_ONLY_NAV = ['dashboard', 'booths'];
   function visibleNav() {
-    return PORTAL_MENU_MODE === 'booth-only'
-      ? NAV.filter(function (n) { return BOOTH_ONLY_NAV.indexOf(n.id) >= 0; })
-      : NAV;
+    var full = S.settings && S.settings.portal_menu_mode === 'full';
+    return full ? NAV : NAV.filter(function (n) { return BOOTH_ONLY_NAV.indexOf(n.id) >= 0; });
   }
 
   function svgIcon(d) {
@@ -3545,17 +3544,13 @@
       if (!items.length) return '';
       return '<p class="side__group">' + esc(name) + '</p>' + items.map(link).join('');
     }
-    // 관리자 링크는 늘 보입니다. 눌러도 admin.html 이 스스로 로그인을
-    // 요구하므로, 링크가 보인다고 해서 열리는 것은 아닙니다.
-    // 로그인한 상태면 옆에 작게 적어 둡니다 — 처리 단추가 왜 보이는지 알 수 있게.
-    var adminLink = '<a href="admin.html">관리자' +
-      (canAct() ? '<span class="nav__state">로그인됨</span>' : '') + '</a>';
+    // 관리자만 admin.html 주소로 직접 접속합니다. 운영 포털에는 관리자 링크를 두지 않습니다.
     $('#sidenav').innerHTML =
       menu.filter(function (n) { return !n.group; }).map(link).join('') +
-      NAV_GROUPS.map(group).join('') +
-      '<p class="side__group">관리</p>' + adminLink;
+      NAV_GROUPS.map(group).join('');
 
     var tabs = menu.filter(function (n) { return n.tab; });
+    var extras = menu.filter(function (n) { return !n.tab; });
     $('#tabbar').innerHTML = tabs.map(function (n) {
       var num = badgeNum(n.id);
       return '<a href="#' + n.id + '" class="' + (n.id === view ? 'is-on' : '') + '"' +
@@ -3564,10 +3559,11 @@
         (num ? '<span class="tab__badge">' + num + '</span>' : '') +
         '<span>' + esc(n.short) + '</span></a>';
     }).join('') +
-      '<button type="button" data-open-sheet>' + TAB_ICONS.more + '<span>더보기</span></button>';
+      (extras.length
+        ? '<button type="button" data-open-sheet>' + TAB_ICONS.more + '<span>더보기</span></button>'
+        : '');
 
-    /* 더보기 시트도 같은 묶음으로 보여 줍니다. 사이드바와 순서가
-       다르면 PC 로 익힌 위치가 휴대폰에서 통하지 않습니다. */
+    /* 더보기 시트도 선택된 메뉴로만 구성합니다. 부스 전용에서는 빈 더보기를 표시하지 않습니다. */
     function sheetLink(n) {
       return '<a href="#' + n.id + '" class="' + (n.id === view ? 'is-on' : '') + '">' +
         esc(n.label) + badgeFor(n.id) + '</a>';
@@ -3576,7 +3572,7 @@
       var items = menu.filter(function (n) { return n.group === name && !n.tab; });
       if (!items.length) return '';
       return '<p class="sheet__group">' + esc(name) + '</p>' + items.map(sheetLink).join('');
-    }).join('') + '<p class="sheet__group">관리</p>' + adminLink;
+    }).join('');
   }
 
   function routeFromHash() {
