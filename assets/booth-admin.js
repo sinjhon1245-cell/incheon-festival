@@ -49,11 +49,12 @@
 
   var SORTS = [['ops', '운영 우선'], ['code', '부스번호'], ['wait', '대기시간 높은 순'], ['oldest', '최근 입력 오래된 순']];
   /* 맨 위 요약 = 걸러 보기. 행사 당일 '손이 가야 하는 부스' 중심으로만 둡니다(운영 중 수는 결과 줄과
-     구역 현황이 말합니다). 빨강 = 혼잡 · 확인 필요, 주황 = 미입력(주의), 회색 = 중단 · 마감.
+     구역 현황이 말합니다). 빨강 = 혼잡(과 QR 꺼짐 · PIN 실패 많음 같은 장애), 주황 = 확인 필요 · 미입력(데이터 점검 —
+     둘은 낱말 · 줄 표시로 나눕니다: 확인 필요 = 주황 띠 + '확인 필요' 표, 미입력 = 회색 띠 + '현황 미입력'), 회색 = 중단 · 마감.
      QR 준비 필요 · PIN 확인은 해당 부스가 있을 때만 붙습니다(summaryHtml).
      QR 준비 필요 = 공개 부스인데 쓸 수 있는 QR(미발급 · 꺼짐)도 PIN 도 없음 — 장애가 아니라 '발급할 일' 이라 주황. */
   var QUICK = [
-    ['all', '전체'], ['busy', '혼잡', 'danger'], ['stale', '확인 필요', 'danger'],
+    ['all', '전체'], ['busy', '혼잡', 'danger'], ['stale', '확인 필요', 'warn'],
     ['missing', '미입력', 'warn'], ['pause', '일시 중단'], ['closed', '운영 종료']
   ];
   var BY = { qr: '운영자 QR', pin: '운영자 PIN', admin: '관리자 입력' };
@@ -334,7 +335,7 @@
       '</div>' +
       '<div class="lv__meta">' +
         '<span class="lv__state"><i class="lv__dot" aria-hidden="true"></i>' + esc(stateText(r)) + '</span>' +
-        '<span class="lv__flags">' + (r.stale ? flag('확인 필요', 'bad') : '') +
+        '<span class="lv__flags">' + (r.stale ? flag('확인 필요', 'warn') : '') +
           '<span class="lv__cred">' + credFlags(r) + '</span></span>' +
         '<span class="lv__ago">' + agoHtml(r) + '</span>' +
       '</div>' +
@@ -573,11 +574,13 @@
     }).join('') + '</span>';
   }
   // 상태 4칸(마지막 입력 기준) — 같은 색 네모 + 낱말 + 수. 0 은 흐리게.
+  // long(전체 요약): 긴 낱말 + 운영 중 칸 아래 '최근 확인 ○곳'(운영 중 수가 지금 확인된 수가 아님을 바로 옆에서)
   function stateCells(t, cls, long) {
     return [['open', '운영 중', t.open], ['pause', long ? '일시 중단' : '중단', t.pause], ['closed', long ? '운영 종료' : '마감', t.closed],
       ['missing', '미입력', t.missing]].map(function (c) {
       return '<span class="' + cls + ' zs--' + c[0] + (c[2] ? '' : ' is-zero') + '"><span class="zs__l"><i aria-hidden="true"></i>' + c[1] + '</span>' +
-        '<b class="zs__n">' + c[2] + '</b></span>';
+        '<b class="zs__n">' + c[2] + '</b>' +
+        (long && c[0] === 'open' ? '<span class="zs__sub">최근 확인 <b>' + t.openFresh + '</b>곳</span>' : '') + '</span>';
     }).join('');
   }
   function staleSub(t) {
@@ -626,7 +629,8 @@
     return '<section class="zov" aria-labelledby="zov-title">' +
       '<div class="zov__base">' +
         '<div class="zov__head"><h2 class="zov__title" id="zov-title">전체 부스 현황</h2>' +
-          '<p class="zov__total">공개 부스 <b>' + t.total + '</b>곳 · <span>마지막 입력 기준</span></p></div>' +
+          '<p class="zov__total">공개 부스 <b>' + t.total + '</b>곳</p></div>' +
+        '<p class="zov__cap"><b>마지막 입력 기준</b><span>' + mins + '분 넘게 그대로인 부스도 마지막 상태로 셉니다</span></p>' +
         '<div class="zov__sts">' + stateCells(t, 'zs zs--lg', true) + '</div>' +
         stateBar(t) +
         '<p class="zov__key"><span><i class="zsw zsw--open" aria-hidden="true"></i>최근 확인</span>' +
