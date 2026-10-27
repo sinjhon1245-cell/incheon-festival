@@ -60,7 +60,9 @@
 
   // pinOn: PIN 보조 로그인 스위치(settings.booth_pin_enabled) — true · false · null(모름)
   var data = { zones: [], booths: [], live: {}, creds: null, pinOn: null, liveAt: null, masterAt: null, failAt: null };
-  var ui = { view: 'live', quick: 'all', zone: '', q: '', sort: 'ops', hidden: false, more: '' };
+  // 기본 정렬은 부스번호순(R1-01, R1-02 …). 고른 정렬은 새로 읽어도 그대로입니다(ui 에만 두고 다시 그릴 때 바꾸지 않음).
+  // zterms · zref: 구역 현황의 '용어' · '참고 값' 펼침(15초마다 다시 그려도 열린 채로)
+  var ui = { view: 'live', quick: 'all', zone: '', q: '', sort: 'code', hidden: false, more: '', zterms: false, zref: false };
   var busy = {};
   var stops = [];
   var started = false;
@@ -224,7 +226,10 @@
   function waitHtml(r) {
     if (r.state === 'open') {
       var big = r.wait === 0 ? '바로' : String(r.wait);
-      return '<span class="lv__val"><span class="lv__num' + (r.wait === 0 ? ' lv__num--word' : '') + '">' + esc(big) + '</span>' +
+      // 30분 넘게 그대로면 마지막 입력값 — 흐린 글자(현재 대기처럼 보이지 않게, booth-admin.css 의 .lv.is-stale)
+      return '<span class="lv__val"' + (r.stale ? ' title="마지막 입력값 · ' + BC.staleMinutes() + '분 이상 미갱신(현재 대기 아님)"' : '') + '>' +
+        (r.stale ? '<span class="sr-only">마지막 입력값 </span>' : '') +
+        '<span class="lv__num' + (r.wait === 0 ? ' lv__num--word' : '') + '">' + esc(big) + '</span>' +
         (r.wait === 0 ? '' : '<span class="lv__unit">' + (r.wait >= 60 ? '분 이상' : '분') + '</span>') + '</span>' +
         '<span class="lv__cong">' + esc(r.congestion) + '</span>';
     }
@@ -505,14 +510,14 @@
   }
 
   /* ── 구역 현황 ─────────────────────────────────────────────── */
-  /* 카드 한 장 = 한 구역. 3초 안에 '어느 구역이 혼잡하고 대기가 긴가' 를 보도록 위에서 아래로
-       구역 코드 · 부스 수 → 혼잡 부스 수 · 최장 대기(가장 큰 두 숫자) → 최장 대기 부스 → 상태 막대 · 상태 수 → 확인 필요
-     수는 부스 운영 현황과 같은 판정(rowsNow · inQuick)을 그대로 셉니다. 아래 막대 · 상태 수는 부스 한 곳을 한 칸에만 셉니다 —
-       운영 중(혼잡 포함) + 확인 필요 + 미입력 + 중단 + 마감 = 그 구역 부스 수.
-       혼잡은 운영 중 안의 수(inQuick 'busy' = 운영 중이면서 혼잡)라 따로 더하지 않습니다.
-       확인 필요(30분 넘게 그대로)는 운영 중 · 중단 어느 쪽이든 먼저 셉니다 — 운영 중 수가 이미 확인 필요를 빼고 세는 것과
-       같은 규칙이라, 중단 칸도 확인 필요가 아닌 중단만 셉니다. 확인 필요 띠의 둘째 줄이 그 안의 운영 중 · 중단 수와
-       '위 상태 수에서 제외' 를 늘 글자로 보여 줍니다(마우스 · 휴대폰 · 키보드 모두). */
+  /* 운영 상태와 데이터 최신성을 나눠 보여 줍니다.
+       운영 상태 = 마지막 입력 기준 운영 중 · 일시 중단 · 운영 종료 · 미입력(r.state). 부스 한 곳 = 한 칸 → 합 = 부스 수.
+       확인 필요 = 마지막 입력 뒤 30분 넘게 그대로(r.stale). 운영 중 · 중단과 겹치는 '점검 지표' 라 상태 수에 더하지 않고 따로 씁니다.
+       혼잡 = 최근 확인된(확인 필요가 아닌) 운영 중 부스 가운데 혼잡(inQuick 'busy' 그대로) — 이것도 운영 중과 겹치는 지표.
+     오래된 값이라고 운영 상태를 지우지 않되, 현재 확인된 사실처럼 보이지 않게 '마지막 입력 기준' · '30분 이상 미갱신' ·
+     '최근 확인' 을 붙이고, 막대에서는 미갱신 운영 중을 옅은 초록으로 칠합니다. 최장 대기는 최근 확인된 값만 크게 쓰고,
+     오래된 값은 '참고' 로만(작고 흐리게) 보입니다. 판정 함수(rowsNow · inQuick · isStale · 30분 기준)는 그대로 씁니다.
+     맨 위 '전체 부스 현황' → 구역 카드 R1~R4 → '최장 대기 부스' 순서입니다. */
   /* 구역 이름에서 앞의 구역 코드를 뗍니다 — 카드 · 구역 고르기 칸은 코드를 따로 씁니다.
        'R1 실제 위치 …' → '실제 위치 …' · 'F구역' → '' · 'A 구역 열린마당' → '열린마당'
      코드 바로 뒤가 끝 · 빈칸 · 나눔표 · '구역' 일 때만 코드로 봅니다 — 'AI 스쿨존'(A) · 'R10 …'(R1) 은 그대로. */
@@ -522,20 +527,34 @@
     if (m) label = label.slice(m[0].length).replace(/^[\s·:\-–|/]+/, '');
     return label === '구역' ? '' : label;
   }
+  // 대기가 긴 순(같으면 부스번호순) — 최장 대기 · 최장 대기 부스 목록
+  function byWait(a, b) { return (b.wait - a.wait) || byCode(a, b); }
+  // 부스 묶음 하나(전체 또는 한 구역)의 수. 상태 4칸은 마지막 입력 기준이라 서로 겹치지 않습니다.
+  function tally(rs) {
+    function n(f) { return rs.filter(f).length; }
+    var openRows = rs.filter(function (r) { return r.state === 'open'; });
+    var fresh = openRows.filter(function (r) { return !r.stale; });
+    var stale = openRows.filter(function (r) { return r.stale; });
+    return {
+      total: rs.length,
+      open: openRows.length, pause: n(function (r) { return r.state === 'pause'; }),
+      closed: n(function (r) { return r.state === 'closed'; }), missing: n(function (r) { return r.state === 'missing'; }),
+      // 겹치는 지표
+      stale: n(function (r) { return r.stale; }),
+      staleOpen: stale.length, stalePause: n(function (r) { return r.stale && r.state === 'pause'; }),
+      openFresh: fresh.length,
+      busy: n(function (r) { return inQuick(r, 'busy'); }),
+      top: fresh.slice().sort(byWait)[0] || null,       // 최근 확인된 최장 대기
+      ref: stale.slice().sort(byWait)[0] || null         // 30분 이상 미갱신 — 참고
+    };
+  }
   function zoneGroups() {
     var all = base(rowsNow());
     return data.zones.map(function (z) {
       var rs = all.filter(function (r) { return r.zone_key === z.key; });
-      var open = rs.filter(function (r) { return r.state === 'open' && !r.stale; });
-      var top = open.slice().sort(function (a, b) { return b.wait - a.wait; })[0] || null;
-      function n(q) { return rs.filter(function (r) { return inQuick(r, q); }).length; }
-      var stale = rs.filter(function (r) { return r.stale; });
-      return { z: z, name: zoneName(z), rs: rs, open: open.length, busy: n('busy'), stale: stale.length, missing: n('missing'),
-               closed: n('closed'), top: top,
-               // 확인 필요가 아닌 중단 · 확인 필요 안의 운영 중 · 중단(막대 · 상태 수에 씀)
-               pauseOnly: rs.filter(function (r) { return r.state === 'pause' && !r.stale; }).length,
-               staleOpen: stale.filter(function (r) { return r.state === 'open'; }).length,
-               stalePause: stale.filter(function (r) { return r.state === 'pause'; }).length };
+      var g = tally(rs);
+      g.z = z; g.name = zoneName(z); g.rs = rs;
+      return g;
     }).filter(function (g) { return g.rs.length; });
   }
   /* 모든 카드의 구역 이름(코드를 뗀 것)이 같으면 — 리허설 임시구역 R1~R4 처럼 — 카드마다 되풀이하지 않고
@@ -545,70 +564,139 @@
     for (var i = 1; i < groups.length; i++) if (groups[i].name !== groups[0].name) return '';
     return groups[0].name;
   }
+  function waitText(w) { return w === 0 ? '바로' : w + (w >= 60 ? '분 이상' : '분'); }
+  // 상태 막대 — 마지막 입력 기준 4칸. 운영 중은 최근 확인(혼잡 빨강 · 그 밖 초록)과 30분 이상 미갱신(옅은 초록)으로 나눠 칠합니다.
+  function stateBar(t) {
+    return '<span class="zbar" aria-hidden="true">' + [['busy', t.busy], ['open', t.openFresh - t.busy], ['old', t.staleOpen],
+      ['pause', t.pause], ['closed', t.closed], ['missing', t.missing]].filter(function (s) { return s[1] > 0; }).map(function (s) {
+      return '<i class="zbar__s zbar__s--' + s[0] + '" style="flex-grow:' + s[1] + '"></i>';
+    }).join('') + '</span>';
+  }
+  // 상태 4칸(마지막 입력 기준) — 같은 색 네모 + 낱말 + 수. 0 은 흐리게.
+  function stateCells(t, cls, long) {
+    return [['open', '운영 중', t.open], ['pause', long ? '일시 중단' : '중단', t.pause], ['closed', long ? '운영 종료' : '마감', t.closed],
+      ['missing', '미입력', t.missing]].map(function (c) {
+      return '<span class="' + cls + ' zs--' + c[0] + (c[2] ? '' : ' is-zero') + '"><span class="zs__l"><i aria-hidden="true"></i>' + c[1] + '</span>' +
+        '<b class="zs__n">' + c[2] + '</b></span>';
+    }).join('');
+  }
+  function staleSub(t) {
+    return t.stale ? '운영 중 ' + t.staleOpen + ' · 중단 ' + t.stalePause : '모두 30분 안에 입력';
+  }
   function zoneCard(g, common) {
     var tag = common && /리허설/.test(common) ? '<span class="zc__tag">리허설</span>' : '';
     var name = common ? '' : g.name;
-    var t = g.top;
-    var waitBig = t ? (t.wait === 0 ? '바로' : String(t.wait)) : '—';
-    var waitUnit = t && t.wait !== 0 ? (t.wait >= 60 ? '분 이상' : '분') : '';
-    var topName = t ? (t.code ? t.code + ' ' : '') + (t.name || '(이름 없음)') : '';
-    // 막대: 부스 한 곳 = 한 칸. 혼잡(빨강)은 운영 중 안에 있어 운영 중 칸의 앞쪽을 칠합니다.
-    var segs = [['busy', g.busy], ['open', g.open - g.busy], ['stale', g.stale], ['missing', g.missing],
-                ['pause', g.pauseOnly], ['closed', g.closed]];
-    var bar = segs.filter(function (s) { return s[1] > 0; }).map(function (s) {
-      return '<i class="zbar__s zbar__s--' + s[0] + '" style="flex-grow:' + s[1] + '"></i>';
-    }).join('');
-    function st(kind, label, v, extra) {
-      return '<span class="zst zst--' + kind + (v ? '' : ' is-zero') + '"><i aria-hidden="true"></i>' + esc(label) +
-        ' <b>' + v + '</b>' + (extra || '') + '</span>';
+    var t = g.top, f = g.ref;
+    // 최장 대기: 최근 확인된 값만 크게. 없으면 그렇다고 쓰고, 오래된 값은 '참고' 로만.
+    var top;
+    if (t) {
+      top = '<span class="zc__topr"><span class="zc__topk">최장 대기</span><b class="zc__topw zc__topw--' + tone(t) + '">' + esc(waitText(t.wait)) + '</b>' +
+          '<b class="zc__topc">' + esc(t.code || '') + '</b><span class="zc__topn">' + esc(t.name || '(이름 없음)') + '</span></span>' +
+        '<span class="zc__tops">최근 확인 · ' + esc(BC.formatClock(t.at)) + ' 입력</span>';
+    } else {
+      top = '<span class="zc__topr"><span class="zc__topk">최장 대기</span><span class="zc__topnone">최근 확인된 대기 없음</span></span>' +
+        '<span class="zc__tops">' + (f ? '<span class="zref">참고</span> 마지막 입력 ' + esc(waitText(f.wait)) + ' · ' + esc(f.code || '') + ' · ' + esc(BC.formatAgo(f.at))
+          : (g.open ? '' : '마지막 입력 기준 운영 중인 부스 없음')) + '</span>';
     }
-    var label = g.z.key + ' 구역 · 부스 ' + g.rs.length + '곳 · 혼잡 ' + g.busy + '곳 · 최장 대기 ' +
-      (t ? (t.wait === 0 ? '바로' : t.wait + '분') + '(' + topName + ')' : '없음') + ' · 확인 필요 ' + g.stale + '곳' +
-      (g.stale ? '(운영 중 ' + g.staleOpen + '곳 · 중단 ' + g.stalePause + '곳, 위 상태 수에서 제외)' : '') + ' — 이 구역 부스 보기';
-    return '<button class="zc' + (g.stale ? ' is-attn' : '') + '" type="button" data-zone="' + esc(g.z.key) + '" aria-label="' + esc(label) + '">' +
+    var label = g.z.key + ' 구역 · 부스 ' + g.total + '곳 · 마지막 입력 기준 운영 중 ' + g.open + ' · 중단 ' + g.pause + ' · 마감 ' + g.closed +
+      ' · 미입력 ' + g.missing + ' · 혼잡(최근 확인) ' + g.busy + ' · 확인 필요(30분 이상 미갱신) ' + g.stale +
+      ' · 최장 대기 ' + (t ? waitText(t.wait) + '(' + (t.code || '') + ')' : '최근 확인된 값 없음') + ' — 이 구역 부스 보기';
+    return '<button class="zc" type="button" data-zone="' + esc(g.z.key) + '" aria-label="' + esc(label) + '">' +
       '<span class="zc__head">' +
         '<span class="zc__key">' + esc(g.z.key) + '</span>' +
         '<span class="zc__id">' + tag + (name ? '<span class="zc__name" title="' + esc(name) + '">' + esc(name) + '</span>' : '') + '</span>' +
-        '<span class="zc__all">부스 <b>' + g.rs.length + '</b>곳</span>' +
+        '<span class="zc__all">부스 <b>' + g.total + '</b>곳</span>' +
       '</span>' +
-      '<span class="zc__kpis">' +
-        '<span class="zk zk--busy' + (g.busy ? ' is-on' : ' is-zero') + '"><span class="zk__l">혼잡</span>' +
-          '<span class="zk__v"><b>' + g.busy + '</b><small>곳</small></span>' +
-          '<span class="zk__s">운영 중 ' + g.open + '곳 중</span></span>' +
-        '<span class="zk zk--wait zk--t-' + (t ? tone(t) : 'none') + '"><span class="zk__l">최장 대기</span>' +
-          '<span class="zk__v' + (t && t.wait === 0 ? ' is-word' : '') + (t && t.wait >= 60 ? ' is-over' : '') + '"><b>' + esc(waitBig) + '</b>' + (waitUnit ? '<small>' + waitUnit + '</small>' : '') + '</span>' +
-          '<span class="zk__s">' + (t ? esc(t.congestion) + ' · 운영 중 기준' : '운영 중 대기 값 없음') + '</span></span>' +
+      '<span class="zc__cap">마지막 입력 기준</span>' +
+      '<span class="zc__sts">' + stateCells(g, 'zs') + '</span>' +
+      stateBar(g) +
+      // 겹치는 지표 두 칸 — 상태 수에 더하지 않습니다.
+      '<span class="zc__ind">' +
+        '<span class="zi zi--busy' + (g.busy ? ' is-on' : '') + '"><span class="zi__l">혼잡</span><b class="zi__n">' + g.busy + '</b>' +
+          '<span class="zi__s">최근 확인</span></span>' +
+        '<span class="zi zi--stale' + (g.stale ? ' is-on' : '') + '"><span class="zi__l">확인 필요</span><b class="zi__n">' + g.stale + '</b>' +
+          '<span class="zi__s">' + (g.stale ? esc(staleSub(g)) : '30분 이상 미갱신') + '</span></span>' +
       '</span>' +
-      // 최장 대기 부스 — 한 줄(길면 …). 전체 이름은 마우스를 올리거나 카드를 눌러 그 구역 부스 목록에서 봅니다.
-      '<span class="zc__top"' + (t ? ' title="' + esc(topName) + '"' : '') + '>' +
-        (t ? '<span class="zc__topk">최장 대기</span><b class="zc__topc">' + esc(t.code || '') + '</b><span class="zc__topn">' + esc(t.name || '(이름 없음)') + '</span>'
-          : '<span class="zc__topk">최장 대기 부스 없음</span>') +
-      '</span>' +
-      '<span class="zbar" aria-hidden="true">' + bar + '</span>' +
-      '<span class="zc__sts">' +
-        st('open', '운영 중', g.open) + st('pause', '중단', g.pauseOnly) + st('closed', '마감', g.closed) + st('missing', '미입력', g.missing) +
-      '</span>' +
-      // 확인 필요 띠 — 둘째 줄이 그 안의 운영 중 · 중단 수와 '위 상태 수에서 제외' 를 늘 글자로 보여 줍니다.
-      '<span class="zc__attn' + (g.stale ? ' is-on' : '') + '">' +
-        (g.stale
-          ? '<span class="zc__attnr">확인 필요 <b>' + g.stale + '곳</b><span class="zc__attnh">' + BC.staleMinutes() + '분 넘게 그대로</span></span>' +
-            '<span class="zc__attnr zc__attnx"><span>운영 중 <b>' + g.staleOpen + '</b> · 중단 <b>' + g.stalePause + '</b></span>' +
-              '<span class="zc__attnh">위 상태 수에서 제외</span></span>'
-          : '<span class="zc__attnr">확인 필요 없음</span>') +
-      '</span>' +
+      '<span class="zc__top">' + top + '</span>' +
     '</button>';
   }
+  // 맨 위 전체 부스 현황 — 관람객 첫 화면의 요약(큰 수 · 분포 막대 · 네모 표)을 관리자용으로: 상태 4칸 + 겹치는 지표 2칸
+  function overviewHtml(t) {
+    var mins = BC.staleMinutes();
+    return '<section class="zov" aria-labelledby="zov-title">' +
+      '<div class="zov__base">' +
+        '<div class="zov__head"><h2 class="zov__title" id="zov-title">전체 부스 현황</h2>' +
+          '<p class="zov__total">공개 부스 <b>' + t.total + '</b>곳 · <span>마지막 입력 기준</span></p></div>' +
+        '<div class="zov__sts">' + stateCells(t, 'zs zs--lg', true) + '</div>' +
+        stateBar(t) +
+        '<p class="zov__key"><span><i class="zsw zsw--open" aria-hidden="true"></i>최근 확인</span>' +
+          '<span><i class="zsw zsw--old" aria-hidden="true"></i>운영 중 · ' + mins + '분 이상 미갱신</span>' +
+          '<span>네 칸의 합 = 공개 부스 수</span></p>' +
+      '</div>' +
+      '<div class="zov__ind" role="group" aria-label="상태와 겹치는 지표">' +
+        '<p class="zov__indh">상태와 겹치는 지표</p>' +
+        '<p class="zi zi--lg zi--stale' + (t.stale ? ' is-on' : '') + '"><span class="zi__l">확인 필요</span><b class="zi__n">' + t.stale + '</b>' +
+          '<span class="zi__s">' + mins + '분 이상 미갱신' + (t.stale ? ' · ' + esc(staleSub(t)) : '') + '</span></p>' +
+        '<p class="zi zi--lg zi--busy' + (t.busy ? ' is-on' : '') + '"><span class="zi__l">혼잡</span><b class="zi__n">' + t.busy + '</b>' +
+          '<span class="zi__s">최근 확인된 운영 중 ' + t.openFresh + '곳 중</span></p>' +
+      '</div>' +
+      '<details class="zov__terms"' + (ui.zterms ? ' open' : '') + ' data-zd="zterms"><summary>용어</summary><dl>' +
+        '<div><dt>운영 중</dt><dd>마지막 입력 상태가 운영 중</dd></div>' +
+        '<div><dt>혼잡</dt><dd>최근 확인된 운영 중 부스 가운데 혼잡으로 입력된 곳</dd></div>' +
+        '<div><dt>확인 필요</dt><dd>마지막 상태 입력 뒤 ' + mins + '분을 넘겨 다시 확인이 필요한 곳(운영 중 · 중단과 겹침)</dd></div>' +
+        '<div><dt>일시 중단</dt><dd>마지막 입력 상태가 중단</dd></div>' +
+        '<div><dt>운영 종료</dt><dd>마지막 입력 상태가 마감</dd></div>' +
+        '<div><dt>미입력</dt><dd>오늘 입력된 운영 상태가 없는 곳</dd></div>' +
+      '</dl></details>' +
+    '</section>';
+  }
+  /* 구역 카드 아래 '최장 대기 부스' — 최근 확인된 대기만 순위로. 없으면 그렇다고 쓰고,
+     30분 이상 미갱신 값은 접힌 '참고' 묶음 안에만 둡니다(흐린 글자 · '마지막 입력' · '오래된 참고값'). 누르면 그 부스 상세. */
+  var LONG_N = 5;
+  function longRow(r, old) {
+    return '<li><button class="zl' + (old ? ' is-old' : '') + '" type="button" data-booth="' + esc(r.id) + '" ' +
+        'aria-label="' + esc((r.code || '') + ' ' + (r.name || '') + ' · ' + r.zone_key + ' 구역 · ' + (old ? '마지막 입력 ' : '대기 ') + waitText(r.wait) +
+          ' · ' + BC.formatClock(r.at) + ' 입력 · ' + (old ? '오래된 참고값' : '최근 확인') + ' — 상세 보기') + '">' +
+      '<span class="zl__code">' + esc(r.code || '') + '</span>' +
+      '<span class="zl__name">' + esc(r.name || '(이름 없음)') + '</span>' +
+      '<span class="zl__zone">' + esc(r.zone_key) + '</span>' +
+      '<span class="zl__wait' + (old ? '' : ' zl__wait--' + tone(r)) + '">' + (old ? '<small>마지막 입력</small>' : '') + esc(waitText(r.wait)) + '</span>' +
+      '<span class="zl__at">' + esc(BC.formatClock(r.at)) + '<small>' + esc(BC.formatAgo(r.at)) + '</small></span>' +
+      '<span class="zl__fresh"><span class="zbadge zbadge--' + (old ? 'old' : 'new') + '">' + (old ? '오래된 참고값' : '최근 확인') + '</span></span>' +
+    '</button></li>';
+  }
+  function longestHtml(all) {
+    var open = all.filter(function (r) { return r.state === 'open'; });
+    var fresh = open.filter(function (r) { return !r.stale; }).sort(byWait).slice(0, LONG_N);
+    var old = open.filter(function (r) { return r.stale; }).sort(byWait);
+    var mins = BC.staleMinutes();
+    return '<section class="zlong" aria-labelledby="zlong-title">' +
+      '<div class="zlong__head"><h2 class="zlong__title" id="zlong-title">최장 대기 부스</h2>' +
+        '<p class="zlong__sub">최근 확인(' + mins + '분 안에 입력)된 대기 · 상위 ' + LONG_N + '곳 · 누르면 그 부스 상세</p></div>' +
+      (fresh.length
+        ? '<ol class="zlist">' + fresh.map(function (r) { return longRow(r, false); }).join('') + '</ol>'
+        : '<p class="zlong__empty"><b>현재 확인 가능한 대기정보 없음</b><span>' + mins + '분 안에 입력된 운영 중 부스가 없습니다.</span></p>') +
+      (old.length
+        ? '<details class="zlong__ref"' + (ui.zref ? ' open' : '') + ' data-zd="zref"><summary>참고 · ' + mins + '분 이상 미갱신된 마지막 입력값 ' + old.length + '곳' +
+            '<span>현재 대기가 아닙니다</span></summary>' +
+            '<ol class="zlist zlist--old">' + old.slice(0, LONG_N).map(function (r) { return longRow(r, true); }).join('') + '</ol></details>'
+        : '') +
+    '</section>';
+  }
   function paintZones() {
+    var all = base(rowsNow());
     var groups = zoneGroups();
     var common = zoneCommon(groups);
     var head = '<div class="page__head"><div><h1 class="page__title">구역 현황</h1>' +
-      '<p class="page__desc">구역마다 혼잡 부스 수와 가장 긴 대기를 먼저 보여 줍니다. 아래 막대와 상태 수는 부스 한 곳을 한 칸에만 셉니다' +
-      '(혼잡은 운영 중에 포함, 확인 필요는 운영 중 · 중단에서 제외). 구역을 누르면 그 구역 부스만 봅니다.</p></div></div>' +
+      '<p class="page__desc">운영 상태는 마지막 입력 기준, 확인 필요 · 혼잡은 그 위에 겹쳐 보는 지표입니다. 구역을 누르면 그 구역 부스만 봅니다.</p></div></div>' +
       (DEMO ? '<p class="demohint">' + esc(DEMO_TEXT) + '</p>' : '') +
-      '<p class="lvmeta">' + metaHtml() + '</p>' +
-      (common ? '<p class="znote"><b>' + esc(groups.map(function (g) { return g.z.key; }).join(' · ')) + '</b><span>' + esc(common) + '</span></p>' : '');
-    var body = groups.length ? '<div class="zgrid' + (groups.length === 4 ? ' zgrid--4' : '') + '">' +
-      groups.map(function (g) { return zoneCard(g, common); }).join('') + '</div>' : emptyHtml(rowsNow());
+      '<p class="lvmeta">' + metaHtml() + '</p>';
+    var body = groups.length
+      ? overviewHtml(tally(all)) +
+        (common ? '<p class="znote"><b>' + esc(groups.map(function (g) { return g.z.key; }).join(' · ')) + '</b><span>' + esc(common) + '</span></p>' : '') +
+        '<div class="zgrid' + (groups.length === 4 ? ' zgrid--4' : '') + '">' + groups.map(function (g) { return zoneCard(g, common); }).join('') + '</div>' +
+        longestHtml(all)
+      : emptyHtml(rowsNow());
     $('#view').innerHTML = '<div class="page lvpage">' + head + body + '</div>';
   }
 
@@ -1156,7 +1244,9 @@
   }
   function go() {
     ui.view = route();
-    ui.more = '';
+    // 구역 현황의 '최장 대기 부스' 에서 누른 부스는 부스 운영 현황에서 펼친 채로 엽니다(그 밖에는 접힘).
+    ui.more = ui.view === 'live' && ui.pend ? ui.pend : '';
+    ui.pend = '';
     paintNav();
     if (ui.view === 'live') $('#view').innerHTML = '';
     paint();
@@ -1196,6 +1286,13 @@
       if (t.closest('[data-reset]')) { ui.quick = 'all'; ui.zone = ''; ui.q = ''; var qi = $('#lv-q'); if (qi) qi.value = ''; paint(); return; }
       var qb = t.closest('[data-quick]');
       if (qb) { var v = qb.getAttribute('data-quick'); ui.quick = ui.quick === v && v !== 'all' ? 'all' : v; paint(); return; }
+      // 최장 대기 부스 → 부스 운영 현황에서 그 부스 하나(부스번호 검색)를 상세가 펼쳐진 채로
+      var bb = t.closest('[data-booth]');
+      if (bb) {
+        var br = rowsNow().filter(function (r) { return r.id === bb.getAttribute('data-booth'); })[0];
+        if (br) { ui.q = br.code || br.name; ui.zone = ''; ui.quick = 'all'; ui.pend = br.id; window.location.hash = '#live'; }
+        return;
+      }
       var zb = t.closest('[data-zone]');
       if (zb) { ui.zone = zb.getAttribute('data-zone'); ui.quick = 'all'; window.location.hash = '#live'; return; }
       var act = t.closest('[data-act]');
@@ -1217,6 +1314,11 @@
       else if (e.target.id === 'lv-sort') { ui.sort = e.target.value; paintLive(); }
 
     });
+    // 구역 현황의 펼침(용어 · 참고 값)을 기억 — 15초마다 다시 그려도 사용자가 연 그대로(toggle 은 거품이 없어 잡기 단계에서)
+    document.addEventListener('toggle', function (e) {
+      var k = e.target && e.target.getAttribute && e.target.getAttribute('data-zd');
+      if (k === 'zterms' || k === 'zref') ui[k] = e.target.open;
+    }, true);
     try {
       var mq = window.matchMedia('(max-width: 680px)');
       var onWidth = function () { var q = $('#lv-q'); if (q) q.placeholder = searchPh(); };
