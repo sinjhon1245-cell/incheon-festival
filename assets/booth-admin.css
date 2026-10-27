@@ -97,7 +97,7 @@ body { background: #fff; }
 /* 관리 조치 — 한 줄 = 할 일 하나(누르면 그 부스만). 왼쪽 선 = 주황(데이터 점검) · 빨강(PIN 장애) */
 .oact__list { display: grid; gap: 8px; }
 /* 운영 상태 아래에 놓일 때(1279px 이하)는 할 일을 가로로 나란히 — 세로로 길어지지 않게 */
-@media (min-width: 700px) and (max-width: 1279px) { .oact__list { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); } }
+@media (min-width: 700px) and (max-width: 1279px) { .oact__list { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); align-items: start; } }
 .todo { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "l n" "s go"; align-items: baseline; gap: 0 12px;
   min-width: 0; padding: 10px 14px; text-align: left; background: #fff; border: 1px solid var(--line); border-left: 4px solid var(--c);
   border-radius: 10px; font: inherit; color: var(--ink); cursor: pointer; }
@@ -129,7 +129,7 @@ body { background: #fff; }
 .tsplit__l { grid-area: l; min-width: 0; font-size: 13.5px; font-weight: 800; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tsplit__n { grid-area: n; font-size: 20px; font-weight: 800; line-height: 1.1; font-variant-numeric: tabular-nums; }
 .tsplit__n::after { content: '곳'; margin-left: 2px; font-size: 12px; font-weight: 700; color: var(--ink-2); }
-.tsplit__s { grid-area: s; min-width: 0; font-size: 12px; font-weight: 600; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tsplit__s { grid-area: s; min-width: 0; font-size: 12px; font-weight: 600; line-height: 1.4; color: var(--muted); }
 .tsplit__b--checked .tsplit__n { color: var(--primary); }
 .tsplit__b--unchecked .tsplit__n { color: var(--warn); }
 .tsplit__b.is-zero .tsplit__n { color: var(--muted-2); }
