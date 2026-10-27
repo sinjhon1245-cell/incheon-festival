@@ -48,19 +48,20 @@
   var PIN_FAIL_WARN = 10;   // 관리자 화면의 'PIN 실패 많음' 과 같은 기준
 
   var SORTS = [['ops', '운영 우선'], ['code', '부스번호'], ['wait', '대기시간 높은 순'], ['oldest', '최근 입력 오래된 순']];
-  /* 맨 위 요약 = 걸러 보기. 행사 당일 '손이 가야 하는 부스' 중심으로만 둡니다(운영 중 수는 결과 줄과
-     구역 현황이 말합니다). 빨강 = 혼잡(과 QR 꺼짐 · PIN 실패 많음 같은 장애), 주황 = 확인 필요 · 미입력(데이터 점검 —
+  /* 맨 위 요약 = 걸러 보기. 여유 · 보통 · 혼잡(최근 확인 — 30분 안에 입력된 운영 중만, 혼잡과 같은 규칙)을 먼저 견주고,
+     그 뒤에 손이 가야 하는 부스(확인 필요 · 미입력)와 중단 · 마감. 여유 + 보통 + 혼잡 + 확인 필요인 운영 중 = 운영 중. 빨강 = 혼잡(과 QR 꺼짐 · PIN 실패 많음 같은 장애), 주황 = 확인 필요 · 미입력(데이터 점검 —
      둘은 낱말 · 줄 표시로 나눕니다: 확인 필요 = 주황 띠 + '확인 필요' 표, 미입력 = 회색 띠 + '현황 미입력'), 회색 = 중단 · 마감.
      QR 준비 필요 · PIN 확인은 해당 부스가 있을 때만 붙습니다(summaryHtml).
      QR 준비 필요 = 공개 부스인데 쓸 수 있는 QR(미발급 · 꺼짐)도 PIN 도 없음 — 장애가 아니라 '발급할 일' 이라 주황. */
   var QUICK = [
-    ['all', '전체'], ['busy', '혼잡', 'danger'], ['stale', '확인 필요', 'warn'],
+    ['all', '전체'], ['free', '여유', 'ok'], ['normal', '보통', 'normal'], ['busy', '혼잡', 'danger'], ['stale', '확인 필요', 'warn'],
     ['missing', '미입력', 'warn'], ['pause', '일시 중단'], ['closed', '운영 종료']
   ];
   var BY = { qr: '운영자 QR', pin: '운영자 PIN', admin: '관리자 입력' };
 
   // pinOn: PIN 보조 로그인 스위치(settings.booth_pin_enabled) — true · false · null(모름)
-  var data = { zones: [], booths: [], live: {}, creds: null, pinOn: null, liveAt: null, masterAt: null, failAt: null };
+  // event: 행사 날짜 · 시간(settings.event_start · event_end · time_label) — 운영 시간 밖 표시에만 씁니다(못 읽으면 null = 운영 중으로 봄)
+  var data = { zones: [], booths: [], live: {}, creds: null, pinOn: null, event: null, liveAt: null, masterAt: null, failAt: null };
   // 기본 정렬은 부스번호순(R1-01, R1-02 …). 고른 정렬은 새로 읽어도 그대로입니다(ui 에만 두고 다시 그릴 때 바꾸지 않음).
   // zterms · zref: 구역 현황의 '용어' · '참고 값' 펼침(15초마다 다시 그려도 열린 채로)
   var ui = { view: 'live', quick: 'all', zone: '', q: '', sort: 'code', hidden: false, more: '', zterms: false, zref: false };
@@ -88,13 +89,16 @@
       // PIN 기능 전(함수 없음)이거나 못 읽으면 접속 칸만 비웁니다.
       C.rpc('admin_booth_credentials').then(null, function () { return null; }),
       // 공통 PIN 도 이 스위치가 꺼지면 로그인되지 않습니다(로그인 함수가 먼저 봄). 못 읽으면 모름(null).
-      C.select('settings', { columns: 'booth_pin_enabled', order: false, limit: 1 }).then(null, function () { return null; })
+      C.select('settings', { columns: 'booth_pin_enabled', order: false, limit: 1 }).then(null, function () { return null; }),
+      // 행사 날짜는 따로 읽습니다 — 못 읽어도 PIN 스위치 값(위)에는 영향이 없게.
+      C.select('settings', { columns: 'event_start,event_end,time_label', order: false, limit: 1 }).then(null, function () { return null; })
     ]).then(function (r) {
       data.zones = r[0] || [];
       data.booths = r[1] || [];
       data.creds = r[2] ? indexBy(r[2], 'booth_id') : null;
       var st = r[3] && r[3][0];
       data.pinOn = st && typeof st.booth_pin_enabled === 'boolean' ? st.booth_pin_enabled : null;
+      data.event = (r[4] && r[4][0]) || null;
       data.masterAt = new Date();
     });
   }
@@ -127,6 +131,22 @@
     data.creds = creds;
     data.masterAt = new Date();
   }
+
+  /* ── 운영 시간 밖(표시 전용) ──────────────────────────────────
+     행사 운영 시간(settings 의 행사 날짜 · 여는 시각 · 닫는 시각, BC.eventInfo)이 아닐 때 — 행사 전(리허설 기간) ·
+     오늘 문 열기 전 · 오늘 운영 끝 · 행사 끝 — 30분 넘게 그대로인 값은 당연한 일이라 긴급하게 보이지 않게 합니다.
+     '확인 필요' 판정(isStale · 30분)과 수는 그대로이고, 주황 대신 회색으로만 바뀌며 맨 위에 까닭 한 줄이 붙습니다.
+     날짜를 못 읽거나 협의용 예시면 운영 중으로 봅니다(지금까지와 같음). */
+  function offHours() {
+    if (DEMO || !data.event) return null;
+    var i = BC.eventInfo(data.event, Date.now());
+    if (i.phase === 'open') return null;
+    var mins = BC.staleMinutes();
+    var why = { before: '행사 전(리허설 기간)', preopen: '오늘 운영 시작(' + i.openTime + ') 전', dayclosed: '오늘 운영 끝(' + i.closeTime + ')', after: '행사 끝' }[i.phase] || '운영 시간 밖';
+    return { phase: i.phase, text: '<b>운영 시간 밖 · ' + esc(why) + '</b><span>' + mins + '분 넘게 그대로인 값은 참고용이며 긴급 확인 대상이 아닙니다' +
+      (i.nextOpenLabel ? ' · 다음 운영 ' + esc(i.nextOpenLabel) : '') + '</span>' };
+  }
+  function offHtml(o) { return '<p class="lvoff" id="lv-off"' + (o ? '' : ' hidden') + '>' + (o ? o.text : '') + '</p>'; }
 
   /* ── 한 부스의 지금 모습 ───────────────────────────────────────── */
   function zoneMap() {
@@ -166,6 +186,9 @@
   function inQuick(r, q) {
     if (q === 'open') return r.state === 'open' && !r.stale;
     if (q === 'busy') return r.state === 'open' && !r.stale && r.congestion === '혼잡';
+    // 여유 · 보통도 혼잡과 같은 규칙(최근 확인된 운영 중만) — 새 걸러 보기라 다른 판정은 그대로입니다.
+    if (q === 'free') return r.state === 'open' && !r.stale && r.congestion === '여유';
+    if (q === 'normal') return r.state === 'open' && !r.stale && r.congestion === '보통';
     if (q === 'stale') return r.stale;
     if (q === 'missing') return r.state === 'missing';
     if (q === 'pause') return r.state === 'pause';
@@ -232,7 +255,7 @@
         (r.stale ? '<span class="sr-only">마지막 입력값 </span>' : '') +
         '<span class="lv__num' + (r.wait === 0 ? ' lv__num--word' : '') + '">' + esc(big) + '</span>' +
         (r.wait === 0 ? '' : '<span class="lv__unit">' + (r.wait >= 60 ? '분 이상' : '분') + '</span>') + '</span>' +
-        '<span class="lv__cong">' + esc(r.congestion) + '</span>';
+        '<span class="lv__cong lvb lvb--' + tone(r) + (r.stale ? ' is-old' : '') + '">' + esc(r.congestion) + '</span>';
     }
     if (r.state === 'missing') return '<span class="lv__val"><span class="lv__num lv__num--none">—</span></span><span class="lv__cong">미입력</span>';
     // 중단 · 마감: 휴대폰은 이 칸에 낱말을, 데스크톱은 '운영상태' 칸이 말하므로 여기는 — 만
@@ -300,7 +323,9 @@
       '<span class="lv__clock">' + esc(BC.formatClock(r.at)) + '</span>';
   }
   function attention(r) { return !!(r.stale || r.state === 'missing' || r.qrIssue || r.pinIssue); }
-  function urgent(r) { return !!(r.stale || r.qrIssue || r.pinIssue); }
+  // 진한 단추(확인·수정)는 QR · PIN 문제만 — 30분 넘게 그대로인 것(확인 필요)은 운영자가 갱신하는 것이 기본이라
+  // 주황 '확인 필요' 표로만 알리고 단추는 보통 무게(수정)입니다. 관리자는 필요한 부스에만 손댑니다.
+  function urgent(r) { return !!(r.qrIssue || r.pinIssue); }
   function actClass(r) { return urgent(r) ? 'btn--primary' : (r.state === 'missing' ? 'btn--soft' : 'btn--ghost'); }
   function actLabel(r) { return urgent(r) ? '확인·수정' : (r.state === 'missing' ? '입력' : '수정'); }
   function adminHref(r) {
@@ -335,13 +360,13 @@
       '</div>' +
       '<div class="lv__meta">' +
         '<span class="lv__state"><i class="lv__dot" aria-hidden="true"></i>' + esc(stateText(r)) + '</span>' +
-        '<span class="lv__flags">' + (r.stale ? flag('확인 필요', 'warn') : '') +
+        '<span class="lv__flags">' + (r.stale ? '<span class="flag flag--warn flag--stale">확인 필요</span>' : '') +
           '<span class="lv__cred">' + credFlags(r) + '</span></span>' +
         '<span class="lv__ago">' + agoHtml(r) + '</span>' +
       '</div>' +
       '<div class="lv__wait">' + waitHtml(r) + '</div>' +
       '<div class="lv__act">' +
-        // 단추 무게: 확인 필요 · QR/PIN 문제 = 진한 단추(확인·수정), 미입력 = 연한 보라(입력), 나머지 = 옅은 단추(수정)
+        // 단추 무게: QR/PIN 문제 = 진한 단추(확인·수정), 미입력 = 연한 보라(입력), 나머지(확인 필요 포함) = 옅은 단추(수정)
         '<button class="btn ' + actClass(r) + ' btn--sm" type="button" data-act="override"' + (busy[r.id] ? ' disabled' : '') + '>' +
           (busy[r.id] ? '저장 중…' : actLabel(r)) + '</button>' +
         // 휴대폰에서는 줄의 왼쪽(부스 · 표시) 전체를 덮는 투명 단추, 데스크톱에서는 ⋯ 단추
@@ -449,8 +474,10 @@
           '</div></div>' +
         (DEMO ? '<p class="demohint">' + esc(DEMO_TEXT) + ' 현황 수정을 눌러도 실제 DB에 반영되지 않고, 새로 고치면 처음 예시로 돌아갑니다.</p>' : '') +
         (DEMO ? '' : '<section class="card rhpanel" id="lv-rh" aria-labelledby="lv-rh-title"' + (rh.open ? '' : ' hidden') + '></section>') +
-        '<p class="lvmeta" id="lv-meta" aria-live="polite"></p>' +
+        '<p class="lvmeta" id="lv-meta" aria-live="polite"></p>' + offHtml(null) +
         '<div class="lvpin" id="lv-pin"></div>' +
+        '<p class="lvsumcap" id="lv-sumcap"><b>여유 · 보통 · 혼잡</b> = 최근 확인(' + BC.staleMinutes() + '분 안에 입력)된 운영 중 · ' +
+          '점선 표 = ' + BC.staleMinutes() + '분 넘게 그대로인 마지막 입력값</p>' +
         '<div class="minigrid sumgrid" id="lv-sum" role="group" aria-label="걸러 보기"></div>' +
         // 검색 · 구역 · 정렬 · 지금 걸러 보는 것은 스크롤해도 맨 위에 붙어 있습니다(데스크톱은 표 머리도 함께).
         '<div class="lvbar" id="lv-bar">' +
@@ -480,6 +507,9 @@
     var all = rowsNow();
     var rows = filtered(all);
     $('#lv-meta').innerHTML = metaHtml();
+    var off = offHours(), ob = $('#lv-off');
+    ob.hidden = !off; ob.innerHTML = off ? off.text : '';
+    $('.lvpage').classList.toggle('is-off', !!off);
     $('#lv-pin').innerHTML = pinHtml(all);
     $('#lv-sum').innerHTML = summaryHtml(all);
     var sel = $('#lv-zone');
@@ -694,14 +724,14 @@
     var head = '<div class="page__head"><div><h1 class="page__title">구역 현황</h1>' +
       '<p class="page__desc">운영 상태는 마지막 입력 기준, 확인 필요 · 혼잡은 그 위에 겹쳐 보는 지표입니다. 구역을 누르면 그 구역 부스만 봅니다.</p></div></div>' +
       (DEMO ? '<p class="demohint">' + esc(DEMO_TEXT) + '</p>' : '') +
-      '<p class="lvmeta">' + metaHtml() + '</p>';
+      '<p class="lvmeta">' + metaHtml() + '</p>' + offHtml(offHours());
     var body = groups.length
       ? overviewHtml(tally(all)) +
         (common ? '<p class="znote"><b>' + esc(groups.map(function (g) { return g.z.key; }).join(' · ')) + '</b><span>' + esc(common) + '</span></p>' : '') +
         '<div class="zgrid' + (groups.length === 4 ? ' zgrid--4' : '') + '">' + groups.map(function (g) { return zoneCard(g, common); }).join('') + '</div>' +
         longestHtml(all)
       : emptyHtml(rowsNow());
-    $('#view').innerHTML = '<div class="page lvpage">' + head + body + '</div>';
+    $('#view').innerHTML = '<div class="page lvpage' + (offHours() ? ' is-off' : '') + '">' + head + body + '</div>';
   }
 
   function paint() {
