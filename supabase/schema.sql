@@ -38,8 +38,11 @@ create table if not exists public.settings (
   show_ops_track     boolean     not null default false,
   show_parking_table boolean     not null default false,
   show_countdown     boolean     not null default true,
+  -- 두 포털의 메뉴 노출 설정: 관리자 화면에서만 변경 (별도 운영자 기능 없음).
+  portal_menu_mode   text        not null default 'booth-only',
   updated_at         timestamptz not null default now(),
-  constraint settings_single_row check (id = 1)
+  constraint settings_single_row check (id = 1),
+  constraint settings_portal_menu_mode_check check (portal_menu_mode in ('booth-only', 'full'))
 );
 
 -- ── 2. 프로그램 카드 ──────────────────────────────────────────────
