@@ -1,0 +1,58 @@
+# '확인 필요' 일괄 확인 — 실제 PostgreSQL 17 동시 잠금 시험
+# 이 시험 브랜치(claude/batch-confirm-tests)에 push 할 때만 돕니다. main · 운영 배포와 관계없습니다.
+# 시험 DB 는 이 작업 안에서만 사는 PostgreSQL 17 서비스 컨테이너입니다 — Production · Supabase 에 접속하지 않습니다(비밀값 없음).
+# 다시 돌리기: GitHub → Actions → 이 실행 → Re-run jobs, 또는 이 브랜치에 커밋을 push.
+name: batch-confirm-locks
+
+on:
+  push:
+    branches: [claude/batch-confirm-tests]
+
+permissions:
+  contents: read
+
+jobs:
+  locks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      SITE_REF: claude/ops-batch-confirm   # 시험할 일괄 확인 SQL 이 있는 브랜치(PR #38)
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: lockstest
+          POSTGRES_DB: bc_lock_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    steps:
+      - name: 시험 코드(이 브랜치)
+        uses: actions/checkout@v4
+      - name: 일괄 확인 SQL(PR #38 브랜치)
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SITE_REF }}
+          path: site
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: pg 클라이언트
+        run: npm install --no-audit --no-fund --prefix "$RUNNER_TEMP/pg" pg@8
+      - name: 동시 잠금 시험
+        env:
+          PGURL: postgres://postgres:lockstest@localhost:5432/bc_lock_test
+        run: node scripts/booth-data/test-batch-confirm-locks.mjs --pg-dir "$RUNNER_TEMP/pg" --main-dir site --disposable --rounds 40
+      - name: 결과 요약
+        if: always()
+        run: |
+          f=scripts/booth-data/out/rehearsal/batch-confirm-locks-report.md
+          if [ -f "$f" ]; then cat "$f" >> "$GITHUB_STEP_SUMMARY"; fi
+      - name: 결과 파일
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: batch-confirm-locks-report
+          path: scripts/booth-data/out/rehearsal/
+          if-no-files-found: warn
