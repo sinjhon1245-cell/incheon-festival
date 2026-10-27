@@ -32,6 +32,27 @@
 .sum--ok .mini__n { color: var(--ok); }
 .sum--warn .mini__n { color: var(--warn); }
 .sum--danger .mini__n { color: var(--danger); }
+.sum--normal .mini__n { color: var(--ink); }
+/* 여유 · 보통 · 혼잡(최근 확인) — 낱말 앞 작은 네모(줄의 표 · 구역 현황 막대와 같은 색) */
+.sum[data-quick="free"] .mini__l::before, .sum[data-quick="normal"] .mini__l::before, .sum[data-quick="busy"] .mini__l::before {
+  content: ''; display: inline-block; width: 8px; height: 8px; margin-right: 5px; border-radius: 2px; vertical-align: 1px; background: var(--ok); }
+.sum[data-quick="normal"] .mini__l::before { background: #F2E600; box-shadow: inset 0 0 0 1px rgba(22, 32, 60, .28); }
+.sum[data-quick="busy"] .mini__l::before { background: var(--danger); }
+.sum.is-zero .mini__l::before { opacity: .45; }
+/* 운영 시간 밖(행사 전 · 문 열기 전 · 운영 끝 · 행사 끝) — 까닭 한 줄 + 확인 필요를 주황 대신 회색으로(수 · 판정은 그대로) */
+.lvoff { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; margin: -4px 0 0; padding: 9px 14px;
+  background: var(--bg-soft); border-left: 3px solid var(--off); border-radius: 8px; font-size: 13px; line-height: 1.5; color: var(--muted); }
+.lvoff[hidden] { display: none; }
+.lvoff b { font-weight: 800; color: var(--ink-2); }
+.lvpage.is-off .flag--stale { background: var(--bg-sink); color: var(--muted); font-weight: 600; }
+.lvpage.is-off .is-stale .lv__agov { color: var(--ink-2); font-weight: 600; }
+.lvpage.is-off .sum[data-quick="stale"] .mini__n { color: var(--ink-2); }
+.lvpage.is-off .zi--stale.is-on { background: var(--bg-soft); }
+.lvpage.is-off .zi--stale.is-on .zi__n, .lvpage.is-off .zi--stale.is-on .zi__l { color: var(--ink-2); }
+.lvpage.is-off .zi--stale.is-on .zi__s { color: var(--muted); }
+/* 요약 위 한 줄 — 여유 · 보통 · 혼잡이 무엇을 세는지 */
+.lvsumcap { margin: -6px 2px -4px; font-size: 12.5px; color: var(--muted); }
+.lvsumcap b { font-weight: 700; color: var(--ink-2); }
 .sum.is-zero .mini__n { color: var(--muted-2); }
 
 /* 검색 · 구역 · 정렬 */
@@ -122,10 +143,25 @@
 .lv--busy    { --c: var(--danger); }
 .lv--pause, .lv--closed { --c: var(--off); }
 .lv--missing { --c: var(--line-3, #C9D1E0); }
-.lv.is-stale { --c: var(--warn); background: #FFFBF3; }
-/* 확인 필요(30분 이상 미갱신)의 대기 · 혼잡도는 마지막 입력값 — 현재 대기처럼 보이지 않게 흐리게 */
-.lv.is-stale .lv__num, .lv.is-stale .lv__cong { color: var(--muted-2); }
-.lv.is-stale .lv__num { font-weight: 700; }
+/* 확인 필요(30분 이상 미갱신): 줄 전체를 주황으로 칠하지 않고, 왼쪽 띠는 마지막 입력 혼잡도의 옅은 색 —
+   여유 · 보통 · 혼잡은 여전히 구분되지만 지금 확인된 값처럼 진하지 않게. 주황은 '확인 필요' 표 · 경과 시간에만. */
+.lv.is-stale.lv--free   { --c: #A9D6C3; }
+.lv.is-stale.lv--normal { --c: #F6EE9A; }
+.lv.is-stale.lv--busy   { --c: #E9AAB4; }
+.lv.is-stale.lv--pause  { --c: #BCC3D3; }
+/* 대기 숫자는 마지막 입력값 — 흐리게(현재 대기처럼 보이지 않게) */
+.lv.is-stale .lv__num { color: var(--muted-2); font-weight: 700; }
+
+/* 혼잡도 표 — 최근 확인은 채운 표(여유 초록 · 보통 노랑 바탕 남색 글자 · 혼잡 빨강),
+   마지막 입력값(확인 필요)은 같은 색 점선 테두리 + 흐린 글자. 색만이 아니라 낱말 · 테두리 모양으로도 나뉩니다. */
+.lv .lvb { display: inline-block; padding: 0 6px; border: 1px solid transparent; border-radius: 5px; font-size: 12px; font-weight: 800; line-height: 1.55; white-space: nowrap; }
+.lv .lvb--free   { background: var(--ok-t); color: var(--ok); }
+.lv .lvb--normal { background: #FFF8B8; color: var(--ink); }
+.lv .lvb--busy   { background: var(--danger-t); color: var(--danger); }
+.lv .lvb.is-old  { background: transparent; color: var(--muted); font-weight: 700; border-style: dashed; }
+.lv .lvb--free.is-old   { border-color: #7DBFA3; }
+.lv .lvb--normal.is-old { border-color: #CFC24A; }
+.lv .lvb--busy.is-old   { border-color: #DC8E9A; }
 .lv.is-hidden { opacity: 0.72; }
 
 .lv__booth { grid-area: booth; display: flex; align-items: baseline; gap: 7px; min-width: 0; white-space: nowrap; }
