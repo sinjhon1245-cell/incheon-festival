@@ -363,7 +363,8 @@ t('F12 다시 [일괄 확인] — 이미 확인한 부스는 체크칸 없이 �
   /확인함/.test(text(rowOfCode('R1-01'))) && boxes().map(b => codeOf(b.getAttribute('data-bsel'))).sort().join() === 'R1-07', boxes().map(b => codeOf(b.getAttribute('data-bsel'))).join());
 click(W, D.querySelector('[data-batch="close"]')); await wait(100);
 const names = [...new Set(P.calls.map(c => c.name))].sort();
-t('F13 이 화면이 부른 함수 — 원래 읽기 함수 + 새 두 함수뿐(admin_set_booth_live · 발급 · 지우기 없음)', names.every(n => ['admin_booth_credentials', 'admin_rehearsal_status', 'admin_booth_live_checks', 'admin_confirm_booth_live'].includes(n)), names.join(','));
+// 운영자 알림 판(main 의 운영자 알림 · booth-admin)이면 켜짐 여부 · 상태 읽기도 부릅니다(읽기 전용).
+t('F13 이 화면이 부른 함수 — 원래 읽기 함수 + 새 두 함수(+ 운영자 알림 읽기)뿐(admin_set_booth_live · 발급 · 지우기 없음)', names.every(n => ['admin_booth_credentials', 'admin_rehearsal_status', 'admin_booth_live_checks', 'admin_confirm_booth_live', 'admin_booth_notice_enabled', 'admin_booth_notice_status'].includes(n)), names.join(','));
 t('F14 화면 오류 없음', P.errors.length === 0, P.errors.join(' | '));
 P.dom.window.close();
 
