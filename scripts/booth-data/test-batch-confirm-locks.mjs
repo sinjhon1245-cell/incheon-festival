@@ -216,29 +216,33 @@ await refill();
 const plan = (await S.query('explain delete from public.booth_live as l where l.booth_id = any (private.rehearsal_booth_ids())')).rows.map(r => r['QUERY PLAN'])
   .join(' / ').replace(/'\{[^}]*\}'::uuid\[\]/g, "'{84곳}'::uuid[]").replace(/\s+\(cost=[^)]*\)/g, '');
 metrics.resetPlan = plan;
-// 초기화가 줄을 잡는 순서 — 순차 읽기면 물리 순서(ctid), 색인 읽기면 booth_id 순서. 맨 처음 · 맨 끝 줄을 골라
-// '관리자가 끝 줄을 잡은 채, 초기화가 이미 잡은 첫 줄을 요청' 하는 엇갈림을 일부러 만듭니다.
-async function resetOrder() {
-  const byIndex = /Index (Only )?Scan/i.test(plan);
-  const rows = (await S.query(`select booth_id::text b from public.booth_live where booth_id = any($1::uuid[]) order by ${byIndex ? 'booth_id' : 'ctid'}`, [R])).rows.map(r => r.b);
-  return { first: rows[0], last: rows[rows.length - 1] };
+// '관리자가 한 줄을 잡은 채, 초기화가 이미 잡은 다른 줄을 요청' 하는 엇갈림을 일부러 만듭니다.
+// 초기화가 줄을 잡는 순서(함수 안 계획)에 기대지 않도록, 초기화가 멈춰 있는 동안 어느 줄을 이미 잡았는지 직접 봅니다
+// (다른 연결에서 skip locked 로 읽어 안 보이는 줄 = 잡힌 줄, 곧바로 rollback).
+async function lockedByReset(except) {
+  await OP.query('begin');
+  const free = new Set((await OP.query('select booth_id::text b from public.booth_live where booth_id = any($1::uuid[]) for update skip locked', [R])).rows.map(r => r.b));
+  await OP.query('rollback');
+  return R.filter(id => id !== except && !free.has(id));
 }
 async function interleave(fn) {
-  await refill(); const { first: lockedFirst, last: lockedLast } = await resetOrder(); const s = await seenOf([lockedFirst, lockedLast]);
-  await A.query('begin'); const first = await confirm(A, items([lockedLast], s), fn);  // 관리자: 초기화가 맨 끝에 잡을 줄을 먼저 잡음
-  const pr = timed(RS.query('select private.rehearsal_live_reset()'));                // 초기화: 앞에서부터 지우다 그 줄에서 기다림
+  await refill(); const held = R[42]; const s = await seenOf(R);
+  await A.query('begin'); const first = await confirm(A, items([held], s), fn);        // 관리자: 가운데 줄 하나를 잡음
+  const pr = timed(RS.query('select private.rehearsal_live_reset()'));                // 초기화: 지우다가 그 줄에서 기다림
   const resetWaiting = await stillWaiting(pr, 400);
-  const second = await timed(confirm(A, items([lockedFirst], s), fn));                // 관리자: 이미 초기화가 잡은 첫 줄을 요청
+  const taken = await lockedByReset(held);                                             // 초기화가 이미 잡은 줄들
+  const target = taken[0];
+  const second = target ? await timed(confirm(A, items([target], s), fn)) : { ok: false, code: 'NO_TARGET', ms: 0 };   // 관리자: 그중 하나를 요청
   await A.query('commit');
   const r = await pr;
   const left = +(await S.query('select count(*) n from public.booth_live where booth_id = any($1::uuid[])', [R])).rows[0].n;
-  return { first: first[0].status, second: second.ok ? second.v[0].status : second.code, secondMs: second.ms, resetWaiting, resetOk: r.ok, resetCode: r.code || '', resetMs: r.ms, left };
+  return { first: first[0].status, takenByReset: taken.length, second: second.ok ? second.v[0].status : second.code, secondMs: second.ms, resetWaiting, resetOk: r.ok, resetCode: r.code || '', resetMs: r.ms, left };
 }
 const old5 = await interleave('test_confirm_old_wait');
 const new5 = await interleave('admin_confirm_booth_live');
 metrics.L5interleave = { old: old5, now: new5 };
 t('L5a (비교) 처음 설계(FOR UPDATE 기다림) — 관리자가 앞 부스를 잡은 채 초기화가 잡은 부스를 기다리면 교착 → 초기화가 실패할 수 있음',
-  !old5.resetOk && old5.resetCode === '40P01', JSON.stringify({ plan, old5 }));
+  old5.takenByReset > 0 && !old5.resetOk && old5.resetCode === '40P01', JSON.stringify({ plan, old5 }));
 t('L5b 지금 설계 — 같은 끼어들기에서 관리자는 그 부스만 failed:busy(기다리지 않음) · 초기화는 관리자 요청이 끝나자 84곳 모두 지우고 완료(오류 없음)',
   new5.first === 'confirmed' && new5.second === 'failed:busy' && new5.secondMs < 1000 && new5.resetWaiting && new5.resetOk && new5.left === 0, JSON.stringify(new5));
 async function resetStress(fn, rounds) {
