@@ -401,9 +401,11 @@
     var zs = data.zones.filter(function (z) { return used[z.key]; });
     if (ui.zone && !used[ui.zone]) ui.zone = '';
     // 좁은 고르기 칸에서도 어느 구역인지 보이게 구역 코드를 앞에 둡니다(A · 읽걷쓰AI 스쿨존).
+    // 이름 앞에 코드가 또 있으면 뗍니다(zoneName) — 'R1 · R1 실제 …' 가 아니라 'R1 · 실제 …', 이름이 'F구역' 뿐이면 'F구역'.
     return '<option value="">구역 전체</option>' + zs.map(function (z) {
+      var nm = zoneName(z);
       return '<option value="' + esc(z.key) + '"' + (ui.zone === z.key ? ' selected' : '') + '>' +
-        esc(z.key + ' · ' + (z.label || z.key + '구역')) + '</option>';
+        esc(nm ? z.key + ' · ' + nm : z.key + '구역') + '</option>';
     }).join('');
   }
   function emptyHtml(all) {
@@ -509,11 +511,15 @@
        운영 중(혼잡 포함) + 확인 필요 + 미입력 + 중단 + 마감 = 그 구역 부스 수.
        혼잡은 운영 중 안의 수(inQuick 'busy' = 운영 중이면서 혼잡)라 따로 더하지 않습니다.
        확인 필요(30분 넘게 그대로)는 운영 중 · 중단 어느 쪽이든 먼저 셉니다 — 운영 중 수가 이미 확인 필요를 빼고 세는 것과
-       같은 규칙이라, 중단 칸도 확인 필요가 아닌 중단만 셉니다(그 수는 확인 필요 칸에 마우스를 올리면 보임). */
-  // 구역 이름에서 앞의 구역 코드('R1 실제 …' 의 R1)를 뗍니다 — 카드는 코드를 따로 크게 씁니다.
+       같은 규칙이라, 중단 칸도 확인 필요가 아닌 중단만 셉니다. 확인 필요 띠의 둘째 줄이 그 안의 운영 중 · 중단 수와
+       '위 상태 수에서 제외' 를 늘 글자로 보여 줍니다(마우스 · 휴대폰 · 키보드 모두). */
+  /* 구역 이름에서 앞의 구역 코드를 뗍니다 — 카드 · 구역 고르기 칸은 코드를 따로 씁니다.
+       'R1 실제 위치 …' → '실제 위치 …' · 'F구역' → '' · 'A 구역 열린마당' → '열린마당'
+     코드 바로 뒤가 끝 · 빈칸 · 나눔표 · '구역' 일 때만 코드로 봅니다 — 'AI 스쿨존'(A) · 'R10 …'(R1) 은 그대로. */
   function zoneName(z) {
     var label = String(z.label || '').trim(), key = String(z.key || '');
-    if (key && label.indexOf(key) === 0) label = label.slice(key.length).replace(/^[\s·:\-]+/, '');
+    var m = key && new RegExp('^' + key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?:\\s*구역)?(?=$|[\\s·:\\-–|/(])').exec(label);
+    if (m) label = label.slice(m[0].length).replace(/^[\s·:\-–|/]+/, '');
     return label === '구역' ? '' : label;
   }
   function zoneGroups() {
@@ -556,9 +562,9 @@
       return '<span class="zst zst--' + kind + (v ? '' : ' is-zero') + '"><i aria-hidden="true"></i>' + esc(label) +
         ' <b>' + v + '</b>' + (extra || '') + '</span>';
     }
-    var staleTip = g.stale ? BC.staleMinutes() + '분 넘게 그대로 — 운영 중 ' + g.staleOpen + '곳 · 잠시 중단 ' + g.stalePause + '곳' : '';
     var label = g.z.key + ' 구역 · 부스 ' + g.rs.length + '곳 · 혼잡 ' + g.busy + '곳 · 최장 대기 ' +
-      (t ? (t.wait === 0 ? '바로' : t.wait + '분') + '(' + topName + ')' : '없음') + ' · 확인 필요 ' + g.stale + '곳 — 이 구역 부스 보기';
+      (t ? (t.wait === 0 ? '바로' : t.wait + '분') + '(' + topName + ')' : '없음') + ' · 확인 필요 ' + g.stale + '곳' +
+      (g.stale ? '(운영 중 ' + g.staleOpen + '곳 · 중단 ' + g.stalePause + '곳, 위 상태 수에서 제외)' : '') + ' — 이 구역 부스 보기';
     return '<button class="zc' + (g.stale ? ' is-attn' : '') + '" type="button" data-zone="' + esc(g.z.key) + '" aria-label="' + esc(label) + '">' +
       '<span class="zc__head">' +
         '<span class="zc__key">' + esc(g.z.key) + '</span>' +
@@ -570,7 +576,7 @@
           '<span class="zk__v"><b>' + g.busy + '</b><small>곳</small></span>' +
           '<span class="zk__s">운영 중 ' + g.open + '곳 중</span></span>' +
         '<span class="zk zk--wait zk--t-' + (t ? tone(t) : 'none') + '"><span class="zk__l">최장 대기</span>' +
-          '<span class="zk__v' + (t && t.wait === 0 ? ' is-word' : '') + '"><b>' + esc(waitBig) + '</b>' + (waitUnit ? '<small>' + waitUnit + '</small>' : '') + '</span>' +
+          '<span class="zk__v' + (t && t.wait === 0 ? ' is-word' : '') + (t && t.wait >= 60 ? ' is-over' : '') + '"><b>' + esc(waitBig) + '</b>' + (waitUnit ? '<small>' + waitUnit + '</small>' : '') + '</span>' +
           '<span class="zk__s">' + (t ? esc(t.congestion) + ' · 운영 중 기준' : '운영 중 대기 값 없음') + '</span></span>' +
       '</span>' +
       // 최장 대기 부스 — 한 줄(길면 …). 전체 이름은 마우스를 올리거나 카드를 눌러 그 구역 부스 목록에서 봅니다.
@@ -582,8 +588,13 @@
       '<span class="zc__sts">' +
         st('open', '운영 중', g.open) + st('pause', '중단', g.pauseOnly) + st('closed', '마감', g.closed) + st('missing', '미입력', g.missing) +
       '</span>' +
-      '<span class="zc__attn' + (g.stale ? ' is-on' : '') + '"' + (staleTip ? ' title="' + esc(staleTip) + '"' : '') + '>' +
-        (g.stale ? '확인 필요 <b>' + g.stale + '곳</b><span class="zc__attnh">' + BC.staleMinutes() + '분 넘게 그대로</span>' : '확인 필요 없음') +
+      // 확인 필요 띠 — 둘째 줄이 그 안의 운영 중 · 중단 수와 '위 상태 수에서 제외' 를 늘 글자로 보여 줍니다.
+      '<span class="zc__attn' + (g.stale ? ' is-on' : '') + '">' +
+        (g.stale
+          ? '<span class="zc__attnr">확인 필요 <b>' + g.stale + '곳</b><span class="zc__attnh">' + BC.staleMinutes() + '분 넘게 그대로</span></span>' +
+            '<span class="zc__attnr zc__attnx"><span>운영 중 <b>' + g.staleOpen + '</b> · 중단 <b>' + g.stalePause + '</b></span>' +
+              '<span class="zc__attnh">위 상태 수에서 제외</span></span>'
+          : '<span class="zc__attnr">확인 필요 없음</span>') +
       '</span>' +
     '</button>';
   }
@@ -592,7 +603,7 @@
     var common = zoneCommon(groups);
     var head = '<div class="page__head"><div><h1 class="page__title">구역 현황</h1>' +
       '<p class="page__desc">구역마다 혼잡 부스 수와 가장 긴 대기를 먼저 보여 줍니다. 아래 막대와 상태 수는 부스 한 곳을 한 칸에만 셉니다' +
-      '(혼잡은 운영 중에 포함). 구역을 누르면 그 구역 부스만 봅니다.</p></div></div>' +
+      '(혼잡은 운영 중에 포함, 확인 필요는 운영 중 · 중단에서 제외). 구역을 누르면 그 구역 부스만 봅니다.</p></div></div>' +
       (DEMO ? '<p class="demohint">' + esc(DEMO_TEXT) + '</p>' : '') +
       '<p class="lvmeta">' + metaHtml() + '</p>' +
       (common ? '<p class="znote"><b>' + esc(groups.map(function (g) { return g.z.key; }).join(' · ')) + '</b><span>' + esc(common) + '</span></p>' : '');
