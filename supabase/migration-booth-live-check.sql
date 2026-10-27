@@ -11,10 +11,11 @@
 --     · 관람객에게 보이는 값까지 새로 하려면 지금처럼 [수정](admin_set_booth_live, 기록 'admin')으로 입력합니다.
 --
 --   이 파일이 더하는 것
---     public.booth_live_check                표 — 확인한 값(입력 시각 · 혼잡도 · 대기) · 확인한 관리자 · 시각 · 묶음 id.
+--     public.booth_live_check                표 — 확인한 값(입력 시각 · 혼잡도 · 대기) · 그때의 부스번호 · 이름 · 확인한 관리자 · 시각 · 묶음 id.
 --                                            RLS 켬 · 정책 없음 · anon/authenticated 권한 없음(아래 두 함수로만).
+--                                            booths 를 외래 키로 걸지 않습니다 — 부스를 지워도 감사 기록이 함께 지워지지 않게.
 --     public.admin_confirm_booth_live(jsonb)  관리자만. [{ booth_id, seen_updated_at }] 1~100곳.
---                                            부스마다 booth_live 줄을 FOR UPDATE 로 잠근 뒤 판단하고, 통과하면 기록 한 줄.
+--                                            부스마다 booth_live 줄을 FOR UPDATE NOWAIT 로 잠근 뒤 판단하고, 통과하면 기록 한 줄.
 --     public.admin_booth_live_checks()        관리자만. 부스마다 '지금 값' 에 대한 오늘(KST)의 마지막 확인.
 --
 --   판단 순서(admin_confirm_booth_live) — 결과는 부스마다 한 줄
@@ -27,19 +28,24 @@
 --     skipped:fresh       30분 안에 입력됨(확인 필요 아님)
 --     skipped:checked     같은 값을 30분 안에 이미 관리자 확인함(중복 요청 · 다른 관리자) — checked_at = 그 확인 시각
 --     confirmed           기록함
---     failed:busy         3초 안에 잠그지 못함(그 부스에 다른 입력이 진행 중) — 그 부스만, 다시 시도하면 됨
+--     failed:busy         그 부스 줄을 지금 다른 입력(운영자 · 관리자 수정 · 23:00 초기화)이 잡고 있음 — 기다리지 않고
+--                         그 부스만 넘김(다시 시도하면 됨). 다른 관리자의 일괄 확인이 3초 넘게 끝나지 않으면 모든 부스가 이것.
 --     failed              그 밖의 오류 — 그 부스만(나머지는 계속)
 --
---   동시성 — 왜 FOR SHARE 가 아니라 FOR UPDATE 인가
+--   동시성 — 관리자 확인은 운영 쪽 작업을 절대 실패시키지 않게
 --     · FOR SHARE 는 공유 잠금끼리 서로 막지 않습니다. 두 관리자(또는 같은 요청 두 번)가 같은 부스를 동시에 잡으면
---       둘 다 '아직 확인 없음' 을 보고 둘 다 기록합니다(중복). 운영자 입력은 막지만 관리자끼리는 못 막습니다.
---     · FOR UPDATE 는 관리자 · 운영자 입력(booth_ctrl_set · touch, booth_session_*, admin_set_booth_live, 23:00 초기화)
---       모두와 차례를 지킵니다. 뒤에 온 쪽은 앞 쪽이 끝날 때까지(몇 ms) 기다린 뒤, READ COMMITTED 에서
---       그 줄의 최신 판을 다시 읽고, 다음 문장(이미 확인했는가)도 새 스냅숏으로 봅니다
---       → 늦게 온 관리자는 skipped:checked, 그 사이 운영자가 입력했으면 skipped:changed.
---     · 잠그기만 하고 값 · 시각은 바꾸지 않습니다. 운영자 입력은 관리자 요청이 끝날 때까지만(보통 수 ms) 기다립니다.
---     · 여러 부스는 booth_id 순서로 잠급니다 — 두 관리자 묶음이 서로 엇갈려 잠그는 교착을 막습니다.
---     · lock_timeout 3초 — 오래 걸리는 입력이 있으면 그 부스만 failed:busy 로 넘기고 관리자 요청이 매달리지 않습니다.
+--       둘 다 '아직 확인 없음' 을 보고 둘 다 기록합니다(중복). 그래서 FOR UPDATE 입니다.
+--     · 그런데 FOR UPDATE 로 '기다리면', 관리자가 앞 부스를 잡은 채 다음 부스를 기다리는 동안 23:00 초기화
+--       (84곳을 순서 없이 지움)가 반대 순서로 잡고 있으면 교착이 생기고, PostgreSQL 이 초기화 쪽을 끊을 수 있습니다.
+--     · 그래서 두 가지를 함께 씁니다.
+--       1) 관리자 일괄 확인끼리는 함수 맨 처음, 아직 아무 줄도 잡지 않은 때에 트랜잭션 advisory 잠금 하나로 줄을 세웁니다
+--          (기다림 최대 3초 — lock_timeout). 늦게 온 관리자는 앞 관리자가 끝난 뒤 그 기록을 보고 skipped:checked.
+--       2) booth_live 줄은 FOR UPDATE NOWAIT — 관리자는 줄 잠금을 절대 기다리지 않습니다. 운영자 입력 · 관리자 수정 ·
+--          23:00 초기화가 그 줄을 잡고 있으면 그 부스만 failed:busy 로 넘기고 운영 쪽은 그대로 진행합니다.
+--       → 관리자 확인은 '줄을 잡은 채 기다리는' 일이 없어 운영 쪽과 교착을 만들 수 없습니다. 운영 쪽은 관리자 확인이
+--         잡은 줄을 그 요청이 끝날 때까지(수 ms)만 기다렸다가 저장 · 삭제합니다(최신 입력이 이김).
+--     · 잠그기만 하고 값 · 시각은 바꾸지 않습니다. 여러 부스는 booth_id 순서로 처리합니다.
+--     · 초기화 작업 · 운영자 입력 함수는 바꾸지 않습니다.
 --
 --   보안 점검 경고
 --     두 함수도 authenticated_security_definer_function_executable 로 짚힙니다. 함수 안의 is_admin() 이 막습니다
@@ -72,10 +78,14 @@ $preflight$;
 -- ═══════════════════════════════════════════════════════════════
 -- 1. 표 — 관리자 확인 기록(지우지 않고 쌓기만)
 -- ═══════════════════════════════════════════════════════════════
+-- booth_id 는 외래 키가 아닙니다(감사 기록 보존). on delete cascade 면 부스를 지울 때 그 부스의 확인 기록도 사라지고,
+-- restrict 면 관리자 화면의 부스 삭제가 막히므로, 둘 다 쓰지 않고 그때의 부스번호 · 이름을 함께 남깁니다.
 create table if not exists public.booth_live_check (
   id               bigint      generated always as identity primary key,
   batch_id         uuid        not null,
-  booth_id         uuid        not null references public.booths(id) on delete cascade,
+  booth_id         uuid        not null,
+  booth_code       text        not null default '',
+  booth_name       text        not null default '',
   seen_updated_at  timestamptz not null,
   seen_congestion  text        not null,
   seen_wait        integer     not null,
@@ -152,7 +162,19 @@ begin
 
   v_today := (v_now at time zone 'Asia/Seoul')::date;
 
-  -- booth_id 순서로(교착 방지). 같은 부스가 여러 번이면 처음 것만.
+  -- 관리자 일괄 확인끼리 줄 세우기. 아직 booth_live 줄을 하나도 잡지 않은 지금만 기다리므로(최대 3초 · lock_timeout)
+  -- 운영자 입력 · 23:00 초기화와 교착이 될 수 없습니다. 3초 안에 차례가 안 오면 모든 부스를 failed:busy 로 돌려줍니다.
+  begin
+    perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtext('public.admin_confirm_booth_live'));
+  exception when lock_not_available then
+    return query
+      select (e.x ->> 'booth_id')::uuid, 'failed:busy'::text, null::timestamptz, null::timestamptz, v_batch
+        from pg_catalog.jsonb_array_elements(p_items) with ordinality as e(x, n)
+       order by 1, e.n;
+    return;
+  end;
+
+  -- booth_id 순서로. 같은 부스가 여러 번이면 처음 것만.
   for v_item in
     select (e.x ->> 'booth_id')::uuid                as bid,
            (e.x ->> 'seen_updated_at')::timestamptz  as seen,
@@ -172,12 +194,13 @@ begin
     end if;
 
     begin
-      -- 운영자 입력 · 다른 관리자와 차례를 지키는 잠금(값은 바꾸지 않음)
+      -- 판단하는 동안 그 줄이 바뀌지 않게 잠급니다(값은 바꾸지 않음). NOWAIT — 운영자 입력 · 관리자 수정 ·
+      -- 23:00 초기화가 이 줄을 잡고 있으면 기다리지 않고 이 부스만 failed:busy(운영 쪽이 먼저, 최신 입력 보호).
       select l.congestion, l.wait_minutes, l.updated_at
         into v_live
         from public.booth_live as l
        where l.booth_id = v_item.bid
-         for update;
+         for update nowait;
 
       if not found then
         status := case when exists (select 1 from public.booths as b where b.id = v_item.bid)
@@ -202,9 +225,15 @@ begin
             status := 'skipped:checked';
             checked_at := v_prev;
           else
+            -- 그때의 부스번호 · 이름도 남깁니다(나중에 부스를 지우거나 고쳐도 기록만으로 알아볼 수 있게).
             insert into public.booth_live_check as c
-                   (batch_id, booth_id, seen_updated_at, seen_congestion, seen_wait, checked_by, checked_at)
-            values (v_batch, v_item.bid, v_live.updated_at, v_live.congestion, v_live.wait_minutes, v_uid, v_now)
+                   (batch_id, booth_id, booth_code, booth_name, seen_updated_at, seen_congestion, seen_wait, checked_by, checked_at)
+            select v_batch, v_item.bid,
+                   coalesce(nullif(b.code, ''), b.zone_key || '-' || lpad(b.no::text, greatest(2, length(b.no::text)), '0'), ''),
+                   coalesce(b.name, ''),
+                   v_live.updated_at, v_live.congestion, v_live.wait_minutes, v_uid, v_now
+              from public.booths as b
+             where b.id = v_item.bid
             returning c.checked_at into v_at;
             status := 'confirmed';
             checked_at := v_at;
@@ -226,7 +255,7 @@ revoke all     on function public.admin_confirm_booth_live(jsonb) from public;
 revoke execute on function public.admin_confirm_booth_live(jsonb) from anon;
 grant  execute on function public.admin_confirm_booth_live(jsonb) to authenticated;
 comment on function public.admin_confirm_booth_live(jsonb) is
-  '관리자 전용. 현장에서 확인한 부스의 지금 값에 확인 기록(booth_live_check)만 남깁니다. booth_live · booth_live_log 는 바꾸지 않습니다(FOR UPDATE 로 잠그기만). 결과는 부스마다 confirmed · skipped:* · failed*.';
+  '관리자 전용. 현장에서 확인한 부스의 지금 값에 확인 기록(booth_live_check)만 남깁니다. booth_live · booth_live_log 는 바꾸지 않습니다(FOR UPDATE NOWAIT 로 잠그기만 — 줄을 잡은 채 기다리지 않아 운영 쪽 작업을 실패시키지 않음). 결과는 부스마다 confirmed · skipped:* · failed*.';
 
 
 -- ═══════════════════════════════════════════════════════════════
@@ -319,8 +348,9 @@ select v."항목",
             and pro.prosecdef
             and pro.provolatile = 'v'
             and 'search_path=""' = any (pro.proconfig))::text),
-    (7, '일괄 확인: FOR UPDATE 잠금 · lock_timeout 3s', 'true',
-        ((select pg_catalog.pg_get_functiondef('public.admin_confirm_booth_live(jsonb)'::regprocedure) ~* 'for\s+update')
+    (7, '일괄 확인: 관리자끼리 advisory 잠금 · 줄은 FOR UPDATE NOWAIT · lock_timeout 3s', 'true',
+        ((select pg_catalog.pg_get_functiondef('public.admin_confirm_booth_live(jsonb)'::regprocedure) ~* 'for\s+update\s+nowait')
+         and (select pg_catalog.pg_get_functiondef('public.admin_confirm_booth_live(jsonb)'::regprocedure) ~* 'pg_advisory_xact_lock')
          and (select 'lock_timeout=3s' = any (pro.proconfig) from pg_catalog.pg_proc pro
                where pro.oid = 'public.admin_confirm_booth_live(jsonb)'::regprocedure))::text),
     (8, '일괄 확인이 booth_live · booth_live_log 를 쓰지 않음', 'false',
@@ -333,6 +363,9 @@ select v."항목",
                                            where nsp.nspname = 'public'
                                              and pro.proname = f.n)::text,
                            ', ' order by f.n collate "C")
-           from unnest(array['admin_booth_live_checks', 'admin_confirm_booth_live']) as f(n)))
+           from unnest(array['admin_booth_live_checks', 'admin_confirm_booth_live']) as f(n))),
+    (10, '기록 표에 외래 키 없음(부스를 지워도 감사 기록 남음)', '0',
+        (select count(*) from pg_catalog.pg_constraint con
+          where con.conrelid = 'public.booth_live_check'::regclass and con.contype = 'f')::text)
   ) as v("순서", "항목", "기대", "실제")
  order by v."순서";

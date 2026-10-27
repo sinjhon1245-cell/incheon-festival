@@ -119,8 +119,9 @@
   }
   /* 관리자 일괄 확인 기록 — 함수가 없으면(DB 적용 전 · 되돌린 뒤 · PGRST202) [일괄 확인] 은 '준비 중' 그대로입니다.
      한 번 못 읽으면 지난 기록으로 그리고(표시만), 확인 여부의 최종 판단은 언제나 서버(admin_confirm_booth_live)가 합니다. */
-  function loadChecks() {
-    if (DEMO) return Promise.resolve();
+  // 함수가 없다고 한 번 확인하면(PGRST202) 이 페이지에서는 다시 묻지 않습니다 — 페이지를 새로 열거나 [새로 고침](force)을 누를 때만 다시 확인.
+  function loadChecks(force) {
+    if (DEMO || (data.checkFn === 'missing' && force !== true)) return Promise.resolve();
     return C.rpc('admin_booth_live_checks').then(function (rows) {
       data.checks = indexBy(rows || [], 'booth_id');
       data.checkFn = 'ok';
@@ -220,6 +221,9 @@
     if (q === 'normal') return r.state === 'open' && r.congestion === '보통';
     if (q === 'busy') return r.state === 'open' && r.congestion === '혼잡';
     if (q === 'stale') return r.stale;
+    // 확인 필요를 나눠 보기 — 관리자 확인(최근 30분 안, 지금 값) · 아직 미확인
+    if (q === 'checked') return r.stale && !!r.check;
+    if (q === 'unchecked') return r.stale && !r.check;
     if (q === 'missing') return r.state === 'missing';
     if (q === 'pause') return r.state === 'pause';
     if (q === 'closed') return r.state === 'closed';
@@ -504,14 +508,32 @@
       '<b class="todo__n">' + n + '</b><span class="todo__l">' + esc(label) + '</span>' +
       '<span class="todo__s">' + esc(sub) + '</span><span class="todo__go" aria-hidden="true">' + (n ? '보기 ›' : '') + '</span></button>';
   }
+  /* 확인 필요 나눠 보기 — 확인 기록 함수가 있을 때만(없으면 관리자 확인이란 것이 없음).
+     관리자 확인은 운영 상태 갱신이 아니므로 확인 필요 수를 줄이지 않고, 그 안을 '관리자 확인' · '아직 미확인' 으로 나눕니다.
+     일괄 확인 뒤에도 확인 필요 수가 그대로인 까닭을 한 줄로 함께 씁니다(고장으로 보이지 않게). */
+  function splitHtml(c) {
+    if (DEMO || data.checkFn !== 'ok' || !c.stale) return '';
+    function b(k, label, n, sub) {
+      var on = ui.view === 'live' && ui.quick === k;
+      return '<button class="tsplit__b tsplit__b--' + k + (n ? '' : ' is-zero') + (on ? ' is-on' : '') + '" type="button" data-quick="' + k + '" aria-pressed="' + on + '">' +
+        '<span class="tsplit__l">' + esc(label) + '</span><b class="tsplit__n">' + n + '</b><span class="tsplit__s">' + esc(sub) + '</span></button>';
+    }
+    return '<div class="tsplit" role="group" aria-label="확인 필요 나눠 보기">' +
+      b('checked', '관리자 확인', c.checked, '최근 ' + BC.staleMinutes() + '분 안에 현장 확인') +
+      b('unchecked', '아직 미확인', c.stale - c.checked, '관리자 확인 없음 또는 ' + BC.staleMinutes() + '분 지남') +
+      '<p class="tsplit__note">관리자 확인은 운영 상태 갱신이 아니어서 확인 필요 수는 그대로입니다. 운영자가 새로 입력하면 확인 필요에서 빠집니다.</p>' +
+    '</div>';
+  }
   function actionHtml(c) {
     var mins = BC.staleMinutes();
     return '<section class="opanel oact" aria-label="관리 조치">' +
       '<div class="opanel__head"><h2 class="opanel__t">관리 조치</h2></div>' +
       '<div class="oact__list">' +
-        // 확인 필요 수는 30분 넘게 그대로인 부스 그대로 — 관리자 확인은 그 안에서 따로 셉니다(수를 줄이지 않음).
-        todoBtn('stale', '확인 필요', c.stale, c.stale ? mins + '분 넘게 그대로 · 운영 중 ' + c.staleOpen + ' · 중단 ' + c.stalePause +
-          (c.checked ? ' · 관리자 확인 ' + c.checked : '') : mins + '분 안에 모두 입력', 'stale') +
+        // 확인 필요 수는 30분 넘게 그대로인 부스 그대로 — 관리자 확인은 그 안에서 따로 나눠 셉니다(수를 줄이지 않음).
+        '<div class="todo-stack">' +
+          todoBtn('stale', '확인 필요', c.stale, c.stale ? mins + '분 넘게 그대로 · 운영 중 ' + c.staleOpen + ' · 중단 ' + c.stalePause : mins + '분 안에 모두 입력', 'stale') +
+          splitHtml(c) +
+        '</div>' +
         todoBtn('missing', '미입력', c.missing.n, '오늘 입력된 상태 없음', 'missing') +
         (c.qr || ui.quick === 'qr' ? todoBtn('qr', 'QR 준비 필요', c.qr, 'QR이 없거나 꺼져 있고 PIN도 없음', 'qr') : '') +
         (c.pin || ui.quick === 'pin' ? todoBtn('pin', 'PIN 확인', c.pin, '1시간 PIN 실패 ' + PIN_FAIL_WARN + '번 이상', 'pin') : '') +
@@ -521,7 +543,7 @@
       '<div class="oact__soon">' +
         (!DEMO && data.checkFn === 'ok'
           ? '<button class="soon soon--on" type="button" data-batch="open" title="현장에서 확인한 부스에 관리자 확인 기록만 남깁니다(현황 값 · 입력 시각은 그대로)">일괄 확인</button>'
-          : '<button class="soon" type="button" disabled title="관리자 확인 기록(현황 값 · 입력 시각은 그대로) DB 함수 적용 뒤 사용">일괄 확인<span>준비 중</span></button>') +
+          : '<button class="soon" type="button" disabled title="관리자 확인 기록(현황 값 · 입력 시각은 그대로) DB 함수 적용 뒤 사용 — 적용 뒤에는 [새로 고침]을 누르면 다시 확인합니다">일괄 확인<span>준비 중</span></button>') +
         '<button class="soon" type="button" disabled title="알림 저장 · 발송 기능 승인 뒤 구현">운영자 알림<span>준비 중</span></button>' +
       '</div>' +
     '</section>';
@@ -636,11 +658,12 @@
     sel.classList.toggle('is-set', !!ui.zone);
     // 붙박이 줄의 '지금 걸러 보는 것' — 위의 요약 카드가 화면 밖으로 지나가도 무엇을 보고 있는지 알 수 있게
     var act = $('#lv-active');
-    var q = QUICK.concat([['qr', 'QR 준비 필요'], ['pin', 'PIN 확인']]).filter(function (o) { return o[0] === ui.quick; })[0];
+    var q = QUICK.concat([['qr', 'QR 준비 필요'], ['pin', 'PIN 확인'], ['checked', '확인 필요 중 관리자 확인'], ['unchecked', '확인 필요 중 아직 미확인']])
+      .filter(function (o) { return o[0] === ui.quick; })[0];
     if (ui.quick !== 'all' && q) {
       act.hidden = false;
       // 여유 · 보통 · 혼잡 · 중단은 마지막 입력 기준이라 30분 넘은 값이 섞일 수 있습니다 — 몇 곳인지 함께 씁니다.
-      var oldN = ui.quick === 'stale' ? 0 : rows.filter(function (r) { return r.stale; }).length;
+      var oldN = /^(stale|checked|unchecked)$/.test(ui.quick) ? 0 : rows.filter(function (r) { return r.stale; }).length;
       act.innerHTML = '<span class="lvactive__t"><b>' + esc(q[1]) + '</b>만 보는 중 · ' + rows.length + '곳' +
           (oldN ? '<span class="lvactive__o">그중 확인 필요 ' + oldN + '곳</span>' : '') + '</span>' +
         '<button class="lvactive__x" type="button" data-quick="all">전체 보기</button>';
@@ -956,7 +979,8 @@
     }
     return '<div class="bc__head"><h2 class="bc__t">일괄 확인 결과</h2>' +
         '<p class="bc__sum"><b>확인 완료 ' + ok.length + '</b> · 제외 ' + skip.length + ' · 실패 ' + fail.length + '</p>' +
-        '<p class="bc__note">기록한 부스도 ‘확인 필요’(30분 넘게 그대로) 표시는 그대로이고, 줄에 ‘관리자 확인 HH:MM’ 이 따로 붙습니다. 관람객 화면은 바뀌지 않습니다.</p></div>' +
+        '<p class="bc__note">관리자 확인은 운영 상태 갱신이 아니어서 ‘확인 필요’ 수는 그대로이고, 관리 조치의 <b>관리자 확인</b> 수가 늘고 <b>아직 미확인</b> 수가 줄어듭니다. ' +
+          '줄에는 ‘관리자 확인 HH:MM’ 이 따로 붙고, 관람객 화면은 바뀌지 않습니다.</p></div>' +
       (b.err ? '<p class="bc__err" role="alert">' + esc(b.err) + '</p>' : '') +
       group('ok', '확인 완료', ok) + group('skip', '제외', skip) + group('fail', '실패', fail) +
       '<div class="bc__foot">' +
@@ -1456,10 +1480,11 @@
       paint();
     });
   }
-  function refreshMaster() {
+  // force: [새로 고침] 을 누른 경우 — 관리자 확인 함수가 없다고 본 뒤에도 한 번 더 확인합니다(그 사이 적용됐을 수 있음).
+  function refreshMaster(force) {
     // 리허설 대상 · 행사 첫날(공통 PIN 요약)도 함께 다시 읽습니다. 못 읽으면 지난 값으로 그립니다.
     if (!DEMO) loadRehearsal().then(null, function () { /* 지난 상태 */ });
-    return loadMaster().then(loadLive).then(loadChecks).then(paint, function (e) {
+    return loadMaster().then(loadLive).then(function () { return loadChecks(force === true); }).then(paint, function (e) {
       data.failAt = new Date();
       console.warn('[booth-admin] 부스 목록을 읽지 못했습니다', e && (e.code || e.message));
       paint();
@@ -1530,7 +1555,7 @@
       if (t.closest('[data-pwchange]')) { openPasswordChange(); return; }
       if (t.closest('[data-open-sheet]')) { $('#sheet').hidden = false; document.body.style.overflow = 'hidden'; return; }
       if (t.closest('[data-close-sheet]')) { $('#sheet').hidden = true; document.body.style.overflow = ''; return; }
-      if (t.closest('[data-refresh]')) { refreshMaster().then(function () { toast('새로 읽었습니다.'); }); return; }
+      if (t.closest('[data-refresh]')) { refreshMaster(true).then(function () { toast('새로 읽었습니다.'); }); return; }
       var ex = t.closest('[data-example]');
       if (ex) { runExamples(ex.getAttribute('data-example')); return; }
       if (t.closest('[data-rh-toggle]')) { toggleRehearsal(); return; }
