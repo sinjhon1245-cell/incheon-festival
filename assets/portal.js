@@ -45,6 +45,16 @@
   ];
   var NAV_GROUPS = ['운영', '정보'];
 
+  /* 행사 운영 포털의 표시 메뉴만 제어합니다. 숨긴 화면과 기존 링크는 유지합니다.
+     향후 'full' 로 변경하면 기존 전체 메뉴가 돌아옵니다. */
+  var PORTAL_MENU_MODE = 'booth-only'; // 'booth-only' | 'full'
+  var BOOTH_ONLY_NAV = ['dashboard', 'booths'];
+  function visibleNav() {
+    return PORTAL_MENU_MODE === 'booth-only'
+      ? NAV.filter(function (n) { return BOOTH_ONLY_NAV.indexOf(n.id) >= 0; })
+      : NAV;
+  }
+
   function svgIcon(d) {
     return '<svg class="tab__ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" ' +
       'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">' + d + '</svg>';
@@ -3512,6 +3522,7 @@
   }
 
   function paintNav() {
+    var menu = visibleNav();
     var openReq = S.requests.filter(function (r) { return r.status !== '완료'; }).length;
     var urgent = S.notices.filter(function (n) { return n.level === '긴급'; }).length;
     function badgeNum(id) {
@@ -3530,7 +3541,7 @@
     /* 그룹 제목을 사이에 끼워 메뉴가 세 덩어리로 읽히게 합니다.
        제목은 누를 수 없는 글자라 탭 순서에 끼어들지 않습니다. */
     function group(name) {
-      var items = NAV.filter(function (n) { return n.group === name; });
+      var items = menu.filter(function (n) { return n.group === name; });
       if (!items.length) return '';
       return '<p class="side__group">' + esc(name) + '</p>' + items.map(link).join('');
     }
@@ -3540,11 +3551,11 @@
     var adminLink = '<a href="admin.html">관리자' +
       (canAct() ? '<span class="nav__state">로그인됨</span>' : '') + '</a>';
     $('#sidenav').innerHTML =
-      NAV.filter(function (n) { return !n.group; }).map(link).join('') +
+      menu.filter(function (n) { return !n.group; }).map(link).join('') +
       NAV_GROUPS.map(group).join('') +
       '<p class="side__group">관리</p>' + adminLink;
 
-    var tabs = NAV.filter(function (n) { return n.tab; });
+    var tabs = menu.filter(function (n) { return n.tab; });
     $('#tabbar').innerHTML = tabs.map(function (n) {
       var num = badgeNum(n.id);
       return '<a href="#' + n.id + '" class="' + (n.id === view ? 'is-on' : '') + '"' +
@@ -3562,7 +3573,7 @@
         esc(n.label) + badgeFor(n.id) + '</a>';
     }
     $('#sheetnav').innerHTML = NAV_GROUPS.map(function (name) {
-      var items = NAV.filter(function (n) { return n.group === name && !n.tab; });
+      var items = menu.filter(function (n) { return n.group === name && !n.tab; });
       if (!items.length) return '';
       return '<p class="sheet__group">' + esc(name) + '</p>' + items.map(sheetLink).join('');
     }).join('') + '<p class="sheet__group">관리</p>' + adminLink;
