@@ -222,6 +222,17 @@
         </div>
       </div>
 
+      <!-- 운영본부 알림(기본 꺼짐 — 설정 boothNotices 와 서버 스위치가 모두 켜져 있고, 내 부스에 확인 안 한 알림이 있을 때만 보임).
+           [확인했어요] 는 알림 확인만 남기고 대기 값은 바꾸지 않습니다(상태가 그대로면 아래 ‘맞아요’ 를 따로 누름). -->
+      <div class="notice" id="notice" role="status" aria-live="polite" hidden>
+        <p class="notice__k" id="notice-k"></p>
+        <p class="notice__t" id="notice-t"></p>
+        <div class="notice__row">
+          <button type="button" class="notice__btn" id="notice-ack" data-act="notice-ack">확인했어요</button>
+          <span class="notice__more" id="notice-more" hidden></span>
+        </div>
+      </div>
+
       <!-- 부스 식별 머리: 왼쪽 부스 번호 판(넓은 색 면) │ 오른쪽 부스 이름 + 운영기관 · 구역.
            상태(여유 · 보통 · 혼잡 · 중단 · 마감)와 상관없이 늘 같은 모양입니다(상태는 아래 '현재 대기' 에서만). -->
       <header class="head">
@@ -1157,6 +1168,7 @@
 
     function stopAll() {
       dead = true;
+      stopNotice();
       if (stopPoll) { stopPoll(); stopPoll = null; }
       if (stopDemo) { stopDemo(); stopDemo = null; }
       clearInterval(tickTimer);
@@ -1611,6 +1623,101 @@
     function startPoll() {
       if (stopPoll || dead) return;
       stopPoll = core.poll(refresh, REFRESH_MS);
+      startNotice();
+    }
+
+    /* ── 운영본부 알림 ─────────────────────────────────────────────
+       기본 꺼짐: 설정(boothNotices)이 true 일 때만 묻기 시작하고, 서버 스위치가 꺼져 있으면 빈 목록만 옵니다.
+       화면이 보이는 동안만 서버가 정한 간격(켜짐 15~20초 · 꺼짐 5분)으로 내 부스 알림만 묻습니다 — 부스 id 를 보내지 않고
+       QR 열쇠 · PIN 세션으로 서버가 부스를 정합니다. 연결이 안 되면 20초 → 40초 → … 5분까지 늘려 다시 묻고,
+       함수가 없으면(DB 적용 전 · 되돌린 뒤) 이 화면에서는 더 묻지 않습니다.
+       띠를 그린 뒤에만 '화면에 표시됨', [확인했어요] 를 눌렀을 때만 '운영자 확인' 을 남깁니다.
+       대기 값 · 저장 흐름 · 로그인은 건드리지 않습니다(따로 묻고 따로 그림). 협의용 예시(?demo)에서는 쓰지 않습니다. */
+    var NOTICE_ON = !!(core.cfg && core.cfg.boothNotices === true) && !isMock;
+    var nt = { timer: null, stopped: true, fails: 0, items: [], shown: {}, acking: false };
+    // 다시 보이면 0~3초 흩뜨려 이어 묻습니다(가려진 동안은 묻지 않음 — 위 noticeTick)
+    document.addEventListener('visibilitychange', function () {
+      if (!nt.stopped && !document.hidden && !dead) noticeNext(Math.random() * 3000);
+    });
+    function noticeCall(action, id) {
+      var args = { p_action: action, p_notice_id: id || null };
+      if (sess) { args.p_session = sess.session; return core.request('POST', 'rpc/booth_session_notice', args); }
+      args.p_token = token;
+      return core.request('POST', 'rpc/booth_ctrl_notice', args);
+    }
+    function noticeNext(ms) {
+      clearTimeout(nt.timer);
+      if (nt.stopped) return;
+      nt.timer = setTimeout(noticeTick, ms);
+    }
+    function noticeTick() {
+      if (nt.stopped || dead || document.hidden) return;   // 가려져 있으면 쉬고, 다시 보일 때 이어 묻습니다
+      noticeCall('list').then(function (r) {
+        if (nt.stopped || dead) return;
+        nt.fails = 0;
+        var on = !!(r && r.enabled === true);
+        nt.items = on && r.notices && r.notices.length ? r.notices : [];
+        paintNotice();
+        var base = on ? Math.min(Math.max(Number(r.poll_ms) || 18000, 15000), 20000) : 300000;
+        noticeNext(base * (0.9 + Math.random() * 0.2));
+      }, function (err) {
+        if (nt.stopped || dead) return;
+        var code = err && err.code;
+        // 함수 없음 · 실행 권한 없음 · 설정 없음 — 이 화면에서는 더 묻지 않습니다(새로 열면 다시 확인)
+        if (code === 'PGRST202' || code === '42883' || code === 'NO_CONFIG' || (code === '42501' && /permission denied/i.test(err.message || ''))) { stopNotice(); return; }
+        // 끝난 세션 · 바뀐 QR 은 대기 화면의 읽기가 알립니다 — 여기서는 띠를 내리고 오래 쉽니다
+        if (code === '42501') { nt.items = []; paintNotice(); noticeNext(300000); return; }
+        nt.fails += 1;
+        noticeNext(Math.min(20000 * Math.pow(2, nt.fails - 1), 300000));
+      });
+    }
+    function startNotice() {
+      if (!NOTICE_ON || !nt.stopped || dead) return;
+      nt.stopped = false;
+      noticeNext(1500 + Math.random() * 1500);
+    }
+    function stopNotice() {
+      if (!nt) return;   // 알림 칸을 만들기 전(처음 불러오는 중)에 멈추는 경우
+      nt.stopped = true;
+      clearTimeout(nt.timer);
+      nt.items = [];
+      paintNotice();
+    }
+    function paintNotice() {
+      var box = $('notice');
+      if (!box || !nt) return;
+      var it = nt.items[0];
+      box.hidden = !it || view !== 'main';
+      if (box.hidden) return;
+      $('notice-k').textContent = '운영본부 알림 · ' + core.formatClock(it.created_at);
+      $('notice-t').textContent = it.body;
+      var more = nt.items.length - 1;
+      $('notice-more').hidden = more < 1;
+      $('notice-more').textContent = more > 0 ? '다음 알림 ' + more + '개' : '';
+      var b = $('notice-ack');
+      b.disabled = nt.acking;
+      b.textContent = nt.acking ? '보내는 중' : '확인했어요';
+      // 실제로 그렸고 화면이 보일 때만 '화면에 표시됨'(알림마다 한 번)
+      if (!document.hidden && !it.shown && !nt.shown[it.id]) {
+        nt.shown[it.id] = true;
+        noticeCall('shown', it.id).then(function () { it.shown = true; }, function () { nt.shown[it.id] = false; });
+      }
+    }
+    function noticeAck() {
+      var it = nt.items[0];
+      if (!it || nt.acking) return;
+      nt.acking = true;
+      paintNotice();
+      noticeCall('ack', it.id).then(function (r) {
+        nt.acking = false;
+        nt.items = nt.items.filter(function (x) { return x.id !== it.id; });
+        paintNotice();
+        toast(r && r.ok === false ? '이미 끝난 알림이에요.' : '확인했어요. 운영본부에 표시돼요.', 'info', 3000);
+      }, function () {
+        nt.acking = false;
+        paintNotice();
+        toast('연결이 안 돼 확인을 못 보냈어요. 다시 눌러 주세요.', 'error');
+      });
     }
 
     /* ── 누르기 · 저장 ─────────────────────────────────────────────── */
@@ -1916,6 +2023,7 @@
 
     function render() {
       expireDay();
+      paintNotice();
       if (view !== 'main') return;
       renderHead();
 
@@ -2110,6 +2218,7 @@
       if (act === 'close-yes') { tap('closed', 0); return; }
       if (act === 'close-no') { $('ask-close').hidden = true; return; }
       if (act === 'touch') { touch(); return; }
+      if (act === 'notice-ack') { noticeAck(); return; }
       if (act === 'retry') {
         offline = false;
         render();

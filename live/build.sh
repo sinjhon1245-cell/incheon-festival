@@ -193,6 +193,10 @@ SB_KEY=$(pick_str supabaseAnonKey) || exit 1
 POLL_MS=$(pick_num pollingIntervalMs) || exit 1
 FRESH_MIN=$(pick_num freshnessThresholdMinutes) || exit 1
 HELP_LINE=$(pick_help) || exit 1
+# 운영자 알림(기본 꺼짐). 원본 설정 파일에 'boothNotices: true,' 한 줄이 있을 때만 켜고, 그 밖(없음 · false · 다른 모양)은 늘 false 입니다.
+# 켜져도 서버 스위치(public.booth_notice_config)가 꺼져 있으면 운영자 화면에 아무것도 보이지 않습니다.
+BOOTH_NOTICES=false
+if grep -Eq '^[[:space:]]*boothNotices:[[:space:]]*true[[:space:]]*,?[[:space:]]*$' "$SRC"; then BOOTH_NOTICES=true; fi
 
 # 연결 정보가 없으면 두 화면은 "연결 설정을 불러오지 못했습니다" 만
 # 보여 줍니다. 그런 배포본을 조용히 올리느니 빌드를 멈추는 편이
@@ -289,6 +293,7 @@ cp og-image.png dist/og-image.png
   printf '  pollingIntervalMs: %s,\n' "$POLL_MS"
   printf '  freshnessThresholdMinutes: %s,\n' "$FRESH_MIN"
   printf "  boothHelpLine: '%s',\n" "$HELP_LINE"
+  printf '  boothNotices: %s,\n' "$BOOTH_NOTICES"
   printf "  visitorSiteUrl: './'\n"
   printf '};\n'
 } > dist/assets/config.js

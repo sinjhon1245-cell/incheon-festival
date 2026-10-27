@@ -518,6 +518,33 @@ button {
 }
 .bar + .bar { border-top: 1px solid #E9D3A8; }
 
+/* ── 운영본부 알림(기본 꺼짐) — 부스 머리 위, 보라(운영본부 · 조작 색) 왼쪽 띠. 대기 상태 색과 섞지 않습니다. ── */
+.notice {
+  margin: 12px 0 0;
+  padding: 12px 14px;
+  border: 1px solid #D8D1FB;
+  border-radius: 12px;
+  background: var(--accent-t);
+  box-shadow: inset 4px 0 0 var(--accent);
+  color: var(--ink);
+}
+.notice[hidden] { display: none; }
+.notice__k { margin: 0; font-size: 13px; font-weight: 800; color: var(--accent-d); font-variant-numeric: tabular-nums; }
+.notice__t { margin: 4px 0 0; font-size: 17px; font-weight: 700; line-height: 1.45; overflow-wrap: anywhere; }
+.notice__row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 10px; }
+.notice__btn {
+  min-height: 44px;
+  padding: 0 18px;
+  border: 1.5px solid var(--accent);
+  border-radius: var(--r-btn);
+  background: var(--accent);
+  color: var(--on);
+  font-size: 15px;
+  font-weight: 800;
+}
+.notice__btn:disabled { opacity: 0.6; }
+.notice__more { font-size: 13px; font-weight: 700; color: var(--accent-d); }
+
 /* ── 머리: 부스 식별 — [부스 번호 판] │ 부스 이름 + 운영기관 · 구역 ────────
    운영자가 글을 읽기 전에 '지금 어느 부스를 만지는지' 알게 하는 자리입니다.
      번호 판     작은 배지가 아니라 넓은 보라 면 + 흰 글자. 판 높이에 맞춘 세로 구분선을 오른쪽에 둡니다.
