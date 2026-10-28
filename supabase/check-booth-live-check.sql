@@ -10,6 +10,9 @@
 --   D. 확인 표 10줄 다시 보기 — migration-booth-live-check.sql 맨 아래와 같은 표(적용 뒤 언제든)
 --   E. 기준 지문 — 적용 직전 · 직후 · 리허설 뒤에 한 번씩 돌려 견줌(실제 84곳 · 현황 · 대기 기록 · QR · PIN · 기존 함수 · 정책 · 23:00 작업)
 --   F. 확인 필요 · 관리자 확인 · 아직 미확인 수 — 관리자 화면 ‘관리 조치’ 와 같은 셈(적용 뒤)
+--   R. 23:00 자동 초기화 — 적용 당일 14:00 · 다음 날 아침(전날 23:00 succeeded · 어제 값 남음 0)
+--   X. E 가 달라졌을 때 — E(전) 뒤 대기 기록의 출처 · 시각 대조 + 기록 없이 바뀐 현황 수(0)
+--   G. 관리자 확인 뒤 현황 그대로인가 — 확인한 부스마다(적용 뒤)
 --   (적용 직후의 확인 표 10줄은 migration-booth-live-check.sql 맨 아래에도 있습니다.)
 -- ===================================================================
 
@@ -180,3 +183,69 @@ select (select count(*) from stale) as "확인 필요",
            where c.booth_id = s.booth_id and c.seen_updated_at = s.updated_at
              and c.checked_at >= now() - interval '30 minutes'
              and (c.checked_at at time zone 'Asia/Seoul')::date = (now() at time zone 'Asia/Seoul')::date)) as "아직 미확인";
+
+
+-- ── R. 23:00 자동 초기화(적용 당일 14:00 · 다음 날 아침) ─────────────────────
+-- 맨 앞이 ‘succeeded 전날 23:00’ 이고 ‘실제 부스 어제 값 남음’ 이 0 이어야 적용합니다. 아니면 적용을 미루고 초기화부터 봅니다.
+with r as (select b.id from public.booths b where b.org !~ '^\s*\[예시\]')
+select
+  (select string_agg(d.status || ' ' || to_char(d.start_time at time zone 'Asia/Seoul', 'MM-DD HH24:MI:SS'), ' · ' order by d.start_time desc)
+     from (select d.* from cron.job_run_details d join cron.job j on j.jobid = d.jobid
+            where j.jobname = 'booth-rehearsal-reset' order by d.start_time desc limit 3) d) as "최근 초기화 3번(상태 시작 KST)",
+  (select count(*) from public.booth_live l join r on r.id = l.booth_id
+    where (l.updated_at at time zone 'Asia/Seoul')::date < (now() at time zone 'Asia/Seoul')::date) as "실제 부스 어제 값 남음(0)",
+  (select count(*) from public.booth_live l join r on r.id = l.booth_id
+    where (l.updated_at at time zone 'Asia/Seoul')::date = (now() at time zone 'Asia/Seoul')::date) as "실제 부스 오늘 입력";
+
+
+-- ── X. E 가 달라졌을 때 — 입력 시각 · 출처 대조(적용 전에도 · 뒤에도) ─────────────
+-- 맨 위 'E(전)의_마지막_id' 를 E(전) 결과의 ‘대기 기록 줄 / 마지막 id’ 의 마지막 id(숫자)로 바꿔 Run 합니다(안 바꾸면 일부러 오류).
+-- 출처: set = 운영자 입력 · touch = 운영자 ‘변동 없음’ · admin = 관리자 화면 입력. 일괄 확인은 대기 기록을 남기지 않습니다.
+-- ‘기록과 안 맞는 현황’ 은 현황 줄마다 같은 시각 · 같은 값의 대기 기록이 있는지 셉니다 — 0 이 아니면 기록 없이 바뀐 값이 있다는 뜻(되돌리기 · 원인 확인).
+-- 기록이 맞아도 누가 입력했는지는 따로 판단합니다(대기 기록에는 입력한 사람이 없음 — 문서 9장).
+-- X1 요약
+with base as (select 'E(전)의_마지막_id'::bigint as last_id)
+select
+  (select count(*) from public.booth_live_log g, base where g.id > base.last_id) as "E(전) 뒤 새 대기 기록",
+  (select coalesce(string_agg(x.s, ' · '), '없음') from (
+      select g.source || ' ' || count(*) || '건 ' || to_char(min(g.created_at) at time zone 'Asia/Seoul', 'HH24:MI:SS')
+             || '~' || to_char(max(g.created_at) at time zone 'Asia/Seoul', 'HH24:MI:SS') as s
+        from public.booth_live_log g, base where g.id > base.last_id group by g.source order by g.source) x) as "출처별",
+  (select count(*) from public.booth_live l
+    where not exists (select 1 from public.booth_live_log g
+                       where g.booth_id = l.booth_id and g.created_at = l.updated_at
+                         and g.congestion is not distinct from l.congestion
+                         and g.wait_minutes is not distinct from l.wait_minutes)) as "기록과 안 맞는 현황(0)";
+
+-- X2 목록(어느 부스에 언제 무엇이) — 위와 같은 숫자로 바꿔 씁니다
+with base as (select 'E(전)의_마지막_id'::bigint as last_id)
+select g.id                                                                       as "기록 id",
+       to_char(g.created_at at time zone 'Asia/Seoul', 'MM-DD HH24:MI:SS')        as "입력 시각(KST)",
+       g.source                                                                   as "출처",
+       coalesce(nullif(b.code, ''), b.zone_key || '-' || lpad(b.no::text, greatest(2, length(b.no::text)), '0')) as "부스",
+       g.congestion || ' ' || coalesce(g.wait_minutes::text || '분', '')           as "값",
+       coalesce(l.updated_at = g.created_at, false)                               as "지금 현황이 이 입력"
+  from public.booth_live_log g cross join base
+  left join public.booths b on b.id = g.booth_id
+  left join public.booth_live l on l.booth_id = g.booth_id
+ where g.id > base.last_id
+ order by g.id
+ limit 200;
+
+
+-- ── G. 관리자 확인 뒤 현황이 그대로인가(적용 뒤 — 새 표가 있어야 함) ───────────────
+-- 오늘 확인한 부스마다 ‘확인한 값’ 이 지금 현황과 같은지 봅니다.
+-- ‘현황 그대로’ false 는 ‘확인한 값 뒤 입력 수’ 가 1 이상(그 뒤 운영자 · 관리자가 새로 입력)일 때만 정상입니다.
+-- false 인데 0 이면 관리자 확인만으로 현황이 바뀐 것 — 즉시 사용 중단 · 되돌리기 · 원인 확인.
+select c.booth_code                                                          as "부스",
+       to_char(c.checked_at at time zone 'Asia/Seoul', 'HH24:MI:SS')        as "확인 시각",
+       c.seen_updated_at = l.updated_at                                      as "현황 그대로",
+       (select count(*) from public.booth_live_log g
+         where g.booth_id = c.booth_id and g.created_at > c.seen_updated_at) as "확인한 값 뒤 입력 수",
+       (select coalesce(string_agg(g.source || ' ' || to_char(g.created_at at time zone 'Asia/Seoul', 'HH24:MI:SS'), ', ' order by g.id), '')
+          from public.booth_live_log g
+         where g.booth_id = c.booth_id and g.created_at > c.seen_updated_at) as "그 입력(출처 시각)"
+  from public.booth_live_check c
+  left join public.booth_live l on l.booth_id = c.booth_id
+ where (c.checked_at at time zone 'Asia/Seoul')::date = (now() at time zone 'Asia/Seoul')::date
+ order by c.id desc;
