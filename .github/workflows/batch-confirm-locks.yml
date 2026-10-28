@@ -16,7 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
-      SITE_REF: claude/ops-batch-confirm   # 시험할 일괄 확인 SQL 이 있는 브랜치(PR #38)
+      SITE_REF: main   # 시험할 일괄 확인 SQL(PR #38 병합 뒤 main)
     services:
       postgres:
         image: postgres:17
