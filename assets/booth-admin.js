@@ -76,7 +76,10 @@
   var ui = { view: 'live', quick: 'all', zone: '', q: '', sort: 'code', hidden: false, more: '', zref: false, batch: null };
   // 운영자 알림(supabase/migration-booth-notice.sql) — fn: 'ok' · 'missing'(함수 없음) · ''(아직), on: 서버 스위치(기본 꺼짐),
   // rows: 최근 12시간 보낸 알림의 부스별 상태, open: 칸이 열려 있나, kind · zone · body: 쓰는 중인 알림, res: 마지막 보내기 결과
-  var notice = { fn: '', on: null, rows: [], open: false, kind: 'stale', zone: '', body: '', busy: false, res: null, err: '' };
+  // kind 는 처음엔 '' (아무 대상도 안 고름) · booth: 부스 1곳의 id · step: compose → preview → confirm · pick: 미리보기에서 고정한 대상 · 문구,
+  // sure: 마지막 확인 체크 · sent: 보낸 pick(결과를 견줄 때)
+  var notice = { fn: '', on: null, rows: [], open: false, kind: '', zone: '', booth: '', body: '', step: 'compose', pick: null, sure: false,
+    busy: false, res: null, sent: null, err: '' };
   var busy = {};
   var stops = [];
   var started = false;
@@ -1101,15 +1104,17 @@
   }
 
   /* ── 운영자 알림 (admin_send_booth_notice · supabase/migration-booth-notice.sql) ──
-     관리자가 확인 필요 · 미입력 · 구역 · 전체 공개 부스에 짧은 알림을 보내면, 운영자 화면(QR · PIN)이 열려 있고 보일 때
+     관리자가 확인 필요 · 미입력 · 구역 · 전체 공개 · 부스 1곳에 짧은 알림을 보내면, 운영자 화면(QR · PIN)이 열려 있고 보일 때
      15~20초 안에 위쪽 띠로 뜹니다. 상태는 셋 — 대기(아직 화면에 안 뜸) · 화면에 표시됨 · 운영자 확인(운영자가 누름) — 과
      만료(대기인 채로 3시간 · 그날 자정)뿐이고 ‘전달 완료’ 라고 쓰지 않습니다. 같은 부스 같은 종류는 10분 안에 서버가 다시 보내지 않습니다.
-     알림을 보내거나 확인해도 대기 값(booth_live)은 바뀌지 않습니다. 받을 부스는 화면이 보여 준 목록을 보내고, 서버가 다시 셉니다. */
-  var NT_KINDS = [['stale', '확인 필요'], ['missing', '미입력'], ['zone', '구역'], ['all', '전체 공개']];
+     알림을 보내거나 확인해도 대기 값(booth_live)은 바뀌지 않습니다.
+     보내기는 세 단계 — 쓰기(처음엔 대상 없음) → 미리보기(받을 부스번호 · 수 · 문구를 그 자리에서 고정) → 마지막 확인(체크 뒤 [보내기]).
+     미리보기에서 고정한 부스만 보내고 서버가 다시 셉니다. 결과는 고정한 목록과 견줘 서버가 뺀 부스를 따로 보입니다. */
+  var NT_KINDS = [['stale', '확인 필요'], ['missing', '미입력'], ['zone', '구역'], ['all', '전체 공개'], ['booth', '부스 1곳']];
   var NT_DEFAULT = {
     stale: '대기 상태가 30분 넘게 그대로예요. 지금 상태를 다시 눌러 주세요.',
     missing: '오늘 대기 상태가 아직 없어요. 지금 상태를 눌러 주세요.',
-    zone: '', all: ''
+    zone: '', all: '', booth: ''
   };
   var NT_STATE = { waiting: '대기', shown: '화면에 표시됨', acked: '운영자 확인', expired: '만료' };
   var NT_WHY = { 'skipped:recent': '10분 안에 같은 알림 받음', 'skipped:not_target': '지금 대상 아님' };
@@ -1118,66 +1123,144 @@
     if (!notice.on) return '<button class="soon" type="button" disabled title="운영 담당자가 서버에서 운영자 알림을 켜야 보낼 수 있습니다">운영자 알림<span>꺼짐</span></button>';
     return '<button class="soon soon--on" type="button" data-notice="open" title="운영자 화면 위쪽 띠로 짧은 알림을 보냅니다(대기 값은 그대로)">운영자 알림</button>';
   }
-  // 받을 부스 — 공개 부스만(비공개 · 미배정 보기와 상관없이), 서버 대상 규칙과 같게
+  function ntLabel(kind, zone, code) {
+    var k = (NT_KINDS.filter(function (x) { return x[0] === kind; })[0] || ['', kind])[1];
+    return kind === 'zone' && zone ? zone + ' 구역' : kind === 'booth' && code ? '부스 ' + code : k;
+  }
+  // 받을 부스 — 공개 부스만(비공개 · 미배정 보기와 상관없이), 서버 대상 규칙과 같게. 아직 대상을 안 골랐으면 없음.
   function noticeTargets(all) {
     var pub = all.filter(function (r) { return r.shown; });
     if (notice.kind === 'stale') return pub.filter(function (r) { return r.stale; });
     if (notice.kind === 'missing') return pub.filter(function (r) { return r.state === 'missing'; });
     if (notice.kind === 'zone') return pub.filter(function (r) { return !!notice.zone && r.zone_key === notice.zone; });
-    return pub;
+    if (notice.kind === 'booth') return pub.filter(function (r) { return !!notice.booth && r.id === notice.booth; });
+    if (notice.kind === 'all') return pub;
+    return [];
   }
-  function noticeRecent() {
+  function noticeRecent(kind) {
     var cut = Date.now() - 10 * 60000, m = {};
-    notice.rows.forEach(function (x) { if (x.kind === notice.kind && Date.parse(x.created_at) > cut) m[x.booth_id] = true; });
+    notice.rows.forEach(function (x) { if (x.kind === kind && Date.parse(x.created_at) > cut) m[x.booth_id] = true; });
     return m;
   }
+  // 운영자 화면에 실제로 보일 문구 — 서버와 같게(여러 칸 공백은 한 칸 · 앞뒤 공백 없음 · 비우면 확인 필요 · 미입력만 정해진 문구)
+  function noticeText() { return notice.body.replace(/\s+/g, ' ').trim() || NT_DEFAULT[notice.kind] || ''; }
+  function noticeReady(all) {
+    var t = noticeText();
+    if (!notice.kind || (notice.kind === 'zone' && !notice.zone) || (notice.kind === 'booth' && !notice.booth)) return '';
+    if (!t || t.length > 120) return '문구를 1~120자로 써 주세요.';
+    var recent = noticeRecent(notice.kind);
+    if (!noticeTargets(all).filter(function (r) { return !recent[r.id]; }).length) return '보낼 부스가 없습니다(대상이 없거나 10분 안에 같은 알림을 받음).';
+    return 'ok';
+  }
   function noticeFormHtml(all) {
-    var pub = all.filter(function (r) { return r.shown; });
+    var pub = all.filter(function (r) { return r.shown; }), lock = notice.step !== 'compose' || notice.busy;
     var zs = {};
     pub.forEach(function (r) { if (r.zone_key) zs[r.zone_key] = (zs[r.zone_key] || 0) + 1; });
     var cnt = { stale: pub.filter(function (r) { return r.stale; }).length, missing: pub.filter(function (r) { return r.state === 'missing'; }).length, all: pub.length };
+    var dis = lock ? ' disabled' : '';
     var kinds = NT_KINDS.map(function (k) {
       var on = notice.kind === k[0];
-      return '<button class="ntk' + (on ? ' is-on' : '') + '" type="button" role="radio" aria-checked="' + on + '" data-nkind="' + k[0] + '">' +
-        '<span>' + esc(k[1]) + '</span>' + (k[0] === 'zone' ? '' : '<span class="ntk__n"><b>' + cnt[k[0]] + '</b>곳</span>') + '</button>';
+      return '<button class="ntk' + (on ? ' is-on' : '') + '" type="button" role="radio" aria-checked="' + on + '" data-nkind="' + k[0] + '"' + dis + '>' +
+        '<span>' + esc(k[1]) + '</span>' + (cnt[k[0]] === undefined ? '' : '<span class="ntk__n"><b>' + cnt[k[0]] + '</b>곳</span>') + '</button>';
     }).join('');
     var zsel = notice.kind === 'zone'
-      ? '<label class="listsel ntzone"><span class="sr-only">구역</span><select class="select select--sm" id="nt-zone"><option value="">구역 고르기</option>' +
+      ? '<label class="listsel ntzone"><span class="sr-only">구역</span><select class="select select--sm" id="nt-zone"' + dis + '><option value="">구역 고르기</option>' +
           data.zones.filter(function (z) { return zs[z.key]; }).map(function (z) {
             return '<option value="' + esc(z.key) + '"' + (notice.zone === z.key ? ' selected' : '') + '>' + esc(z.key) + ' · 공개 ' + zs[z.key] + '곳</option>';
           }).join('') + '</select></label>'
       : '';
-    return '<div class="ntkinds" role="radiogroup" aria-label="받을 부스">' + kinds + '</div>' + zsel +
-      '<label class="ntbody"><span class="ntbody__l">문구 <small>(운영자 화면에 그대로 보임 · 120자 안)</small></span>' +
-        '<textarea class="input" id="nt-body" rows="2" maxlength="120">' + esc(notice.body) + '</textarea>' +
-        '<span class="ntbody__n" id="nt-count">' + notice.body.length + ' / 120</span></label>';
+    // 부스 1곳 — 공개 부스 목록에서만 고름(글로 쓰지 않아 오타 · 여러 곳 섞임이 없음)
+    var bsel = notice.kind === 'booth'
+      ? '<label class="listsel ntzone ntbooth"><span class="sr-only">부스</span><select class="select select--sm" id="nt-booth"' + dis + '><option value="">부스번호 고르기</option>' +
+          pub.slice().sort(byCode).map(function (r) {
+            return '<option value="' + esc(r.id) + '"' + (notice.booth === r.id ? ' selected' : '') + '>' + esc(r.code + ' · ' + (r.name || '(이름 없음)')) + '</option>';
+          }).join('') + '</select></label>'
+      : '';
+    return '<div class="ntkinds" role="radiogroup" aria-label="받을 부스">' + kinds + '</div>' + zsel + bsel +
+      (notice.kind ? '<label class="ntbody"><span class="ntbody__l">문구 <small>(운영자 화면에 그대로 보임 · 120자 안' +
+          (NT_DEFAULT[notice.kind] ? ' · 비우면 정해진 문구' : '') + ')</small></span>' +
+        '<textarea class="input" id="nt-body" rows="2" maxlength="120"' + dis + '>' + esc(notice.body) + '</textarea>' +
+        '<span class="ntbody__n" id="nt-count">' + notice.body.length + ' / 120</span></label>'
+      : '<p class="ntpick">먼저 받을 부스를 고르세요. 처음에는 아무 대상도 골라져 있지 않습니다.</p>');
+  }
+  // 받을 부스 수 — 구역 · 전체 공개는 크게(한꺼번에 여러 곳)
+  function ntCountHtml(kind, n, label) {
+    var wide = kind === 'zone' || kind === 'all';
+    return '<p class="ntcount' + (wide ? ' is-wide' : '') + '"><span class="ntcount__n"><b>' + n + '</b>곳</span>' +
+      '<span class="ntcount__l">' + esc(label) + (wide ? ' — 여러 부스에 한꺼번에 갑니다' : '') + '</span></p>';
+  }
+  function ntCodesHtml(list, skip) {
+    return '<ol class="ntcodes">' + list.map(function (c) {
+      return '<li' + (skip && skip[c] ? ' class="is-skip" title="10분 안에 같은 알림을 받아 서버가 뺍니다"' : '') + '>' + esc(c) + '</li>';
+    }).join('') + '</ol>';
   }
   function noticeWhoHtml(all) {
-    var list = noticeTargets(all), recent = noticeRecent();
-    var send = list.filter(function (r) { return !recent[r.id]; }), skip = list.length - send.length;
-    var ok = send.length > 0 && notice.body.trim().length > 0 && !notice.busy && (notice.kind !== 'zone' || !!notice.zone);
-    var codes = list.slice().sort(byCode).map(function (r) {
-      return '<li' + (recent[r.id] ? ' class="is-skip" title="10분 안에 같은 알림을 받아 서버가 뺍니다"' : '') + '>' + esc(r.code || r.name) + '</li>';
-    }).join('');
-    return '<p class="ntwho"><b>' + send.length + '곳</b>에 보냅니다' + (skip ? ' · 10분 안에 같은 알림을 받은 ' + skip + '곳은 서버가 뺍니다' : '') +
-        (list.length ? '' : ' — 받을 부스가 없습니다') + '</p>' +
-      (list.length ? '<ol class="ntcodes">' + codes + '</ol>' : '') +
+    var p = notice.pick;
+    if (notice.step === 'compose' || !p) {
+      var ready = noticeReady(all);
+      if (!notice.kind) return (notice.err ? '<p class="bc__err" role="alert">' + esc(notice.err) + '</p>' : '') +
+        '<div class="bc__foot"><button class="btn btn--ghost" type="button" data-notice="close">닫기</button></div>';
+      var list = noticeTargets(all), recent = noticeRecent(notice.kind);
+      var send = list.filter(function (r) { return !recent[r.id]; });
+      var code = notice.kind === 'booth' && list[0] ? list[0].code : '';
+      return ((notice.kind !== 'zone' || notice.zone) && (notice.kind !== 'booth' || notice.booth)
+          ? ntCountHtml(notice.kind, send.length, ntLabel(notice.kind, notice.zone, code) + (list.length - send.length ? ' · 10분 안에 같은 알림을 받은 ' + (list.length - send.length) + '곳 제외' : ''))
+          : '') +
+        (ready && ready !== 'ok' ? '<p class="ntwho">' + esc(ready) + '</p>' : '') +
+        (notice.err ? '<p class="bc__err" role="alert">' + esc(notice.err) + '</p>' : '') +
+        '<div class="bc__foot">' +
+          '<button class="btn btn--primary" type="button" data-notice="preview"' + (ready === 'ok' && !notice.busy ? '' : ' disabled') + '>미리보기</button>' +
+          '<button class="btn btn--ghost" type="button" data-notice="close">닫기</button>' +
+        '</div>';
+    }
+    // 미리보기 뒤 대상이 바뀌었는지(15초 새로 읽기) — 보내는 것은 고정한 목록이고 서버가 다시 셉니다
+    var now = noticeTargets(all).map(function (r) { return r.id; }), moved = now.length !== p.all.length ||
+      now.some(function (id) { return p.all.indexOf(id) < 0; });
+    var head = notice.step === 'confirm'
+      ? '<h3 class="ntstep">마지막 확인 — 보낸 알림은 되돌릴 수 없습니다</h3>'
+      : '<h3 class="ntstep">미리보기 — 아직 보내지 않았습니다</h3>';
+    return head + ntCountHtml(p.kind, p.ids.length, ntLabel(p.kind, p.zone, p.kind === 'booth' ? p.codes[0] : '') +
+        (p.skip.length ? ' · 10분 안에 같은 알림을 받은 ' + p.skip.length + '곳 제외' : '')) +
+      '<p class="ntmsg"><span class="ntmsg__l">운영자 화면에 보일 문구</span><span class="ntmsg__t">' + esc(p.text) + '</span></p>' +
+      '<p class="ntwho">받을 부스번호 ' + p.ids.length + '곳</p>' + ntCodesHtml(p.codes.concat(p.skip), p.skipSet) +
+      (moved ? '<p class="bwarn" role="note"><b>미리보기 뒤 대상이 바뀌었습니다(지금 ' + now.length + '곳).</b> 그대로 보내면 위 목록 가운데 서버가 지금도 대상이라고 확인한 부스에만 갑니다. 다시 보려면 [고치기].</p>' : '') +
       (notice.err ? '<p class="bc__err" role="alert">' + esc(notice.err) + '</p>' : '') +
-      '<div class="bc__foot">' +
-        '<button class="btn btn--primary" type="button" data-notice="send"' + (ok ? '' : ' disabled') + '>' +
-          (notice.busy ? '보내는 중…' : send.length + '곳에 보내기') + '</button>' +
-        '<button class="btn btn--ghost" type="button" data-notice="close">닫기</button>' +
-      '</div>';
+      (notice.step === 'confirm'
+        ? '<label class="ntsure"><input type="checkbox" id="nt-sure"' + (notice.sure ? ' checked' : '') + (notice.busy ? ' disabled' : '') + ' /> ' +
+            '<span>받을 부스 <b>' + p.ids.length + '곳</b>과 문구를 확인했습니다</span></label>' +
+          '<div class="bc__foot">' +
+            '<button class="btn btn--primary" type="button" data-notice="send"' + (notice.sure && !notice.busy ? '' : ' disabled') + '>' +
+              (notice.busy ? '보내는 중…' : '보내기 (' + p.ids.length + '곳)') + '</button>' +
+            '<button class="btn btn--ghost" type="button" data-notice="back"' + (notice.busy ? ' disabled' : '') + '>미리보기로</button>' +
+          '</div>'
+        : '<div class="bc__foot">' +
+            '<button class="btn btn--primary" type="button" data-notice="confirm">다음 — 마지막 확인</button>' +
+            '<button class="btn btn--ghost" type="button" data-notice="edit">고치기</button>' +
+          '</div>');
   }
+  // 결과 — 미리보기에서 고정한 부스와 서버가 돌려준 부스를 견줍니다(서버가 뺀 부스 · 화면 목록에 없던 부스는 따로 크게)
   function noticeResHtml() {
-    var r = notice.res;
-    if (!r) return '';
-    var q = r.filter(function (x) { return x.status === 'queued'; }).length;
-    var why = {};
-    r.forEach(function (x) { if (x.status !== 'queued') why[x.status] = (why[x.status] || 0) + 1; });
-    var sk = Object.keys(why);
-    return '<p class="ntres"><b>보냄 ' + q + '곳</b>' + (sk.length ? ' · 제외 ' + sk.map(function (k) { return (NT_WHY[k] || k) + ' ' + why[k]; }).join(' · ') : '') +
-      ' — 운영자 화면에 뜨면 ‘화면에 표시됨’, 운영자가 누르면 ‘운영자 확인’ 으로 바뀝니다.</p>';
+    var r = notice.res, p = notice.sent;
+    if (!r || !p) return '';
+    var byId = {}, sent = [], recent = [], notT = [], extra = [], miss = [];
+    r.forEach(function (x) {
+      byId[x.booth_id] = x;
+      var c = x.booth_code || x.booth_id;
+      if (p.ids.indexOf(x.booth_id) < 0) extra.push(c);
+      else if (x.status === 'queued') sent.push(c);
+      else if (x.status === 'skipped:recent') recent.push(c);
+      else notT.push(c);
+    });
+    p.ids.forEach(function (id, i) { if (!byId[id]) miss.push(p.codes[i]); });
+    var diff = notT.length + extra.length + miss.length;
+    function line(t, list) { return list.length ? '<p class="ntres__l"><b>' + t + ' ' + list.length + '곳</b> ' + esc(list.join(' · ')) + '</p>' : ''; }
+    return '<div class="ntres' + (diff ? ' is-diff' : '') + '" role="status">' +
+        '<p class="ntres__h"><b>' + esc(ntLabel(p.kind, p.zone, p.kind === 'booth' ? p.codes[0] : '')) + ' · 화면에서 고른 ' + p.ids.length + '곳 → 보냄 ' + sent.length + '곳</b>' +
+          (diff ? ' — <b class="ntres__x">화면에서 고른 부스와 서버가 확인한 부스가 다릅니다</b>' : ' — 화면에서 고른 부스와 같습니다') + '</p>' +
+        line('보냄', sent) + line('10분 안에 같은 알림 받음(서버가 뺌)', recent) +
+        line('지금 대상 아님(그 사이 상태가 바뀌어 서버가 뺌)', notT) + line('화면 목록에 없던 부스', extra) + line('서버 결과에 없음', miss) +
+        '<p class="ntres__n">운영자 화면에 뜨면 ‘화면에 표시됨’, 운영자가 누르면 ‘운영자 확인’ 으로 바뀝니다.</p>' +
+      '</div>';
   }
   function noticeStatusHtml() {
     if (!notice.rows.length) return '<p class="ntempty">최근 12시간 동안 보낸 알림이 없습니다.</p>';
@@ -1189,7 +1272,7 @@
     return '<h3 class="ntst__t">보낸 알림 · 최근 12시간</h3><ul class="ntst">' + order.slice(0, 8).map(function (id) {
       var g = by[id], c = { waiting: [], shown: [], acked: [], expired: [] };
       g.list.forEach(function (x) { (c[x.state] || c.waiting).push(x.booth_code || ''); });
-      var kind = (NT_KINDS.filter(function (k) { return k[0] === g.n.kind; })[0] || ['', g.n.kind])[1] + (g.n.zone_key ? ' ' + g.n.zone_key : '');
+      var kind = ntLabel(g.n.kind, g.n.zone_key, g.n.kind === 'booth' ? g.list[0].booth_code : '');
       return '<li class="ntst__i"><p class="ntst__h"><b>' + esc(BC.formatClock(g.n.created_at)) + '</b> · ' + esc(kind) + ' · ' + g.list.length + '곳' +
           (g.n.created_by_name ? ' · ' + esc(g.n.created_by_name) : '') + '</p>' +
         '<p class="ntst__b">' + esc(g.n.body) + '</p>' +
@@ -1206,21 +1289,24 @@
     if (!box) return;
     box.hidden = !notice.open;
     if (!notice.open) { if (box._built) { box.innerHTML = ''; box._built = false; } return; }
-    if (!box._built || box._kind !== notice.kind + ':' + notice.zone) {
+    var key = [notice.kind, notice.zone, notice.booth, notice.step, notice.busy].join(':');
+    if (!box._built || box._kind !== key) {
       box.innerHTML = '<div class="bc__head"><h2 class="bc__t" id="nt-title">운영자 알림</h2>' +
           '<p class="bc__note">운영자 화면(QR · PIN)이 열려 있고 보일 때 15~20초 안에 위쪽 띠로 뜹니다. 상태는 <b>대기 · 화면에 표시됨 · 운영자 확인</b> — ' +
           '화면이 꺼져 있으면 대기로 남고, 알림을 확인해도 대기 값은 바뀌지 않습니다. 같은 부스에 같은 종류는 10분 안에 다시 보내지 않습니다.</p></div>' +
         '<div id="nt-form">' + noticeFormHtml(all) + '</div><div id="nt-who"></div><div id="nt-res"></div><div id="nt-status"></div>';
-      box._built = true; box._kind = notice.kind + ':' + notice.zone;
+      box._built = true; box._kind = key;
       $('#nt-who')._h = $('#nt-res')._h = $('#nt-status')._h = null;
     }
     batchSet(noticeWhoHtml(all), $('#nt-who'));
     batchSet(noticeResHtml(), $('#nt-res'));
     batchSet(noticeStatusHtml(), $('#nt-status'));
   }
+  // 쓰던 것을 처음으로 — 여는 때 · 보낸 뒤(같은 대상에 한 번 더 누르는 실수를 막음)
+  function noticeReset() { notice.kind = ''; notice.zone = ''; notice.booth = ''; notice.body = ''; notice.step = 'compose'; notice.pick = null; notice.sure = false; notice.err = ''; }
   function noticeOpen() {
-    notice.open = true; notice.res = null; notice.err = '';
-    if (!notice.body) notice.body = NT_DEFAULT[notice.kind] || '';
+    notice.open = true; notice.res = null; notice.sent = null;
+    noticeReset();
     if (ui.view !== 'live') { window.location.hash = '#live'; }
     paint();
     loadNotice(false, true).then(paint);
@@ -1228,20 +1314,34 @@
     if (box && box.scrollIntoView) box.scrollIntoView({ block: 'start' });
   }
   function noticeKind(k) {
+    if (notice.step !== 'compose' || notice.busy) return;
     if (notice.body === (NT_DEFAULT[notice.kind] || '')) notice.body = NT_DEFAULT[k] || '';
-    notice.kind = k; notice.res = null; notice.err = '';
+    notice.kind = k; notice.err = '';
+    paint();
+  }
+  // 미리보기: 지금 받을 부스(10분 안에 같은 알림 받은 곳은 따로)와 문구를 고정합니다 — 보내기는 이 목록만
+  function noticePreview() {
+    var all = rowsNow();
+    if (noticeReady(all) !== 'ok') { paint(); return; }
+    var list = noticeTargets(all).slice().sort(byCode), recent = noticeRecent(notice.kind);
+    var go = list.filter(function (r) { return !recent[r.id]; }), sk = list.filter(function (r) { return recent[r.id]; }), skipSet = {};
+    sk.forEach(function (r) { skipSet[r.code] = true; });
+    notice.pick = { kind: notice.kind, zone: notice.kind === 'zone' ? notice.zone : null, text: noticeText(),
+      all: list.map(function (r) { return r.id; }), ids: go.map(function (r) { return r.id; }), codes: go.map(function (r) { return r.code; }),
+      skip: sk.map(function (r) { return r.code; }), skipSet: skipSet };
+    notice.step = 'preview'; notice.sure = false; notice.err = ''; notice.res = null; notice.sent = null;
     paint();
   }
   function noticeSend() {
-    var all = rowsNow(), recent = noticeRecent();
-    var ids = noticeTargets(all).filter(function (r) { return !recent[r.id]; }).map(function (r) { return r.id; });
-    if (!ids.length || notice.busy) return;
+    var p = notice.pick;
+    if (!p || notice.step !== 'confirm' || !notice.sure || !p.ids.length || notice.busy) return;
     notice.busy = true; notice.err = '';
     paint();
-    C.rpc('admin_send_booth_notice', { p_kind: notice.kind, p_zone: notice.kind === 'zone' ? notice.zone : null, p_booth_ids: ids, p_body: notice.body })
+    C.rpc('admin_send_booth_notice', { p_kind: p.kind, p_zone: p.zone, p_booth_ids: p.ids, p_body: p.text })
       .then(function (rows) {
         notice.busy = false;
-        notice.res = rows || [];
+        notice.res = rows || []; notice.sent = p;
+        noticeReset();
         return loadNotice(false, true);
       }, function (e) {
         notice.busy = false;
@@ -1254,7 +1354,12 @@
   }
   function noticeAct(k) {
     if (k === 'open') { noticeOpen(); return; }
-    if (k === 'close') { notice.open = false; notice.res = null; notice.err = ''; paint(); return; }
+    if (notice.busy) return;
+    if (k === 'close') { notice.open = false; notice.res = null; notice.sent = null; noticeReset(); paint(); return; }
+    if (k === 'preview') { noticePreview(); return; }
+    if (k === 'confirm' && notice.step === 'preview') { notice.step = 'confirm'; notice.sure = false; paint(); return; }
+    if (k === 'back' && notice.step === 'confirm') { notice.step = 'preview'; notice.sure = false; paint(); return; }
+    if (k === 'edit') { notice.step = 'compose'; notice.pick = null; notice.sure = false; notice.err = ''; paint(); return; }
     if (k === 'send') noticeSend();
   }
 
@@ -1818,7 +1923,9 @@
       if (e.target.id === 'lv-zone') { ui.zone = e.target.value; paintLive(); }
       else if (e.target.id === 'lv-sort') { ui.sort = e.target.value; paintLive(); }
       else if (e.target.id === 'lv-bzone') { var zk = e.target.value; e.target.value = ''; batchZone(zk); }
-      else if (e.target.id === 'nt-zone') { notice.zone = e.target.value; notice.res = null; paint(); }
+      else if (e.target.id === 'nt-zone') { notice.zone = e.target.value; paint(); }
+      else if (e.target.id === 'nt-booth') { notice.booth = e.target.value; paint(); }
+      else if (e.target.id === 'nt-sure') { notice.sure = e.target.checked; batchSet(noticeWhoHtml(rowsNow()), $('#nt-who')); var ns = $('#nt-sure'); if (ns) ns.focus(); }
       else if (e.target.getAttribute && e.target.getAttribute('data-bsel')) batchPick(e.target.getAttribute('data-bsel'), e.target.checked);
     });
     // 구역 현황의 펼침(용어 · 참고 값)을 기억 — 15초마다 다시 그려도 사용자가 연 그대로(toggle 은 거품이 없어 잡기 단계에서)

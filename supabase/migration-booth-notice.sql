@@ -68,7 +68,7 @@ insert into public.booth_notice_config (id) values (1) on conflict (id) do nothi
 
 create table if not exists public.booth_notice (
   id               bigint      generated always as identity primary key,
-  kind             text        not null check (kind in ('stale', 'missing', 'zone', 'all')),
+  kind             text        not null,
   body             text        not null check (char_length(body) between 1 and 120),
   zone_key         text,
   created_by       uuid        not null,
@@ -90,6 +90,9 @@ create table if not exists public.booth_notice_target (
   acked_session  uuid,
   primary key (notice_id, booth_id)
 );
+-- 종류: stale(확인 필요) · missing(미입력) · zone(구역) · all(전체 공개) · booth(부스 1곳). 다시 실행해도 같은 제약 하나만 남게 지우고 다시 겁니다.
+alter table public.booth_notice drop constraint if exists booth_notice_kind_check;
+alter table public.booth_notice add constraint booth_notice_kind_check check (kind in ('stale', 'missing', 'zone', 'all', 'booth'));
 create index if not exists booth_notice_target_booth_idx on public.booth_notice_target (booth_id, notice_id desc);
 create index if not exists booth_notice_created_idx on public.booth_notice (created_at desc);
 
@@ -254,7 +257,7 @@ revoke all     on function public.admin_booth_notice_enabled() from public;
 revoke execute on function public.admin_booth_notice_enabled() from anon;
 grant  execute on function public.admin_booth_notice_enabled() to authenticated;
 
--- 보내기. p_kind: stale · missing · zone(p_zone 필요) · all. p_booth_ids: 그 대상 안에서 고른 부스(null 이면 대상 전부).
+-- 보내기. p_kind: stale · missing · zone(p_zone 필요) · all · booth(p_booth_ids 에 정확히 1곳). p_booth_ids: 그 대상 안에서 고른 부스(null 이면 대상 전부).
 -- p_body: 120자 안(앞뒤 · 여러 칸 공백은 한 칸으로). stale · missing 은 비우면 정해진 문구.
 -- 돌려줌: 부스마다 queued · skipped:recent(10분 안에 같은 종류 받음) · skipped:not_target(지금 대상이 아님).
 drop function if exists public.admin_send_booth_notice(text, text, uuid[], text);
@@ -283,8 +286,11 @@ begin
   if not private.booth_notice_on() then
     raise exception '운영자 알림이 꺼져 있습니다.' using errcode = '55000', hint = 'notice_off';
   end if;
-  if p_kind is null or p_kind not in ('stale', 'missing', 'zone', 'all') then
+  if p_kind is null or p_kind not in ('stale', 'missing', 'zone', 'all', 'booth') then
     raise exception '알림 종류가 맞지 않습니다.' using errcode = '22023';
+  end if;
+  if p_kind = 'booth' and (p_booth_ids is null or pg_catalog.cardinality(p_booth_ids) <> 1 or p_booth_ids[1] is null) then
+    raise exception '부스 1곳을 골라 주세요.' using errcode = '22023';
   end if;
   if p_kind = 'zone' and (p_zone is null or not exists (select 1 from public.zones z where z.key = p_zone and z.is_published)) then
     raise exception '공개된 구역을 골라 주세요.' using errcode = '22023';
@@ -325,7 +331,7 @@ begin
              when 'stale'   then l.booth_id is not null and l.congestion <> '마감' and l.updated_at < v_now - interval '30 minutes'
              when 'missing' then l.booth_id is null
              when 'zone'    then b.zone_key = p_zone
-             else true end
+             else true end   -- all · booth(위 p_booth_ids 로 1곳)
   ), picks as (
     select c.bid, c.code, c.name,
            case when exists (select 1 from public.booth_notice_target t join public.booth_notice n on n.id = t.notice_id
