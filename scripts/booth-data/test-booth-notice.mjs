@@ -161,6 +161,19 @@ t('C7 구역 R2 — R2 공개 부스 21곳 · 문구 공백 정리(“R2 구역 
 await db.query("update public.booth_notice set created_at = created_at - interval '11 minutes' where kind = 'stale'");
 const c8 = await send(ADMIN, 'stale', null, [idOf('R1-01')], null);
 t('C8 10분 지난 뒤에는 같은 종류를 다시 보냄(queued)', c8.ok && c8.rows[0].status === 'queued', JSON.stringify(c8.rows));
+// 부스 1곳(booth) — p_booth_ids 에 정확히 1곳 · 공개 부스만 · 같은 종류 10분 제한
+const c10e = [await send(ADMIN, 'booth', null, null, '확인 부탁'), await send(ADMIN, 'booth', null, [idOf('R1-04'), idOf('R1-05')], '확인 부탁'), await send(ADMIN, 'booth', null, [idOf('R1-04')], '  ')];
+const c10 = await send(ADMIN, 'booth', null, [idOf('R1-04')], 'R1-04 대기 상태를 확인해 주세요');
+const c10r = c10.ok && await q1('select kind, body, zone_key from public.booth_notice where id = $1', [c10.rows[0].notice_id]);
+const c10b = await send(ADMIN, 'booth', null, [idOf('R1-04')], '다시');
+await db.query('update public.booths set is_published = false where id = $1', [idOf('R4-21')]);
+const c10h = await send(ADMIN, 'booth', null, [idOf('R4-21')], '비공개 부스');
+await db.query('update public.booths set is_published = true where id = $1', [idOf('R4-21')]);
+t('C10 부스 1곳 — 없음 · 2곳 · 빈 문구는 22023 · R1-04 한 곳 queued(kind booth · 문구 그대로) · 10분 안 다시 skipped:recent · 비공개 부스는 skipped:not_target(기록 안 만듦)',
+  c10e.every(x => !x.ok && x.code === '22023') && c10.ok && c10.rows.length === 1 && c10.rows[0].booth_code === 'R1-04' && c10.rows[0].status === 'queued' &&
+  c10r.kind === 'booth' && c10r.body === 'R1-04 대기 상태를 확인해 주세요' && !c10r.zone_key && c10b.ok && c10b.rows[0].status === 'skipped:recent' &&
+  c10h.ok && c10h.rows.length === 1 && c10h.rows[0].status === 'skipped:not_target' && c10h.rows[0].notice_id === null,
+  JSON.stringify({ e: c10e.map(x => x.code), c10: c10.rows, b: c10b.rows, h: c10h.rows }));
 t('C9 보내기 내내 booth_live · booth_live_log 그대로', sameFp(fpC, await liveFp()), '');
 
 // ══ D 운영자 ════════════════════════════════════════════════════════════
@@ -246,33 +259,98 @@ const f2 = soonOf(D);
 t('F2 켜짐 — [운영자 알림] 누를 수 있음', f2[1] && f2[1].k === 'open' && !f2[1].dis, JSON.stringify(f2));
 click(W, D.querySelector('[data-notice="open"]')); await wait(300);
 const box = () => D.getElementById('lv-notice');
+const who = () => D.getElementById('nt-who');
 const kindN = k => +text(D.querySelector(`[data-nkind="${k}"] b`));
+const pickK = async k => { click(W, D.querySelector(`[data-nkind="${k}"]`)); await wait(200); };
+const act = async k => { const b = D.querySelector(`[data-notice="${k}"]`); if (b && !b.disabled) click(W, b); await wait(250); return !!b && !b.disabled; };
+const typeBody = async v => { const ta = D.getElementById('nt-body'); ta.value = v; ta.dispatchEvent(new W.Event('input', { bubbles: true })); await wait(120); return ta; };
+const sends = () => P.calls.filter(c => c.name === 'admin_send_booth_notice');
 const stalePub = 3, missPub = pubN - 3;
-t(`F3 칸 열림 — 받을 부스 네 가지(확인 필요 ${stalePub} · 미입력 ${missPub} · 구역 · 전체 공개 ${pubN}) · 기본 ‘확인 필요’ · 정해진 문구 · ‘대기 · 화면에 표시됨 · 운영자 확인’ 설명`,
-  !box().hidden && kindN('stale') === stalePub && kindN('missing') === missPub && kindN('all') === pubN &&
-  D.querySelector('[data-nkind="stale"]').getAttribute('aria-checked') === 'true' && /30분 넘게 그대로/.test(D.getElementById('nt-body').value) &&
-  /대기 · 화면에 표시됨 · 운영자 확인/.test(text(box())) && /3곳에 보내기/.test(text(D.querySelector('[data-notice="send"]'))), text(box()).slice(0, 300));
-const callsBefore = P.calls.length;
-click(W, D.querySelector('[data-notice="send"]'));
+t(`F3 칸 열림 — 받을 부스 다섯 가지(확인 필요 ${stalePub} · 미입력 ${missPub} · 구역 · 전체 공개 ${pubN} · 부스 1곳) · 처음엔 아무것도 안 고름 · 문구 칸 · 보내기 단추 없음`,
+  !box().hidden && kindN('stale') === stalePub && kindN('missing') === missPub && kindN('all') === pubN && !!D.querySelector('[data-nkind="booth"]') &&
+  [...D.querySelectorAll('[data-nkind]')].every(b => b.getAttribute('aria-checked') === 'false') && !D.getElementById('nt-body') &&
+  !D.querySelector('[data-notice="send"]') && !D.querySelector('[data-notice="preview"]') && /먼저 받을 부스를 고르세요/.test(text(box())) &&
+  /대기 · 화면에 표시됨 · 운영자 확인/.test(text(box())), text(box()).slice(0, 300));
+await pickK('stale');
+t('F4 ‘확인 필요’ 고름 — 정해진 문구 · 받을 부스 3곳 · [미리보기] 만(보내기 단추는 아직 없음)',
+  /30분 넘게 그대로/.test(D.getElementById('nt-body').value) && /3곳/.test(text(D.querySelector('.ntcount'))) &&
+  !D.querySelector('[data-notice="preview"]').disabled && !D.querySelector('[data-notice="send"]'), text(who()));
+await act('preview');
+const pv = text(who());
+t('F5 미리보기 — ‘아직 보내지 않았습니다’ · 받을 부스번호 R1-01 · R1-02 · R1-07 · 3곳 · 운영자 화면에 보일 문구 그대로 · 고르기 · 문구 칸 잠김 · 보내기 요청 0',
+  /미리보기 — 아직 보내지 않았습니다/.test(pv) && [...who().querySelectorAll('.ntcodes li')].map(li => text(li)).join() === 'R1-01,R1-02,R1-07' &&
+  /3곳/.test(text(who().querySelector('.ntcount'))) && /30분 넘게 그대로예요\. 지금 상태를 다시 눌러 주세요\./.test(text(who().querySelector('.ntmsg'))) &&
+  D.getElementById('nt-body').disabled && D.querySelector('[data-nkind="all"]').disabled && !D.querySelector('[data-notice="send"]') && sends().length === 0, pv.slice(0, 300));
+await act('confirm');
+const sendBtn = () => D.querySelector('[data-notice="send"]');
+const f6a = sendBtn() && sendBtn().disabled && /보내기 \(3곳\)/.test(text(sendBtn())) && /마지막 확인/.test(text(who()));
+const sure = D.getElementById('nt-sure'); sure.checked = true; sure.dispatchEvent(new W.Event('change', { bubbles: true })); await wait(120);
+const f6b = !sendBtn().disabled && sends().length === 0;
+t('F6 마지막 확인 — 체크 전에는 [보내기 (3곳)] 꺼짐 · 체크하면 켜짐 · 아직 요청 0', f6a && f6b, text(who()).slice(0, 200));
+const cb6 = P.calls.length;
+click(W, sendBtn());
 await until(() => /보냄 3곳/.test(text(box())), 10000); await wait(300);
-const sentArgs = P.calls.slice(callsBefore).find(c => c.name === 'admin_send_booth_notice');
-t('F4 보내기 → ‘보냄 3곳’ · 화면이 보낸 것 = 확인 필요 3곳 id · 종류 stale · 문구 · 상태 목록에 대기 3',
-  /보냄 3곳/.test(text(box())) && sentArgs && sentArgs.args.p_kind === 'stale' && sentArgs.args.p_booth_ids.length === 3 &&
-  /대기 3/.test(text(D.querySelector('.ntst__c'))), text(box()).slice(0, 400));
-const f5btn = D.querySelector('[data-notice="send"]');
-t('F5 10분 안에 같은 종류를 다시 — 받을 부스가 모두 ‘서버가 뺍니다’ 로 표시되고 보내기 단추 꺼짐(0곳)', f5btn.disabled && /0곳에 보내기/.test(text(f5btn)) && D.querySelectorAll('.ntcodes li.is-skip').length === 3, text(D.getElementById('nt-who')));
-click(W, D.querySelector('[data-nkind="all"]')); await wait(200);
-const f6a = D.querySelector('[data-notice="send"]').disabled && D.getElementById('nt-body').value === '';
-const ta = D.getElementById('nt-body'); ta.value = '오후 4시 30분에 체험을 마감해 주세요'; ta.dispatchEvent(new W.Event('input', { bubbles: true })); await wait(100);
-const f6b = !D.querySelector('[data-notice="send"]').disabled && new RegExp(pubN + '곳에 보내기').test(text(D.querySelector('[data-notice="send"]')));
-t('F6 ‘전체 공개’ — 문구가 비어 있으면 보내기 못 함 · 쓰면 켜짐(쓰는 동안 글칸을 다시 그리지 않음)', f6a && f6b && D.getElementById('nt-body') === ta, JSON.stringify({ f6a, f6b }));
-click(W, D.querySelector('[data-nkind="zone"]')); await wait(200);
-const f7a = D.querySelector('[data-notice="send"]').disabled;
+const s6 = P.calls.slice(cb6).find(c => c.name === 'admin_send_booth_notice');
+t('F7 보내기 → 보낸 것 = 미리보기 3곳 id · 종류 stale · 문구 그대로 · 결과 ‘화면에서 고른 3곳 → 보냄 3곳 — 같습니다’ · 상태 대기 3 · 쓰기 칸은 처음으로(대상 없음)',
+  s6 && s6.args.p_kind === 'stale' && s6.args.p_booth_ids.length === 3 && /^대기 상태가 30분 넘게 그대로예요/.test(s6.args.p_body) &&
+  /화면에서 고른 3곳 → 보냄 3곳/.test(text(D.querySelector('.ntres'))) && !D.querySelector('.ntres.is-diff') && /대기 3/.test(text(D.querySelector('.ntst__c'))) &&
+  [...D.querySelectorAll('[data-nkind]')].every(b => b.getAttribute('aria-checked') === 'false'), text(box()).slice(0, 400));
+await pickK('stale');
+t('F8 10분 안에 같은 종류 다시 — 0곳 · ‘보낼 부스가 없습니다’ · [미리보기] 꺼짐', /0곳/.test(text(D.querySelector('.ntcount'))) &&
+  /보낼 부스가 없습니다/.test(text(who())) && D.querySelector('[data-notice="preview"]').disabled, text(who()));
+await pickK('all');
+const f9a = D.querySelector('[data-notice="preview"]').disabled && D.getElementById('nt-body').value === '';
+await typeBody('오후 4시 30분에 체험을 마감해 주세요');
+await act('preview'); await act('confirm');
+const wide = D.querySelector('#nt-who .ntcount.is-wide');
+t(`F9 ‘전체 공개’ — 문구 없으면 미리보기 못 함 · 미리보기 · 마지막 확인에 ${pubN}곳을 크게(여러 부스에 한꺼번에) · 부스번호 ${pubN}개`,
+  f9a && wide && +text(wide.querySelector('b')) === pubN && /여러 부스에 한꺼번에/.test(text(wide)) && who().querySelectorAll('.ntcodes li').length === pubN &&
+  new RegExp('보내기 \\(' + pubN + '곳\\)').test(text(sendBtn())) && sendBtn().disabled, text(who()).slice(0, 200));
+await act('back'); await act('edit');
+t('F10 [미리보기로] · [고치기] → 쓰기로 돌아옴 · 쓴 문구 유지 · 보내기 요청 0(전체 공개는 보내지 않음)',
+  !D.getElementById('nt-body').disabled && D.getElementById('nt-body').value === '오후 4시 30분에 체험을 마감해 주세요' && sends().length === 1, text(who()).slice(0, 120));
+await pickK('zone');
+const f11a = D.querySelector('[data-notice="preview"]').disabled;
 const zs = D.getElementById('nt-zone'); zs.value = 'R3'; zs.dispatchEvent(new W.Event('change', { bubbles: true })); await wait(200);
-t('F7 ‘구역’ — 구역을 고르기 전에는 보내기 못 함 · R3 고르면 21곳 · 쓴 문구 유지', f7a && /21곳에 보내기/.test(text(D.querySelector('[data-notice="send"]'))) && D.getElementById('nt-body').value === '오후 4시 30분에 체험을 마감해 주세요', text(D.getElementById('nt-who')).slice(0, 120));
+t('F11 ‘구역’ — 구역 고르기 전에는 미리보기 못 함 · R3 → 21곳을 크게 · 쓴 문구 유지',
+  f11a && D.querySelector('#nt-who .ntcount.is-wide') && +text(D.querySelector('#nt-who .ntcount b')) === 21 && D.getElementById('nt-body').value === '오후 4시 30분에 체험을 마감해 주세요', text(who()).slice(0, 120));
+// 부스 1곳 — 공개 부스 목록에서만
+await pickK('booth');
+const bs = D.getElementById('nt-booth');
+const f12a = bs && bs.options.length === pubN + 1 && D.querySelector('[data-notice="preview"]').disabled;
+bs.value = idOf('R1-02'); bs.dispatchEvent(new W.Event('change', { bubbles: true })); await wait(200);
+await typeBody('R1-02 부스 대기 상태를 확인해 주세요');
+await act('preview');
+const f12b = [...who().querySelectorAll('.ntcodes li')].map(li => text(li)).join() === 'R1-02' && !D.querySelector('#nt-who .ntcount.is-wide') && /부스 R1-02/.test(text(who()));
+await act('confirm');
+const s12s = D.getElementById('nt-sure'); s12s.checked = true; s12s.dispatchEvent(new W.Event('change', { bubbles: true })); await wait(100);
+const cb12 = P.calls.length;
+click(W, sendBtn());
+await until(() => /보냄 1곳/.test(text(box())), 10000); await wait(300);
+const s12 = P.calls.slice(cb12).find(c => c.name === 'admin_send_booth_notice');
+const t12 = await qa("select t.booth_code from public.booth_notice_target t join public.booth_notice n on n.id = t.notice_id where n.kind = 'booth'");
+t('F12 ‘부스 1곳’ — 공개 부스 목록(+고르기 전 미리보기 못 함) · R1-02 만 미리보기 · 보낸 것 kind booth · id 1개 · 받은 부스 R1-02 뿐 · 상태 목록 ‘부스 R1-02’',
+  f12a && f12b && s12 && s12.args.p_kind === 'booth' && s12.args.p_booth_ids.join() === idOf('R1-02') && t12.map(r => r.booth_code).join() === 'R1-02' &&
+  /부스 R1-02/.test(text(D.querySelector('.ntst'))), JSON.stringify({ f12a, f12b, t12 }));
+// 미리보기 뒤 상태가 바뀜 → 서버가 뺀 부스를 결과에 따로 크게
+await pickK('missing');
+await act('preview'); await act('confirm');
+const mPick = [...who().querySelectorAll('.ntcodes li')].map(li => text(li));
+await setLive(mPick[0], '보통', 15, 1);   // 미리보기 뒤 그 부스 운영자가 입력 → 더는 미입력이 아님
+const s13s = D.getElementById('nt-sure'); s13s.checked = true; s13s.dispatchEvent(new W.Event('change', { bubbles: true })); await wait(100);
+const cb13 = P.calls.length;
+click(W, sendBtn());
+await until(() => /보냄 \d+곳/.test(text(D.querySelector('.ntres'))), 10000); await wait(300);
+const s13 = P.calls.slice(cb13).find(c => c.name === 'admin_send_booth_notice');
+const r13 = text(D.querySelector('.ntres'));
+t(`F13 미리보기 뒤 ${mPick[0]} 이 입력 → 서버가 뺌: 결과에 ‘화면에서 고른 부스와 서버가 확인한 부스가 다릅니다’ · ‘지금 대상 아님 1곳 ${mPick[0]}’ · 보냄 ${mPick.length - 1}곳`,
+  s13 && s13.args.p_booth_ids.length === mPick.length && D.querySelector('.ntres.is-diff') && /화면에서 고른 부스와 서버가 확인한 부스가 다릅니다/.test(r13) &&
+  new RegExp('지금 대상 아님\\(그 사이 상태가 바뀌어 서버가 뺌\\) 1곳 ' + mPick[0]).test(r13) && new RegExp('보냄 ' + (mPick.length - 1) + '곳').test(r13), r13.slice(0, 300));
+await db.query("update public.booth_notice set expires_at = now() - interval '1 second' where kind <> 'stale'");   // 아래 운영자 화면 시험이 ‘확인 필요’ 알림을 맨 위에 보게
 click(W, D.querySelector('[data-notice="close"]')); await wait(100);
-t('F8 화면이 부른 함수 — 원래 읽기 + 알림 셋(켜짐 · 상태 · 보내기)뿐 · 오류 없음', [...new Set(P.calls.map(c => c.name))].every(n => ['admin_booth_credentials', 'admin_rehearsal_status', 'admin_booth_live_checks', 'admin_booth_notice_enabled', 'admin_booth_notice_status', 'admin_send_booth_notice'].includes(n)) && !P.errors.length,
-  [...new Set(P.calls.map(c => c.name))].join() + P.errors.join('|'));
+t('F14 화면이 부른 함수 — 원래 읽기 + 알림 셋(켜짐 · 상태 · 보내기)뿐 · 보내기는 [보내기] 누른 3번뿐 · 오류 없음',
+  [...new Set(P.calls.map(c => c.name))].every(n => ['admin_booth_credentials', 'admin_rehearsal_status', 'admin_booth_live_checks', 'admin_booth_notice_enabled', 'admin_booth_notice_status', 'admin_send_booth_notice'].includes(n)) &&
+  sends().length === 3 && !P.errors.length, [...new Set(P.calls.map(c => c.name))].join() + P.errors.join('|'));
 const sentNotice = +(await q1("select max(id) n from public.booth_notice where kind = 'stale'")).n;
 
 // ══ G 운영자 화면 ════════════════════════════════════════════════════════
@@ -338,8 +416,11 @@ async function openCtrl({ flag, hash = '', pinRec = null }) {
 const nCalls = n => ctrlCalls.filter(c => c.name === n).length;
 // G1 설정 꺼짐(기본) — 알림을 묻지 않음
 let C = await openCtrl({ flag: false, hash: '#k=' + tok01 });
-await wait(4500);
-t('G1 설정 꺼짐(boothNotices false · 기본) — 4.5초 동안 알림 함수를 한 번도 부르지 않음 · 띠 숨김 · 대기 화면 정상', nCalls('booth_ctrl_notice') === 0 && C.d.getElementById('notice').hidden &&
+await wait(2500);
+// 꺼짐이면 다시 보임 · 연결 돌아옴(online) 에도 묻지 않음
+C.setHidden(true); C.setHidden(false); C.w.dispatchEvent(new C.w.Event('online'));
+await wait(2000);
+t('G1 설정 꺼짐(boothNotices false · 기본) — 4.5초 · 다시 보임 · 연결 돌아옴(online) 에도 알림 함수를 한 번도 부르지 않음 · 띠 숨김 · 대기 화면 정상', nCalls('booth_ctrl_notice') === 0 && C.d.getElementById('notice').hidden &&
   nCalls('booth_ctrl_get') >= 1 && !C.errs.length, JSON.stringify(ctrlCalls.map(c => c.name)));
 C.dom.window.close();
 // G2 설정 켜짐 · 서버 꺼짐 — 한 번 묻고 띠 없음, 다음은 5분 뒤
@@ -391,7 +472,14 @@ await until(() => nCalls('booth_ctrl_notice') > before7, 5000);
 await wait(6000);
 const after7 = nCalls('booth_ctrl_notice');
 failNotice = false;
+const bannerKept7 = !C.d.getElementById('notice').hidden;
 t('G7 연결 오류(Failed to fetch) — 한 번 실패한 뒤 6초 동안 다시 묻지 않음(20초 · 40초 … 5분까지 늘림) · 띠 · 대기 화면 그대로', after7 === before7 + 1 && !C.errs.length, JSON.stringify({ before7, after7 }));
+// G7b 연결이 돌아오면(online) — 늘린 간격을 기다리지 않고 3초 안에 다시 묻기
+const before7b = nCalls('booth_ctrl_notice');
+C.w.dispatchEvent(new C.w.Event('online'));
+await until(() => nCalls('booth_ctrl_notice') > before7b, 5000); await wait(600);
+t('G7b 연결이 돌아오면(online) — 20초를 기다리지 않고 3초 안에 다시 물어 성공 · 실패 동안에도 띠 그대로 · 오류 없음',
+  nCalls('booth_ctrl_notice') >= before7b + 1 && bannerKept7 && !C.d.getElementById('notice').hidden && !C.errs.length, JSON.stringify({ before7b, now: nCalls('booth_ctrl_notice'), bannerKept7 }));
 C.dom.window.close();
 // G8 PIN 으로 연 화면
 const lg2 = await as(null, 'select * from public.booth_pin_login($1, $2, $3)', [idOf('R1-02'), COMMON, 'pintestdev80000002'], 'anon');

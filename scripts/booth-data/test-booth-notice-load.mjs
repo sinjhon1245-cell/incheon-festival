@@ -117,6 +117,21 @@ metrics.N2 = { rounds: ROUNDS, statuses: st2, roundsWithDuplicates: dup, errors:
 t(`N2 관리자 둘이 같은 순간 ‘확인 필요’ 보내기 ${ROUNDS}번 — 부스마다 한 번만(queued 84 · skipped:recent 84) · 중복 0 · 오류 0`,
   dup === 0 && odd === 0 && st2.queued === 84 * ROUNDS && st2['skipped:recent'] === 84 * ROUNDS, JSON.stringify(metrics.N2));
 
+// ══ N2b 관리자 둘이 같은 순간 같은 ‘부스 1곳’ 보내기 ════════════════════════
+let dupB = 0, oddB = 0, wrongB = 0; const stB = {};
+for (let i = 0; i < ROUNDS; i++) {
+  await S.query('delete from public.booth_notice');
+  const one = R[i % R.length];
+  const [ra, rb] = await Promise.all([settle(send(A, 'booth', '부스 1곳 시험', [one])), settle(send(B, 'booth', '부스 1곳 시험', [one]))]);
+  if (!ra.ok || !rb.ok) { oddB++; continue; }
+  [...ra.v, ...rb.v].forEach(r => { stB[r.status] = (stB[r.status] || 0) + 1; if (r.booth_id !== one) wrongB++; });
+  const per = (await S.query('select booth_id, count(*)::int n from public.booth_notice_target group by 1')).rows;
+  if (per.length !== 1 || per[0].booth_id !== one || per[0].n !== 1) dupB++;
+}
+metrics.N2b = { rounds: ROUNDS, statuses: stB, roundsWithDuplicates: dupB, otherBooth: wrongB, errors: oddB };
+t(`N2b 관리자 둘이 같은 순간 같은 ‘부스 1곳’ ${ROUNDS}번 — 그 부스에만 · 한 번만(queued 1 · skipped:recent 1) · 다른 부스 0 · 오류 0`,
+  dupB === 0 && oddB === 0 && wrongB === 0 && stB.queued === ROUNDS && stB['skipped:recent'] === ROUNDS, JSON.stringify(metrics.N2b));
+
 // ══ N3 묻는 동안 운영자 대기 입력 ═══════════════════════════════════════
 await refill();
 const n3 = (await send(A, 'all', '입력 겹침 시험')).find(r => r.status === 'queued').notice_id;
