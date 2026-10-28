@@ -96,7 +96,22 @@ async function refill(ids = R) {
 }
 const seenOf = async ids => Object.fromEntries((await S.query('select booth_id::text b, updated_at::text t from public.booth_live where booth_id = any($1::uuid[])', [ids])).rows.map(r => [r.b, r.t]));
 const items = (ids, seen) => ids.map(id => ({ booth_id: id, seen_updated_at: seen[id] }));
-const confirm = (c, its, fn = 'admin_confirm_booth_live') => c.query(`select booth_id::text, status from public.${fn}($1::jsonb)`, [JSON.stringify(its)]).then(r => r.rows);
+const confirm = (c, its, fn = 'admin_confirm_booth_live') => c.query(`select booth_id::text, status, checked_at::text, live_updated_at::text, batch_id::text from public.${fn}($1::jsonb)`, [JSON.stringify(its)]).then(r => r.rows);
+// 돌려준 결과 = 실제 기록인가. confirmed 면 그 묶음 · 부스 기록이 정확히 1줄(확인 시각 · 확인한 값의 입력 시각이 돌려준 것과 같음),
+// skipped · failed 면 그 묶음 · 부스 기록 0줄. 또 기록 표의 모든 묶음은 누군가 돌려받은 묶음이어야 합니다(응답 없이 남은 기록 없음).
+// 라운드 처음에 기록 표를 비운 경우에만 orphan 을 셉니다.
+async function ledger(results) {
+  const bad = [], batches = new Set();
+  for (const r of results) {
+    batches.add(r.batch_id);
+    const recs = (await S.query('select checked_at::text t, seen_updated_at::text s from public.booth_live_check where batch_id = $1 and booth_id = $2', [r.batch_id, r.booth_id])).rows;
+    if (r.status === 'confirmed') { if (recs.length !== 1 || recs[0].t !== r.checked_at || recs[0].s !== r.live_updated_at) bad.push(r.status + ':' + recs.length); }
+    else if (recs.length) bad.push(r.status + ':' + recs.length);
+  }
+  const orphan = (await S.query('select distinct batch_id::text b from public.booth_live_check')).rows.filter(x => !batches.has(x.b)).length;
+  return { bad: bad.length, orphan };
+}
+const rand = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
 const recN = async id => +(await S.query('select count(*) n from public.booth_live_check where booth_id = $1', [id])).rows[0].n;
 const recPerBooth = async () => Object.fromEntries((await S.query('select booth_id::text b, count(*)::int n from public.booth_live_check group by 1')).rows.map(r => [r.b, r.n]));
 const opSet = (c, id, w) => c.query('select wait_minutes, updated_at from public.booth_ctrl_set($1, $2, $3)', [TOK[id], 'open', w]).then(r => r.rows[0]);
@@ -104,7 +119,9 @@ const activeChecks = async () => { await S.query("select set_config('test.uid', 
 const fp = async () => (await S.query(`select md5(coalesce(string_agg(row(l.*)::text, ',' order by l.booth_id), '')) a,
   (select md5(coalesce(string_agg(row(g.*)::text, ',' order by g.id), '')) from public.booth_live_log g) b from public.booth_live l`)).rows[0];
 
-const A = await client(ADMIN), B = await client(ADMIN2), C = await client(ADMIN3), OP = await client(), RS = await client();
+const A = await client(ADMIN), B = await client(ADMIN2), C = await client(ADMIN3), OP = await client(), OP2 = await client(), RS = await client();
+// Production 의 관리자 요청(PostgREST authenticated)과 같은 문장 시간 제한 8초
+for (const c of [A, B, C]) await c.query("set statement_timeout = '8s'");
 const [X, Y, Z, W] = [R[10], R[20], R[30], R[40]];
 
 // ══ L1 두 관리자 · 같은 부스 ═══════════════════════════════════════════
@@ -117,20 +134,21 @@ await A.query('commit'); const b1 = await pb1;
 t('L1a 관리자 A 가 확인 중일 때 B 가 같은 부스 → B 는 A 가 끝날 때까지 기다렸다가 skipped:checked · 기록 1줄', a1[0].status === 'confirmed' && waited1 && b1.ok && b1.v[0].status === 'skipped:checked' && (await recN(X)) === 1,
   JSON.stringify({ a: a1[0].status, waited1, b: b1.v && b1.v[0].status, bMs: b1.ms }));
 { // 동시 반복: 두 관리자가 같은 5곳(서로 다른 순서)을 같은 순간에
-  const st = [], dup = []; let errs = 0;
+  const st = [], dup = []; let errs = 0, lbad = 0, lorph = 0;
   const fp0 = await fp();
   for (let i = 0; i < ROUNDS; i++) {
     await S.query('delete from public.booth_live_check');
     const ids = shuffle(R).slice(0, 5); seen = await seenOf(ids);
     const [ra, rb] = await Promise.all([settle(confirm(A, items(ids, seen))), settle(confirm(B, items(shuffle(ids), seen)))]);
     if (!ra.ok || !rb.ok) { errs++; continue; }
+    const lg = await ledger([...ra.v, ...rb.v]); lbad += lg.bad; lorph += lg.orphan;
     st.push(...ra.v.map(r => r.status), ...rb.v.map(r => r.status));
     const per = await recPerBooth(); for (const id of ids) if ((per[id] || 0) !== 1) dup.push(id);
     for (const id of ids) { const s = [...ra.v, ...rb.v].filter(r => r.booth_id === id).map(r => r.status).sort().join(); if (s !== 'confirmed,skipped:checked') dup.push(id + ':' + s); }
   }
   const fp1 = await fp();
-  metrics.L1 = { rounds: ROUNDS, booths: ROUNDS * 5, statuses: tally(st), duplicateOrOdd: dup.length, errors: errs };
-  t(`L1b 동시 반복 ${ROUNDS}번 × 5곳 — 부스마다 confirmed 1 · skipped:checked 1 · 기록 1줄, 중복 0 · 오류 0`, dup.length === 0 && errs === 0, JSON.stringify(metrics.L1));
+  metrics.L1 = { rounds: ROUNDS, booths: ROUNDS * 5, statuses: tally(st), duplicateOrOdd: dup.length, errors: errs, resultVsRecordMismatch: lbad, recordsWithoutResult: lorph };
+  t(`L1b 동시 반복 ${ROUNDS}번 × 5곳 — 부스마다 confirmed 1 · skipped:checked 1 · 기록 1줄, 중복 0 · 오류 0 · 결과 = 기록`, dup.length === 0 && errs === 0 && lbad === 0 && lorph === 0, JSON.stringify(metrics.L1));
   t('L6 관리자 확인만 한 동안 booth_live · booth_live_log 그대로(지문 같음)', fp0.a === fp1.a && fp0.b === fp1.b, JSON.stringify({ fp0, fp1 }));
 }
 { // 비교: FOR SHARE
@@ -187,28 +205,33 @@ await OP.query('begin'); await opSet(OP, Z, 20);
 const a4 = await timed(confirm(A, items([Z, W], seen)));
 await OP.query('rollback');
 const s4 = Object.fromEntries((a4.v || []).map(r => [r.booth_id, r.status]));
-t('L3a 운영자 입력이 잡고 있는 부스만 failed:busy · 다른 부스는 confirmed · 관리자는 기다리지 않음', s4[Z] === 'failed:busy' && s4[W] === 'confirmed' && a4.ms < 1000, JSON.stringify({ s4, ms: a4.ms }));
+const lg4 = await ledger(a4.v || []);
+t('L3a 운영자 입력이 잡고 있는 부스만 failed:busy · 다른 부스는 confirmed · 관리자는 기다리지 않음 · 결과 = 기록', s4[Z] === 'failed:busy' && s4[W] === 'confirmed' && a4.ms < 1000 && lg4.bad === 0 && lg4.orphan === 0, JSON.stringify({ s4, ms: a4.ms, lg4 }));
 const ids5 = [R[50], R[51], R[52]];
 await A.query('begin'); await confirm(A, items([R[49]], seen));     // A 가 일괄 확인을 끝내지 않고 붙잡음(줄 세우기 잠금 보유)
 const b5 = await timed(confirm(B, items(ids5, seen)));
 await sleep(200); await A.query('commit');
+const lg5 = b5.ok ? await ledger(b5.v) : { bad: -1 };
 const b5b = await confirm(B, items(ids5, seen));
-t('L3b 다른 관리자의 일괄 확인이 3초 넘게 끝나지 않으면 이 요청은 약 3초 뒤 전체 failed:busy(기록 0) · 다시 보내면 confirmed',
-  b5.ok && b5.v.length === 3 && b5.v.every(r => r.status === 'failed:busy') && b5.ms >= 2800 && b5.ms < 6000 && b5b.every(r => r.status === 'confirmed') && (await recN(R[50])) === 1,
+const lg5b = await ledger(b5b);
+t('L3b 다른 관리자의 일괄 확인이 3초 넘게 끝나지 않으면 이 요청은 약 3초 뒤 전체 failed:busy(기록 0 · 요청은 정상 응답) · 다시 보내면 confirmed · 결과 = 기록',
+  b5.ok && b5.v.length === 3 && b5.v.every(r => r.status === 'failed:busy') && b5.ms >= 2800 && b5.ms < 6000 && b5b.every(r => r.status === 'confirmed') && (await recN(R[50])) === 1 &&
+  lg5.bad === 0 && lg5b.bad === 0,
   JSON.stringify({ st: b5.v && b5.v.map(r => r.status), ms: b5.ms }));
 
 // ══ L4 서로 다른 순서로 여러 부스 ═════════════════════════════════════════
 {
-  let dl = 0, odd = 0; const st = [];
+  let dl = 0, odd = 0, lbad = 0, lorph = 0; const st = [];
   for (let i = 0; i < ROUNDS; i++) {
     await S.query('delete from public.booth_live_check');
     const ids = shuffle(R).slice(0, 20); seen = await seenOf(ids);
     const rs = await Promise.all([A, B, C].map(c => settle(confirm(c, items(shuffle(ids), seen)))));
     for (const r of rs) { if (!r.ok) { if (r.code === '40P01') dl++; odd++; } else st.push(...r.v.map(x => x.status)); }
     const per = await recPerBooth(); for (const id of ids) if ((per[id] || 0) !== 1) odd++;
+    const lg = await ledger(rs.filter(r => r.ok).flatMap(r => r.v)); lbad += lg.bad; lorph += lg.orphan;
   }
-  metrics.L4 = { rounds: ROUNDS, adminsPerRound: 3, boothsPerBatch: 20, statuses: tally(st), deadlocks: dl, oddRecords: odd };
-  t(`L4 세 관리자가 같은 20곳을 서로 다른 순서로 동시에 ${ROUNDS}번 — 교착 0 · 오류 0 · 부스마다 기록 1줄`, dl === 0 && odd === 0, JSON.stringify(metrics.L4));
+  metrics.L4 = { rounds: ROUNDS, adminsPerRound: 3, boothsPerBatch: 20, statuses: tally(st), deadlocks: dl, oddRecords: odd, resultVsRecordMismatch: lbad, recordsWithoutResult: lorph };
+  t(`L4 세 관리자가 같은 20곳을 서로 다른 순서로 동시에 ${ROUNDS}번 — 교착 0 · 오류 0 · 부스마다 기록 1줄 · 결과 = 기록`, dl === 0 && odd === 0 && lbad === 0 && lorph === 0, JSON.stringify(metrics.L4));
 }
 
 // ══ L5 23:00 초기화와 겹침 ═══════════════════════════════════════════════
@@ -246,7 +269,7 @@ t('L5a (비교) 처음 설계(FOR UPDATE 기다림) — 관리자가 앞 부스�
 t('L5b 지금 설계 — 같은 끼어들기에서 관리자는 그 부스만 failed:busy(기다리지 않음) · 초기화는 관리자 요청이 끝나자 84곳 모두 지우고 완료(오류 없음)',
   new5.first === 'confirmed' && new5.second === 'failed:busy' && new5.secondMs < 1000 && new5.resetWaiting && new5.resetOk && new5.left === 0, JSON.stringify(new5));
 async function resetStress(fn, rounds) {
-  let resetFail = 0, deadlocks = 0, adminErr = 0, left = 0; const st = [];
+  let resetFail = 0, deadlocks = 0, adminErr = 0, left = 0, lbad = 0, lorph = 0; const st = [];
   for (let i = 0; i < rounds; i++) {
     await refill(); const s = await seenOf(R);
     const batches = [A, B, C].map(c => () => confirm(c, items(shuffle(R).slice(0, 30), s), fn));
@@ -256,18 +279,82 @@ async function resetStress(fn, rounds) {
     if (!rr.ok) { resetFail++; if (rr.code === '40P01') deadlocks++; }
     for (const r of ra) { if (!r.ok) { adminErr++; if (r.code === '40P01') deadlocks++; } else st.push(...r.v.map(x => x.status)); }
     left += +(await S.query('select count(*) n from public.booth_live where booth_id = any($1::uuid[])', [R])).rows[0].n;
+    const lg = await ledger(ra.filter(r => r.ok).flatMap(r => r.v)); lbad += lg.bad; lorph += lg.orphan;
   }
-  return { rounds, resetFailures: resetFail, deadlocks, adminErrors: adminErr, rowsLeftAfterReset: left, adminStatuses: tally(st) };
+  return { rounds, resetFailures: resetFail, deadlocks, adminErrors: adminErr, rowsLeftAfterReset: left, adminStatuses: tally(st), resultVsRecordMismatch: lbad, recordsWithoutResult: lorph };
 }
 metrics.L5now = await resetStress('admin_confirm_booth_live', ROUNDS);
-t(`L5c 지금 설계 — 초기화 + 관리자 세 명(30곳씩)을 같은 순간에 ${ROUNDS}번: 초기화 실패 0 · 교착 0 · 초기화 뒤 남은 값 0 · 관리자 오류 0`,
-  metrics.L5now.resetFailures === 0 && metrics.L5now.deadlocks === 0 && metrics.L5now.rowsLeftAfterReset === 0 && metrics.L5now.adminErrors === 0, JSON.stringify(metrics.L5now));
+t(`L5c 지금 설계 — 초기화 + 관리자 세 명(30곳씩)을 같은 순간에 ${ROUNDS}번: 초기화 실패 0 · 교착 0 · 초기화 뒤 남은 값 0 · 관리자 오류 0 · 결과 = 기록`,
+  metrics.L5now.resetFailures === 0 && metrics.L5now.deadlocks === 0 && metrics.L5now.rowsLeftAfterReset === 0 && metrics.L5now.adminErrors === 0 &&
+  metrics.L5now.resultVsRecordMismatch === 0 && metrics.L5now.recordsWithoutResult === 0, JSON.stringify(metrics.L5now));
 metrics.L5old = await resetStress('test_confirm_old_wait', ROUNDS);
 t(`L5d (참고) 처음 설계로 같은 반복 ${ROUNDS}번 — 초기화 실패 ${metrics.L5old.resetFailures} · 교착 ${metrics.L5old.deadlocks}(0 이 아닐 수 있음을 기록만)`, true, JSON.stringify(metrics.L5old));
 t('L5e 초기화 함수는 시험 내내 그대로(이 시험이 바꾸지 않음)', /delete from public\.booth_live/i.test((await S.query("select pg_get_functiondef('private.rehearsal_live_reset()'::regprocedure) d")).rows[0].d), '');
 
+// ══ L9 뒤섞기 — 관리자 셋 · 운영자 둘 · (가끔) 23:00 초기화를 같은 순간에, 미리보기 시각 일부는 낡게 ═══════
+{
+  const ALLOWED = new Set(['confirmed', 'skipped:changed', 'skipped:checked', 'skipped:no_value', 'skipped:fresh', 'failed:busy']);
+  let adminErr = 0, opErr = 0, resetErr = 0, lbad = 0, lorph = 0, resets = 0; const st = [], codes = [];
+  for (let i = 0; i < ROUNDS * 2; i++) {
+    await refill();
+    const s = await seenOf(R);
+    const stale = Object.fromEntries(Object.entries(s).map(([k, v]) => [k, Math.random() < 0.2 ? '2026-01-01 00:00:00+00' : v]));   // 20% 는 미리보기 뒤 바뀐 것처럼
+    const res = [];
+    const jobs = [A, B, C].map(c => sleep(rand(0, 25)).then(() => settle(confirm(c, items(shuffle(R).slice(0, rand(10, 40)), stale))))
+      .then(r => { if (r.ok) res.push(...r.v); else { adminErr++; codes.push(r.code); } }));
+    for (const [k, c] of [[0, OP], [1, OP2]]) {
+      const id = R[rand(0, 83)];
+      jobs.push(sleep(rand(0, 25)).then(() => settle(opSet(c, id, 5 + k * 10))).then(r => { if (!r.ok) opErr++; }));
+    }
+    if (Math.random() < 0.3) { resets++; jobs.push(sleep(rand(0, 25)).then(() => settle(RS.query('select private.rehearsal_live_reset()'))).then(r => { if (!r.ok) resetErr++; })); }
+    await Promise.all(jobs);
+    st.push(...res.map(r => r.status));
+    const lg = await ledger(res); lbad += lg.bad; lorph += lg.orphan;
+  }
+  const odd = st.filter(x => !ALLOWED.has(x));
+  metrics.L9 = { rounds: ROUNDS * 2, resets, statuses: tally(st), unexpectedStatuses: odd.length, adminWholeCallErrors: adminErr, adminErrorCodes: tally(codes),
+    operatorErrors: opErr, resetErrors: resetErr, resultVsRecordMismatch: lbad, recordsWithoutResult: lorph };
+  t(`L9 뒤섞기 ${ROUNDS * 2}번(관리자 셋 · 운영자 입력 둘 · 초기화 ${resets}번 · 낡은 미리보기 20%) — 관리자 요청 전체 실패 0 · 뜻밖의 결과 0 · 운영자 입력 실패 0 · 초기화 실패 0 · 결과 = 기록`,
+    adminErr === 0 && odd.length === 0 && opErr === 0 && resetErr === 0 && lbad === 0 && lorph === 0, JSON.stringify(metrics.L9));
+}
+
+// ══ L10 한 부스의 뜻밖의 오류 · 잠김 · 정상 부스가 한 요청에 섞일 때 ═══════════════════════════════
+{
+  await refill(); const s = await seenOf(R);
+  const [bad, held, ok1, ok2] = [R[60], R[61], R[62], R[63]];
+  await S.query(`create function public.test_fail_one() returns trigger language plpgsql as $f$ begin if new.booth_id = '${bad}' then raise exception 'test boom'; end if; return new; end $f$;
+    create trigger test_fail_one before insert on public.booth_live_check for each row execute function public.test_fail_one();`);
+  await OP.query('begin'); await opSet(OP, held, 20);
+  const r10 = await timed(confirm(A, items([ok2, bad, held, ok1], s)));
+  await OP.query('rollback');
+  await S.query('drop trigger test_fail_one on public.booth_live_check; drop function public.test_fail_one();');
+  const m10 = Object.fromEntries((r10.v || []).map(r => [r.booth_id, r.status]));
+  const lg10 = r10.ok ? await ledger(r10.v) : { bad: -1, orphan: -1 };
+  t('L10 한 요청 안에 뜻밖의 오류(트리거) · 운영자가 잡은 부스 · 정상 두 곳 — 요청은 정상 응답 · failed · failed:busy · confirmed 둘 · 결과 = 기록',
+    r10.ok && m10[bad] === 'failed' && m10[held] === 'failed:busy' && m10[ok1] === 'confirmed' && m10[ok2] === 'confirmed' && lg10.bad === 0 && lg10.orphan === 0,
+    JSON.stringify({ m10, ms: r10.ms, lg10, err: r10.code }));
+}
+
+// ══ L11 부스 삭제 — 확인 기록은 남고, 확인 중인 부스를 지우면 삭제가 기다렸다가 끝남 ═══════════════════
+{
+  await refill(); const s = await seenOf(R);
+  const [d1, d2] = [R[70], R[71]];
+  const a11 = await confirm(A, items([d1], s));
+  await S.query('delete from public.booths where id = $1', [d1]);
+  const rec11 = +(await S.query('select count(*) n from public.booth_live_check where booth_id = $1', [d1])).rows[0].n;
+  const after11 = await confirm(A, items([d1], s));
+  await A.query('begin'); const a11b = await confirm(A, items([d2], s));
+  const pdel = timed(RS.query('delete from public.booths where id = $1', [d2]));
+  const waitDel = await stillWaiting(pdel, 400);
+  await A.query('commit'); const del = await pdel;
+  const rec11b = +(await S.query('select count(*) n from public.booth_live_check where booth_id = $1', [d2])).rows[0].n;
+  t('L11 부스 삭제 — 확인한 부스를 지워도 기록 남음 · 지운 부스를 다시 확인하면 skipped:not_found · 확인 중인 부스 삭제는 기다렸다가 성공 · 그 기록도 남음',
+    a11[0].status === 'confirmed' && rec11 === 1 && after11[0].status === 'skipped:not_found' && a11b[0].status === 'confirmed' && waitDel && del.ok && rec11b === 1,
+    JSON.stringify({ a11: a11[0].status, rec11, after: after11[0].status, a11b: a11b[0].status, waitDel, del: del.ok || del.code, rec11b }));
+}
+
 await S.query('drop function public.test_confirm_old_wait(jsonb); drop function public.test_confirm_share(jsonb);');
-for (const c of [A, B, C, OP, RS, S]) await c.end();
+for (const c of [A, B, C, OP, OP2, RS, S]) await c.end();
 const passed = results.filter(x => x.ok).length;
 mkdirSync(resolve(OUT, 'rehearsal'), { recursive: true });
 const head = [`- 실행: ${new Date().toISOString()} · 결과 **${passed} / ${results.length} 통과**`, `- PostgreSQL ${pgVersion} · deadlock_timeout ${deadlockTimeout} · 반복 ${ROUNDS} · 일괄 확인 SQL ${siteRev}`,
