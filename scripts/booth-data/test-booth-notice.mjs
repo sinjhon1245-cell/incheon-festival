@@ -493,6 +493,15 @@ const tg8 = await targetOf(sentNotice, 'R1-02');
 t('G8 PIN 으로 연 화면 — booth_session_notice 만 부름(세션만 보냄 · 부스 id 없음) · 확인 → acked_via pin',
   pinCalls.length >= 1 && pinCalls.every(c => c.name === 'booth_session_notice' && !('p_booth_id' in c.args) && !('p_token' in c.args)) && tg8.acked_via === 'pin', JSON.stringify({ n: pinCalls.map(c => c.name), tg8 }));
 C.dom.window.close();
+// H1 전체 흐름 — 관리자 보내기(F) → 운영자 QR 화면 표시(G3) · PIN 화면 확인(G8) → 관리자 화면이 받음
+click(W, D.querySelector('[data-notice="open"]'));
+const stLi = () => [...D.querySelectorAll('.ntst__i')].find(li => /확인 필요 · 3곳/.test(text(li)));
+await until(() => stLi() && /운영자 확인 1/.test(text(stLi())), 10000); await wait(300);
+const h1 = stLi(), h1d = h1 ? [...h1.querySelectorAll('.ntst__d p')].map(x => text(x)) : [];
+t('H1 전체 흐름 — 관리자가 화면에서 보낸 ‘확인 필요’ 3곳: QR 화면(R1-01) ‘화면에 표시됨’ · PIN 화면(R1-02) ‘운영자 확인’ · 아무도 안 연 R1-07 ‘대기’ 를 관리자 화면 상태 목록이 그대로 보임',
+  !!h1 && /대기 1/.test(text(h1)) && /화면에 표시됨 1/.test(text(h1)) && /운영자 확인 1/.test(text(h1)) &&
+  h1d.includes('대기 R1-07') && h1d.includes('화면에 표시됨 R1-01') && h1d.includes('운영자 확인 R1-02'), JSON.stringify({ h: h1 && text(h1).slice(0, 160), h1d }));
+click(W, D.querySelector('[data-notice="close"]')); await wait(100);
 // G9 함수 없음(되돌린 뒤) — 한 번 묻고 이 화면에서는 더 묻지 않음
 await R.run(RB);
 C = await openCtrl({ flag: true, hash: '#k=' + tok01 });
