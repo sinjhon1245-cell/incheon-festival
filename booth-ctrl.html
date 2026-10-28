@@ -1639,6 +1639,10 @@
     document.addEventListener('visibilitychange', function () {
       if (!nt.stopped && !document.hidden && !dead) noticeNext(Math.random() * 3000);
     });
+    // 연결이 돌아오면(비행기 모드 해제 등) 늘려 둔 간격(20초 … 5분)을 기다리지 않고 0~3초 안에 다시 묻습니다
+    window.addEventListener('online', function () {
+      if (!nt.stopped && !document.hidden && !dead) { nt.fails = 0; noticeNext(Math.random() * 3000); }
+    });
     function noticeCall(action, id) {
       var args = { p_action: action, p_notice_id: id || null };
       if (sess) { args.p_session = sess.session; return core.request('POST', 'rpc/booth_session_notice', args); }
