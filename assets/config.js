@@ -98,7 +98,7 @@ window.FESTIVAL_CONFIG = {
   /* 운영자 화면의 '운영본부 알림' 띠(기본 꺼짐). true 로 바꾸고 다시 배포해도,
      서버 스위치(public.booth_notice_config.enabled)가 꺼져 있으면 아무것도 보이지
      않습니다. 리허설(실기기)을 통과하기 전에는 false 로 둡니다. true · false 한 단어만. */
-  boothNotices: false,
+  boothNotices: true,
 
   /* 부스 대기 시간이 이 시간(분) 넘게 바뀌지 않으면 숫자를 흐리게
      보여 줍니다. 오래된 대기 시간을 사실처럼 보이지 않게 합니다.
