@@ -165,6 +165,14 @@ body { background: #fff; }
   .bsel__a .select { width: 100%; max-width: none; }
   .bsel__a .btn { flex: 1 1 auto; }
 }
+/* 전체 구역으로 고름 · 한 번에 100곳 넘음 — 고르기 줄 아래 · 미리보기 머리에 한 줄 전체.
+   일괄 확인 판(--primary)과 같은 색, 막힘만 오류(.bc__err)와 같은 빨강 */
+.bwarn { flex: 1 1 100%; margin: 0; padding: 7px 10px; border-left: 3px solid var(--primary); border-radius: 6px;
+  background: var(--primary-t); font-size: 13px; line-height: 1.55; color: var(--ink-2); }
+.bwarn b { color: var(--ink); }
+.bwarn--stop { border-left-color: var(--danger); background: var(--danger-t); }
+.bwarn--stop b { color: var(--danger); }
+.bc__head .bwarn { margin: 8px 0 0; }
 /* 줄의 체크칸 — 휴대폰에서 줄 왼쪽을 덮는 투명 단추(z-index 1) 위에 둡니다 */
 .lv__pick { position: relative; z-index: 2; flex: none; display: inline-flex; align-items: center; align-self: center; }
 .lv__pick input { width: 22px; height: 22px; margin: 0; accent-color: var(--primary); cursor: pointer; }

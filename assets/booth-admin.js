@@ -405,6 +405,8 @@
   }
   // 일괄 확인 고르기 — '확인 필요' 이고 아직 관리자 확인이 없는 줄에만 체크칸(처음엔 모두 빔). 이미 확인한 줄은 '확인함'.
   function pickable(r) { return !!(r.stale && r.at && !r.check); }
+  // 구역 · 전체 한꺼번에 고르기는 공개된 부스만(비공개 · 미배정은 '숨김 포함' 으로 보여도 빼고, 줄의 체크칸으로만).
+  function bulkPickable(r) { return pickable(r) && r.shown && !!r.zone_key; }
   function pickHtml(r, name) {
     if (!ui.batch || ui.batch.step !== 'select' || !r.stale) return '';
     if (r.check) return '<span class="lv__pick lv__pick--done">확인함</span>';
@@ -921,8 +923,11 @@
     'skipped:duplicate': '같은 부스가 두 번', 'skipped:not_found': '부스를 찾지 못함',
     'failed:busy': '다른 입력을 처리하는 중 — 다시 시도', failed: '기록하지 못함 — 다시 시도'
   };
+  // admin_confirm_booth_live 는 한 번에 100곳까지(넘으면 통째로 거절) — 화면에서 먼저 막고 구역별로 나눠 고르게 합니다.
+  var BATCH_MAX = 100;
   function batchOpen() {
-    ui.batch = { step: 'select', sel: {}, items: [], res: null, err: '', dropped: 0 };
+    // all: '전체 구역' 으로 고른 적이 있음(선택 비우기 전까지) — 현장 확인한 부스만 남기라는 안내를 계속 보입니다.
+    ui.batch = { step: 'select', sel: {}, items: [], res: null, err: '', dropped: 0, all: false };
     ui.quick = 'stale'; ui.zone = ''; ui.q = ''; ui.more = '';
     var qi = $('#lv-q'); if (qi) qi.value = '';
     if (ui.view !== 'live') { window.location.hash = '#live'; return; }
@@ -944,25 +949,30 @@
     batchSet(box.hidden ? '' : (b.step === 'result' ? resultHtml() : previewHtml(all)), box);
   }
   function bselHtml(all) {
-    var b = ui.batch, n = Object.keys(b.sel).length, zs = {}, order = [];
-    base(all).forEach(function (r) {
-      if (!pickable(r) || !r.zone_key) return;
+    var b = ui.batch, n = Object.keys(b.sel).length, zs = {}, order = [], total = 0, over = n > BATCH_MAX;
+    all.forEach(function (r) {
+      if (!bulkPickable(r)) return;
       if (!zs[r.zone_key]) { zs[r.zone_key] = { n: 0, rank: r.zone_rank }; order.push(r.zone_key); }
-      zs[r.zone_key].n++;
+      zs[r.zone_key].n++; total++;
     });
     order.sort(function (a, c) { return zs[a].rank - zs[c].rank; });
     return '<p class="bsel__t"><b>일괄 확인</b><span>현장에서 실제로 확인한 부스만 고르세요 · 고른 <b>' + n + '</b>곳</span>' +
         (b.dropped ? '<span class="bsel__drop">새 입력 · 다른 관리자 확인으로 빠진 부스 ' + b.dropped + '곳</span>' : '') + '</p>' +
       '<div class="bsel__a">' +
         '<label class="listsel"><span class="sr-only">구역 단위로 고르기</span><select class="select select--sm" id="lv-bzone"' + (order.length ? '' : ' disabled') + '>' +
-          '<option value="">구역 단위로 고르기</option>' + order.map(function (k) {
+          '<option value="">구역 단위로 고르기</option>' +
+          (total ? '<option value="*">전체 구역 · 확인 필요 ' + total + '곳 모두 고르기</option>' : '') + order.map(function (k) {
             return '<option value="' + esc(k) + '">' + esc(k) + ' · 확인 필요 ' + zs[k].n + '곳 모두 고르기</option>';
           }).join('') +
         '</select></label>' +
         '<button class="btn btn--ghost btn--sm" type="button" data-batch="clear"' + (n ? '' : ' disabled') + '>선택 비우기</button>' +
-        '<button class="btn btn--primary btn--sm" type="button" data-batch="preview"' + (n ? '' : ' disabled') + '>미리보기</button>' +
+        '<button class="btn btn--primary btn--sm" type="button" data-batch="preview"' + (n && !over ? '' : ' disabled') + '>미리보기</button>' +
         '<button class="btn btn--ghost btn--sm" type="button" data-batch="close">끝내기</button>' +
-      '</div>';
+      '</div>' +
+      (over ? '<p class="bwarn bwarn--stop" role="alert"><b>한 번에 ' + BATCH_MAX + '곳까지 기록할 수 있습니다 — 지금 ' + n + '곳.</b> ' +
+        '체크를 풀거나 [선택 비우기] 뒤 구역별로 나눠 고르세요.</p>' : '') +
+      (b.all && n ? '<p class="bwarn" role="note"><b>전체 구역을 고른 상태입니다 — 아직 아무것도 기록되지 않았습니다.</b> ' +
+        '현장(전화 · 순회)에서 실제로 확인을 마친 부스만 남기고, 나머지는 체크를 풀거나 미리보기에서 빼 주세요.</p>' : '');
   }
   function previewHtml(all) {
     var b = ui.batch, byId = {}, sending = b.step === 'sending';
@@ -979,7 +989,8 @@
     }).join('');
     return '<div class="bc__head"><h2 class="bc__t">확인 기록 미리보기 · ' + b.items.length + '곳</h2>' +
         '<p class="bc__note"><b>관리자 확인 기록만 남습니다. 관람객 화면 값과 운영자 입력 시각은 바뀌지 않습니다.</b> ' +
-          '현장(전화 · 순회)에서 이 상태가 맞다고 확인한 부스만 남기세요. 상태가 다르면 빼고 [수정]으로 입력합니다.</p></div>' +
+          '현장(전화 · 순회)에서 이 상태가 맞다고 확인한 부스만 남기세요. 상태가 다르면 빼고 [수정]으로 입력합니다.</p>' +
+        (b.all ? '<p class="bwarn" role="note"><b>전체 구역에서 고른 목록입니다.</b> 현장 확인을 마치지 않은 부스는 [빼기] 한 뒤 기록하세요.</p>' : '') + '</div>' +
       (b.err ? '<p class="bc__err" role="alert">' + esc(b.err) + '</p>' : '') +
       '<ol class="bc__list">' + rows + '</ol>' +
       '<div class="bc__foot">' +
@@ -1018,7 +1029,7 @@
     b.items = Object.keys(b.sel).map(function (id) { return byId[id]; }).filter(function (r) { return r && pickable(r); }).sort(byCode)
       .map(function (r) { return { id: r.id, code: r.code, name: r.name || '(이름 없음)', label: liveLabel(r), at: r.at, by: r.by }; });
     b.err = '';
-    b.step = b.items.length ? 'preview' : 'select';
+    b.step = b.items.length && b.items.length <= BATCH_MAX ? 'preview' : 'select';
     paint();
     var box = $('#lv-batch');
     if (b.step === 'preview' && box.scrollIntoView) box.scrollIntoView({ block: 'start' });
@@ -1027,6 +1038,10 @@
   function batchSend(items) {
     var b = ui.batch;
     if (!b || !items.length) return;
+    if (items.length > BATCH_MAX) {   // 미리보기에서 이미 막지만, 서버가 통째로 거절하기 전에 한 번 더
+      b.err = '한 번에 ' + BATCH_MAX + '곳까지 기록할 수 있습니다 — [다시 고르기] 로 구역별로 나눠 주세요.';
+      paint(); return;
+    }
     b.step = 'sending'; b.err = '';
     paint();
     C.rpc('admin_confirm_booth_live', { p_items: items.map(function (it) { return { booth_id: it.id, seen_updated_at: it.at }; }) })
@@ -1052,7 +1067,7 @@
     if (k === 'open') { batchOpen(); return; }
     if (!b) return;
     if (k === 'close') { ui.batch = null; paint(); return; }
-    if (k === 'clear') { b.sel = {}; b.dropped = 0; paint(); return; }
+    if (k === 'clear') { b.sel = {}; b.dropped = 0; b.all = false; paint(); return; }
     if (k === 'preview') { batchPreview(); return; }
     if (k === 'back') { b.step = 'select'; b.err = ''; paint(); return; }
     if (k === 'send' && b.step === 'preview') { batchSend(b.items); return; }
@@ -1068,10 +1083,12 @@
     if (on) b.sel[id] = true; else delete b.sel[id];
     paintBatch(rowsNow());   // 고른 수만 새로 — 줄 목록은 그대로(체크칸 초점 유지)
   }
+  // k = 구역 키 또는 '*'(전체 구역). 체크만 더합니다(이미 고른 것은 그대로) — 기록은 미리보기 뒤 [확인 기록 남기기] 에서만.
   function batchZone(k) {
     var b = ui.batch;
     if (!b || b.step !== 'select' || !k) return;
-    base(rowsNow()).forEach(function (r) { if (r.zone_key === k && pickable(r)) b.sel[r.id] = true; });
+    if (k === '*') b.all = true;
+    rowsNow().forEach(function (r) { if ((k === '*' || r.zone_key === k) && bulkPickable(r)) b.sel[r.id] = true; });
     paint();
   }
   function batchDrop(id) {
