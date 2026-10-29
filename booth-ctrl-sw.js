@@ -5,7 +5,7 @@
    · 운영자 화면이 보이고 있으면 시스템 알림 대신 화면에 ‘지금 다시 읽기’ 만 알립니다(화면 안 카드가 뜸).
    · 누르면 열려 있는 운영자 화면으로 가고, 없으면 /booth-ctrl?nt=번호 를 엽니다(QR 열쇠 · PIN 세션은 그 기기 화면이 가진 것만). */
 var TITLE = '운영본부 알림';
-var BODY = '다시 확인해 주세요.';
+var BODY = '운영본부에서 확인 요청이 있습니다. 부스 운영 상황을 다시 확인해 주세요.';
 
 self.addEventListener('install', function () { self.skipWaiting(); });
 self.addEventListener('activate', function (e) { e.waitUntil(self.clients.claim()); });
