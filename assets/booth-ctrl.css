@@ -522,7 +522,7 @@ button {
       대기 상태 색과 섞지 않습니다. 확인할 때까지 남고, 한 번에 하나(먼저 온 것부터). ── */
 .notice {
   margin: 14px 0 6px;
-  padding: 18px 18px 16px;
+  padding: 16px 18px;
   border: 2px solid var(--accent);
   border-radius: 16px;
   background: var(--panel, #fff);
@@ -535,12 +535,12 @@ button {
 .notice__time { font-size: 14px; font-weight: 700; color: var(--ink-2, #44506b); font-variant-numeric: tabular-nums; }
 .notice__n { margin-left: auto; font-size: 14px; font-weight: 800; color: var(--accent-d); font-variant-numeric: tabular-nums; }
 .notice__n[hidden] { display: none; }
-.notice__t { margin: 10px 0 0; font-size: 22px; font-weight: 800; line-height: 1.45; letter-spacing: -0.01em; overflow-wrap: anywhere; }
+.notice__t { margin: 8px 0 0; font-size: 21px; font-weight: 800; line-height: 1.45; letter-spacing: -0.01em; overflow-wrap: anywhere; }
 .notice__btn {
   display: block;
   width: 100%;
   min-height: 56px;
-  margin-top: 16px;
+  margin-top: 14px;
   padding: 0 18px;
   border: 1.5px solid var(--accent);
   border-radius: 14px;
@@ -551,9 +551,10 @@ button {
 }
 .notice__btn:disabled { opacity: 0.6; }
 @media (min-width: 768px) {
-  .notice { padding: 22px 24px 20px; }
-  .notice__t { font-size: 24px; }
-  .notice__btn { display: inline-block; width: auto; min-width: 240px; }
+  .notice { display: grid; grid-template-columns: minmax(0, 1fr) 240px; grid-template-areas: "head action" "message action"; column-gap: 20px; row-gap: 8px; align-items: center; padding: 18px 24px; }
+  .notice__top { grid-area: head; }
+  .notice__t { grid-area: message; margin: 0; font-size: 23px; }
+  .notice__btn { grid-area: action; width: 100%; margin: 0; min-width: 0; }
 }
 
 /* ── 기기 알림(Web Push · 기본 꺼짐) — 머리 아래 한 줄. 조용한 모양(대기 입력보다 눈에 덜 띄게). ── */
@@ -565,6 +566,26 @@ button {
   color: var(--accent-d); font-size: 14px; font-weight: 800; }
 .npush__btn[hidden] { display: none; }
 .npush__btn:disabled { opacity: 0.6; }
+/* 최초 QR·PIN 인증 후 자동 표시하는 알림 동의 안내. OS 권한 요청은 사용자 누름에만. */
+.npush-invite {
+  display: grid; gap: 12px; margin-top: 10px; padding: 14px 16px;
+  border: 1.5px solid #CCC3FC; border-radius: 14px;
+  background: #F5F2FF; color: var(--ink);
+}
+.npush-invite[hidden] { display: none; }
+.npush-invite__title { margin: 0; font-size: 17px; font-weight: 800; line-height: 1.4; }
+.npush-invite__desc { margin: 4px 0 0; font-size: 14px; line-height: 1.5; color: var(--ink-2, #44506b); }
+.npush-invite__actions { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 8px; }
+.npush-invite__later, .npush-invite__allow {
+  min-height: 44px; padding: 8px 12px; border-radius: 10px; font-size: 15px; font-weight: 800;
+}
+.npush-invite__later { border: 1px solid #C8CBE0; background: #FFF; color: var(--ink-2, #44506b); }
+.npush-invite__allow { border: 1px solid var(--accent); background: var(--accent); color: var(--on); }
+@media (min-width: 768px) {
+  .npush-invite { grid-template-columns: minmax(0, 1fr) auto; align-items: center; column-gap: 20px; }
+  .npush-invite__actions { grid-template-columns: 100px 166px; }
+}
+
 
 /* ── 머리: 부스 식별 — [부스 번호 판] │ 부스 이름 + 운영기관 · 구역 ────────
    운영자가 글을 읽기 전에 '지금 어느 부스를 만지는지' 알게 하는 자리입니다.
