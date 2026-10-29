@@ -132,10 +132,7 @@
   </footer>
 
   <div class="sheet" id="sheet" role="region" aria-labelledby="sheet-name" hidden>
-    <div class="sheet__top">
-      <span class="sheet__code" id="sheet-code"></span>
-      <button type="button" class="sheet__close" id="sheet-close">닫기</button>
-    </div>
+    <button type="button" class="sheet__close" id="sheet-close">닫기</button>
     <div id="sheet-body"></div>
   </div>
 
@@ -1103,51 +1100,11 @@
         '<span class="zone__n">' + n + '곳</span></h2>';
     }
 
-    /* 구역별 현황 — 전체 + 한눈에에서 부스가 많을 때(ZONE_OVERVIEW_OVER 곳 초과) 타일을 모두 펼치지 않고
-       구역마다 한 줄(이름 · 부스 수 · 분포 막대 · 상태별 수)로 줄여 구역끼리 견주게 합니다. 줄을 누르면
-       그 구역이 골라지고(구역 탭과 같은 S.ui.zone) 한눈에는 그대로라 그 구역의 타일이 나옵니다.
-       구역을 고르거나 · 검색어가 있거나 · 위의 상태 숫자로 거르면 결과가 적으니 타일을 바로 보여 줍니다.
-       맨 위 요약은 행사 전체, 여기는 구역별, 구역을 고르면 부스별 — 같은 숫자를 되풀이하지 않습니다. */
-    var ZONE_OVERVIEW_OVER = 30;
-    function overviewOn() {
-      return effView() === 'grid' && !S.ui.zone && !searching() && !S.ui.count &&
-        S.booths.length > ZONE_OVERVIEW_OVER && zoneList().length >= 2;
-    }
-    function overviewHtml() {
-      var zs = zoneList(), by = {};
-      S.booths.forEach(function (b) {
-        var c = by[b.zone_key] || (by[b.zone_key] = { '여유': 0, '보통': 0, '혼잡': 0, 'off': 0, 'unknown': 0 });
-        c[bucketOf(b)]++;
-      });
-      return '<section class="group zov" aria-labelledby="zov-h">' +
-        '<h2 class="zone" id="zov-h"><span class="zone__label">구역별 현황</span><span class="zone__n">' + zs.length + '개 구역</span></h2>' +
-        '<ul class="zov__list">' + zs.map(function (z) {
-          var c = by[z.key];
-          var segs = COUNT_KEYS.concat('unknown').map(function (k) {
-            return c[k] ? '<i class="dist__s dist__s--' + COUNT_CLS[k] + '" style="flex-grow:' + c[k] + '"></i>' : '';
-          }).join('');
-          var nums = COUNT_KEYS.map(function (k) {
-            return '<span class="zov__c' + (c[k] ? '' : ' is-zero') + '"><i class="sq sq--' + COUNT_CLS[k] + '"></i>' +
-              COUNT_WORD[k] + ' <b>' + c[k] + '</b></span>';
-          }).join('') + (c.unknown ? '<span class="zov__c zov__c--unknown">정보 없음 <b>' + c.unknown + '</b></span>' : '');
-          var speech = [(zoneKeyShown(z) ? z.key + ' ' : '') + z.label, '전체 ' + z.n + '곳']
-            .concat(COUNT_KEYS.map(function (k) { return COUNT_WORD[k] + ' ' + c[k] + '곳'; }))
-            .concat(c.unknown ? ['정보 없음 ' + c.unknown + '곳'] : []).join(', ') + '. 이 구역 부스 보기';
-          return '<li><button type="button" class="zov__btn" data-zone-go="' + esc(z.key) + '" aria-label="' + esc(speech) + '">' +
-            '<span class="zov__top"><span class="zov__name">' + zoneNameHtml(z) + '</span>' +
-              '<span class="zov__n">' + z.n + '곳</span><span class="zov__go" aria-hidden="true">›</span></span>' +
-            '<span class="dist zov__bar" aria-hidden="true">' + segs + '</span>' +
-            '<span class="zov__counts" aria-hidden="true">' + nums + '</span>' +
-          '</button></li>';
-        }).join('') + '</ul></section>';
-    }
-
+    // 펼친 내용: 체험 내용 · 입력 전 안내만. 번호 · 이름 · 학교는 줄에 있고(펼치면 이름 · 학교를 끝까지 보임),
+    // 학교급(초등 · 중등 …)은 구역 제목이 이미 말하므로 다시 쓰지 않습니다. 둘 다 없으면 비어 있고 칸도 숨습니다(CSS :empty).
     function moreHtml(b) {
       var age = ageLine(b);
-      // 운영 학교는 접힌 줄에 이미 보이므로 펼친 내용에는 구역만 둡니다.
-      var meta = b.zone_name || '';
-      return (meta ? '<p class="more__meta">' + esc(meta) + '</p>' : '') +
-        (b.program ? '<p class="more__prog">' + esc(b.program) + '</p>' : '') +
+      return (b.program ? '<p class="more__prog">' + esc(b.program) + '</p>' : '') +
         (age ? '<p class="more__age">' + esc(age) + '</p>' : '');
     }
 
@@ -1157,7 +1114,7 @@
       var open = !!S.open[b.id], did = domId(b.id), org = orgText(b);
       return '<li class="' + rowCls(b) + '" data-id="' + esc(b.id) + '">' +
         '<button type="button" class="row__main" aria-expanded="' + open + '" aria-controls="more-' + did + '">' +
-          '<span class="row__code">' + esc(codeLabel(b)) + '</span>' +
+          '<span class="row__code' + (codeLabel(b).length > 2 ? ' row__code--long' : '') + '">' + esc(codeLabel(b)) + '</span>' +
           '<span class="row__body"><span class="row__name">' + esc(b.name || '이름 미정') + '</span>' +
             (org ? '<span class="row__org">' + esc(org) + '</span>' : '') + '</span>' +
           '<span class="row__right">' + rightHtml(b) + '</span>' +
@@ -1176,10 +1133,10 @@
       return { cls: 'is-' + core.meta(c).key, v: v, w: c };
     }
 
+    // 칸 왼쪽 위의 번호가 칸에서 가장 큰 글자입니다(관람객은 번호부터 찾음). 목록 · 상세와 같은 공식 번호(앞에 0 없음).
     function tileInner(b) {
       var p = tileParts(b);
-      var no = (b.no !== null && b.no !== undefined && b.no !== '') ? pad2(b.no) : b.code;
-      return '<span class="tile__no">' + esc(no) + '</span>' +
+      return '<span class="tile__no">' + esc(codeLabel(b)) + '</span>' +
         '<span class="tile__v">' + p.v + '</span>' +
         '<span class="tile__w">' + esc(p.w) + '</span>';
     }
@@ -1247,7 +1204,7 @@
     function focusKey(root) {
       var ae = document.activeElement;
       if (!ae || ae === document.body || !root.contains(ae)) return null;
-      var attrs = ['data-id', 'data-count', 'data-zone', 'data-zone-go', 'data-go', 'data-act'];
+      var attrs = ['data-id', 'data-count', 'data-zone', 'data-go', 'data-act'];
       for (var i = 0; i < attrs.length; i++) {
         var host = ae.closest('[' + attrs[i] + ']');
         if (host && root.contains(host)) {
@@ -1306,17 +1263,6 @@
       }
 
       var view = effView(), grouped = view === 'grid' ? true : isGrouped();
-      if (overviewOn()) {
-        // 숫자가 바뀌면 통째로 다시 만듭니다(열 줄 남짓이라 가볍고, 초점은 data-zone-go 로 이어집니다).
-        var ov = mapHtml() + overviewHtml();
-        if (force || S.keys.list !== 'ov|' + ov) {
-          var restoreOv = focusKey(box);
-          box.innerHTML = ov;
-          S.keys.list = 'ov|' + ov;
-          restoreFocus(box, restoreOv);
-        }
-        return;
-      }
       // patch() 는 상태 칸만 고칩니다. 그래서 이름 · 학교 · 번호 · 구역 이름이 바뀌면(5분마다 전부
       // 다시 받을 때 관리자가 고친 값) 줄을 새로 만들어야 합니다. 펼침(S.open)과 초점은
       // 새로 만들어도 이어집니다. 한눈에 타일은 code 대신 no 를 보여 주니 no 도 넣습니다.
@@ -1392,12 +1338,14 @@
       el._flashT = setTimeout(function () { el.classList.remove('is-changed'); }, 1700);
     }
 
-    /* 한눈에: 아래에 붙는 상세 */
+    /* 한눈에: 아래에 붙는 상세 — ① 번호 ② 체험 주제(부스 이름) ③ 학교 ④ 대기 · 상태.
+       번호와 이름을 목록 줄처럼 한 줄에 나란히 둡니다. 학교급은 구역 제목이 말하므로 쓰지 않습니다. */
     function sheetHtml(b) {
-      var meta = [orgText(b), b.zone_name].filter(Boolean).join(' · ');
+      var org = orgText(b);
       var age = ageLine(b);
-      return '<p class="sheet__name" id="sheet-name">' + esc(b.name) + '</p>' +
-        (meta ? '<p class="sheet__meta">' + esc(meta) + '</p>' : '') +
+      return '<div class="sheet__head"><span class="sheet__code">' + esc(codeLabel(b)) + '</span>' +
+          '<div class="sheet__id"><p class="sheet__name" id="sheet-name">' + esc(b.name) + '</p>' +
+          (org ? '<p class="sheet__meta">' + esc(org) + '</p>' : '') + '</div></div>' +
         (b.program ? '<p class="sheet__prog">' + esc(b.program) + '</p>' : '') +
         '<div class="sheet__live"><div class="sheet__val">' + bigHtml(b) + '</div>' +
           (age ? '<p class="sheet__age">' + esc(age) + '</p>' : '') +
@@ -1406,7 +1354,7 @@
 
     function renderSheet(items) {
       var sh = $('sheet');
-      var b = (S.sel && effView() === 'grid' && !overviewOn()) ? S.byId[S.sel] : null;
+      var b = (S.sel && effView() === 'grid') ? S.byId[S.sel] : null;
       if (b && !items.some(function (x) { return x.id === b.id; })) b = null; // 걸러져 안 보이면 닫습니다
       if (!b) {
         S.sel = null;
@@ -1418,7 +1366,6 @@
       if (html !== S.keys.sheet) {
         S.keys.sheet = html;
         $('sheet-body').innerHTML = html;
-        $('sheet-code').textContent = b.code;
       }
       sh.hidden = false;
       // 상세가 목록 끝을 가리지 않도록 그만큼 바닥을 늘립니다.
@@ -1849,26 +1796,21 @@
           }
           return;
         }
-        if (t.hasAttribute('data-zone-go')) {
-          // 구역별 현황의 한 줄: 한눈에는 그대로 두고 그 구역의 타일로. 검색칸이 (검색어 없이) 열려 있으면
-          // 닫습니다 — 검색칸이 열린 동안에는 구역 고름이 걸리지 않습니다(visible()).
-          if (S.ui.search || S.ui.q) { S.ui.search = false; S.ui.q = ''; $('q').value = ''; }
-          S.ui.zone = t.getAttribute('data-zone-go');
-          S.ui.count = '';
-          S.sel = null;
-          navCommit(false);
-          render(false);
-          revealTab();
-          showResults(true);
-          // 누른 줄은 사라졌으니 초점을 그 구역의 첫 타일로 옮깁니다(키보드 · 화면 읽기).
-          var first = $('list').querySelector('.tile');
-          if (first) { try { first.focus({ preventScroll: true }); } catch (err) { first.focus(); } }
-          return;
-        }
         if (t.hasAttribute('data-view')) {
+          var toGrid = t.getAttribute('data-view') === 'grid';
           S.ui.view = t.getAttribute('data-view');
+          var narrowed = toGrid && !!(S.ui.count || S.ui.zone || S.ui.q || S.ui.search);
+          if (toGrid) {
+            // '한눈에' 는 공식 부스 전체를 한꺼번에 보는 화면입니다 — 상태 고름 · 구역 · 검색을 풀고 시작합니다.
+            // 그 뒤에 고르는 상태 · 구역은 평소처럼 걸립니다. '목록' 으로 돌아갈 때는 지금 고름을 그대로 둡니다.
+            if (document.activeElement === $('q')) $('q').blur();
+            S.ui.count = ''; S.ui.zone = ''; S.ui.q = ''; S.ui.search = false; $('q').value = '';
+            S.zpick = false;
+            S.open = {};
+          }
           render(false);
-          navCommit(false);   // 보기 바꿈은 칸을 쌓지 않습니다(한눈에 상세가 닫혔으면 지금 칸만 고침)
+          // 보기 바꿈은 칸을 쌓지 않습니다(한눈에 상세가 닫혔으면 지금 칸만 고침). 고름을 풀었으면 한 단계 위로 — '× 필터 해제' 와 같게.
+          navCommit(narrowed);
           return;
         }
         if (t.hasAttribute('data-sort')) {
