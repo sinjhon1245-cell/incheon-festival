@@ -196,8 +196,9 @@
          normal    POLL_MS(설정 pollingIntervalMs, 기본 60초) ± 1/6 — 60초면 50~70초
          conserve  POLL_MS × 2 ± 1/6 — 100~140초
          manual    자동으로 받지 않음. 처음 열 때 · 화면에 돌아올 때 · '새로고침' 단추로만
-       행사 날의 여는 시각 30분 전 ~ 닫는 시각 30분 뒤(설정의 event_start · event_end, 한국 시각)
-       밖에서는 mode 와 관계없이 자동으로 받지 않습니다(처음 열 때 · 돌아올 때만).
+       행사 전에는 대기시간 확인을 위해 자동 갱신하고, 행사 당일에는 여는 시각 30분 전 ~
+       닫는 시각 30분 뒤(설정의 event_start · event_end, 한국 시각)에만 자동 갱신합니다.
+       행사 종료 후에는 처음 열 때 · 돌아올 때만 받고, manual 모드는 언제나 수동입니다.
        15초 아래로는 내리지 않고(live/build.sh 도 같은 하한), 2분 위로는 올리지 않습니다 — 아주 큰 값은
        setTimeout 이 32비트를 넘겨 곧바로 실행되어 쉬지 않고 받게 됩니다. */
     var POLL_MS = Math.min(2 * 60 * 1000, Math.max(15000, Number(cfg.pollingIntervalMs) || 60000));
@@ -275,9 +276,9 @@
     }
     function smooth() { return reduceMotion ? 'auto' : 'smooth'; }
 
-    // 실제 운영 시간 중이고 기능이 켜져 있을 때만 대기 시간을 보여 줍니다.
+    // 행사 전 점검 기간과 실제 운영 시간에 현재 입력된 대기시간을 보여 줍니다.
     function liveOn() {
-      return !!S.info && S.info.phase === 'open' && S.liveReady !== false;
+      return !!S.info && (S.info.phase === 'before' || S.info.phase === 'open') && S.liveReady !== false;
     }
     function effView() { return liveOn() ? S.ui.view : 'list'; }
     function effSort() { return liveOn() ? S.ui.sort : 'code'; }
@@ -286,13 +287,18 @@
     function derive() {
       S.info = core.eventInfo(S.settings, Date.now());
       var list = S.raw || [];
-      // 관람객에게는 운영 중의 대기값만 표시합니다. 행사 전(연습 값 포함)이나
-      // 운영 시간 밖의 값은 수신하거나 캐시에 남아 있더라도 화면용 자료에서 제거합니다.
-      if (S.info.phase === 'open') {
-        // 오늘 문 열기 전에 넣은 값(연습 · 아침 준비)은 '지금 대기' 가 아닙니다.
+      // 행사 전에는 한국 날짜로 오늘 저장한 값만 표시합니다(공개 API와 같은 규칙).
+      // 이전 날의 브라우저 캐시가 남거나 23:00 초기화가 지연돼도 지난 날짜의 값은 숨깁니다.
+      if (S.info.phase === 'before') {
+        var today = core.kstDay(Date.now());
+        list = list.map(function (b) {
+          return b.congestion && core.kstDay(b.congestion_updated_at) !== today ? clearLive(b) : b;
+        });
+      } else if (S.info.phase === 'open') {
+        // 행사 당일에는 실제 문을 연 뒤 저장된 값만 표시합니다.
         list = core.applyOpenRule(list, S.info);
       } else {
-        // 숫자 · 정렬 · 거르기가 모두 '정보 없음' 으로 같게 움직이도록 비웁니다.
+        // 행사 당일 개장 전·마감 후에는 대기값을 표시하지 않습니다.
         list = list.map(clearLive);
       }
       S.booths = list;
@@ -581,17 +587,18 @@
     }
 
     /* ── 받는 때 ───────────────────────────────────────────────── */
-    // 자동으로 받는 시간대인가: 행사 날(한국 날짜) 여는 시각 30분 전 ~ 닫는 시각 30분 뒤.
-    // 아니면 다음에 시작하는 때(ms)를 알려 줍니다. 시간표가 비었거나 시연이면 늘 받습니다.
+    // 행사 전 점검 기간에도 자동 갱신합니다. 행사 날은 개장 30분 전 ~ 마감 30분 후만 갱신합니다.
+    // 시간표가 없거나 협의용 예시 모드면 늘 갱신하며, manual 모드는 autoFactor에서 별도로 끕니다.
     function liveWindow(now) {
       var s = S.settings || {};
       var a = core.kstParts(s.event_start), e = core.kstParts(s.event_end);
       if (core.isMock || !a || !e) return { on: true, next: null };
       var t = core.kstParts(now);
+      if (t.dayNum < a.dayNum) return { on: true, next: null };
       var open = a.min - WINDOW_PAD_MIN;
       var close = (e.min > a.min ? e.min : 24 * 60) + WINDOW_PAD_MIN;
       if (t.dayNum >= a.dayNum && t.dayNum <= e.dayNum && t.min >= open && t.min < close) return { on: true, next: null };
-      var day = t.dayNum < a.dayNum ? a.dayNum : (t.min < open ? t.dayNum : t.dayNum + 1);
+      var day = t.min < open ? t.dayNum : t.dayNum + 1;
       if (day > e.dayNum) return { on: false, next: null };
       return { on: false, next: day * 86400000 - 9 * 3600000 + open * 60000 };
     }
@@ -766,7 +773,7 @@
       var ph = S.info.phase;
       if (ph === 'after') return 'after';
       if (S.liveReady === false) return 'notready';
-      var live = ph === 'open';
+      var live = ph === 'before' || ph === 'open';
       // 운영 중인데 배치 · 공개된 부스가 아직 하나도 없으면(모두 배치 준비 중) '0곳' 대신 안내 문장을 둡니다.
       if (live && !S.booths.length && S.unplaced.length) return 'placing';
       return live ? 'live' : ph;
@@ -775,7 +782,7 @@
     // 운영 시간 밖일 때 '지금 계신 부스' 카드에 붙일 한 줄
     function offHint(mode) {
       var i = S.info || {};
-      if (mode === 'before' || mode === 'notready') return '대기 시간은 행사 당일부터 여기에 표시돼요';
+      if (mode === 'notready') return '현재 대기 정보를 불러올 수 없어요';
       if (mode === 'preopen') return '오늘 ' + (i.openTime || '') + '에 문을 열어요';
       if (mode === 'dayclosed') return '오늘 체험은 끝났어요';
       if (mode === 'after') return '행사가 끝났어요';
@@ -798,14 +805,8 @@
         // 어떻게 하면 되는지와 다시 시도 단추는 바로 아래 목록 자리(failHtml)에 둡니다. 같은 말을 두 번 하지 않습니다.
         return '<p class="hero__label">부스 대기 현황</p><p class="hero__head">정보를 불러오지 못했어요</p>';
       }
-      if (mode === 'before') {
-        // 'D-21' 만 두면 부스 번호(구역-번호)처럼 읽힐 수 있어, 앞에 '개막까지' 를 작게 붙입니다.
-        return label + '<p class="hero__dday"><span class="hero__ddkey">개막까지</span>' +
-          '<span aria-hidden="true">D-' + i.dday + '</span><span class="sr-only">' + i.dday + '일 남았어요</span></p>' +
-          '<p class="hero__copy">' + esc((i.nextOpenLabel || '행사 당일') + '부터 부스별 대기 시간이 여기에 실시간으로 표시돼요') + '</p>';
-      }
       if (mode === 'notready') {
-        return label + '<p class="hero__head">부스별 대기 시간은<br />행사 당일부터 표시돼요</p>';
+        return label + '<p class="hero__head">현재 대기 정보를<br />불러올 수 없어요</p>';
       }
       if (mode === 'preopen') {
         return label + '<p class="hero__head">오늘 ' + esc(i.openTime) + '에 문을 열어요</p>' +
