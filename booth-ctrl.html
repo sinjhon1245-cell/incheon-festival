@@ -2109,9 +2109,13 @@
       return toMs(b.congestion_updated_at) < info.todayOpenAt.getTime();
     }
     function beforeOpenValue(info) { return beforeOpen(booth, info); }
-    // 실제 관람객 화면은 행사 운영 시간 중의 대기값만 표시합니다.
+    // 행사 전에는 오늘(한국 날짜) 저장된 값만 관람객에게 표시합니다.
+    function beforeToday(b) {
+      return !!b && !!b.congestion && !!b.congestion_updated_at &&
+        core.kstDay(b.congestion_updated_at) === core.kstDay(Date.now());
+    }
     // 시간표를 아직 못 받았거나 시연이면 운영 중으로 봅니다.
-    function visibleNow(info) { return !info || info.phase === 'open'; }
+    function visibleNow(info) { return !info || info.phase === 'before' || info.phase === 'open'; }
 
     // 저장 알림. 운영 시간 밖에서 넣은 값은 관람객 화면에 보이지 않습니다(문을 열면 '문 열기 전 값' 으로,
     // 날이 바뀌면 '어제 값' 으로 지워집니다). '반영됐어요' 라고 하면 안 되어 그대로 알립니다.
@@ -2119,7 +2123,7 @@
     function savedShows(b) {
       if (!settings) return null;
       var info = eventInfo();
-      return info.phase === 'open' && !beforeOpen(b, info);
+      return (info.phase === 'before' && beforeToday(b)) || (info.phase === 'open' && !beforeOpen(b, info));
     }
     // 알림 첫 줄의 값 이름. 모두 받침으로 끝나 뒤에 '으로' 를 붙입니다.
     function savedWord(b) {
@@ -2133,9 +2137,7 @@
     // again: '맞아요 · 지금 확인' 으로 같은 값을 다시 확인한 것
     function savedToast(b, again) {
       var head = '✓ ' + savedWord(b) + (again ? '으로 다시 확인했습니다.' : '으로 반영했습니다.');
-      // 시간표를 못 받았으면(현장 와이파이에서 첫 읽기가 실패하는 등) 관람객 화면에 보이는지 알 수 없습니다.
-      // '곧 표시됩니다' 라고 하면 행사 몇 주 전 리허설 값도 보이는 것처럼 알리게 되어, 저장 시각만 알리고
-      // 시간표를 다시 받아 봅니다.
+      // 시간표를 못 받았으면 관람객 화면에 보이는지 확신할 수 없어 저장 시각만 알리고 다시 확인합니다.
       if (!settings) {
         loadSettings();
         return head + '\n저장 ' + core.formatClock((b && b.congestion_updated_at) || new Date());
@@ -2147,8 +2149,10 @@
         if (beforeOpen(b, info)) return head + '\n문 열기 전 값이라 관람객 화면에는 아직 안 보여요.';
         return head + '\n관람객 화면에도 곧 표시됩니다.';
       }
-      // 행사 전에도 운영자 저장과 PIN 접속은 정상 동작하되 관람객에게 시험 값은 표시하지 않습니다.
-      if (info.phase === 'before') return head + '\n행사 전 입력값은 저장됐지만 관람객 화면에는 표시되지 않아요.';
+      // 행사 전에는 오늘 저장한 값이 관람객 화면에도 나타납니다.
+      if (info.phase === 'before') return head + (beforeToday(b)
+        ? '\n관람객 화면에도 곧 표시됩니다.'
+        : '\n이전 날짜의 입력값은 관람객 화면에 표시되지 않아요.');
       if (info.phase === 'preopen') {
         return head + '\n문을 연 뒤' + (info.openTime ? '(' + info.openTime + ')' : '') + ' 한 번 더 눌러 주세요.';
       }
@@ -2230,9 +2234,9 @@
       var conflict = !!(pending && pending.conflict);
       var old = !conflict && isOld(pending);
       var info = eventInfo();
-      // 지금 값이 관람객 화면에 그대로 보이는가. 운영 시간 밖이거나, 운영 중이어도 오늘 문 열기 전에
-      // 넣은 값이면 관람객에게는 '정보 없음' 으로 보입니다.
-      var seen = visibleNow(info) && !beforeOpenValue(info);
+      // 지금 값이 관람객 화면에 그대로 보이는가. 행사 전에는 오늘 입력만,
+      // 행사 날에는 실제 문을 연 뒤의 입력만 표시합니다.
+      var seen = visibleNow(info) && !beforeOpenValue(info) && (!info || info.phase !== 'before' || beforeToday(booth));
 
       // 지금 상태 판
       var now = $('now');
