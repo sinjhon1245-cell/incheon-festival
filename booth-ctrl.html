@@ -222,16 +222,18 @@
         </div>
       </div>
 
-      <!-- 운영본부 알림(기본 꺼짐 — 설정 boothNotices 와 서버 스위치가 모두 켜져 있고, 내 부스에 확인 안 한 알림이 있을 때만 보임).
-           [확인했어요] 는 알림 확인만 남기고 대기 값은 바꾸지 않습니다(상태가 그대로면 아래 ‘맞아요’ 를 따로 누름). -->
-      <div class="notice" id="notice" role="status" aria-live="polite" hidden>
-        <p class="notice__k" id="notice-k"></p>
-        <p class="notice__t" id="notice-t"></p>
-        <div class="notice__row">
-          <button type="button" class="notice__btn" id="notice-ack" data-act="notice-ack">확인했어요</button>
-          <span class="notice__more" id="notice-more" hidden></span>
+      <!-- 운영본부 알림 카드(기본 꺼짐 — 설정 boothNotices 와 서버 스위치가 모두 켜져 있고, 내 부스에 확인 안 한 · 만료 전 알림이 있을 때만 보임).
+           화면 흐름 안에 놓여 부스 머리 · 대기 입력을 가리지 않습니다. 여러 개면 먼저 온 것부터 하나씩(1 / 2).
+           [확인했어요] 는 알림 확인만 남기고 대기 값은 바꾸지 않습니다. -->
+      <section class="notice" id="notice" role="status" aria-live="polite" aria-labelledby="notice-k" hidden>
+        <div class="notice__top">
+          <h2 class="notice__k" id="notice-k">운영본부 알림</h2>
+          <span class="notice__time num" id="notice-time"></span>
+          <span class="notice__n num" id="notice-n" hidden></span>
         </div>
-      </div>
+        <p class="notice__t" id="notice-t"></p>
+        <button type="button" class="notice__btn" id="notice-ack" data-act="notice-ack">확인했어요</button>
+      </section>
 
       <!-- 부스 식별 머리: 왼쪽 부스 번호 판(넓은 색 면) │ 오른쪽 부스 이름 + 운영기관 · 구역.
            상태(여유 · 보통 · 혼잡 · 중단 · 마감)와 상관없이 늘 같은 모양입니다(상태는 아래 '현재 대기' 에서만). -->
@@ -247,6 +249,13 @@
         <!-- 운영자 화면에는 다른 화면으로 가는 링크를 두지 않습니다(관람객 화면 · 운영 포털 · 관리자 화면 모두).
              운영자의 일은 자기 부스 확인 · 대기 상태 입력 · 마지막 입력 확인입니다. -->
       </header>
+
+      <!-- 기기 알림(Web Push · 기본 꺼짐 — 설정 boothPush · Vercel 키 · 서버 push_enabled 가 모두 켜져 있고 이 브라우저가 지원할 때만).
+           누를 때만 알림 권한을 묻습니다. 거절 · 미지원이어도 위 화면 안 알림 카드는 그대로입니다. -->
+      <div class="npush" id="npush" hidden>
+        <p class="npush__t" id="npush-t">기기 알림</p>
+        <button type="button" class="npush__btn" id="npush-btn" data-act="push-on">알림 받기</button>
+      </div>
 
       <p class="note" id="demo-note" hidden>협의용 예시 · 여기서 누른 값은 이 브라우저의 예시 화면에만 보여요</p>
       <div class="tip" id="tip" hidden>
@@ -833,7 +842,7 @@
         return;
       }
       var s = sess.session;
-      core.sessLogout(s).then(null, function () { /* 연결이 안 돼도 이 기기에서는 지웁니다(세션은 자정에 끝남) */ })
+      pushOff().then(function () { return core.sessLogout(s); }).then(null, function () { /* 연결이 안 돼도 이 기기에서는 지웁니다(세션은 자정에 끝남) */ })
         .then(function () {
           stopAll();
           clearPending(true);
@@ -1634,7 +1643,8 @@
        띠를 그린 뒤에만 '화면에 표시됨', [확인했어요] 를 눌렀을 때만 '운영자 확인' 을 남깁니다.
        대기 값 · 저장 흐름 · 로그인은 건드리지 않습니다(따로 묻고 따로 그림). 협의용 예시(?demo)에서는 쓰지 않습니다. */
     var NOTICE_ON = !!(core.cfg && core.cfg.boothNotices === true) && !isMock;
-    var nt = { timer: null, stopped: true, fails: 0, items: [], shown: {}, acking: false };
+    // open: 기기 알림을 눌러 열었을 때의 알림 번호(주소 ?nt= 또는 Service Worker 메시지) — 첫 목록에서 한 번 견줘 봄
+    var nt = { timer: null, stopped: true, fails: 0, items: [], shown: {}, acking: false, open: 0 };
     // 다시 보이면 0~3초 흩뜨려 이어 묻습니다(가려진 동안은 묻지 않음 — 위 noticeTick)
     document.addEventListener('visibilitychange', function () {
       if (!nt.stopped && !document.hidden && !dead) noticeNext(Math.random() * 3000);
@@ -1660,7 +1670,15 @@
         if (nt.stopped || dead) return;
         nt.fails = 0;
         var on = !!(r && r.enabled === true);
-        nt.items = on && r.notices && r.notices.length ? r.notices : [];
+        var before = nt.items;
+        // 먼저 온 알림부터 하나씩. 만료 시각이 지난 것은 서버가 빼지만, 연결이 끊긴 동안에도 화면에 남지 않게 여기서도 뺍니다.
+        nt.items = on && r.notices && r.notices.length ? noticeLive(r.notices.slice().sort(function (a, b) { return toMs(a.created_at) - toMs(b.created_at); })) : [];
+        before.forEach(function (x) { if (!nt.items.some(function (y) { return y.id === x.id; })) closeSys(x.id); });
+        // 기기 알림을 눌러 열었는데 그 알림이 이미 확인됐거나 만료됐으면 알려 줍니다
+        if (nt.open) {
+          if (on && !nt.items.some(function (y) { return y.id === nt.open; })) { toast('이미 끝난 알림이에요.', 'info', 3000); closeSys(nt.open); }
+          nt.open = 0;
+        }
         paintNotice();
         var base = on ? Math.min(Math.max(Number(r.poll_ms) || 18000, 15000), 20000) : 300000;
         noticeNext(base * (0.9 + Math.random() * 0.2));
@@ -1678,7 +1696,8 @@
     function startNotice() {
       if (!NOTICE_ON || !nt.stopped || dead) return;
       nt.stopped = false;
-      noticeNext(1500 + Math.random() * 1500);
+      noticeNext(nt.open ? 0 : 1500 + Math.random() * 1500);
+      pushInit();
     }
     function stopNotice() {
       if (!nt) return;   // 알림 칸을 만들기 전(처음 불러오는 중)에 멈추는 경우
@@ -1687,17 +1706,29 @@
       nt.items = [];
       paintNotice();
     }
+    // 만료 시각(서버가 준 expires_at)이 지난 알림을 뺍니다. 기기 시계가 조금 빨라도 일찍 사라지지 않게 1분 여유.
+    function noticeLive(list) {
+      var now = Date.now();
+      return list.filter(function (x) { var e = toMs(x.expires_at); return !(e > 0 && now > e + SKEW_MS); });
+    }
+    function noticePrune() {
+      if (!nt || !nt.items.length) return;
+      var keep = noticeLive(nt.items);
+      if (keep.length === nt.items.length) return;
+      nt.items.forEach(function (x) { if (keep.indexOf(x) < 0) closeSys(x.id); });
+      nt.items = keep;
+      paintNotice();
+    }
     function paintNotice() {
       var box = $('notice');
       if (!box || !nt) return;
       var it = nt.items[0];
       box.hidden = !it || view !== 'main';
       if (box.hidden) return;
-      $('notice-k').textContent = '운영본부 알림 · ' + core.formatClock(it.created_at);
+      $('notice-time').textContent = core.formatClock(it.created_at);
       $('notice-t').textContent = it.body;
-      var more = nt.items.length - 1;
-      $('notice-more').hidden = more < 1;
-      $('notice-more').textContent = more > 0 ? '다음 알림 ' + more + '개' : '';
+      $('notice-n').hidden = nt.items.length < 2;
+      $('notice-n').textContent = nt.items.length > 1 ? '1 / ' + nt.items.length : '';
       var b = $('notice-ack');
       b.disabled = nt.acking;
       b.textContent = nt.acking ? '보내는 중' : '확인했어요';
@@ -1715,6 +1746,7 @@
       noticeCall('ack', it.id).then(function (r) {
         nt.acking = false;
         nt.items = nt.items.filter(function (x) { return x.id !== it.id; });
+        closeSys(it.id);
         paintNotice();
         toast(r && r.ok === false ? '이미 끝난 알림이에요.' : '확인했어요. 운영본부에 표시돼요.', 'info', 3000);
       }, function () {
@@ -1722,6 +1754,132 @@
         paintNotice();
         toast('연결이 안 돼 확인을 못 보냈어요. 다시 눌러 주세요.', 'error');
       });
+    }
+
+    /* ── 기기 알림(Web Push) ─────────────────────────────────────────
+       기본 꺼짐: 설정 boothPush 가 켜져 있고(운영자 알림도 켜짐), 이 브라우저가 Service Worker · Push · Notification 을 모두 지원하고,
+       Vercel /api/notice-push 에 공개 열쇠가 있고, 서버가 push 켜짐이라고 답할 때만 [알림 받기] 를 보입니다.
+       권한은 [알림 받기] 를 눌렀을 때만 묻습니다. 구독은 서버 함수(booth_ctrl_push · booth_session_push)로만 —
+       부스 id 를 보내지 않고 지금 QR 열쇠 · PIN 세션으로 서버가 부스를 정합니다. 한 기기(브라우저)는 마지막으로 [알림 받기] 한 부스의 알림만 받습니다.
+       Service Worker(/booth-ctrl-sw.js · 범위 /booth-ctrl)는 fetch 를 가로채지 않습니다. 화면이 보이면 시스템 알림 대신 여기로 ‘지금 다시 읽기’ 를 알립니다.
+       무엇이 실패해도 화면 안 알림 카드(위)는 그대로 돕니다. */
+    var PUSH_ON = NOTICE_ON && cfg.boothPush === true;
+    var pu = { inited: false, state: 'none', key: '', reg: null, sub: null, busy: false };   // state: none(안 보임) · ask(알림 받기) · on(받는 중)
+    function pushSupported() {
+      try { return !!(window.isSecureContext && navigator.serviceWorker && window.PushManager && window.Notification); } catch (e) { return false; }
+    }
+    function pushCall(action, sub) {
+      var args = { p_action: action, p_sub: sub || null };
+      if (sess) { args.p_session = sess.session; return core.request('POST', 'rpc/booth_session_push', args); }
+      args.p_token = token;
+      return core.request('POST', 'rpc/booth_ctrl_push', args);
+    }
+    function b64uBytes(s) {
+      var b = window.atob(String(s).replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((String(s).length + 3) % 4));
+      var a = new Uint8Array(b.length);
+      for (var i = 0; i < b.length; i++) a[i] = b.charCodeAt(i);
+      return a;
+    }
+    // 예전에 다른 공개 열쇠로 구독한 기기면 새로 구독해야 합니다(열쇠를 바꾼 뒤)
+    function sameKey(sub) {
+      var k = sub && sub.options && sub.options.applicationServerKey;
+      if (!k) return true;
+      var a = new Uint8Array(k), b = b64uBytes(pu.key);
+      if (a.length !== b.length) return false;
+      for (var i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+      return true;
+    }
+    function closeSys(id) {
+      if (!pu.reg || !pu.reg.getNotifications) return;
+      pu.reg.getNotifications({ tag: 'aisw-notice-' + id }).then(function (l) { l.forEach(function (n) { n.close(); }); }, function () { /* 무시 */ });
+    }
+    function paintPush() {
+      var box = $('npush');
+      if (!box) return;
+      box.hidden = pu.state === 'none' || view !== 'main';
+      if (box.hidden) return;
+      $('npush-t').textContent = pu.state === 'on' ? '기기 알림 켜짐' : '기기 알림';
+      var b = $('npush-btn');
+      b.hidden = pu.state === 'on';
+      b.disabled = pu.busy;
+      b.textContent = pu.busy ? '켜는 중' : '알림 받기';
+    }
+    function pushInit() {
+      if (!PUSH_ON || pu.inited || dead || (sess && sess.demo)) return;
+      pu.inited = true;
+      if (!pushSupported() || window.Notification.permission === 'denied') return;
+      window.fetch('/api/notice-push', { cache: 'no-store', credentials: 'omit' }).then(function (res) {
+        return res.ok ? res.json() : null;
+      }).then(function (j) {
+        if (!j || j.enabled !== true || !j.publicKey) return null;
+        pu.key = j.publicKey;
+        return navigator.serviceWorker.getRegistration('/booth-ctrl').then(function (reg) {
+          pu.reg = reg || null;
+          return reg ? reg.pushManager.getSubscription() : null;
+        }).then(function (sub) {
+          pu.sub = sub || null;
+          return pushCall('status', sub ? sub.toJSON() : null);
+        }).then(function (r) {
+          if (dead || !r || r.push !== true) return;
+          pu.state = r.mine && window.Notification.permission === 'granted' && sameKey(pu.sub) ? 'on' : 'ask';
+          paintPush();
+        });
+      }).then(null, function () { /* 기기 알림 없이도 화면 안 알림은 그대로 */ });
+    }
+    function pushOn() {
+      if (pu.busy || !pu.key || pu.state !== 'ask') return;
+      pu.busy = true;
+      paintPush();
+      var done = function (state, msg, kind) {
+        pu.busy = false;
+        pu.state = state;
+        paintPush();
+        if (msg) toast(msg, kind || 'info', 3500);
+      };
+      // 권한 창은 누른 그 순간에 띄웁니다(다른 일을 먼저 하면 브라우저가 막음)
+      var perm;
+      try { perm = window.Notification.requestPermission(); } catch (e) { perm = null; }
+      Promise.resolve(perm).then(function (p) {
+        if ((p || window.Notification.permission) !== 'granted') { done('none', '알림이 허용되지 않았어요. 화면 안 알림은 그대로 와요.'); return null; }
+        return navigator.serviceWorker.register('/booth-ctrl-sw.js', { scope: '/booth-ctrl' }).then(function () {
+          return navigator.serviceWorker.ready;
+        }).then(function (reg) {
+          pu.reg = reg;
+          return reg.pushManager.getSubscription().then(function (old) {
+            if (old && sameKey(old)) return old;
+            return (old ? old.unsubscribe() : Promise.resolve()).then(function () {
+              return reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64uBytes(pu.key) });
+            });
+          });
+        }).then(function (sub) {
+          pu.sub = sub;
+          return pushCall('subscribe', sub.toJSON());
+        }).then(function (r) {
+          if (r && r.ok) done('on', '기기 알림을 받아요.');
+          else done('none', '지금은 기기 알림을 켤 수 없어요. 화면 안 알림은 그대로 와요.', 'error');
+        });
+      }).then(null, function () { done('ask', '기기 알림을 켜지 못했어요. 화면 안 알림은 그대로 와요.', 'error'); });
+    }
+    // PIN 으로 나갈 때 이 기기 구독을 서버에서 지웁니다(세션이 끝나면 서버가 어차피 보내지 않지만 남기지 않게).
+    function pushOff() {
+      if (!pu.sub || pu.state !== 'on') return Promise.resolve();
+      return pushCall('unsubscribe', pu.sub.toJSON()).then(null, function () { /* 무시 */ });
+    }
+    if (PUSH_ON && pushSupported()) {
+      // Service Worker 가 ‘알림 왔음’ · ‘알림을 눌러 열었음’ 을 알리면 곧바로 내 부스 알림을 다시 읽습니다
+      navigator.serviceWorker.addEventListener('message', function (e) {
+        var d = (e && e.data) || {};
+        if (d.type !== 'aisw-notice') return;
+        if (d.open) nt.open = Number(d.n) || 0;
+        if (!nt.stopped && !dead) { nt.fails = 0; noticeNext(0); }
+      });
+    } else if (!PUSH_ON && !isMock) {
+      // 설정을 끈 뒤에는 예전에 등록한 이 화면의 Service Worker 를 지웁니다(구독도 함께 사라짐)
+      try {
+        if (navigator.serviceWorker && navigator.serviceWorker.getRegistration) {
+          navigator.serviceWorker.getRegistration('/booth-ctrl').then(function (r) { if (r) r.unregister(); }, function () { /* 무시 */ });
+        }
+      } catch (e) { /* 무시 */ }
     }
 
     /* ── 누르기 · 저장 ─────────────────────────────────────────────── */
@@ -2027,7 +2185,9 @@
 
     function render() {
       expireDay();
+      noticePrune();
       paintNotice();
+      paintPush();
       if (view !== 'main') return;
       renderHead();
 
@@ -2203,6 +2363,7 @@
       if (act === 'pin-reload') { openPin(pin.pre); return; }
       if (act === 'pin-back') { pinBack(); return; }
       if (act === 'pin-logout') { pinLogout(t); return; }
+      if (act === 'push-on') { pushOn(); return; }
 
       if (t.classList.contains('w')) { tap('open', Number(t.getAttribute('data-wait'))); return; }
       if (t.id === 'btn-pause') { tap('pause', 0); return; }
@@ -2342,6 +2503,15 @@
     function boot() {
       wire();
       token = readToken();
+      // 기기 알림을 눌러 새로 연 화면(/booth-ctrl?nt=번호 — Service Worker 가 엶). 주소에서 지우고, 첫 목록에서 그 알림을 견줘 봅니다.
+      // 이 기기에 PIN 세션이 없고 QR 로 연 최근 부스가 있으면 그 QR 화면으로 엽니다(시작 화면의 ‘최근 연 부스’ 와 같은 열쇠 — 이 기기에 이미 있던 것).
+      var ntm = /(?:^\?|&)nt=(\d{1,12})(?=&|$)/.exec(window.location.search || '');
+      if (ntm && !isMock) {
+        nt.open = Number(ntm[1]);
+        var rest = window.location.search.replace(/([?&])nt=\d{1,12}(&|$)/, function (m0, a, b) { return b ? a : ''; }).replace(/^&/, '?');
+        if (!token && !readPin() && readLastQr()) token = readLastQr().token;
+        try { window.history.replaceState(null, '', window.location.pathname + (rest === '?' ? '' : rest) + (token ? '#k=' + encodeURIComponent(token) : window.location.hash)); } catch (e) { /* 무시 */ }
+      }
 
       if (!token) {
         // 주소에 QR 열쇠가 없으면: 이 기기에 PIN 세션이 있으면 그 화면을 이어서 엽니다(PIN 은 다시 묻지 않음).
