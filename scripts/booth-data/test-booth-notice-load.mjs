@@ -9,6 +9,7 @@
      N4 알림을 묻는 동안 23:00 초기화 — 초기화 성공 · 알림 함수는 booth_live 를 잡지 않음
      N5 서버 스위치 끄기 — 다음 묻기부터 enabled false · 보내기 거절
      N6 알림만 다룬 동안 booth_live · booth_live_log 그대로
+     N8 (migration-booth-notice-push.sql 이 있으면) 기기 알림 — 84곳 동시 구독 · 같은 기기 두 부스 경쟁 · 관리자 둘이 같은 알림의 보낼 곳 · 결과를 동시에 · 되돌리기 · 다시 적용
    ⚠️ 버려도 되는 빈 PostgreSQL(14 이상 · pgcrypto)에서만. Supabase 주소 · public.booths 가 있는 DB 는 거절합니다.
    쓰는 법: PGURL=postgres://…/<빈 DB> node scripts/booth-data/test-booth-notice-load.mjs --pg-dir <pg 폴더> --main-dir <claude/operator-notice 작업 폴더> --disposable
    결과: out/rehearsal/booth-notice-load-report.md
@@ -18,6 +19,7 @@ import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { execFileSync } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const OUT = resolve(HERE, 'out');
@@ -53,6 +55,11 @@ await S.query(readFileSync(join(MAIN, 'supabase/migration-booth-notice.sql'), 'u
 // 리허설 모드 추가 SQL(있으면) — 기본 리허설 모드. N1~N4 는 행사 모드로, N7 에서 리허설 모드를 봅니다.
 const HAS_REH = existsSync(join(MAIN, 'supabase/migration-booth-notice-rehearsal.sql'));
 if (HAS_REH) await S.query(readFileSync(join(MAIN, 'supabase/migration-booth-notice-rehearsal.sql'), 'utf8'));
+// 30분 · 기기 알림(Web Push) 추가 SQL(있으면) — 확인 표는 N8 에서 봅니다
+const PUSH_SQL = join(MAIN, 'supabase/migration-booth-notice-push.sql'), PUSH_RB = join(MAIN, 'supabase/rollback-booth-notice-push.sql');
+const HAS_PUSH = existsSync(PUSH_SQL);
+const lastRows = r => (Array.isArray(r) ? r[r.length - 1] : r).rows;
+const pushConf = HAS_PUSH ? lastRows(await S.query(readFileSync(PUSH_SQL, 'utf8'))) : null;
 const setMode = r => HAS_REH ? S.query('update public.booth_notice_config set rehearsal_only = $1 where id = 1', [r]) : null;
 const siteRev = (() => { try { return execFileSync('git', ['-C', MAIN, 'rev-parse', '--short', 'HEAD'], { encoding: 'utf8' }).trim(); } catch { return '?'; } })();
 await S.query("select set_config('test.uid', $1, false)", [ADMIN]);
@@ -187,6 +194,63 @@ if (HAS_REH) {
   t(`N7 리허설 모드(설치 기본 ${modeAtInstall}) — 관리자 둘 동시 ${ROUNDS}번: 일괄 발송 모두 거절(55000 rehearsal_only) · 부스 1곳은 모두 그 1곳에 · 알림마다 대상 최대 1곳 · 24곳 동시 각 1곳 · 대기 값 그대로`,
     modeAtInstall === true && bulkOk === 0 && bulkWrongErr === 0 && oneBad === 0 && maxPer === 1 && per.every(r => r.kind === 'booth') && parBad === 0 && maxPer2.n === 24 && maxPer2.m === 1 &&
     JSON.stringify(fp7) === JSON.stringify(await fp()), JSON.stringify(metrics.N7));
+  await setMode(false);
+}
+
+// ══ N8 기기 알림(Web Push) — 실제 연결 여럿으로 구독 · 보낼 곳 · 결과가 겹칠 때 ═══════════════
+if (HAS_PUSH) {
+  const fp8 = await fp();
+  await setMode(true);
+  await S.query('delete from public.booth_notice');
+  await S.query('update public.booth_notice_config set push_enabled = true where id = 1');
+  const b64 = n => randomBytes(n).toString('base64url');
+  const sub = tag => ({ endpoint: 'https://fcm.googleapis.com/fcm/send/' + tag + '-' + b64(9), keys: { p256dh: b64(65), auth: b64(16) } });
+  const opPush = (c, id, action, s) => c.query('select public.booth_ctrl_push($1, $2, $3::jsonb) r', [TOK[id], action, JSON.stringify(s)]).then(r => r.rows[0].r);
+  // ① 84곳이 같은 순간 [알림 받기](앞 24곳은 기기 2대)
+  const subsBy = {};
+  R.forEach((id, i) => { subsBy[id] = [sub('b' + i)].concat(i < 24 ? [sub('c' + i)] : []); });
+  const jobs = R.flatMap((id, i) => subsBy[id].map(s => ({ id, s })));
+  const sr = await Promise.all(jobs.map((j, k) => settle(opPush(OPC[k % OPC.length], j.id, 'subscribe', j.s))));
+  const subRows = (await S.query('select booth_id::text b, count(*)::int n from public.booth_push_sub group by 1')).rows;
+  // ② 같은 기기가 두 부스로 같은 순간 [알림 받기](부스 옮김 경쟁) — 한 줄만 남음
+  const mv = sub('move');
+  const mr = await Promise.all([settle(opPush(OPC[0], R[30], 'subscribe', mv)), settle(opPush(OPC[1], R[31], 'subscribe', mv))]);
+  const mvRows = (await S.query('select booth_id::text b from public.booth_push_sub where endpoint = $1', [mv.endpoint])).rows;
+  // ③ 부스 1곳 알림 24개(동시) → 관리자 둘이 같은 알림의 보낼 곳을 같은 순간 묻고 · 결과(201)도 같은 순간 적음
+  const nots = await Promise.all(R.slice(0, 24).map((id, k) => send(k % 2 ? A : B, 'booth', '', [id])));
+  const ids = nots.map(r => r[0].notice_id);
+  const tg = async (c, nid) => (await c.query('select * from public.admin_notice_push_targets($1)', [nid])).rows;
+  const res = (c, nid, rows) => c.query('select public.admin_notice_push_result($1, $2::jsonb) r', [nid, JSON.stringify(rows.map(x => ({ sub_id: x.sub_id, booth_id: x.booth_id, status: 201 })))]);
+  let wrongBooth = 0, sizes = [], errs8 = 0;
+  await Promise.all(ids.map(async (nid, k) => {
+    const [ta, tb] = await Promise.all([tg(A, nid), tg(B, nid)]);
+    sizes.push(ta.length);
+    if (ta.some(x => x.booth_id !== R[k]) || tb.some(x => x.booth_id !== R[k])) wrongBooth++;
+    const rr = await Promise.all([settle(res(A, nid, ta)), settle(res(B, nid, tb))]);
+    errs8 += rr.filter(x => !x.ok).length;
+  }));
+  const after = await Promise.all(ids.map(nid => tg(A, nid)));
+  const sentRows = (await S.query('select count(*)::int n, count(push_sent_at)::int s from public.booth_notice_target where notice_id = any($1::bigint[])', [ids])).rows[0];
+  // ④ QR 을 다시 발급한 부스는 빠짐 · 확인한 부스도 빠짐
+  const n2 = await send(A, 'booth', '', [R[40]]);
+  const before40 = (await tg(A, n2[0].notice_id)).length;
+  await S.query("update public.booth_access set token = $2 where booth_id = $1", [R[40], b64(18)]);
+  const after40 = (await tg(A, n2[0].notice_id)).length;
+  await S.query("update public.booth_access set token = $2 where booth_id = $1", [R[40], TOK[R[40]]]);
+  // ⑤ 되돌리기 → 다시 적용(실제 PostgreSQL 에서 두 SQL 이 끝까지 돎)
+  const rb = await settle(S.query(readFileSync(PUSH_RB, 'utf8')));
+  const rbConf = rb.ok ? lastRows(rb.v) : [];
+  const re = await settle(S.query(readFileSync(PUSH_SQL, 'utf8')));
+  const reConf = re.ok ? lastRows(re.v) : [];
+  metrics.N8 = { installConf: pushConf.filter(r => r['맞음']).length + '/' + pushConf.length, subscribeErrors: sr.filter(x => !x.ok).length, subRows: subRows.length,
+    move: { ok: mr.map(x => x.ok), rows: mvRows.length }, notices: ids.length, targetSizes: [Math.min(...sizes), Math.max(...sizes)], wrongBooth, resultErrors: errs8,
+    targetsAfterResult: after.reduce((a, x) => a + x.length, 0), pushSent: sentRows, reissue: [before40, after40],
+    rollback: rbConf.filter(r => r['맞음']).length + '/' + rbConf.length, reapply: reConf.filter(r => r['맞음']).length + '/' + reConf.length };
+  t('N8 기기 알림 — 설치 확인 표 모두 맞음 · 84곳(108대) 동시 구독 오류 0 · 같은 기기 두 부스 동시 등록 → 한 줄 · 알림 24개를 관리자 둘이 동시에 보낼 곳 · 결과: 다른 부스 기기 0 · 결과 뒤 보낼 곳 0(한 번만) · QR 재발급 부스 빠짐 · 되돌리기 · 다시 적용 확인 표 모두 맞음 · 대기 값 그대로',
+    pushConf.every(r => r['맞음']) && sr.every(x => x.ok && x.v.ok) && subRows.length === 84 && mr.every(x => x.ok) && mvRows.length === 1 &&
+    wrongBooth === 0 && errs8 === 0 && Math.min(...sizes) >= 1 && after.every(x => x.length === 0) && sentRows.n === 24 && sentRows.s === 24 &&
+    before40 === 1 && after40 === 0 && rbConf.length && rbConf.every(r => r['맞음']) && reConf.length && reConf.every(r => r['맞음']) &&
+    JSON.stringify(fp8) === JSON.stringify(await fp()), JSON.stringify(metrics.N8));
   await setMode(false);
 }
 
