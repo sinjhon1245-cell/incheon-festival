@@ -22,7 +22,10 @@ import { supabaseUrl, supabaseAnonKey } from '../lib/public-config.mjs';
 
 const REST = supabaseUrl.replace(/\/+$/, '') + '/rest/v1/';
 const ADMIN_ORIGIN = 'https://sinjhon1245-cell.github.io';   // 관리자 화면(GitHub Pages)에서만 부름
-const TIMEOUT_MS = 6000;
+const TIMEOUT_MS = 4000;          // 푸시 서비스 요청 하나
+const RPC_TIMEOUT_MS = 2500;      // DB 요청 하나(보낼 곳 · 결과)
+const RETRY_GAP_MS = 800;         // 잠깐 실패(연결 오류 · 429 · 5xx)면 이만큼 쉬고 한 번만 다시
+const BUDGET_MS = 7000;           // 요청을 받은 때부터 — 다시 보내기는 이 안에 끝날 때만(함수 제한 10초 · DB 결과 적기 몫 남김)
 const MAX_TTL = 30 * 60;
 // 브라우저 푸시 서비스 주소만(DB 의 booth_push_op 와 같은 목록)
 const PUSH_HOST = /^https:\/\/(fcm\.googleapis\.com|android\.googleapis\.com|updates\.push\.services\.mozilla\.com|[a-z0-9-]+\.notify\.windows\.com|web\.push\.apple\.com|[a-z0-9.-]+\.push\.samsungosp\.com)\//;
@@ -64,11 +67,10 @@ export function encrypt(payload, p256dh, auth, salt = randomBytes(16), ecdh = nu
   return Buffer.concat([head, as, body]);
 }
 
-async function sendOne(t, keys, noticeId) {
-  if (!PUSH_HOST.test(String(t.endpoint || ''))) return 400;
+async function pushOnce(t, keys, noticeId) {
   const exp = Date.parse(t.expires_at);
   const ttl = Math.max(0, Math.min(MAX_TTL, Math.floor((exp - Date.now()) / 1000)));
-  if (!ttl) return 0;
+  if (!ttl) return -1;   // 그 사이 만료 — 보내지 않음
   const body = encrypt(JSON.stringify({ n: noticeId, e: exp }), t.p256dh, t.auth);
   try {
     const res = await fetch(t.endpoint, {
@@ -80,12 +82,24 @@ async function sendOne(t, keys, noticeId) {
     return res.status;
   } catch { return 0; }
 }
+const transient = (s) => s === 0 || s === 429 || s >= 500;
+// 연결 오류 · 429 · 5xx 는 한 번만 다시(시간 안일 때). 같은 Topic 이라 기기에는 하나만 남습니다.
+// 그래도 실패하면 DB 에 push_sent_at 없이 남아, 관리자 [기기 알림 다시 보내기] 로 그 기기만 다시 보냅니다.
+async function sendOne(t, keys, noticeId, startedAt) {
+  if (!PUSH_HOST.test(String(t.endpoint || ''))) return 400;
+  let s = await pushOnce(t, keys, noticeId);
+  if (transient(s) && Date.now() - startedAt + RETRY_GAP_MS + TIMEOUT_MS <= BUDGET_MS) {
+    await new Promise((r) => setTimeout(r, RETRY_GAP_MS));
+    s = await pushOnce(t, keys, noticeId);
+  }
+  return s < 0 ? 0 : s;
+}
 
 async function rpc(name, args, bearer) {
   const res = await fetch(REST + 'rpc/' + name, {
     method: 'POST',
     headers: { apikey: supabaseAnonKey, Authorization: 'Bearer ' + bearer, 'Content-Type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify(args), signal: AbortSignal.timeout(TIMEOUT_MS)
+    body: JSON.stringify(args), signal: AbortSignal.timeout(RPC_TIMEOUT_MS)
   });
   const text = await res.text();
   let data = null;
@@ -112,6 +126,7 @@ export default {
       return new Response(null, { status: 204, headers: { ...cors(request), 'Access-Control-Allow-Methods': 'POST', 'Access-Control-Allow-Headers': 'authorization, content-type', 'Access-Control-Max-Age': '600' } });
     }
     if (request.method !== 'POST') return reply(request, 405, { error: 'method' }, { Allow: 'GET, POST, OPTIONS' });
+    const startedAt = Date.now();
     const origin = request.headers.get('origin');
     if (origin && origin !== ADMIN_ORIGIN) return reply(request, 403, { error: 'origin' });
     if (!keys) return reply(request, 503, { error: 'off' });
@@ -124,15 +139,19 @@ export default {
     let targets;
     try { targets = await rpc('admin_notice_push_targets', { p_notice_id: id }, m[1]); }
     catch (e) { return reply(request, e.status === 401 || e.status === 403 ? 403 : 502, { error: 'targets', code: e.code || '' }); }
-    if (!Array.isArray(targets) || !targets.length) return reply(request, 200, { ok: true, booths: 0, sent: 0, gone: 0, failed: 0 });
+    if (!Array.isArray(targets) || !targets.length) return reply(request, 200, { ok: true, booths: 0, failedBooths: 0, goneBooths: 0, recorded: true, sent: 0, gone: 0, failed: 0 });
 
-    const statuses = await Promise.all(targets.slice(0, 500).map((t) => sendOne(t, keys, id)));
+    const statuses = await Promise.all(targets.slice(0, 500).map((t) => sendOne(t, keys, id, startedAt)));
     const results = targets.slice(0, 500).map((t, i) => ({ sub_id: t.sub_id, booth_id: t.booth_id, status: statuses[i] }));
     let r = null;
     try { r = await rpc('admin_notice_push_result', { p_notice_id: id, p_results: results }, m[1]); }
     catch (e) { console.error('[notice-push] result', e.status || '', e.code || ''); }
-    const booths = new Set(results.filter((x) => x.status >= 200 && x.status < 300).map((x) => x.booth_id)).size;
-    console.log('[notice-push]', { notice: id, subs: results.length, booths });
-    return reply(request, 200, { ok: true, booths, sent: r ? r.sent : null, gone: r ? r.gone : null, failed: r ? r.failed : null });
+    // 부스 단위: 한 대라도 받았으면 보냄 · 받은 기기 없이 실패만 있으면 실패(다시 보내기 대상) · 410/404 만이면 끊김(다시 [알림 받기] 필요)
+    const ok = new Set(results.filter((x) => x.status >= 200 && x.status < 300).map((x) => x.booth_id));
+    const bad = new Set(results.filter((x) => !ok.has(x.booth_id) && x.status !== 404 && x.status !== 410).map((x) => x.booth_id));
+    const gone = new Set(results.filter((x) => !ok.has(x.booth_id) && !bad.has(x.booth_id)).map((x) => x.booth_id));
+    console.log('[notice-push]', { notice: id, subs: results.length, booths: ok.size, failed: bad.size, gone: gone.size, recorded: !!r });
+    return reply(request, 200, { ok: true, booths: ok.size, failedBooths: bad.size, goneBooths: gone.size, recorded: !!r,
+      sent: r ? r.sent : null, gone: r ? r.gone : null, failed: r ? r.failed : null });
   }
 };
