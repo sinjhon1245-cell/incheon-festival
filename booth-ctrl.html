@@ -941,11 +941,15 @@
         $('pin-s0-acts').hidden = false;
       });
     }
+    function schoolGradeZone(key) {
+      return key === '초등' || key === '중등' || key === '고등' || key === '특수';
+    }
     function renderZones() {
       $('pin-zones').innerHTML = pin.zones.map(function (z) {
         var n = boothsIn(z.key).length;
+        var badge = schoolGradeZone(z.key) ? String(z.key).charAt(0) : z.key;
         return '<button type="button" class="pick" data-zone="' + esc(z.key) + '">' +
-          '<span class="pick__k">' + esc(z.key) + '</span>' +
+          '<span class="pick__k">' + esc(badge) + '</span>' +
           '<span class="pick__t">' + esc(z.label || z.key + '구역') + '</span>' +
           '<span class="pick__s">부스 ' + n + '곳</span></button>';
       }).join('');
@@ -967,7 +971,9 @@
     function pickZone(key) {
       pin.zone = key;
       pin.booth = null;
-      $('pin-zone-name').textContent = zoneNameOf(key) + ' · ' + key + ' 구역';
+      $('pin-zone-name').textContent = schoolGradeZone(key)
+        ? zoneNameOf(key) + ' · 부스 ' + boothsIn(key).length + '곳'
+        : zoneNameOf(key) + ' · ' + key + ' 구역';
       $('pin-find').hidden = boothsIn(key).length < PIN_FIND_MIN;
       $('pin-q').value = '';
       renderBoothPicks();
