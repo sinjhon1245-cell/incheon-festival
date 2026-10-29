@@ -279,7 +279,7 @@
     function liveOn() {
       return !!S.info && S.info.phase === 'open' && S.liveReady !== false;
     }
-        function effView() { return liveOn() ? S.ui.view : 'list'; }
+    function effView() { return liveOn() ? S.ui.view : 'list'; }
     function effSort() { return liveOn() ? S.ui.sort : 'code'; }
 
     /* ── 받은 것을 화면용으로 ─────────────────────────────────── */
