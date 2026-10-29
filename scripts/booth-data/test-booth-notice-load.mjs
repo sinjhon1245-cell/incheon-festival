@@ -13,7 +13,7 @@
    쓰는 법: PGURL=postgres://…/<빈 DB> node scripts/booth-data/test-booth-notice-load.mjs --pg-dir <pg 폴더> --main-dir <claude/operator-notice 작업 폴더> --disposable
    결과: out/rehearsal/booth-notice-load-report.md
    =================================================================== */
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
@@ -50,12 +50,18 @@ for (const [i, id] of R.entries()) await S.query("insert into public.booths (id,
   [id, 'R' + (1 + Math.floor(i / 21)), (i % 21) + 1, '시험 부스 ' + (i + 1), i + 1]);
 await S.query(REH);
 await S.query(readFileSync(join(MAIN, 'supabase/migration-booth-notice.sql'), 'utf8'));
+// 리허설 모드 추가 SQL(있으면) — 기본 리허설 모드. N1~N4 는 행사 모드로, N7 에서 리허설 모드를 봅니다.
+const HAS_REH = existsSync(join(MAIN, 'supabase/migration-booth-notice-rehearsal.sql'));
+if (HAS_REH) await S.query(readFileSync(join(MAIN, 'supabase/migration-booth-notice-rehearsal.sql'), 'utf8'));
+const setMode = r => HAS_REH ? S.query('update public.booth_notice_config set rehearsal_only = $1 where id = 1', [r]) : null;
 const siteRev = (() => { try { return execFileSync('git', ['-C', MAIN, 'rev-parse', '--short', 'HEAD'], { encoding: 'utf8' }).trim(); } catch { return '?'; } })();
 await S.query("select set_config('test.uid', $1, false)", [ADMIN]);
 await S.query('select count(*) from public.admin_issue_booth_tokens(null)');
 const TOK = Object.fromEntries((await S.query('select booth_id::text b, token from public.admin_booth_access()')).rows.map(r => [r.b, r.token]));
 await S.query("select set_config('test.uid', '', false)");
 await S.query('update public.booth_notice_config set enabled = true where id = 1');
+const modeAtInstall = HAS_REH ? (await S.query('select rehearsal_only from public.booth_notice_config where id = 1')).rows[0].rehearsal_only : null;
+await setMode(false);
 t(`준비 — PostgreSQL ${pgVersion} · 리허설 84곳 · QR 열쇠 84 · 운영자 알림 SQL(${siteRev}) · 켜짐`, R.length === 84 && R.every(id => TOK[id]), '');
 
 async function refill() {
@@ -156,6 +162,33 @@ await polling;
 const left = +(await S.query('select count(*) n from public.booth_live where booth_id = any($1::uuid[])', [R])).rows[0].n;
 metrics.N4 = { resetOk: rr.ok, deleted: rr.ok ? rr.v.rows[0].n : rr.code, left };
 t('N4 알림을 묻고 확인하는 사이 23:00 초기화 — 초기화 성공 · 84곳 지움 · 남은 값 0', rr.ok && rr.v.rows[0].n === 84 && left === 0, JSON.stringify(metrics.N4));
+
+// ══ N7 리허설 모드(부스 1곳만) — 관리자 여럿이 동시에 ═══════════════════════
+if (HAS_REH) {
+  await setMode(true);
+  await S.query('delete from public.booth_notice');
+  const fp7 = await fp();
+  // 관리자 둘이 같은 순간: 한쪽은 일괄(확인 필요 · 전체 공개), 다른 쪽은 부스 1곳 — ROUNDS 번, 매번 다른 부스
+  let bulkOk = 0, bulkWrongErr = 0, oneBad = 0, otherBooth = 0;
+  for (let i = 0; i < ROUNDS; i++) {
+    const one = R[(i * 7) % R.length];
+    const [ra, rb] = await Promise.all([settle(send(A, i % 2 ? 'all' : 'stale', i % 2 ? '전체' : '')), settle(send(B, 'booth', '[리허설] 동시 시험', [one]))]);
+    if (ra.ok) bulkOk++; else if (!(ra.code === '55000' && ra.hint === 'rehearsal_only')) bulkWrongErr++;
+    if (!rb.ok || rb.v.length !== 1 || rb.v[0].booth_id !== one || rb.v[0].status !== 'queued') oneBad++;
+  }
+  const per = (await S.query('select n.kind, count(distinct t.booth_id)::int b, count(*)::int t from public.booth_notice n join public.booth_notice_target t on t.notice_id = n.id group by 1')).rows;
+  const maxPer = (await S.query('select coalesce(max(c), 0)::int m from (select count(*) c from public.booth_notice_target group by notice_id) x')).rows[0].m;
+  // 서로 다른 부스 1곳씩 24곳 동시(관리자 연결 둘을 번갈아)
+  await S.query('delete from public.booth_notice');
+  const par = await Promise.all(R.slice(0, 24).map((id, k) => settle(send(k % 2 ? A : B, 'booth', '[리허설] 여러 부스', [id]))));
+  const parBad = par.filter((x, k) => !x.ok || x.v.length !== 1 || x.v[0].booth_id !== R[k] || x.v[0].status !== 'queued').length;
+  const maxPer2 = (await S.query('select coalesce(max(c), 0)::int m, count(*)::int n from (select count(*) c from public.booth_notice_target group by notice_id) x')).rows[0];
+  metrics.N7 = { rounds: ROUNDS, modeAtInstall, bulkAccepted: bulkOk, bulkOtherError: bulkWrongErr, singleBad: oneBad, kinds: per, maxTargetsPerNotice: maxPer, parallel24: { bad: parBad, notices: maxPer2.n, maxTargetsPerNotice: maxPer2.m } };
+  t(`N7 리허설 모드(설치 기본 ${modeAtInstall}) — 관리자 둘 동시 ${ROUNDS}번: 일괄 발송 모두 거절(55000 rehearsal_only) · 부스 1곳은 모두 그 1곳에 · 알림마다 대상 최대 1곳 · 24곳 동시 각 1곳 · 대기 값 그대로`,
+    modeAtInstall === true && bulkOk === 0 && bulkWrongErr === 0 && oneBad === 0 && maxPer === 1 && per.every(r => r.kind === 'booth') && parBad === 0 && maxPer2.n === 24 && maxPer2.m === 1 &&
+    JSON.stringify(fp7) === JSON.stringify(await fp()), JSON.stringify(metrics.N7));
+  await setMode(false);
+}
 
 // ══ N5 스위치 끄기 ════════════════════════════════════════════════════
 await S.query('update public.booth_notice_config set enabled = false where id = 1');

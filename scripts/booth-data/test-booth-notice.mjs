@@ -41,6 +41,8 @@ const idOf = c => { const p = plan.find(x => x['표시코드'] === c); if (!p) t
 const codeOf = id => (plan.find(x => x['부스ID'] === id) || {})['표시코드'] || id;
 const MIG = readFileSync(join(MAIN, 'supabase/migration-booth-notice.sql'), 'utf8');
 const RB = readFileSync(join(MAIN, 'supabase/rollback-booth-notice.sql'), 'utf8');
+const MIG2 = readFileSync(join(MAIN, 'supabase/migration-booth-notice-rehearsal.sql'), 'utf8');
+const RB2 = readFileSync(join(MAIN, 'supabase/rollback-booth-notice-rehearsal.sql'), 'utf8');
 const ADMIN2 = '00000000-0000-4000-8000-00000000a002';
 const STAFF = '00000000-0000-4000-8000-00000000a0aa';
 const COMMON = '123456';   // 복제 DB 의 리허설 공통 PIN(서버 함수에 이미 있는 값) — 출력하지 않음
@@ -69,6 +71,7 @@ const send = (uid, kind, zone, ids, body) => as(uid, 'select * from public.admin
 const status = (uid = ADMIN) => as(uid, 'select * from public.admin_booth_notice_status(12)', [], 'authenticated');
 const ctrl = (tok, action, id, method) => as(null, 'select public.booth_ctrl_notice($1, $2, $3) r', [tok, action, id || null], 'anon', method).then(x => x.ok ? Object.assign(x, { r: x.rows[0].r }) : x);
 const sessN = (s, action, id) => as(null, 'select public.booth_session_notice($1, $2, $3) r', [s, action, id || null], 'anon').then(x => x.ok ? Object.assign(x, { r: x.rows[0].r }) : x);
+const setMode = r => db.query('update public.booth_notice_config set rehearsal_only = $1 where id = 1', [r]);
 const setOn = on => db.query('update public.booth_notice_config set enabled = $1, updated_at = now() where id = 1', [on]);
 const liveFp = async () => (await q1(`select md5(coalesce(string_agg(row(l.*)::text, ',' order by l.booth_id), '')) a,
   (select md5(coalesce(string_agg(row(g.*)::text, ',' order by g.id), '')) from public.booth_live_log g) b from public.booth_live l`));
@@ -76,7 +79,7 @@ const sameFp = (x, y) => x.a === y.a && x.b === y.b;
 const fnFp = async () => (await q1(`select md5(string_agg(n.nspname || '.' || p.proname || md5(pg_get_functiondef(p.oid)), ',' order by n.nspname, p.proname, p.oid)) h, count(*) n
   from pg_proc p join pg_namespace n on n.oid = p.pronamespace
   where n.nspname in ('public', 'private', 'auth') and p.prokind = 'f'
-    and p.proname not in ('booth_ctrl_notice', 'booth_session_notice', 'admin_booth_notice_enabled', 'admin_send_booth_notice', 'admin_booth_notice_status', 'booth_notice_op', 'booth_notice_on')`));
+    and p.proname not in ('booth_ctrl_notice', 'booth_session_notice', 'admin_booth_notice_enabled', 'admin_send_booth_notice', 'admin_booth_notice_status', 'booth_notice_op', 'booth_notice_on', 'admin_booth_notice_mode', 'booth_notice_rehearsal_only')`));
 async function setLive(code, cong, w, ago) {
   await db.query(`insert into public.booth_live (booth_id, congestion, wait_minutes, updated_at) values ($1, $2, $3, date_trunc('milliseconds', now() - make_interval(mins => $4)))
     on conflict (booth_id) do update set congestion = excluded.congestion, wait_minutes = excluded.wait_minutes, updated_at = excluded.updated_at`, [idOf(code), cong, w, ago]);
@@ -95,6 +98,13 @@ const conf = await qa(MIG.slice(MIG.lastIndexOf('select v."항목"'), MIG.indexO
 t('S1 적용 SQL 두 번 실행 — 둘 다 성공', m1.ok && m2.ok, (m1.error || '') + ' ' + (m2.error || ''));
 t(`S2 확인 표 ${conf.length}줄 모두 기대 = 실제(기본 꺼짐 포함)`, conf.length === 11 && conf.every(r => r['맞음'] === true), JSON.stringify(conf.filter(r => !r['맞음'])));
 t('S3 기존 함수 정의 그대로 · booth_live · booth_live_log 그대로', (await fnFp()).h === fn0.h && sameFp(live0, await liveFp()), '');
+// 리허설 모드 추가 SQL(Production 에는 처음 설치 위에 따로 적용) — 기본은 리허설 모드. 아래 기존 시험은 행사 모드로 돌리고, M 에서 리허설 모드를 봅니다.
+const mg1 = await R.run(MIG2), mg2 = await R.run(MIG2);
+const conf2 = await qa(MIG2.slice(MIG2.lastIndexOf('select v."항목"')));
+t('S4 리허설 모드 SQL 두 번 — 둘 다 성공 · 확인 표 모두 맞음 · 기본 리허설 모드(rehearsal_only true) · 기존 함수 · 대기 값 그대로',
+  mg1.ok && mg2.ok && conf2.length === 7 && conf2.every(r => r['맞음'] === true) && (await q1('select rehearsal_only from public.booth_notice_config where id = 1')).rehearsal_only === true &&
+  (await fnFp()).h === fn0.h && sameFp(live0, await liveFp()), JSON.stringify({ e: (mg1.error || '') + (mg2.error || ''), bad: conf2.filter(r => !r['맞음']) }));
+await setMode(false);
 
 // ══ A 권한 ══════════════════════════════════════════════════════════════
 section = 'A 권한';
@@ -348,8 +358,8 @@ t(`F13 미리보기 뒤 ${mPick[0]} 이 입력 → 서버가 뺌: 결과에 ‘�
   new RegExp('지금 대상 아님\\(그 사이 상태가 바뀌어 서버가 뺌\\) 1곳 ' + mPick[0]).test(r13) && new RegExp('보냄 ' + (mPick.length - 1) + '곳').test(r13), r13.slice(0, 300));
 await db.query("update public.booth_notice set expires_at = now() - interval '1 second' where kind <> 'stale'");   // 아래 운영자 화면 시험이 ‘확인 필요’ 알림을 맨 위에 보게
 click(W, D.querySelector('[data-notice="close"]')); await wait(100);
-t('F14 화면이 부른 함수 — 원래 읽기 + 알림 셋(켜짐 · 상태 · 보내기)뿐 · 보내기는 [보내기] 누른 3번뿐 · 오류 없음',
-  [...new Set(P.calls.map(c => c.name))].every(n => ['admin_booth_credentials', 'admin_rehearsal_status', 'admin_booth_live_checks', 'admin_booth_notice_enabled', 'admin_booth_notice_status', 'admin_send_booth_notice'].includes(n)) &&
+t('F14 화면이 부른 함수 — 원래 읽기 + 알림 넷(켜짐 · 상태 · 모드 · 보내기)뿐 · 보내기는 [보내기] 누른 3번뿐 · 오류 없음',
+  [...new Set(P.calls.map(c => c.name))].every(n => ['admin_booth_credentials', 'admin_rehearsal_status', 'admin_booth_live_checks', 'admin_booth_notice_enabled', 'admin_booth_notice_status', 'admin_booth_notice_mode', 'admin_send_booth_notice'].includes(n)) &&
   sends().length === 3 && !P.errors.length, [...new Set(P.calls.map(c => c.name))].join() + P.errors.join('|'));
 const sentNotice = +(await q1("select max(id) n from public.booth_notice where kind = 'stale'")).n;
 
@@ -502,6 +512,86 @@ t('H1 전체 흐름 — 관리자가 화면에서 보낸 ‘확인 필요’ 3�
   !!h1 && /대기 1/.test(text(h1)) && /화면에 표시됨 1/.test(text(h1)) && /운영자 확인 1/.test(text(h1)) &&
   h1d.includes('대기 R1-07') && h1d.includes('화면에 표시됨 R1-01') && h1d.includes('운영자 확인 R1-02'), JSON.stringify({ h: h1 && text(h1).slice(0, 160), h1d }));
 click(W, D.querySelector('[data-notice="close"]')); await wait(100);
+// ══ M 리허설 모드(부스 1곳만) ══════════════════════════════════════════════
+section = 'M 리허설 모드';
+const fpM = await liveFp();
+await setMode(true);
+const nN = async () => +(await q1('select count(*) n from public.booth_notice')).n;
+const n0M = await nN();
+const rm1 = [await send(ADMIN, 'stale', null, null, null), await send(ADMIN, 'missing', null, null, null), await send(ADMIN, 'zone', 'R2', null, '구역 안내'),
+  await send(ADMIN, 'all', null, null, '전체 안내'), await send(ADMIN, 'all', null, [idOf('R2-19')], '전체 공개 + 1곳')];
+t('M1 리허설 모드 — 확인 필요 · 미입력 · 구역 · 전체 공개(1곳만 골라도) 직접 호출 모두 거절(55000 rehearsal_only) · 기록 0',
+  rm1.every(x => !x.ok && x.code === '55000' && x.hint === 'rehearsal_only') && await nN() === n0M, JSON.stringify(rm1.map(x => x.code + ':' + x.hint)));
+const rm2 = [await send(ADMIN, 'booth', null, null, '없음'), await send(ADMIN, 'booth', null, [idOf('R2-19'), idOf('R2-20')], '두 곳'), await send(ADMIN, 'booth', null, [null], 'null')];
+await db.query('update public.booths set is_published = false where id = $1', [idOf('R4-21')]);
+const rm2h = await send(ADMIN, 'booth', null, [idOf('R4-21')], '비공개 부스');
+await db.query('update public.booths set is_published = true where id = $1', [idOf('R4-21')]);
+const rm2x = await send(ADMIN, 'booth', null, ['00000000-0000-4000-8000-0000000000ff'], '없는 부스');
+t('M2 잘못된 부스 — 없음 · 2곳 · null 은 22023, 비공개 부스 · 없는 부스는 skipped:not_target 로 기록 0',
+  rm2.every(x => !x.ok && x.code === '22023') && rm2h.ok && rm2h.rows.length === 1 && rm2h.rows[0].status === 'skipped:not_target' &&
+  rm2x.ok && rm2x.rows.every(r => r.status === 'skipped:not_target') && await nN() === n0M, JSON.stringify({ rm2: rm2.map(x => x.code), h: rm2h.rows, x: rm2x.rows }));
+const rm3 = await send(ADMIN, 'booth', null, [idOf('R2-19')], '[리허설] 운영본부 알림 시험');
+const rm3t = rm3.ok ? await qa('select booth_code from public.booth_notice_target where notice_id = $1', [rm3.rows[0].notice_id]) : [];
+const rm3n = rm3.ok ? await q1('select kind from public.booth_notice where id = $1', [rm3.rows[0].notice_id]) : {};
+t('M3 리허설 모드 부스 1곳 — 성공 · 실제 대상 정확히 1곳(R2-19) · 종류 booth', rm3.ok && rm3.rows.length === 1 && rm3.rows[0].status === 'queued' &&
+  rm3t.map(r => r.booth_code).join() === 'R2-19' && rm3n.kind === 'booth', JSON.stringify({ rm3: rm3.rows || rm3, rm3t }));
+const rm4 = await send(ADMIN2, 'booth', null, [idOf('R2-19')], '다시');
+t('M4 10분 중복 방지 그대로 — 같은 부스 1곳을 다른 관리자가 바로 → skipped:recent · 기록 안 늘어남', rm4.ok && rm4.rows[0].status === 'skipped:recent' && await nN() === n0M + 1, JSON.stringify(rm4.rows));
+const rm5 = [await send(STAFF, 'booth', null, [idOf('R2-20')], 'x'), await as(null, "select * from public.admin_send_booth_notice('booth', null, $1::uuid[], 'x')", [[idOf('R2-20')]], 'anon'),
+  await as(null, 'select public.admin_booth_notice_mode() m', [], 'anon'), await as(STAFF, 'select public.admin_booth_notice_mode() m', [], 'authenticated')];
+const rm5m = await as(ADMIN, 'select public.admin_booth_notice_mode() m', [], 'authenticated');
+t('M5 권한 그대로 — 관리자 아님 · anon 의 보내기 · 모드 읽기 모두 42501 · 관리자는 모드 rehearsal 를 읽음', rm5.every(x => !x.ok && x.code === '42501') && rm5m.ok && rm5m.rows[0].m === 'rehearsal',
+  JSON.stringify({ rm5: rm5.map(x => x.code), rm5m: rm5m.rows || rm5m }));
+// 화면 — 리허설 모드 표시 · 다른 종류 잠김 · 부스 1곳 자동 · 미리보기 · 마지막 확인에 부스번호 · 결과 1곳 확인
+click(W, D.querySelector('[data-notice="open"]'));
+await until(() => /리허설 모드 · 부스 1곳만 발송 가능/.test(text(box())) && D.querySelector('[data-nkind="booth"]').getAttribute('aria-checked') === 'true', 10000); await wait(200);
+const rm6k = [...D.querySelectorAll('[data-nkind]')].map(b => ({ k: b.getAttribute('data-nkind'), dis: b.disabled, on: b.getAttribute('aria-checked') }));
+click(W, D.querySelector('[data-nkind="missing"]')); await wait(150);
+t('M6 화면 — ‘리허설 모드 · 부스 1곳만 발송 가능’ · 확인 필요 · 미입력 · 구역 · 전체 공개 잠김 · 부스 1곳 자동 선택 · 잠긴 단추를 눌러도 그대로',
+  rm6k.filter(x => x.k !== 'booth').every(x => x.dis) && rm6k.find(x => x.k === 'booth').on === 'true' && !rm6k.find(x => x.k === 'booth').dis &&
+  D.querySelector('[data-nkind="booth"]').getAttribute('aria-checked') === 'true', JSON.stringify(rm6k));
+const bs6 = D.getElementById('nt-booth'); bs6.value = idOf('R2-20'); bs6.dispatchEvent(new W.Event('change', { bubbles: true })); await wait(200);
+await typeBody('[리허설] 화면 시험');
+await act('preview');
+const rm7p = { one: text(who().querySelector('.ntone')), codes: [...who().querySelectorAll('.ntcodes li')].map(li => text(li)) };
+await act('confirm');
+const rm7c = text(who().querySelector('.ntsure'));
+const s7 = D.getElementById('nt-sure'); s7.checked = true; s7.dispatchEvent(new W.Event('change', { bubbles: true })); await wait(120);
+const cb7 = P.calls.length;
+click(W, sendBtn());
+await until(() => /보낸 부스 1곳 확인/.test(text(box())), 10000); await wait(300);
+const s7a = P.calls.slice(cb7).find(c => c.name === 'admin_send_booth_notice');
+const t7 = s7a ? await qa("select t.booth_code from public.booth_notice_target t join public.booth_notice n on n.id = t.notice_id where n.body = '[리허설] 화면 시험'") : [];
+t('M7 화면 — 미리보기에 부스번호 R2-20 을 크게 · ‘이 부스 1곳에만’ · 마지막 확인 체크 글에 R2-20 · 결과 ‘보낸 부스 1곳 확인 — R2-20’ · DB 대상 R2-20 1곳',
+  /R2-20/.test(rm7p.one) && /1곳에만/.test(rm7p.one) && rm7p.codes.join() === 'R2-20' && /부스 R2-20/.test(rm7c) && /1곳과 문구를 확인했습니다/.test(rm7c) &&
+  s7a && s7a.args.p_kind === 'booth' && s7a.args.p_booth_ids.length === 1 && /보낸 부스 1곳 확인 — R2-20/.test(text(box())) && t7.map(r => r.booth_code).join() === 'R2-20',
+  JSON.stringify({ rm7p, rm7c, t7, res: text(D.querySelector('.ntres')).slice(0, 200) }));
+click(W, D.querySelector('[data-notice="close"]')); await wait(100);
+// 행사 모드로 바꾸면 원래 보내기 그대로
+await setMode(false);
+const rm8 = await send(ADMIN, 'zone', 'R3', null, '행사 모드 구역 안내');
+const rm8m = await as(ADMIN, 'select public.admin_booth_notice_mode() m', [], 'authenticated');
+click(W, D.querySelector('[data-notice="open"]'));
+await until(() => /행사 모드/.test(text(box())), 10000); await wait(200);
+const rm8k = [...D.querySelectorAll('[data-nkind]')].map(b => ({ k: b.getAttribute('data-nkind'), dis: b.disabled, on: b.getAttribute('aria-checked') }));
+click(W, D.querySelector('[data-notice="close"]')); await wait(100);
+t('M8 행사 모드(rehearsal_only false)로 바꾸면 — 모드 event · 구역 R3 21곳 보내기 성공 · 화면 다섯 가지 모두 누를 수 있고 처음엔 아무것도 안 고름',
+  rm8m.rows[0].m === 'event' && rm8.ok && rm8.rows.filter(r => r.status === 'queued').length === 21 && rm8k.every(x => !x.dis && x.on === 'false'), JSON.stringify({ rm8k, n: (rm8.rows || []).length }));
+await setMode(true);
+t('M9 리허설 모드 시험 내내 booth_live · booth_live_log 그대로', sameFp(fpM, await liveFp()), '');
+// 리허설 모드 SQL 되돌리기 — 보내기 함수가 처음 정의로 · 모드 함수 없음 · 화면은 좁은 쪽(리허설)으로
+const rbr = await R.run(RB2), rbr2 = await R.run(RB2);
+const rbconf = await qa(RB2.slice(RB2.lastIndexOf('select v."항목"')));
+click(W, D.querySelector('[data-notice="open"]'));
+await until(() => P.calls.filter(c => c.name === 'admin_booth_notice_mode').length > 0 && /리허설 모드/.test(text(box())), 10000); await wait(300);
+const r0k = [...D.querySelectorAll('[data-nkind]')].filter(b => b.getAttribute('data-nkind') !== 'booth').every(b => b.disabled);
+click(W, D.querySelector('[data-notice="close"]')); await wait(100);
+t('M10 리허설 모드 되돌리기 두 번 — 성공 · 확인 표 모두 맞음(보내기 함수 = 처음 설치 지문) · 모드 함수가 없으면 화면은 리허설 모드(부스 1곳만)로 둠',
+  rbr.ok && rbr2.ok && rbconf.length === 3 && rbconf.every(r => r['맞음'] === true) && r0k, JSON.stringify({ rbconf, r0k }));
+const rbm = await R.run(MIG2);
+t('M11 다시 적용 — 성공 · rehearsal_only 값은 그대로 이어 씀(지금 true)', rbm.ok && (await q1('select rehearsal_only from public.booth_notice_config where id = 1')).rehearsal_only === true, '');
+await setMode(false);
+
 // G9 함수 없음(되돌린 뒤) — 한 번 묻고 이 화면에서는 더 묻지 않음
 await R.run(RB);
 C = await openCtrl({ flag: true, hash: '#k=' + tok01 });

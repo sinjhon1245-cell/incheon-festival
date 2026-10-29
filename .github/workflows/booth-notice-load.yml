@@ -16,7 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
-      SITE_REF: claude/operator-notice   # 시험할 운영자 알림 SQL 이 있는 브랜치
+      SITE_REF: claude/notice-rehearsal-mode   # 시험할 운영자 알림 SQL(처음 설치 + 리허설 모드)이 있는 브랜치
     services:
       postgres:
         image: postgres:17
