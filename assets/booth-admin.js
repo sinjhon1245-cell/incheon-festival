@@ -80,7 +80,7 @@
   // sure: 마지막 확인 체크 · sent: 보낸 pick(결과를 견줄 때)
   // mode: 'rehearsal'(부스 1곳만 — 기본 · 모드 함수가 없거나 못 읽어도 이것) · 'event'(모든 종류). 서버(admin_send_booth_notice)도 같은 규칙으로 막습니다.
   var notice = { fn: '', on: null, mode: 'rehearsal', rows: [], open: false, kind: '', zone: '', booth: '', body: '', step: 'compose', pick: null, sure: false,
-    busy: false, res: null, sent: null, err: '' };
+    busy: false, res: null, sent: null, push: null, err: '' };
   var busy = {};
   var stops = [];
   var started = false;
@@ -1114,24 +1114,25 @@
 
   /* ── 운영자 알림 (admin_send_booth_notice · supabase/migration-booth-notice.sql) ──
      관리자가 확인 필요 · 미입력 · 구역 · 전체 공개 · 부스 1곳에 짧은 알림을 보내면, 운영자 화면(QR · PIN)이 열려 있고 보일 때
-     15~20초 안에 위쪽 띠로 뜹니다. 상태는 셋 — 대기(아직 화면에 안 뜸) · 화면에 표시됨 · 운영자 확인(운영자가 누름) — 과
-     만료(대기인 채로 3시간 · 그날 자정)뿐이고 ‘전달 완료’ 라고 쓰지 않습니다. 같은 부스 같은 종류는 10분 안에 서버가 다시 보내지 않습니다.
+     15~20초 안에 알림 카드로 뜹니다. 상태는 셋 — 대기(아직 화면에 안 뜸) · 화면에 표시됨 · 운영자 확인(운영자가 누름) — 과
+     만료(대기인 채로 30분 · 그날 자정)뿐이고 ‘전달 완료’ 라고 쓰지 않습니다. 같은 부스 같은 종류는 10분 안에 서버가 다시 보내지 않습니다.
+     보낸 뒤 Live 사이트의 /api/notice-push 를 불러 [알림 받기] 한 운영자 기기에 시스템 알림(Web Push)도 보냅니다 —
+     보낼 기기는 서버가 정하고(그 알림을 받은 부스 · 유효한 QR · PIN 으로 등록한 기기만), 꺼져 있으면(키 없음 · push_enabled false) 조용히 건너뜁니다.
      알림을 보내거나 확인해도 대기 값(booth_live)은 바뀌지 않습니다.
      보내기는 세 단계 — 쓰기(처음엔 대상 없음) → 미리보기(받을 부스번호 · 수 · 문구를 그 자리에서 고정) → 마지막 확인(체크 뒤 [보내기]).
      미리보기에서 고정한 부스만 보내고 서버가 다시 셉니다. 결과는 고정한 목록과 견줘 서버가 뺀 부스를 따로 보입니다.
      리허설 모드(booth_notice_config.rehearsal_only · 기본)에서는 ‘부스 1곳’ 만 고를 수 있고, 서버도 그 밖의 종류 · 2곳 이상을 거절합니다. */
   var NT_KINDS = [['stale', '확인 필요'], ['missing', '미입력'], ['zone', '구역'], ['all', '전체 공개'], ['booth', '부스 1곳']];
+  // 문구를 비우면 모든 종류가 같은 짧은 문구(서버 admin_send_booth_notice 와 같음). 필요하면 관리자가 직접 씁니다.
   var NT_DEFAULT = {
-    stale: '대기 상태가 30분 넘게 그대로예요. 지금 상태를 다시 눌러 주세요.',
-    missing: '오늘 대기 상태가 아직 없어요. 지금 상태를 눌러 주세요.',
-    zone: '', all: '', booth: ''
+    stale: '다시 확인해 주세요.', missing: '다시 확인해 주세요.', zone: '다시 확인해 주세요.', all: '다시 확인해 주세요.', booth: '다시 확인해 주세요.'
   };
   var NT_STATE = { waiting: '대기', shown: '화면에 표시됨', acked: '운영자 확인', expired: '만료' };
   var NT_WHY = { 'skipped:recent': '10분 안에 같은 알림 받음', 'skipped:not_target': '지금 대상 아님' };
   function noticeBtnHtml() {
     if (DEMO || notice.fn !== 'ok') return '<button class="soon" type="button" disabled title="운영자 알림 DB 함수 적용 뒤 사용 — 적용 뒤에는 [새로 고침]을 누르면 다시 확인합니다">운영자 알림<span>준비 중</span></button>';
     if (!notice.on) return '<button class="soon" type="button" disabled title="운영 담당자가 서버에서 운영자 알림을 켜야 보낼 수 있습니다">운영자 알림<span>꺼짐</span></button>';
-    return '<button class="soon soon--on" type="button" data-notice="open" title="운영자 화면 위쪽 띠로 짧은 알림을 보냅니다(대기 값은 그대로)">운영자 알림</button>';
+    return '<button class="soon soon--on" type="button" data-notice="open" title="운영자 화면에 알림 카드로 짧은 알림을 보냅니다(대기 값은 그대로)">운영자 알림</button>';
   }
   function ntLabel(kind, zone, code) {
     var k = (NT_KINDS.filter(function (x) { return x[0] === kind; })[0] || ['', kind])[1];
@@ -1160,7 +1161,7 @@
     notice.rows.forEach(function (x) { if (x.kind === kind && Date.parse(x.created_at) > cut) m[x.booth_id] = true; });
     return m;
   }
-  // 운영자 화면에 실제로 보일 문구 — 서버와 같게(여러 칸 공백은 한 칸 · 앞뒤 공백 없음 · 비우면 확인 필요 · 미입력만 정해진 문구)
+  // 운영자 화면에 실제로 보일 문구 — 서버와 같게(여러 칸 공백은 한 칸 · 앞뒤 공백 없음 · 비우면 ‘다시 확인해 주세요.’)
   function noticeText() { return notice.body.replace(/\s+/g, ' ').trim() || NT_DEFAULT[notice.kind] || ''; }
   function noticeReady(all) {
     var t = noticeText();
@@ -1202,8 +1203,8 @@
       : '<p class="ntmode ntmode--event" role="note"><b>행사 모드</b> · 확인 필요 · 미입력 · 구역 · 전체 공개도 보낼 수 있습니다. 받을 부스 수를 꼭 확인하세요.</p>';
     return modeLine + '<div class="ntkinds" role="radiogroup" aria-label="받을 부스">' + kinds + '</div>' + zsel + bsel +
       (notice.kind ? '<label class="ntbody"><span class="ntbody__l">문구 <small>(운영자 화면에 그대로 보임 · 120자 안' +
-          (NT_DEFAULT[notice.kind] ? ' · 비우면 정해진 문구' : '') + ')</small></span>' +
-        '<textarea class="input" id="nt-body" rows="2" maxlength="120"' + dis + '>' + esc(notice.body) + '</textarea>' +
+          (NT_DEFAULT[notice.kind] ? ' · 비우면 ‘' + esc(NT_DEFAULT[notice.kind]) + '’' : '') + ')</small></span>' +
+        '<textarea class="input" id="nt-body" rows="2" maxlength="120" placeholder="' + esc(NT_DEFAULT[notice.kind] || '') + '"' + dis + '>' + esc(notice.body) + '</textarea>' +
         '<span class="ntbody__n" id="nt-count">' + notice.body.length + ' / 120</span></label>'
       : '<p class="ntpick">먼저 받을 부스를 고르세요. 처음에는 아무 대상도 골라져 있지 않습니다.</p>');
   }
@@ -1291,6 +1292,7 @@
         (oneOk ? '<p class="ntres__l"><b>보낸 부스 1곳 확인 — ' + esc(sent[0]) + '</b></p>' : '') +
         line('보냄', sent) + line('10분 안에 같은 알림 받음(서버가 뺌)', recent) +
         line('지금 대상 아님(그 사이 상태가 바뀌어 서버가 뺌)', notT) + line('화면 목록에 없던 부스', extra) + line('서버 결과에 없음', miss) +
+        (notice.push ? '<p class="ntres__l">기기 알림 <b>' + (Number(notice.push.booths) || 0) + '곳</b> — [알림 받기] 한 기기에만 갑니다(받음 · 확인과 별개)</p>' : '') +
         '<p class="ntres__n">운영자 화면에 뜨면 ‘화면에 표시됨’, 운영자가 누르면 ‘운영자 확인’ 으로 바뀝니다.</p>' +
       '</div>';
   }
@@ -1324,7 +1326,7 @@
     var key = [notice.mode, notice.kind, notice.zone, notice.booth, notice.step, notice.busy].join(':');
     if (!box._built || box._kind !== key) {
       box.innerHTML = '<div class="bc__head"><h2 class="bc__t" id="nt-title">운영자 알림</h2>' +
-          '<p class="bc__note">운영자 화면(QR · PIN)이 열려 있고 보일 때 15~20초 안에 위쪽 띠로 뜹니다. 상태는 <b>대기 · 화면에 표시됨 · 운영자 확인</b> — ' +
+          '<p class="bc__note">운영자 화면(QR · PIN)이 열려 있고 보일 때 15~20초 안에 알림 카드로 뜹니다(30분 뒤 만료). 상태는 <b>대기 · 화면에 표시됨 · 운영자 확인</b> — ' +
           '화면이 꺼져 있으면 대기로 남고, 알림을 확인해도 대기 값은 바뀌지 않습니다. 같은 부스에 같은 종류는 10분 안에 다시 보내지 않습니다.</p></div>' +
         '<div id="nt-form">' + noticeFormHtml(all) + '</div><div id="nt-who"></div><div id="nt-res"></div><div id="nt-status"></div>';
       box._built = true; box._kind = key;
@@ -1348,7 +1350,7 @@
   function noticeKind(k) {
     if (notice.step !== 'compose' || notice.busy) return;
     if (notice.mode === 'rehearsal' && k !== 'booth') return;
-    if (notice.body === (NT_DEFAULT[notice.kind] || '')) notice.body = NT_DEFAULT[k] || '';
+    if (notice.body === (NT_DEFAULT[notice.kind] || '')) notice.body = '';   // 문구 칸은 비워 두고(자리 글로 기본 문구를 보임) 쓴 문구는 그대로
     notice.kind = k; notice.err = '';
     paint();
   }
@@ -1374,8 +1376,11 @@
     C.rpc('admin_send_booth_notice', { p_kind: p.kind, p_zone: p.zone, p_booth_ids: p.ids, p_body: p.text })
       .then(function (rows) {
         notice.busy = false;
-        notice.res = rows || []; notice.sent = p;
+        notice.res = rows || []; notice.sent = p; notice.push = null;
         noticeReset();
+        var nid = (notice.res.filter(function (x) { return x.status === 'queued' && x.notice_id; })[0] || {}).notice_id;
+        // 기기 알림(Web Push)은 화면 안 알림 다음 일입니다 — 결과를 기다리지 않고 따로 그립니다. 실패 · 꺼짐이면 아무것도 쓰지 않음.
+        if (nid) noticePush(nid).then(function (r) { if (r && r.ok && notice.sent === p) { notice.push = r; paint(); } });
         return loadNotice(false, true);
       }, function (e) {
         notice.busy = false;
@@ -1386,6 +1391,20 @@
         return loadNotice(true, true);
       })
       .then(paint);
+  }
+  // Live 사이트(/api/notice-push)에 이 알림의 기기 알림을 부탁합니다. 관리자 로그인 토큰을 그대로 넘기고(서버가 is_admin 확인),
+  // 보낼 기기는 DB 가 정합니다. 키가 없거나 꺼져 있거나 연결이 안 되면 null(화면 안 알림은 이미 보냄).
+  function noticePush(id) {
+    var base = String((window.FESTIVAL_CONFIG || {}).staffSiteUrl || '').trim();
+    if (DEMO || !/^https:\/\/[^\/]+/.test(base) || !window.fetch) return Promise.resolve(null);
+    return C.session().then(function (s) {
+      if (!s || !s.access_token) return null;
+      return window.fetch(base.replace(/\/+$/, '') + '/api/notice-push', {
+        method: 'POST', mode: 'cors', credentials: 'omit', cache: 'no-store',
+        headers: { Authorization: 'Bearer ' + s.access_token, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ notice_id: id })
+      }).then(function (r) { return r.ok ? r.json() : null; });
+    }).then(null, function () { return null; });
   }
   function noticeAct(k) {
     if (k === 'open') { noticeOpen(); return; }

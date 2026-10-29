@@ -62,7 +62,7 @@ as $$ select coalesce((select c.enabled and c.push_enabled from public.booth_not
 revoke all on function private.booth_push_on() from public;
 
 -- ── 운영자 알림 처리 — 만료된 알림은 ‘화면에 표시됨’ · ‘확인했어요’ 를 기록하지 않음 ─────────────
--- (migration-booth-notice.sql 2 와 같고, shown · ack 에 ‘만료 전’ 조건과 expired 답만 더했습니다)
+-- (migration-booth-notice.sql 2 와 같고, 목록에 expires_at · shown · ack 에 ‘만료 전’ 조건과 expired 답만 더했습니다)
 create or replace function private.booth_notice_op(p_booth uuid, p_via text, p_session uuid, p_action text, p_notice_id bigint)
 returns jsonb
 language plpgsql
@@ -83,10 +83,10 @@ begin
 
   if p_action = 'list' then
     select coalesce(pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
-             'id', x.id, 'kind', x.kind, 'body', x.body, 'created_at', x.created_at, 'shown', x.shown_at is not null)
+             'id', x.id, 'kind', x.kind, 'body', x.body, 'created_at', x.created_at, 'expires_at', x.expires_at, 'shown', x.shown_at is not null)
              order by x.created_at desc), '[]'::jsonb)
       into v_list
-      from (select n.id, n.kind, n.body, n.created_at, t.shown_at
+      from (select n.id, n.kind, n.body, n.created_at, n.expires_at, t.shown_at
               from public.booth_notice_target t
               join public.booth_notice n on n.id = t.notice_id
              where t.booth_id = p_booth
@@ -294,10 +294,19 @@ declare
   v_a  text := p_sub #>> '{keys,auth}';
   v_n  integer;
 begin
-  if p_action is null or p_action not in ('subscribe', 'unsubscribe') then
+  if p_action is null or p_action not in ('subscribe', 'unsubscribe', 'status') then
     raise exception '허용되지 않는 요청입니다.' using errcode = '22023';
   end if;
-  if v_ep is null or v_ep !~ '^https://' or pg_catalog.char_length(v_ep) > 1000 then
+  -- status: 시스템 알림이 켜져 있는지 · 이 기기(주소)가 지금 이 열쇠 · 세션으로 이 부스 알림을 받는지만(다른 부스 구독은 알려 주지 않음)
+  if p_action = 'status' then
+    return pg_catalog.jsonb_build_object('ok', true, 'push', private.booth_push_on(), 'mine',
+      v_ep is not null and exists (select 1 from public.booth_push_sub s
+                                    where s.endpoint = v_ep and s.booth_id = p_booth and s.disabled_at is null and s.via = p_via
+                                      and ((p_via = 'qr' and s.token_hash = p_token_hash) or (p_via = 'pin' and s.session_id = p_session))));
+  end if;
+  -- 브라우저 푸시 서비스 주소만(FCM · Mozilla · Windows · Apple · Samsung). 아무 주소로나 보내지 않게.
+  if v_ep is null or pg_catalog.char_length(v_ep) > 1000
+     or v_ep !~ '^https://(fcm\.googleapis\.com|android\.googleapis\.com|updates\.push\.services\.mozilla\.com|[a-z0-9-]+\.notify\.windows\.com|web\.push\.apple\.com|[a-z0-9.-]+\.push\.samsungosp\.com)/' then
     raise exception '알림 주소가 맞지 않습니다.' using errcode = '22023';
   end if;
   if p_action = 'unsubscribe' then
