@@ -197,6 +197,10 @@ HELP_LINE=$(pick_help) || exit 1
 # 켜져도 서버 스위치(public.booth_notice_config)가 꺼져 있으면 운영자 화면에 아무것도 보이지 않습니다.
 BOOTH_NOTICES=false
 if grep -Eq '^[[:space:]]*boothNotices:[[:space:]]*true[[:space:]]*,?[[:space:]]*$' "$SRC"; then BOOTH_NOTICES=true; fi
+# 휴대전화 시스템 알림(Web Push · 기본 꺼짐). 같은 규칙으로 'boothPush: true,' 한 줄이 있고 운영자 알림도 켜져 있을 때만 켭니다.
+# 켜져도 Vercel 의 VAPID 키(/api/notice-push)와 서버 push_enabled 가 없으면 [알림 받기] 가 보이지 않습니다.
+BOOTH_PUSH=false
+if [ "$BOOTH_NOTICES" = true ] && grep -Eq '^[[:space:]]*boothPush:[[:space:]]*true[[:space:]]*,?[[:space:]]*$' "$SRC"; then BOOTH_PUSH=true; fi
 
 # 연결 정보가 없으면 두 화면은 "연결 설정을 불러오지 못했습니다" 만
 # 보여 줍니다. 그런 배포본을 조용히 올리느니 빌드를 멈추는 편이
@@ -266,6 +270,9 @@ mkdir -p dist/assets
 
 cp ../visitor.html dist/index.html
 cp ../booth-ctrl.html dist/booth-ctrl.html
+# 운영자 화면 시스템 알림 Service Worker. 등록 주소가 늘 같아야 해서 지문을 붙이지 않고 사이트 뿌리에 둡니다
+# (범위 /booth-ctrl · fetch 를 가로채지 않음 · live/vercel.json 에서 no-cache).
+cp ../booth-ctrl-sw.js dist/booth-ctrl-sw.js
 cp ../assets/booth-core.js ../assets/mock-data.js ../assets/visitor.css ../assets/booth-ctrl.css dist/assets/
 
 # 화면 안내(/example): 두 화면을 소개하고 각 화면으로 보내는 정적 페이지.
@@ -294,6 +301,7 @@ cp og-image.png dist/og-image.png
   printf '  freshnessThresholdMinutes: %s,\n' "$FRESH_MIN"
   printf "  boothHelpLine: '%s',\n" "$HELP_LINE"
   printf '  boothNotices: %s,\n' "$BOOTH_NOTICES"
+  printf '  boothPush: %s,\n' "$BOOTH_PUSH"
   printf "  visitorSiteUrl: './'\n"
   printf '};\n'
 } > dist/assets/config.js
