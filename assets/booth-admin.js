@@ -198,7 +198,7 @@
     var i = BC.eventInfo(data.event, Date.now());
     if (i.phase === 'open') return null;
     var mins = BC.staleMinutes();
-    var why = { before: '행사 전(리허설 기간)', preopen: '오늘 운영 시작(' + i.openTime + ') 전', dayclosed: '오늘 운영 끝(' + i.closeTime + ')', after: '행사 끝' }[i.phase] || '운영 시간 밖';
+    var why = { before: '행사 전', preopen: '오늘 운영 시작(' + i.openTime + ') 전', dayclosed: '오늘 운영 끝(' + i.closeTime + ')', after: '행사 끝' }[i.phase] || '운영 시간 밖';
     return { phase: i.phase, text: '<b>운영 시간 밖 · ' + esc(why) + '</b><span>' + mins + '분 넘게 그대로인 값은 참고용이며 긴급 확인 대상이 아닙니다' +
       (i.nextOpenLabel ? ' · 다음 운영 ' + esc(i.nextOpenLabel) : '') + '</span>' };
   }
@@ -382,7 +382,7 @@
       : '실제 부스 ' + s.target + '곳 중 발급 <b>' + s.on + '곳</b> · 미발급 ' + s.none + '곳 · 꺼짐 ' + s.offPin + '곳' +
         (s.unk ? ' · 확인 불가 ' + s.unk + '곳' : '') +
         ' · <a href="print-qr.html" target="_blank" rel="noopener">QR · PIN 관리</a>';
-    return '<p class="lvpin__row"><span class="lvpin__k">리허설 공통 PIN</span><span>' + l1 + '</span></p>' +
+    return '<p class="lvpin__row"><span class="lvpin__k">공통 PIN</span><span>' + l1 + '</span></p>' +
       '<p class="lvpin__row"><span class="lvpin__k">개별 PIN</span><span>' + l2 + '</span></p>';
   }
   function agoHtml(r) {
@@ -626,10 +626,12 @@
       '<div class="state__act"><button class="btn btn--ghost btn--sm" type="button" data-reset>조건 지우기</button></div></div>';
   }
 
-  function isFinalSchoolLayout() {
-    return ['초등', '중등', '고등', '특수'].every(function (key) {
-      return data.zones.some(function (z) { return z.key === key && z.is_published === true; });
-    });
+  // 공식 부스의 대기시간 일괄 입력은 행사 준비 기간에만 제공합니다.
+  // 데이터/일정 확인에 실패하면 버튼을 숨기고, 서버의 행사 시작 제한은 그대로 유지합니다.
+  function bulkWaitAvailable() {
+    if (DEMO || !data.event) return false;
+    var info = BC.eventInfo(data.event);
+    return !!info && info.phase === 'before' && (!rh.st || !rh.st.closed);
   }
   function renderLiveShell() {
     $('#view').innerHTML =
@@ -637,9 +639,9 @@
         '<div class="page__head"><div><h1 class="page__title">부스 운영 현황</h1>' +
           '<p class="page__desc">공개 부스의 혼잡 · 대기와 손이 가야 하는 부스를 봅니다.</p></div>' +
           '<div class="page__actions">' +
-            // 행사 전 리허설 — 실제 부스 84곳(아래 리허설 관리). 협의용 예시(?demo)에는 없습니다.
-            (DEMO || isFinalSchoolLayout() ? '' : '<button class="btn btn--ghost btn--sm" type="button" id="lv-rh-toggle" data-rh-toggle aria-expanded="' + rh.open +
-              '" aria-controls="lv-rh">리허설 관리</button>') +
+            // 실제 공식 부스용 일괄 입력 도구. 준비 기간에만 보이며 행사 시작 시 자동으로 숨깁니다.
+            (DEMO ? '' : '<button class="btn btn--ghost btn--sm" type="button" id="lv-rh-toggle" data-rh-toggle aria-expanded="false"' +
+              ' aria-controls="lv-rh" title="행사 전 공식 부스의 대기시간을 한꺼번에 입력하거나 비웁니다" hidden>대기시간 일괄 입력</button>') +
             // 운영 준비용 예시 부스가 공개돼 있을 때만 보입니다(paintExampleBtn). 협의용 예시(?demo)에는 없습니다.
             '<button class="btn btn--ghost btn--sm" type="button" id="lv-example-fill" data-example="fill" hidden>예시 현황 채우기</button>' +
             '<button class="btn btn--ghost btn--sm" type="button" id="lv-example-clear" data-example="clear" hidden>예시 현황 비우기</button>' +
@@ -647,7 +649,7 @@
             '<a class="btn btn--ghost btn--sm" href="admin.html' + (DEMO ? '?demo=1' : '') + '#booths">부스 정보 관리</a>' +
           '</div></div>' +
         (DEMO ? '<p class="demohint">' + esc(DEMO_TEXT) + ' 현황 수정을 눌러도 실제 DB에 반영되지 않고, 새로 고치면 처음 예시로 돌아갑니다.</p>' : '') +
-        (DEMO || isFinalSchoolLayout() ? '' : '<section class="card rhpanel" id="lv-rh" aria-labelledby="lv-rh-title"' + (rh.open ? '' : ' hidden') + '></section>') +
+        (DEMO ? '' : '<section class="card rhpanel" id="lv-rh" aria-labelledby="lv-rh-title" hidden></section>') +
         '<p class="lvmeta" id="lv-meta" aria-live="polite"></p>' + offHtml(null) +
         '<div class="lvpin" id="lv-pin"></div>' +
         '<div class="odash" id="lv-sum"></div>' +
@@ -1654,7 +1656,7 @@
   // DB 함수가 아직 없음(migration-booth-rehearsal.sql 적용 전)
   function rhMissing() { return !!rh.err && (rh.err.code === 'PGRST202' || rh.err.code === '42883'); }
   function rhMessage(e) {
-    if (e && (e.code === 'PGRST202' || e.code === '42883')) return '리허설 관리용 DB 함수가 아직 없습니다(supabase/migration-booth-rehearsal.sql 적용 전).';
+    if (e && (e.code === 'PGRST202' || e.code === '42883')) return '일괄 입력 기능을 사용할 수 없습니다. 서버 설정을 확인해 주세요.';
     return C.dataMessage(e);
   }
   function rhTargets(rows) {
@@ -1696,10 +1698,10 @@
     return '<div class="rhfact"><dt>' + esc(label) + '</dt><dd' + (bad ? ' class="is-bad"' : '') + '>' + esc(value) + '</dd></div>';
   }
   function rhHtml(all) {
-    var head = '<div class="rhpanel__head"><h2 class="rhpanel__title" id="lv-rh-title">리허설 관리' +
-        '<span class="rhpanel__n">실제 부스 ' + (rh.st ? rh.st.n : 84) + '곳</span></h2>' +
-      '<p class="rhpanel__desc">행사 전 리허설용 시험 대기시간을 한 번에 넣거나 비웁니다. 관람객 사이트에도 ' +
-        '‘리허설 중 · 실제 대기시간이 아닙니다’ 안내와 함께 보입니다. 예시 부스 · QR · PIN · 대기 기록은 바뀌지 않습니다.</p></div>';
+    var head = '<div class="rhpanel__head"><h2 class="rhpanel__title" id="lv-rh-title">대기시간 일괄 입력' +
+        '<span class="rhpanel__n">공식 부스 ' + (rh.st ? rh.st.n : 84) + '곳</span></h2>' +
+      '<p class="rhpanel__desc">행사 전 운영 점검을 위해 공식 부스에 예시 대기시간을 한 번에 입력하거나 비웁니다. ' +
+        '입력값은 행사 전 관람객 화면에 표시되지 않습니다. QR·PIN·기존 대기 기록은 유지됩니다.</p></div>';
     if (!rh.st) {
       if (rh.err) {
         return head + '<p class="rhpanel__lock">' + esc(rhMessage(rh.err)) +
@@ -1717,16 +1719,16 @@
       '</dl>';
     if (s.closed) {
       var C2 = rh.last && !RH_SENDING[b] ? rh.last : null;
-      return html + '<p class="rhpanel__lock">행사가 시작되어 리허설 관리는 닫혔습니다. 행사 운영은 운영자 QR 입력을 씁니다.</p>' +
+      return html + '<p class="rhpanel__lock">행사가 시작되어 일괄 입력은 종료됐습니다. 이후 대기시간은 운영자 QR·PIN으로 입력해 주세요.</p>' +
         (C2 ? '<p class="rhpanel__note">마지막 실행 ' + esc(rhStamp(C2.at)) + ' · 성공 ' + C2.done + '곳 · 넣지 못함 ' +
           (C2.failed.length + C2.skipped.length) + '곳</p>' : '');
     }
     var off = !!b || !targets.length;
     html += '<div class="rhpanel__acts">' +
       '<button class="btn btn--primary btn--sm" type="button" data-rh="fill"' + (off ? ' disabled' : '') + '>' +
-        (b === 'fill' ? '채우는 중…' : '대기시간 자동 채우기') + '</button>' +
+        (b === 'fill' ? '채우는 중…' : '예시값 일괄 채우기') + '</button>' +
       '<button class="btn btn--ghost btn--sm" type="button" data-rh="clear"' + (off ? ' disabled' : '') + '>' +
-        (b === 'clear' ? '비우는 중…' : '리허설 대기시간 비우기') + '</button>' +
+        (b === 'clear' ? '비우는 중…' : '대기시간 일괄 비우기') + '</button>' +
       '</div>';
     if (sending) {
       var pct = rh.total ? Math.round(rh.done / rh.total * 100) : 0;
@@ -1754,9 +1756,14 @@
     var box = $('#lv-rh');
     if (!box || DEMO) return;
     var t = $('#lv-rh-toggle');
-    if (t) t.setAttribute('aria-expanded', String(rh.open));
-    box.hidden = !rh.open;
-    if (!rh.open) return;
+    var available = bulkWaitAvailable();
+    if (!available) rh.open = false;
+    if (t) {
+      t.hidden = !available;
+      t.setAttribute('aria-expanded', String(available && rh.open));
+    }
+    box.hidden = !available || !rh.open;
+    if (box.hidden) return;
     var html = rhHtml(all || rowsNow());
     if (box._rhHtml === html) return;   // 15초마다 다시 그려도 같으면 건드리지 않음(누르던 단추 · 포커스 유지)
     var f = document.activeElement && box.contains(document.activeElement) ? document.activeElement.getAttribute('data-rh') : null;
@@ -1773,12 +1780,13 @@
     }).then(function () { rh.busy = ''; paintRehearsal(); });
   }
   function toggleRehearsal() {
+    if (!bulkWaitAvailable()) return;
     rh.open = !rh.open;
     paintRehearsal();
     if (rh.open) refreshRehearsal();
   }
   function runRehearsal(kind) {
-    if (DEMO || rh.busy) return;
+    if (!bulkWaitAvailable() || rh.busy) return;
     var fill = kind === 'fill';
     // 확인창의 숫자 · '지금 값 있음' 이 지금 서버 값이 되도록 먼저 다시 읽습니다.
     rh.busy = 'check';
@@ -1786,21 +1794,21 @@
     Promise.all([loadRehearsal(), loadMaster().then(loadLive)]).then(function () {
       rh.busy = '';
       paint();
-      if (rh.st.closed) { toast('행사가 시작되어 리허설 대기시간을 넣거나 지울 수 없습니다.', true); return; }
+      if (rh.st.closed) { toast('행사가 시작되어 일괄 입력을 사용할 수 없습니다.', true); return; }
       var targets = rhTargets(rowsNow());
-      if (!targets.length) { toast('리허설 대상 부스를 찾지 못했습니다.', true); return; }
+      if (!targets.length) { toast('일괄 입력 대상인 공식 부스를 찾지 못했습니다.', true); return; }
       var withVal = targets.filter(function (r) { return !!r.congestion; });
       var byOp = withVal.filter(function (r) { return r.by === 'qr' || r.by === 'pin'; }).length;
       var message = fill
-        ? '실제 부스 ' + targets.length + '곳에 시험 대기시간을 넣습니다.\n' + mixSummary(examplePlan(targets)) + '\n' +
-          '관람객 사이트에도 ‘리허설 중 · 실제 대기시간이 아닙니다’ 안내와 함께 바로 보입니다.' +
-          (withVal.length ? '\n\n지금 값이 있는 ' + withVal.length + '곳' + (byOp ? '(운영자 입력 ' + byOp + '곳 포함)' : '') +
-            '은 새 시험 값으로 덮어씁니다.' : '') +
-          '\n예시 부스 · QR · PIN · 대기 기록은 바뀌지 않습니다.'
-        : '실제 부스 ' + targets.length + '곳의 지금 대기 값을 지워 ‘정보 없음’으로 되돌립니다(지금 값 있는 곳 ' + withVal.length + '곳).\n' +
-          '대기 기록 · QR · PIN · 부스 정보 · 예시 부스는 그대로입니다.';
+        ? '공식 부스 ' + targets.length + '곳에 운영 점검용 예시 대기시간을 저장합니다.\n' + mixSummary(examplePlan(targets)) + '\n' +
+          '행사 전 관람객 화면에는 표시되지 않습니다.' +
+          (withVal.length ? '\n\n현재 대기값이 있는 ' + withVal.length + '곳' + (byOp ? '(운영자 입력 ' + byOp + '곳 포함)' : '') +
+            '은 예시값으로 덮어씁니다.' : '') +
+          '\n매일 23:00에 현재 대기값만 자동 초기화됩니다. 기존 대기 기록·QR·PIN은 유지됩니다.'
+        : '공식 부스 ' + targets.length + '곳의 현재 대기값을 모두 비웁니다(값 있는 곳 ' + withVal.length + '곳).\n' +
+          '운영자 입력값도 비워질 수 있습니다. 기존 대기 기록·QR·PIN·부스 정보는 유지됩니다.';
       return UI.confirm({
-        title: fill ? '리허설 대기시간을 채울까요?' : '리허설 대기시간을 비울까요?',
+        title: fill ? '예시 대기시간을 일괄 입력할까요?' : '현재 대기시간을 일괄 비울까요?',
         message: message,
         confirmLabel: fill ? '채우기' : '비우기',
         danger: !fill
@@ -1822,7 +1830,7 @@
     paintRehearsal();
     // 보내기 직전에 한 번 더: 대상 목록 · 닫힘 · 부스 목록을 서버에서 다시 읽습니다.
     Promise.all([loadRehearsal(), loadMaster()]).then(function () {
-      if (rh.st.closed) { var c = new Error('행사가 시작되어 리허설 대기시간을 넣거나 지울 수 없습니다.'); c.closed = true; throw c; }
+      if (rh.st.closed) { var c = new Error('행사가 시작되어 일괄 입력을 사용할 수 없습니다.'); c.closed = true; throw c; }
       var jobs;
       if (retry) {
         jobs = retry.filter(function (j) { return rh.st.ids[j.r.id]; });
@@ -1842,7 +1850,7 @@
       // 결과를 기다리지 않고 바로 다시 읽어 요약 · 카드 · 이 칸을 새 값으로 그립니다(닫힘 · 자동 초기화 상태도 새로).
       return Promise.all([loadRehearsal().then(null, function () { /* 지난 상태로 그림 */ }), refreshMaster()]).then(function () {
         if (!nBad) {
-          toast(fill ? '실제 부스 ' + res.done.length + '곳에 리허설 대기시간을 채웠습니다.' : '실제 부스 ' + res.done.length + '곳의 리허설 대기시간을 비웠습니다.');
+          toast(fill ? '공식 부스 ' + res.done.length + '곳에 예시 대기시간을 입력했습니다.' : '공식 부스 ' + res.done.length + '곳의 현재 대기시간을 비웠습니다.');
           return;
         }
         // 권한 · 로그인 만료 · 행사 시작으로 멈췄으면 그 까닭과 '넣지 못함' 으로(보내지 않은 부스는 실패가 아님)
