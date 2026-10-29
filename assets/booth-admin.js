@@ -78,7 +78,8 @@
   // rows: 최근 12시간 보낸 알림의 부스별 상태, open: 칸이 열려 있나, kind · zone · body: 쓰는 중인 알림, res: 마지막 보내기 결과
   // kind 는 처음엔 '' (아무 대상도 안 고름) · booth: 부스 1곳의 id · step: compose → preview → confirm · pick: 미리보기에서 고정한 대상 · 문구,
   // sure: 마지막 확인 체크 · sent: 보낸 pick(결과를 견줄 때)
-  var notice = { fn: '', on: null, rows: [], open: false, kind: '', zone: '', booth: '', body: '', step: 'compose', pick: null, sure: false,
+  // mode: 'rehearsal'(부스 1곳만 — 기본 · 모드 함수가 없거나 못 읽어도 이것) · 'event'(모든 종류). 서버(admin_send_booth_notice)도 같은 규칙으로 막습니다.
+  var notice = { fn: '', on: null, mode: 'rehearsal', rows: [], open: false, kind: '', zone: '', booth: '', body: '', step: 'compose', pick: null, sure: false,
     busy: false, res: null, sent: null, err: '' };
   var busy = {};
   var stops = [];
@@ -138,7 +139,15 @@
       var v = Object.prototype.toString.call(on) === '[object Array]' ? on[0] : on;
       notice.on = v === true || !!(v && v.admin_booth_notice_enabled === true);
       if (!withStatus && !notice.open) return;
-      return C.rpc('admin_booth_notice_status', { p_hours: 12 }).then(function (rows) { notice.rows = rows || []; });
+      // 모드는 칸을 열 때 · 열려 있는 동안만 읽습니다(1분마다 켜짐 여부 읽기에 더하지 않음). 함수가 없거나 못 읽으면 리허설 모드(좁은 쪽).
+      return Promise.all([
+        C.rpc('admin_booth_notice_status', { p_hours: 12 }),
+        C.rpc('admin_booth_notice_mode').then(function (m) {
+          var mv = Object.prototype.toString.call(m) === '[object Array]' ? m[0] : m;
+          if (mv && typeof mv === 'object') mv = mv.admin_booth_notice_mode;
+          return mv === 'event' ? 'event' : 'rehearsal';
+        }, function () { return 'rehearsal'; })
+      ]).then(function (x) { notice.rows = x[0] || []; noticeSetMode(x[1]); });
     }).then(null, function (e) {
       var code = e && e.code;
       if (code === 'PGRST202' || code === '42883') { notice.fn = 'missing'; notice.on = null; notice.open = false; return; }
@@ -1109,7 +1118,8 @@
      만료(대기인 채로 3시간 · 그날 자정)뿐이고 ‘전달 완료’ 라고 쓰지 않습니다. 같은 부스 같은 종류는 10분 안에 서버가 다시 보내지 않습니다.
      알림을 보내거나 확인해도 대기 값(booth_live)은 바뀌지 않습니다.
      보내기는 세 단계 — 쓰기(처음엔 대상 없음) → 미리보기(받을 부스번호 · 수 · 문구를 그 자리에서 고정) → 마지막 확인(체크 뒤 [보내기]).
-     미리보기에서 고정한 부스만 보내고 서버가 다시 셉니다. 결과는 고정한 목록과 견줘 서버가 뺀 부스를 따로 보입니다. */
+     미리보기에서 고정한 부스만 보내고 서버가 다시 셉니다. 결과는 고정한 목록과 견줘 서버가 뺀 부스를 따로 보입니다.
+     리허설 모드(booth_notice_config.rehearsal_only · 기본)에서는 ‘부스 1곳’ 만 고를 수 있고, 서버도 그 밖의 종류 · 2곳 이상을 거절합니다. */
   var NT_KINDS = [['stale', '확인 필요'], ['missing', '미입력'], ['zone', '구역'], ['all', '전체 공개'], ['booth', '부스 1곳']];
   var NT_DEFAULT = {
     stale: '대기 상태가 30분 넘게 그대로예요. 지금 상태를 다시 눌러 주세요.',
@@ -1126,6 +1136,14 @@
   function ntLabel(kind, zone, code) {
     var k = (NT_KINDS.filter(function (x) { return x[0] === kind; })[0] || ['', kind])[1];
     return kind === 'zone' && zone ? zone + ' 구역' : kind === 'booth' && code ? '부스 ' + code : k;
+  }
+  // 리허설 모드면 쓰는 중인 알림을 ‘부스 1곳’ 으로 맞춥니다(다른 종류를 고른 채 남지 않게). 행사 모드로 바뀌면 고른 것은 그대로.
+  function noticeSetMode(m) {
+    notice.mode = m === 'event' ? 'event' : 'rehearsal';
+    if (notice.mode === 'rehearsal' && notice.step === 'compose' && notice.kind !== 'booth') {
+      if (notice.body === (NT_DEFAULT[notice.kind] || '')) notice.body = '';
+      notice.kind = 'booth'; notice.zone = '';
+    }
   }
   // 받을 부스 — 공개 부스만(비공개 · 미배정 보기와 상관없이), 서버 대상 규칙과 같게. 아직 대상을 안 골랐으면 없음.
   function noticeTargets(all) {
@@ -1147,6 +1165,7 @@
   function noticeReady(all) {
     var t = noticeText();
     if (!notice.kind || (notice.kind === 'zone' && !notice.zone) || (notice.kind === 'booth' && !notice.booth)) return '';
+    if (notice.mode === 'rehearsal' && notice.kind !== 'booth') return '';
     if (!t || t.length > 120) return '문구를 1~120자로 써 주세요.';
     var recent = noticeRecent(notice.kind);
     if (!noticeTargets(all).filter(function (r) { return !recent[r.id]; }).length) return '보낼 부스가 없습니다(대상이 없거나 10분 안에 같은 알림을 받음).';
@@ -1158,9 +1177,11 @@
     pub.forEach(function (r) { if (r.zone_key) zs[r.zone_key] = (zs[r.zone_key] || 0) + 1; });
     var cnt = { stale: pub.filter(function (r) { return r.stale; }).length, missing: pub.filter(function (r) { return r.state === 'missing'; }).length, all: pub.length };
     var dis = lock ? ' disabled' : '';
+    var reh = notice.mode === 'rehearsal';
     var kinds = NT_KINDS.map(function (k) {
-      var on = notice.kind === k[0];
-      return '<button class="ntk' + (on ? ' is-on' : '') + '" type="button" role="radio" aria-checked="' + on + '" data-nkind="' + k[0] + '"' + dis + '>' +
+      var on = notice.kind === k[0], locked = reh && k[0] !== 'booth';
+      return '<button class="ntk' + (on ? ' is-on' : '') + (locked ? ' is-locked' : '') + '" type="button" role="radio" aria-checked="' + on + '" data-nkind="' + k[0] + '"' +
+        (locked ? ' disabled title="리허설 모드에서는 보낼 수 없습니다(행사 모드에서만)"' : dis) + '>' +
         '<span>' + esc(k[1]) + '</span>' + (cnt[k[0]] === undefined ? '' : '<span class="ntk__n"><b>' + cnt[k[0]] + '</b>곳</span>') + '</button>';
     }).join('');
     var zsel = notice.kind === 'zone'
@@ -1176,7 +1197,10 @@
             return '<option value="' + esc(r.id) + '"' + (notice.booth === r.id ? ' selected' : '') + '>' + esc(r.code + ' · ' + (r.name || '(이름 없음)')) + '</option>';
           }).join('') + '</select></label>'
       : '';
-    return '<div class="ntkinds" role="radiogroup" aria-label="받을 부스">' + kinds + '</div>' + zsel + bsel +
+    var modeLine = reh
+      ? '<p class="ntmode" role="note"><b>리허설 모드 · 부스 1곳만 발송 가능</b> 확인 필요 · 미입력 · 구역 · 전체 공개는 행사 모드에서만 보낼 수 있습니다(서버도 막습니다).</p>'
+      : '<p class="ntmode ntmode--event" role="note"><b>행사 모드</b> · 확인 필요 · 미입력 · 구역 · 전체 공개도 보낼 수 있습니다. 받을 부스 수를 꼭 확인하세요.</p>';
+    return modeLine + '<div class="ntkinds" role="radiogroup" aria-label="받을 부스">' + kinds + '</div>' + zsel + bsel +
       (notice.kind ? '<label class="ntbody"><span class="ntbody__l">문구 <small>(운영자 화면에 그대로 보임 · 120자 안' +
           (NT_DEFAULT[notice.kind] ? ' · 비우면 정해진 문구' : '') + ')</small></span>' +
         '<textarea class="input" id="nt-body" rows="2" maxlength="120"' + dis + '>' + esc(notice.body) + '</textarea>' +
@@ -1221,13 +1245,18 @@
       : '<h3 class="ntstep">미리보기 — 아직 보내지 않았습니다</h3>';
     return head + ntCountHtml(p.kind, p.ids.length, ntLabel(p.kind, p.zone, p.kind === 'booth' ? p.codes[0] : '') +
         (p.skip.length ? ' · 10분 안에 같은 알림을 받은 ' + p.skip.length + '곳 제외' : '')) +
+      (p.kind === 'booth' && p.codes.length === 1
+        ? '<p class="ntone"><span class="ntone__c">' + esc(p.codes[0]) + '</span><span class="ntone__n">' + esc(p.names[0] || '') + '</span>' +
+          '<span class="ntone__k">이 부스 <b>1곳</b>에만 갑니다</span></p>' : '') +
       '<p class="ntmsg"><span class="ntmsg__l">운영자 화면에 보일 문구</span><span class="ntmsg__t">' + esc(p.text) + '</span></p>' +
       '<p class="ntwho">받을 부스번호 ' + p.ids.length + '곳</p>' + ntCodesHtml(p.codes.concat(p.skip), p.skipSet) +
       (moved ? '<p class="bwarn" role="note"><b>미리보기 뒤 대상이 바뀌었습니다(지금 ' + now.length + '곳).</b> 그대로 보내면 위 목록 가운데 서버가 지금도 대상이라고 확인한 부스에만 갑니다. 다시 보려면 [고치기].</p>' : '') +
       (notice.err ? '<p class="bc__err" role="alert">' + esc(notice.err) + '</p>' : '') +
       (notice.step === 'confirm'
         ? '<label class="ntsure"><input type="checkbox" id="nt-sure"' + (notice.sure ? ' checked' : '') + (notice.busy ? ' disabled' : '') + ' /> ' +
-            '<span>받을 부스 <b>' + p.ids.length + '곳</b>과 문구를 확인했습니다</span></label>' +
+            (p.kind === 'booth' && p.codes.length === 1
+              ? '<span>부스 <b>' + esc(p.codes[0]) + '</b>(' + esc(p.names[0] || '') + ') <b>1곳</b>과 문구를 확인했습니다</span></label>'
+              : '<span>받을 부스 <b>' + p.ids.length + '곳</b>과 문구를 확인했습니다</span></label>') +
           '<div class="bc__foot">' +
             '<button class="btn btn--primary" type="button" data-notice="send"' + (notice.sure && !notice.busy ? '' : ' disabled') + '>' +
               (notice.busy ? '보내는 중…' : '보내기 (' + p.ids.length + '곳)') + '</button>' +
@@ -1252,11 +1281,14 @@
       else notT.push(c);
     });
     p.ids.forEach(function (id, i) { if (!byId[id]) miss.push(p.codes[i]); });
-    var diff = notT.length + extra.length + miss.length;
+    // 부스 1곳: 실제로 보낸 부스가 정확히 그 1곳인지(아니면 다름으로 크게)
+    var one = p.kind === 'booth', oneOk = one && sent.length === 1 && sent[0] === p.codes[0];
+    var diff = notT.length + extra.length + miss.length + (one && sent.length > 1 ? 1 : 0);
     function line(t, list) { return list.length ? '<p class="ntres__l"><b>' + t + ' ' + list.length + '곳</b> ' + esc(list.join(' · ')) + '</p>' : ''; }
     return '<div class="ntres' + (diff ? ' is-diff' : '') + '" role="status">' +
         '<p class="ntres__h"><b>' + esc(ntLabel(p.kind, p.zone, p.kind === 'booth' ? p.codes[0] : '')) + ' · 화면에서 고른 ' + p.ids.length + '곳 → 보냄 ' + sent.length + '곳</b>' +
           (diff ? ' — <b class="ntres__x">화면에서 고른 부스와 서버가 확인한 부스가 다릅니다</b>' : ' — 화면에서 고른 부스와 같습니다') + '</p>' +
+        (oneOk ? '<p class="ntres__l"><b>보낸 부스 1곳 확인 — ' + esc(sent[0]) + '</b></p>' : '') +
         line('보냄', sent) + line('10분 안에 같은 알림 받음(서버가 뺌)', recent) +
         line('지금 대상 아님(그 사이 상태가 바뀌어 서버가 뺌)', notT) + line('화면 목록에 없던 부스', extra) + line('서버 결과에 없음', miss) +
         '<p class="ntres__n">운영자 화면에 뜨면 ‘화면에 표시됨’, 운영자가 누르면 ‘운영자 확인’ 으로 바뀝니다.</p>' +
@@ -1289,7 +1321,7 @@
     if (!box) return;
     box.hidden = !notice.open;
     if (!notice.open) { if (box._built) { box.innerHTML = ''; box._built = false; } return; }
-    var key = [notice.kind, notice.zone, notice.booth, notice.step, notice.busy].join(':');
+    var key = [notice.mode, notice.kind, notice.zone, notice.booth, notice.step, notice.busy].join(':');
     if (!box._built || box._kind !== key) {
       box.innerHTML = '<div class="bc__head"><h2 class="bc__t" id="nt-title">운영자 알림</h2>' +
           '<p class="bc__note">운영자 화면(QR · PIN)이 열려 있고 보일 때 15~20초 안에 위쪽 띠로 뜹니다. 상태는 <b>대기 · 화면에 표시됨 · 운영자 확인</b> — ' +
@@ -1306,7 +1338,7 @@
   function noticeReset() { notice.kind = ''; notice.zone = ''; notice.booth = ''; notice.body = ''; notice.step = 'compose'; notice.pick = null; notice.sure = false; notice.err = ''; }
   function noticeOpen() {
     notice.open = true; notice.res = null; notice.sent = null;
-    noticeReset();
+    noticeReset();   // 모드를 새로 읽으면(아래 loadNotice) 리허설일 때 ‘부스 1곳’ 으로 맞춥니다 — 그 전에도 다른 종류는 잠겨 있음
     if (ui.view !== 'live') { window.location.hash = '#live'; }
     paint();
     loadNotice(false, true).then(paint);
@@ -1315,6 +1347,7 @@
   }
   function noticeKind(k) {
     if (notice.step !== 'compose' || notice.busy) return;
+    if (notice.mode === 'rehearsal' && k !== 'booth') return;
     if (notice.body === (NT_DEFAULT[notice.kind] || '')) notice.body = NT_DEFAULT[k] || '';
     notice.kind = k; notice.err = '';
     paint();
@@ -1328,6 +1361,7 @@
     sk.forEach(function (r) { skipSet[r.code] = true; });
     notice.pick = { kind: notice.kind, zone: notice.kind === 'zone' ? notice.zone : null, text: noticeText(),
       all: list.map(function (r) { return r.id; }), ids: go.map(function (r) { return r.id; }), codes: go.map(function (r) { return r.code; }),
+      names: go.map(function (r) { return r.name || ''; }),
       skip: sk.map(function (r) { return r.code; }), skipSet: skipSet };
     notice.step = 'preview'; notice.sure = false; notice.err = ''; notice.res = null; notice.sent = null;
     paint();
@@ -1345,8 +1379,9 @@
         return loadNotice(false, true);
       }, function (e) {
         notice.busy = false;
-        var off = e && (e.code === '55000' || e.hint === 'notice_off');
-        notice.err = off ? '운영자 알림이 서버에서 꺼져 있어 보내지 못했습니다.' : C.dataMessage(e) + ' 보내지 못했습니다 — 다시 시도하면 10분 안에 받은 부스는 서버가 뺍니다.';
+        var reh = e && e.hint === 'rehearsal_only', off = !reh && e && (e.code === '55000' || e.hint === 'notice_off');
+        if (reh) noticeSetMode('rehearsal');
+        notice.err = reh ? '리허설 모드라 부스 1곳만 보낼 수 있습니다 — 서버가 거절했고 아무것도 보내지 않았습니다.' : off ? '운영자 알림이 서버에서 꺼져 있어 보내지 못했습니다.' : C.dataMessage(e) + ' 보내지 못했습니다 — 다시 시도하면 10분 안에 받은 부스는 서버가 뺍니다.';
         console.error('[booth-admin] 운영자 알림 보내기 실패', e && (e.code || e.message));
         return loadNotice(true, true);
       })
