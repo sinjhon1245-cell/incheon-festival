@@ -1632,7 +1632,7 @@
          일부가 실패하면 그 부스만 '다시 시도' 로 같은 값을 다시 보냅니다. 권한 · 로그인 만료 · 행사 시작으로
          거절되면 남은 부스는 보내지 않습니다.
      매일 23:00(KST) 자동 초기화는 DB 예약 작업(pg_cron → private.rehearsal_live_reset)이 하고, 여기서는 상태만 보입니다.
-     관람객 사이트는 행사 전 값을 '리허설 중 · 실제 대기시간이 아닙니다' 띠와 함께 보여 줍니다(booth-live 의 visitor.html). */
+     관람객 사이트는 행사 전 오늘 입력된 값을 별도의 리허설 띠 없이 보여 줍니다(booth-live 의 visitor.html). */
   var rh = { open: false, st: null, err: null, busy: '', done: 0, total: 0, last: null };
   // st: 서버에서 읽은 상태 { ids: {uuid: true}, n, closed, cutoff, reset, sched, lastAt, lastSt }
   // busy: '' | 'load'(상태 읽는 중) | 'check'(확인창 전 다시 읽는 중) | 'fill' | 'clear' | 'retry'
@@ -1701,7 +1701,7 @@
     var head = '<div class="rhpanel__head"><h2 class="rhpanel__title" id="lv-rh-title">대기시간 일괄 입력' +
         '<span class="rhpanel__n">공식 부스 ' + (rh.st ? rh.st.n : 84) + '곳</span></h2>' +
       '<p class="rhpanel__desc">행사 전 운영 점검을 위해 공식 부스에 예시 대기시간을 한 번에 입력하거나 비웁니다. ' +
-        '입력값은 행사 전 관람객 화면에 표시되지 않습니다. QR·PIN·기존 대기 기록은 유지됩니다.</p></div>';
+        '입력값은 행사 전 관람객 화면에도 표시됩니다. 공개 주소를 아는 사람은 누구나 볼 수 있습니다. QR·PIN·기존 대기 기록은 유지됩니다.</p></div>';
     if (!rh.st) {
       if (rh.err) {
         return head + '<p class="rhpanel__lock">' + esc(rhMessage(rh.err)) +
@@ -1801,7 +1801,7 @@
       var byOp = withVal.filter(function (r) { return r.by === 'qr' || r.by === 'pin'; }).length;
       var message = fill
         ? '공식 부스 ' + targets.length + '곳에 운영 점검용 예시 대기시간을 저장합니다.\n' + mixSummary(examplePlan(targets)) + '\n' +
-          '행사 전 관람객 화면에는 표시되지 않습니다.' +
+          '행사 전 관람객 화면에도 표시됩니다(공개 주소). 외부에서 볼 수 있다는 점을 확인해 주세요.' +
           (withVal.length ? '\n\n현재 대기값이 있는 ' + withVal.length + '곳' + (byOp ? '(운영자 입력 ' + byOp + '곳 포함)' : '') +
             '은 예시값으로 덮어씁니다.' : '') +
           '\n매일 23:00에 현재 대기값만 자동 초기화됩니다. 기존 대기 기록·QR·PIN은 유지됩니다.'
