@@ -257,6 +257,18 @@
         <button type="button" class="npush__btn" id="npush-btn" data-act="push-on">알림 받기</button>
       </div>
 
+      <!-- QR/PIN 인증 후 한 번만 자동 안내. 브라우저 권한 요청은 허용 버튼을 눌렀을 때만 합니다. -->
+      <section class="npush-invite" id="npush-invite" aria-labelledby="npush-invite-title" hidden>
+        <div class="npush-invite__copy">
+          <h2 class="npush-invite__title" id="npush-invite-title">운영본부 알림을 받아보세요</h2>
+          <p class="npush-invite__desc">부스에 확인 요청이 오면 휴대전화에도 알려 드려요.</p>
+        </div>
+        <div class="npush-invite__actions">
+          <button type="button" class="npush-invite__later" data-act="push-later">나중에</button>
+          <button type="button" class="npush-invite__allow" data-act="push-on">알림 허용하기</button>
+        </div>
+      </section>
+
       <p class="note" id="demo-note" hidden>협의용 예시 · 여기서 누른 값은 이 브라우저의 예시 화면에만 보여요</p>
       <div class="tip" id="tip" hidden>
         <p class="tip__text">홈 화면에 추가해 두면 다음에 바로 열 수 있어요</p>
@@ -432,6 +444,7 @@
     // 시연 값이 실제로 운영하는 부스의 '최근 연 부스' 를 덮지 않게 시연은 따로 적어 둡니다.
     var KEY_LAST = isMock ? 'aisw-boothctrl-last-demo' : 'aisw-boothctrl-last';
     var KEY_TIP = 'aisw-boothctrl-tip';
+    var KEY_PUSH_INVITE = 'aisw-boothctrl-push-invite-v1';
     // PIN 으로 연 화면(QR 카드가 없을 때). PIN 은 어디에도 남기지 않고, 서버가 준 임시 세션만 둡니다.
     //   KEY_PIN       { session, booth_id, zone_key, code, name, org, zone_name, expires_at }
     //   KEY_PIN_LAST  세션이 끝난 뒤 'PIN 다시 입력' 에서 미리 고를 부스 { booth_id, zone_key, code, name }
@@ -1644,7 +1657,7 @@
        대기 값 · 저장 흐름 · 로그인은 건드리지 않습니다(따로 묻고 따로 그림). 협의용 예시(?demo)에서는 쓰지 않습니다. */
     var NOTICE_ON = !!(core.cfg && core.cfg.boothNotices === true) && !isMock;
     // open: 기기 알림을 눌러 열었을 때의 알림 번호(주소 ?nt= 또는 Service Worker 메시지) — 첫 목록에서 한 번 견줘 봄
-    var nt = { timer: null, stopped: true, fails: 0, items: [], shown: {}, acking: false, open: 0 };
+    var nt = { timer: null, stopped: true, ready: false, fails: 0, items: [], shown: {}, acking: false, open: 0 };
     // 다시 보이면 0~3초 흩뜨려 이어 묻습니다(가려진 동안은 묻지 않음 — 위 noticeTick)
     document.addEventListener('visibilitychange', function () {
       if (!nt.stopped && !document.hidden && !dead) noticeNext(Math.random() * 3000);
@@ -1669,6 +1682,7 @@
       noticeCall('list').then(function (r) {
         if (nt.stopped || dead) return;
         nt.fails = 0;
+        nt.ready = true;
         var on = !!(r && r.enabled === true);
         var before = nt.items;
         // 먼저 온 알림부터 하나씩. 만료 시각이 지난 것은 서버가 빼지만, 연결이 끊긴 동안에도 화면에 남지 않게 여기서도 뺍니다.
@@ -1696,12 +1710,14 @@
     function startNotice() {
       if (!NOTICE_ON || !nt.stopped || dead) return;
       nt.stopped = false;
+      nt.ready = false;
       noticeNext(nt.open ? 0 : 1500 + Math.random() * 1500);
       pushInit();
     }
     function stopNotice() {
       if (!nt) return;   // 알림 칸을 만들기 전(처음 불러오는 중)에 멈추는 경우
       nt.stopped = true;
+      nt.ready = false;
       clearTimeout(nt.timer);
       nt.items = [];
       paintNotice();
@@ -1724,9 +1740,10 @@
       if (!box || !nt) return;
       var it = nt.items[0];
       box.hidden = !it || view !== 'main';
-      if (box.hidden) return;
+      if (box.hidden) { if (pu && pu.inited) paintPush(); return; }
       $('notice-time').textContent = core.formatClock(it.created_at);
-      $('notice-t').textContent = it.body;
+      // 서버 기록은 변경하지 않고 짧은 기본 문구만 화면에서 구체화합니다(관리자 사용자 지정 문구는 보존).
+      $('notice-t').textContent = it.body === '다시 확인해 주세요.' ? '운영본부에서 확인 요청이 있습니다. 부스 운영 상황을 다시 확인해 주세요.' : it.body;
       $('notice-n').hidden = nt.items.length < 2;
       $('notice-n').textContent = nt.items.length > 1 ? '1 / ' + nt.items.length : '';
       var b = $('notice-ack');
@@ -1737,6 +1754,7 @@
         nt.shown[it.id] = true;
         noticeCall('shown', it.id).then(function () { it.shown = true; }, function () { nt.shown[it.id] = false; });
       }
+      if (pu && pu.inited) paintPush();
     }
     function noticeAck() {
       var it = nt.items[0];
@@ -1764,7 +1782,7 @@
        Service Worker(/booth-ctrl-sw.js · 범위 /booth-ctrl)는 fetch 를 가로채지 않습니다. 화면이 보이면 시스템 알림 대신 여기로 ‘지금 다시 읽기’ 를 알립니다.
        무엇이 실패해도 화면 안 알림 카드(위)는 그대로 돕니다. */
     var PUSH_ON = NOTICE_ON && cfg.boothPush === true;
-    var pu = { inited: false, state: 'none', key: '', reg: null, sub: null, busy: false };   // state: none(안 보임) · ask(알림 받기) · on(받는 중)
+    var pu = { inited: false, state: 'none', key: '', reg: null, sub: null, busy: false, inviteDismissed: !!lsGet(KEY_PUSH_INVITE) };   // state: none(안 보임) · ask(알림 받기) · on(받는 중)
     function pushSupported() {
       try { return !!(window.isSecureContext && navigator.serviceWorker && window.PushManager && window.Notification); } catch (e) { return false; }
     }
@@ -1794,15 +1812,27 @@
       pu.reg.getNotifications({ tag: 'aisw-notice-' + id }).then(function (l) { l.forEach(function (n) { n.close(); }); }, function () { /* 무시 */ });
     }
     function paintPush() {
-      var box = $('npush');
-      if (!box) return;
-      box.hidden = pu.state === 'none' || view !== 'main';
+      var box = $('npush'), inviteBox = $('npush-invite');
+      if (!box || !inviteBox) return;
+      // 인증 및 첫 알림 목록 조회 후 자동 표시. 확인 대기 중인 알림이 있으면 그것부터 확인하게 둡니다.
+      // 이미 허용/차단했거나 [나중에]를 선택한 기기에는 반복 노출하지 않습니다.
+      var showInvite = pu.state === 'ask' && !pu.busy && !pu.inviteDismissed &&
+        !dead && !nt.stopped && nt.ready && !nt.items.length &&
+        loaded && confirmed && view === 'main' &&
+        window.Notification.permission === 'default';
+      inviteBox.hidden = !showInvite;
+      box.hidden = pu.state === 'none' || dead || nt.stopped || view !== 'main' || showInvite;
       if (box.hidden) return;
       $('npush-t').textContent = pu.state === 'on' ? '기기 알림 켜짐' : '기기 알림';
       var b = $('npush-btn');
       b.hidden = pu.state === 'on';
       b.disabled = pu.busy;
       b.textContent = pu.busy ? '켜는 중' : '알림 받기';
+    }
+    function dismissPushInvite() {
+      pu.inviteDismissed = true;
+      lsSet(KEY_PUSH_INVITE, { at: Date.now() });
+      paintPush();
     }
     function pushInit() {
       if (!PUSH_ON || pu.inited || dead || (sess && sess.demo)) return;
@@ -1828,6 +1858,7 @@
     }
     function pushOn() {
       if (pu.busy || !pu.key || pu.state !== 'ask') return;
+      dismissPushInvite();
       pu.busy = true;
       paintPush();
       var done = function (state, msg, kind) {
@@ -2364,6 +2395,7 @@
       if (act === 'pin-back') { pinBack(); return; }
       if (act === 'pin-logout') { pinLogout(t); return; }
       if (act === 'push-on') { pushOn(); return; }
+      if (act === 'push-later') { dismissPushInvite(); return; }
 
       if (t.classList.contains('w')) { tap('open', Number(t.getAttribute('data-wait'))); return; }
       if (t.id === 'btn-pause') { tap('pause', 0); return; }
@@ -2556,7 +2588,9 @@
       // 같은 부스를 연 다른 탭이 보내기를 끝내면(보내는 중 표시를 지움) 기다리던 누름을 곧바로 따집니다.
       // 서버를 먼저 읽어, 이미 들어갔으면 '저장됨' 으로 비우고 아니면 보냅니다. 10초 차례를 기다리지 않게.
       window.addEventListener('storage', function (e) {
-        if (dead || !e || e.key !== keySending()) return;
+        if (dead || !e) return;
+        if (e.key === KEY_PUSH_INVITE) { pu.inviteDismissed = !!lsGet(KEY_PUSH_INVITE); paintPush(); return; }
+        if (e.key !== keySending()) return;
         if (!e.newValue && pending && loaded && confirmed && !inflight) refresh();
         else render();
       });
