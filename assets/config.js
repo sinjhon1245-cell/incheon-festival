@@ -102,7 +102,7 @@ window.FESTIVAL_CONFIG = {
 
   /* 운영자 화면의 [알림 받기](휴대전화 시스템 알림 · Web Push, 기본 꺼짐). boothNotices 가 켜져 있고,
      Vercel 에 VAPID 키가 등록돼 있고, 서버 push_enabled 가 켜져 있을 때만 보입니다. true · false 한 단어만. */
-  boothPush: false,
+  boothPush: true,
 
   /* 부스 대기 시간이 이 시간(분) 넘게 바뀌지 않으면 숫자를 흐리게
      보여 줍니다. 오래된 대기 시간을 사실처럼 보이지 않게 합니다.
