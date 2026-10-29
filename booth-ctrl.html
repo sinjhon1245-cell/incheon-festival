@@ -2109,12 +2109,9 @@
       return toMs(b.congestion_updated_at) < info.todayOpenAt.getTime();
     }
     function beforeOpenValue(info) { return beforeOpen(booth, info); }
-    // 행사 전(리허설 기간)에는 모든 부스의 값이 관람객 화면에 '리허설 중 · 실제 대기시간이 아닙니다' 띠와 함께
-    // 보입니다(live/api/live-snapshot.mjs · visitor.html 과 같은 규칙). 행사 날부터는 운영 시간 규칙을 따릅니다.
-    function rehearsalShown(info) { return !!info && info.phase === 'before'; }
-    // 관람객 화면에 지금 값이 보이는 때인가 — 운영 시간(문을 연 뒤 닫기 전) 또는 행사 전 리허설.
+    // 실제 관람객 화면은 행사 운영 시간 중의 대기값만 표시합니다.
     // 시간표를 아직 못 받았거나 시연이면 운영 중으로 봅니다.
-    function visibleNow(info) { return !info || info.phase === 'open' || rehearsalShown(info); }
+    function visibleNow(info) { return !info || info.phase === 'open'; }
 
     // 저장 알림. 운영 시간 밖에서 넣은 값은 관람객 화면에 보이지 않습니다(문을 열면 '문 열기 전 값' 으로,
     // 날이 바뀌면 '어제 값' 으로 지워집니다). '반영됐어요' 라고 하면 안 되어 그대로 알립니다.
@@ -2122,7 +2119,7 @@
     function savedShows(b) {
       if (!settings) return null;
       var info = eventInfo();
-      return (info.phase === 'open' && !beforeOpen(b, info)) || rehearsalShown(info);
+      return info.phase === 'open' && !beforeOpen(b, info);
     }
     // 알림 첫 줄의 값 이름. 모두 받침으로 끝나 뒤에 '으로' 를 붙입니다.
     function savedWord(b) {
@@ -2150,8 +2147,8 @@
         if (beforeOpen(b, info)) return head + '\n문 열기 전 값이라 관람객 화면에는 아직 안 보여요.';
         return head + '\n관람객 화면에도 곧 표시됩니다.';
       }
-      // 행사 전(리허설) 값은 관람객 화면에 '리허설 중' 띠와 함께 보입니다.
-      if (rehearsalShown(info)) return head + '\n관람객 화면에 ‘리허설 중’ 안내와 함께 보여요.';
+      // 행사 전에도 운영자 저장과 PIN 접속은 정상 동작하되 관람객에게 시험 값은 표시하지 않습니다.
+      if (info.phase === 'before') return head + '\n행사 전 입력값은 저장됐지만 관람객 화면에는 표시되지 않아요.';
       if (info.phase === 'preopen') {
         return head + '\n문을 연 뒤' + (info.openTime ? '(' + info.openTime + ')' : '') + ' 한 번 더 눌러 주세요.';
       }
@@ -2163,9 +2160,8 @@
 
     function phaseNote(info) {
       if (!info) return '';
-      // 행사 전(리허설)에는 카드 아래 안내를 두지 않습니다(운영 요청, 2026-10-21). 리허설 값 처리와
-      // 저장 알림('관람객 화면에 ‘리허설 중’ 안내와 함께 보여요') · 관람객 화면의 '리허설 중' 띠는 그대로입니다.
-      if (rehearsalShown(info)) return '';
+      // 행사 전에는 카드 아래 불필요한 안내를 두지 않습니다.
+      if (info.phase === 'before') return '';
       if (info.phase === 'preopen' && info.openTime) {
         return '문 열기 전이에요. ' + info.openTime + '에 문을 열면 대기 시간을 한 번 더 눌러 주세요.';
       }
