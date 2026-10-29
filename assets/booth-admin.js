@@ -606,7 +606,7 @@
     return '<option value="">구역 전체</option>' + zs.map(function (z) {
       var nm = zoneName(z);
       return '<option value="' + esc(z.key) + '"' + (ui.zone === z.key ? ' selected' : '') + '>' +
-        esc(nm ? z.key + ' · ' + nm : z.key + '구역') + '</option>';
+        esc(nm ? (nm === z.key ? nm : z.key + ' · ' + nm) : z.key + '구역') + '</option>';
     }).join('');
   }
   function emptyHtml(all) {
@@ -626,6 +626,11 @@
       '<div class="state__act"><button class="btn btn--ghost btn--sm" type="button" data-reset>조건 지우기</button></div></div>';
   }
 
+  function isFinalSchoolLayout() {
+    return ['초등', '중등', '고등', '특수'].every(function (key) {
+      return data.zones.some(function (z) { return z.key === key && z.is_published === true; });
+    });
+  }
   function renderLiveShell() {
     $('#view').innerHTML =
       '<div class="page lvpage">' +
@@ -633,7 +638,7 @@
           '<p class="page__desc">공개 부스의 혼잡 · 대기와 손이 가야 하는 부스를 봅니다.</p></div>' +
           '<div class="page__actions">' +
             // 행사 전 리허설 — 실제 부스 84곳(아래 리허설 관리). 협의용 예시(?demo)에는 없습니다.
-            (DEMO ? '' : '<button class="btn btn--ghost btn--sm" type="button" id="lv-rh-toggle" data-rh-toggle aria-expanded="' + rh.open +
+            (DEMO || isFinalSchoolLayout() ? '' : '<button class="btn btn--ghost btn--sm" type="button" id="lv-rh-toggle" data-rh-toggle aria-expanded="' + rh.open +
               '" aria-controls="lv-rh">리허설 관리</button>') +
             // 운영 준비용 예시 부스가 공개돼 있을 때만 보입니다(paintExampleBtn). 협의용 예시(?demo)에는 없습니다.
             '<button class="btn btn--ghost btn--sm" type="button" id="lv-example-fill" data-example="fill" hidden>예시 현황 채우기</button>' +
@@ -642,7 +647,7 @@
             '<a class="btn btn--ghost btn--sm" href="admin.html' + (DEMO ? '?demo=1' : '') + '#booths">부스 정보 관리</a>' +
           '</div></div>' +
         (DEMO ? '<p class="demohint">' + esc(DEMO_TEXT) + ' 현황 수정을 눌러도 실제 DB에 반영되지 않고, 새로 고치면 처음 예시로 돌아갑니다.</p>' : '') +
-        (DEMO ? '' : '<section class="card rhpanel" id="lv-rh" aria-labelledby="lv-rh-title"' + (rh.open ? '' : ' hidden') + '></section>') +
+        (DEMO || isFinalSchoolLayout() ? '' : '<section class="card rhpanel" id="lv-rh" aria-labelledby="lv-rh-title"' + (rh.open ? '' : ' hidden') + '></section>') +
         '<p class="lvmeta" id="lv-meta" aria-live="polite"></p>' + offHtml(null) +
         '<div class="lvpin" id="lv-pin"></div>' +
         '<div class="odash" id="lv-sum"></div>' +

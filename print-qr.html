@@ -1625,7 +1625,7 @@
           if (cur !== null) out += '</section>';
           cur = k;
           out += '<section class="zsect" data-zone="' + esc(k) + '"><h3 class="zsect__h">' +
-            esc(b.unplaced ? MSG.UNPLACED : ([k, b.zone_name].filter(Boolean).join(' · ') || '구역 미정')) + '</h3>';
+            esc(b.unplaced ? MSG.UNPLACED : (k === b.zone_name ? k : ([k, b.zone_name].filter(Boolean).join(' · ') || '구역 미정'))) + '</h3>';
         }
         out += itemHtml(b);
       });
@@ -1654,7 +1654,7 @@
       box.innerHTML = [{ key: '', name: '', n: scopedList(kind).length }].concat(zs).map(function (z) {
         var on = S.lists[kind].zone === z.key;
         var label = z.key === UNPLACED ? MSG.UNPLACED : (z.key ? z.key : '전체');
-        var full = z.key === UNPLACED ? MSG.UNPLACED : z.key + ' · ' + z.name;
+        var full = z.key === UNPLACED ? MSG.UNPLACED : (z.key === z.name ? z.key : z.key + ' · ' + z.name);
         return '<button type="button" class="zchip" data-zone-f="' + esc(z.key) + '" data-list="' + kind + '" aria-pressed="' + on + '"' +
           (z.key ? ' title="' + esc(full) + '" aria-label="' + esc(full + ' · ' + z.n + '곳') + '"' : '') + '>' +
           esc(label) + '<span>' + z.n + '</span></button>';
@@ -3561,7 +3561,7 @@
       if (s.normalize) s = s.normalize('NFC');
       return s.trim().toLowerCase();
     }
-    function zoneText(b) { return [b.zone_key, b.zone_name].filter(Boolean).join(' '); }
+    function zoneText(b) { return b.zone_key && b.zone_key === b.zone_name ? b.zone_name : [b.zone_key, b.zone_name].filter(Boolean).join(' '); }
     function orgText(b) { return BC.displayOrganization(b.org); }
     function fmtPin(p) { p = String(p || ''); return /^\d{6}$/.test(p) ? p.slice(0, 3) + ' ' + p.slice(3) : p; }
     function pinOk(p) { return isMock ? /^\d{4,6}$/.test(String(p || '')) : /^\d{6}$/.test(String(p || '')); }
