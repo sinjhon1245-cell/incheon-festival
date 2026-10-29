@@ -80,7 +80,7 @@
   // sure: 마지막 확인 체크 · sent: 보낸 pick(결과를 견줄 때)
   // mode: 'rehearsal'(부스 1곳만 — 기본 · 모드 함수가 없거나 못 읽어도 이것) · 'event'(모든 종류). 서버(admin_send_booth_notice)도 같은 규칙으로 막습니다.
   var notice = { fn: '', on: null, mode: 'rehearsal', rows: [], open: false, kind: '', zone: '', booth: '', body: '', step: 'compose', pick: null, sure: false,
-    busy: false, res: null, sent: null, push: null, err: '' };
+    busy: false, res: null, sent: null, push: null, pushBusy: false, err: '' };
   var busy = {};
   var stops = [];
   var started = false;
@@ -1292,7 +1292,7 @@
         (oneOk ? '<p class="ntres__l"><b>보낸 부스 1곳 확인 — ' + esc(sent[0]) + '</b></p>' : '') +
         line('보냄', sent) + line('10분 안에 같은 알림 받음(서버가 뺌)', recent) +
         line('지금 대상 아님(그 사이 상태가 바뀌어 서버가 뺌)', notT) + line('화면 목록에 없던 부스', extra) + line('서버 결과에 없음', miss) +
-        (notice.push ? '<p class="ntres__l">기기 알림 <b>' + (Number(notice.push.booths) || 0) + '곳</b> — [알림 받기] 한 기기에만 갑니다(받음 · 확인과 별개)</p>' : '') +
+        noticePushHtml() +
         '<p class="ntres__n">운영자 화면에 뜨면 ‘화면에 표시됨’, 운영자가 누르면 ‘운영자 확인’ 으로 바뀝니다.</p>' +
       '</div>';
   }
@@ -1379,8 +1379,8 @@
         notice.res = rows || []; notice.sent = p; notice.push = null;
         noticeReset();
         var nid = (notice.res.filter(function (x) { return x.status === 'queued' && x.notice_id; })[0] || {}).notice_id;
-        // 기기 알림(Web Push)은 화면 안 알림 다음 일입니다 — 결과를 기다리지 않고 따로 그립니다. 실패 · 꺼짐이면 아무것도 쓰지 않음.
-        if (nid) noticePush(nid).then(function (r) { if (r && r.ok && notice.sent === p) { notice.push = r; paint(); } });
+        // 기기 알림(Web Push)은 화면 안 알림 다음 일입니다 — 결과를 기다리지 않고 따로 그립니다. 꺼져 있으면(null) 아무것도 쓰지 않음.
+        if (nid) { p.nid = nid; noticePushRun(p); }
         return loadNotice(false, true);
       }, function (e) {
         notice.busy = false;
@@ -1403,13 +1403,46 @@
         method: 'POST', mode: 'cors', credentials: 'omit', cache: 'no-store',
         headers: { Authorization: 'Bearer ' + s.access_token, 'Content-Type': 'application/json' },
         body: JSON.stringify({ notice_id: id })
-      }).then(function (r) { return r.ok ? r.json() : null; });
-    }).then(null, function () { return null; });
+      }).then(function (r) {
+        if (r.status === 503) return null;   // 키가 없음(꺼짐) — 조용히
+        return r.ok ? r.json() : { ok: false, error: r.status };
+      });
+    }).then(null, function () { return { ok: false, error: 0 }; });
+  }
+  // 보내기 · [기기 알림 다시 보내기] 모두 이 길. 다시 보내면 DB 가 아직 못 보낸 기기만 돌려주므로(이미 받은 부스 · 확인 · 만료 제외) 겹쳐 보내지 않습니다.
+  function noticePushRun(p) {
+    notice.pushBusy = true;
+    if (notice.sent === p) paint();
+    noticePush(p.nid).then(function (r) {
+      notice.pushBusy = false;
+      if (notice.sent !== p) return;
+      var prev = notice.push && notice.push.ok ? notice.push : null;
+      if (r && r.ok && prev) r = { ok: true, retried: true, booths: (prev.booths || 0) + (r.booths || 0), failedBooths: r.failedBooths || 0,
+        goneBooths: (prev.goneBooths || 0) + (r.goneBooths || 0), recorded: r.recorded };
+      notice.push = r;
+      paint();
+    });
+  }
+  function noticePushHtml() {
+    var r = notice.push;
+    if (!r && !notice.pushBusy) return '';
+    var retry = '<button class="btn btn--ghost btn--sm" type="button" data-notice="push-retry"' + (notice.pushBusy ? ' disabled' : '') + '>' +
+      (notice.pushBusy ? '보내는 중…' : '기기 알림 다시 보내기') + '</button>';
+    if (!r) return '<p class="ntres__l">기기 알림 보내는 중…</p>';
+    if (!r.ok) return '<p class="ntres__l ntres__x"><b>기기 알림을 보내지 못했습니다' + (r.error ? '(' + esc(String(r.error)) + ')' : '(연결)') + '</b> — 화면 안 알림은 보냈습니다. ' + retry + '</p>';
+    var none = !(r.booths || r.failedBooths || r.goneBooths);
+    return '<p class="ntres__l">기기 알림 <b>' + (r.booths || 0) + '곳</b>' +
+      (r.failedBooths ? ' · <b class="ntres__x">실패 ' + r.failedBooths + '곳</b>' : '') +
+      (r.goneBooths ? ' · 끊김 ' + r.goneBooths + '곳(그 기기에서 다시 [알림 받기])' : '') +
+      (none ? (r.retried ? ' — 더 보낼 기기가 없습니다(받음 · 확인 · 만료)' : ' — [알림 받기] 한 기기가 없습니다') : '') +
+      (r.recorded === false ? ' · <b class="ntres__x">결과를 기록하지 못함</b>' : '') +
+      ' <small>(받음 · 확인과 별개)</small>' + (r.failedBooths || r.recorded === false ? ' ' + retry : '') + '</p>';
   }
   function noticeAct(k) {
     if (k === 'open') { noticeOpen(); return; }
     if (notice.busy) return;
-    if (k === 'close') { notice.open = false; notice.res = null; notice.sent = null; noticeReset(); paint(); return; }
+    if (k === 'push-retry') { if (notice.sent && notice.sent.nid && !notice.pushBusy) noticePushRun(notice.sent); return; }
+    if (k === 'close') { notice.open = false; notice.res = null; notice.sent = null; notice.push = null; noticeReset(); paint(); return; }
     if (k === 'preview') { noticePreview(); return; }
     if (k === 'confirm' && notice.step === 'preview') { notice.step = 'confirm'; notice.sure = false; paint(); return; }
     if (k === 'back' && notice.step === 'confirm') { notice.step = 'preview'; notice.sure = false; paint(); return; }
