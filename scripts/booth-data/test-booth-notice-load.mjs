@@ -31,7 +31,7 @@ const { Client } = createRequire(join(resolve(arg('pg-dir')), 'package.json'))('
 const ADMIN = '00000000-0000-4000-8000-00000000a001', ADMIN2 = '00000000-0000-4000-8000-00000000a002';
 const results = [], metrics = {};
 function t(name, ok, note = '') { results.push({ name, ok: !!ok, note: String(note).slice(0, 700) }); console.log(`${ok ? '통과' : '실패'}  ${name}${note ? '  — ' + String(note).slice(0, 700) : ''}`); }
-const settle = p => p.then(v => ({ ok: true, v }), e => ({ ok: false, code: e.code, message: e.message }));
+const settle = p => p.then(v => ({ ok: true, v }), e => ({ ok: false, code: e.code, hint: e.hint, message: e.message }));
 const pct = (a, p) => { const s = a.slice().sort((x, y) => x - y); return s.length ? s[Math.min(s.length - 1, Math.floor(p * s.length))] : 0; };
 async function client(uid) { const c = new Client({ connectionString: process.env.PGURL }); await c.connect(); if (uid) await c.query("select set_config('test.uid', $1, false)", [uid]); return c; }
 
@@ -171,7 +171,7 @@ if (HAS_REH) {
   // 관리자 둘이 같은 순간: 한쪽은 일괄(확인 필요 · 전체 공개), 다른 쪽은 부스 1곳 — ROUNDS 번, 매번 다른 부스
   let bulkOk = 0, bulkWrongErr = 0, oneBad = 0, otherBooth = 0;
   for (let i = 0; i < ROUNDS; i++) {
-    const one = R[(i * 7) % R.length];
+    const one = R[i % R.length];   // 판마다 다른 부스(같은 부스면 10분 중복 방지에 걸림)
     const [ra, rb] = await Promise.all([settle(send(A, i % 2 ? 'all' : 'stale', i % 2 ? '전체' : '')), settle(send(B, 'booth', '[리허설] 동시 시험', [one]))]);
     if (ra.ok) bulkOk++; else if (!(ra.code === '55000' && ra.hint === 'rehearsal_only')) bulkWrongErr++;
     if (!rb.ok || rb.v.length !== 1 || rb.v[0].booth_id !== one || rb.v[0].status !== 'queued') oneBad++;
