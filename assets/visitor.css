@@ -52,6 +52,7 @@
   --num-ink:      #3B2DAE;
   --num-bg:       #F1EFFD;
   --num-bg-hover: #E7E3FC;
+  --num-bg-open:  #E0DAFB;   /* 펼친 줄의 번호 띠 — 번호 글자 7.9:1 */
   --num-w:  56px;
   --num-fs: 30px;
 
@@ -889,9 +890,8 @@ html.is-demo .row { scroll-margin-top: calc(56px + var(--demo-h) + env(safe-area
   background: var(--num-bg);
   pointer-events: none;
 }
-/* 펼친(고른) 줄은 번호 띠를 보라로 칠하고 번호를 흰 글자로 — 어느 부스를 보고 있는지 바로 보입니다 */
-.row:has(> .row__main[aria-expanded="true"])::before { background: var(--accent); }
-.row:has(> .row__main[aria-expanded="true"]) .row__code { color: #fff; }
+/* 펼친 줄은 번호 띠만 한 단계 진한 옅은 보라로 — '고른 것' 을 크게 칠하지 않고 펼쳐 둔 줄임만 알립니다(번호 글자 색 그대로) */
+.row:has(> .row__main[aria-expanded="true"])::before { background: var(--num-bg-open); }
 .row__main {
   --name-lh: 24px;
   position: relative;   /* 번호 띠 위에 글자 */
@@ -900,8 +900,8 @@ html.is-demo .row { scroll-margin-top: calc(56px + var(--demo-h) + env(safe-area
   column-gap: 12px;
   align-items: baseline;
   width: 100%;
-  min-height: 72px;
-  padding: 16px 0;
+  min-height: 68px;
+  padding: 14px 0;
   border: 0;
   background: none;
   text-align: left;
@@ -909,7 +909,7 @@ html.is-demo .row { scroll-margin-top: calc(56px + var(--demo-h) + env(safe-area
 .row__main:focus-visible { outline-offset: -2px; }
 @media (hover: hover) {
   .row:not(.is-pending):hover::before { background: var(--num-bg-hover); }
-  .row:has(> .row__main[aria-expanded="true"]):hover::before { background: var(--accent); }
+  .row:has(> .row__main[aria-expanded="true"]):hover::before { background: var(--num-bg-open); }
 }
 /* 부스 번호 — 줄에서 가장 먼저 읽히는 글자입니다(행사장에서는 번호 표지를 보고 찾습니다). 크기 · 굵기 · 진한 보라로 세우고,
    늘 같은 폭 번호 띠의 한가운데(가로 · 세로)에 둡니다 — 1 · 2자리 모두 띠 가운데라 줄마다 같은 자리로 보입니다.
@@ -962,12 +962,15 @@ html.is-demo .row { scroll-margin-top: calc(56px + var(--demo-h) + env(safe-area
   overflow: visible;
 }
 .row.is-closed .row__name { color: var(--st-off); }
+/* 대기 분(32px)은 이름(17px)보다 글자 위쪽이 7px 높아, 기준선을 맞추면 이름을 7px 아래로 밀어 '20분' 줄만 7px 높아졌습니다.
+   위 여백을 7px 당겨 그 몫을 위 여백 안에서 쓰게 합니다 — 기준선은 그대로 맞고, 줄 높이는 대기 값 모양과 상관없이 같습니다. */
 .row__right {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
   justify-content: flex-start;
-  gap: 6px;
+  gap: 4px;
+  margin-top: -7px;
   text-align: right;
 }
 
@@ -1102,14 +1105,14 @@ html.is-demo .row { scroll-margin-top: calc(56px + var(--demo-h) + env(safe-area
 }
 .map__fig .link { font-size: 13px; }
 
-/* 한눈에 칸 — 칸 사이 흰 틈 6px(한 줄 칸 수는 4px 때와 같음: 360 4 · 390 5 · 768 이상 7) + 칸마다 얇은 안쪽 선 + 모서리 4px.
-   같은 색 칸이 나란히 있어도 한 부스씩 떨어져 보입니다. 고른 칸의 보라 테두리(3px + 1px 띄움)는 이 틈 안에 들어가 옆 칸을 덮지 않습니다.
-   칸 높이는 폭의 1.1배로 모두 같고, 번호 · 대기 · 상태 세 줄 묶음을 칸 가운데(세로)에 둡니다. */
+/* 한눈에 칸 — 칸 사이 흰 틈 6px(한 줄 칸 수: 360 4 · 390 5 · 768 이상 7) + 칸마다 얇은 안쪽 선 + 모서리 4px.
+   같은 색 칸이 나란히 있어도 한 부스씩 떨어져 보입니다. 칸은 정사각형이고, 번호 · 대기 · 상태 세 줄 묶음(25 + 16 + 11px,
+   줄 사이 2px)을 칸 가운데(세로)에 둡니다 — 390px(65px 칸)에서도 실제 글자 위아래에 7 · 6px 안팎이 남습니다. */
 .tiles {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
   gap: 6px;
-  margin-top: 12px;
+  margin-top: 10px;
 }
 .tile {
   --tile-edge: rgba(22, 32, 60, .14);
@@ -1117,11 +1120,11 @@ html.is-demo .row { scroll-margin-top: calc(56px + var(--demo-h) + env(safe-area
   display: flex;
   flex-direction: column;
   justify-content: center;
-  gap: 3px;
-  aspect-ratio: 1 / 1.1;
+  gap: 2px;
+  aspect-ratio: 1 / 1;
   min-height: 64px;
   min-width: 0;
-  padding: 6px 7px;
+  padding: 4px 7px;
   border: 0;
   border-radius: 4px;
   background: var(--line-2);
@@ -1169,15 +1172,13 @@ html.is-demo .row { scroll-margin-top: calc(56px + var(--demo-h) + env(safe-area
 .tile.is-idle .tile__no { color: var(--num-ink); }
 .tile.is-unknown .tile__v { color: var(--faint); }   /* '—' 는 장식. 뜻은 '정보 없음' 이 전합니다 */
 .tile.is-idle { color: var(--ink-2); }
-/* 손가락 · 마우스 · 키보드 — 올리면 안쪽 선이 진해지고(마우스 있는 기기만), 키보드 초점은 남색 2px, 고른 칸은 보라 3px.
-   바깥 테두리는 모두 칸에서 1px 띄워 6px 틈 안(최대 4px)에 그려 옆 칸에 닿지 않습니다. */
+/* 손가락 · 마우스 · 키보드 — 올리면 안쪽 선이 진해지고(마우스 있는 기기만), 키보드 초점은 남색 2px(칸에서 1px 띄워 6px 틈 안).
+   칸을 누르면 아래 상세가 열릴 뿐 칸에 테두리를 남기지 않습니다(상세 머리의 번호가 어느 부스인지 말함).
+   고른 상태(.is-sel · aria-expanded)는 그대로 두어 다시 누르기 · 닫기 · 뒤로 가기 · 화면 읽기는 전과 같습니다. */
 @media (hover: hover) {
   .tile:hover { box-shadow: inset 0 0 0 2px rgba(22, 32, 60, .42); }
 }
 .tile:focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; z-index: 1; }
-/* 고른 칸 — 상태 색과 겹치지 않는 보라 테두리(3px)로. 키보드 초점이 함께 있어도 보라가 이깁니다 */
-.tile.is-sel,
-.tile.is-sel:focus-visible { outline: 3px solid var(--accent); outline-offset: 1px; z-index: 1; }
 
 .sq--free   { background: var(--st-free); }
 .sq--normal { background: var(--st-normal); box-shadow: inset 0 0 0 1px var(--st-edge); }
