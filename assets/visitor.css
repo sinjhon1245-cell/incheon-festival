@@ -47,6 +47,14 @@
   --faint:       #8A93AB;   /* 장식(타일의 '—') — 큰 글자(3:1 기준)에만 */
   --lag:         #FFC857;   /* 보라 띠 위 '오래된 정보' 네모. 장식이라 글자에는 쓰지 않습니다 */
 
+  /* 부스 번호 — 목록 · 한눈에 · 상세 · '지금 계신 부스' 가 같이 씁니다. 보라(--accent) 계열의 진한 글자와 옅은 띠.
+     글자 #3B2DAE 는 흰 바탕 9.8:1 · 띠(#F1EFFD) 위 9.0:1. 띠는 상태 색(초록 · 노랑 · 빨강 · 회색)과 겹치지 않는 보라입니다. */
+  --num-ink:      #3B2DAE;
+  --num-bg:       #F1EFFD;
+  --num-bg-hover: #E7E3FC;
+  --num-w:  56px;
+  --num-fs: 30px;
+
   --gutter: 20px;
   --bar-h:  48px;
 
@@ -54,7 +62,7 @@
           'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', sans-serif;
 }
 @media (min-width: 600px) {
-  :root { --gutter: 28px; }
+  :root { --gutter: 28px; --num-w: 64px; --num-fs: 32px; }
 }
 
 /* 모서리는 어디에서도 둥글리지 않습니다. iOS 의 검색칸 · 단추 기본 모양까지 한 번에 지웁니다. */
@@ -318,11 +326,11 @@ html.is-demo .row { scroll-margin-top: calc(56px + var(--demo-h) + env(safe-area
 /* 지금 계신 부스(QR) — 번호는 목록 · 한눈에 · 상세와 같은 크기 · 굵기 */
 .here__code {
   display: block;
-  font-size: 28px;
+  font-size: var(--num-fs);
   font-weight: 800;
   line-height: 1;
-  letter-spacing: -0.03em;
-  color: var(--ink);
+  letter-spacing: -0.035em;
+  color: var(--num-ink);
 }
 .here__name {
   margin-top: 6px;
@@ -383,7 +391,7 @@ html.is-demo .row { scroll-margin-top: calc(56px + var(--demo-h) + env(safe-area
   text-align: left;
 }
 .alts li:last-child .alt { border-bottom: 0; }
-.alt__code { font-size: 20px; font-weight: 800; line-height: 1; letter-spacing: -0.03em; color: var(--ink); text-align: right; }
+.alt__code { font-size: 20px; font-weight: 800; line-height: 1; letter-spacing: -0.03em; color: var(--num-ink); text-align: right; }
 .alt__name {
   font-size: 14.5px;
   font-weight: 600;
@@ -862,40 +870,63 @@ html.is-demo .row { scroll-margin-top: calc(56px + var(--demo-h) + env(safe-area
 
 .rows { border-top: 1px solid var(--line); }
 .zone + .rows { border-top: 0; }
+/* 목록 줄 — 세 열: ① 번호 열(고정 폭 · 옅은 보라 띠) │ ② 부스 이름 + 학교(남는 폭) │ ③ 대기 분 + 상태(고정 폭 · 오른쪽 끝).
+   번호 열의 옅은 보라 띠는 줄 높이만큼 위아래로 차서 줄과 줄 사이에도 끊기지 않는 한 열로 보입니다(구분선만 가로지름).
+   번호는 줄(위 · 아래 구분선 사이)의 세로 가운데에 둡니다 — 이름이 한 줄이든 두 줄이든 칸 한가운데라 줄마다 같은 자리로 보입니다.
+   이름 첫 줄과 대기 분은 서로 같은 글자 바닥선(baseline)에 맞춥니다. */
 .row {
+  position: relative;
   border-bottom: 1px solid var(--line);
   scroll-margin-top: 56px;
 }
-/* 세 칸(번호 · 이름과 학교 · 대기 분과 상태)을 모두 위에서부터 둡니다. 번호 줄 높이를 이름 줄과 같게 두어 번호가
-   이름 첫 줄에 오고, 대기 분도 이름 첫 줄 높이에서 시작합니다 — 이름이 두 줄이 되어도 번호 · 대기 분 자리는 그대로입니다. */
+.row::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: var(--num-w);
+  background: var(--num-bg);
+  pointer-events: none;
+}
+/* 펼친(고른) 줄은 번호 띠를 보라로 칠하고 번호를 흰 글자로 — 어느 부스를 보고 있는지 바로 보입니다 */
+.row:has(> .row__main[aria-expanded="true"])::before { background: var(--accent); }
+.row:has(> .row__main[aria-expanded="true"]) .row__code { color: #fff; }
 .row__main {
   --name-lh: 24px;
+  position: relative;   /* 번호 띠 위에 글자 */
   display: grid;
-  grid-template-columns: 52px minmax(0, 1fr) 84px;
+  grid-template-columns: var(--num-w) minmax(0, 1fr) 80px;
   column-gap: 12px;
-  align-items: start;
+  align-items: baseline;
   width: 100%;
-  min-height: 68px;
-  padding: 14px 0;
+  min-height: 72px;
+  padding: 16px 0;
   border: 0;
   background: none;
   text-align: left;
 }
 .row__main:focus-visible { outline-offset: -2px; }
-/* 부스 번호 — 줄에서 가장 먼저 읽히는 글자입니다(행사장에서는 번호 표지를 보고 찾습니다). 배지 · 색 없이
-   크기 · 굵기 · 진한 남색만으로 세우고, 늘 같은 폭(52px) 칸 안에서 오른쪽 끝을 맞춰 1 · 2자리 번호의 일의 자리가
-   한 줄로 섭니다(숫자 폭 같음 — html 의 tabular-nums). 높이는 이름 첫 줄과 같은 자리에서 시작해 이름이 두 줄이 돼도
-   번호 자리는 그대로입니다. 긴 이름 · 학교는 가운데 칸만 줄이 바뀌고 번호 칸은 밀리지 않습니다. */
+@media (hover: hover) {
+  .row:not(.is-pending):hover::before { background: var(--num-bg-hover); }
+  .row:has(> .row__main[aria-expanded="true"]):hover::before { background: var(--accent); }
+}
+/* 부스 번호 — 줄에서 가장 먼저 읽히는 글자입니다(행사장에서는 번호 표지를 보고 찾습니다). 크기 · 굵기 · 진한 보라로 세우고,
+   늘 같은 폭 번호 띠의 한가운데(가로 · 세로)에 둡니다 — 1 · 2자리 모두 띠 가운데라 줄마다 같은 자리로 보입니다.
+   긴 이름 · 학교는 가운데 열만 줄이 바뀌고 번호 열은 밀리지 않습니다. */
 .row__code {
-  font-size: 28px;
+  align-self: center;   /* 줄(구분선 사이)의 세로 가운데 */
+  font-size: var(--num-fs);
   font-weight: 800;
-  line-height: 26px;
-  letter-spacing: -0.03em;
-  color: var(--ink);
-  text-align: right;
+  line-height: 1;
+  letter-spacing: -0.035em;
+  color: var(--num-ink);
+  text-align: center;   /* 번호 띠의 가로 가운데 */
+  /* 가운데 맞춤이라 숫자 폭을 같게 둘 까닭이 없습니다 — 글자 모양대로의 폭이라 '61' · '71' 처럼 1 이 든 번호도 눈에 가운데로 보입니다 */
+  font-variant-numeric: proportional-nums;
   white-space: nowrap;   /* 전체 번호(A-07)를 한 줄로 */
 }
-/* 세 글자 넘는 번호(협의용 예시의 'A-07' 같은 모양)는 같은 칸에 들게 줄입니다. 공식 번호(1~84)는 늘 큰 글자 */
+/* 세 글자 넘는 번호(협의용 예시의 'A-07' 같은 모양)는 같은 열에 들게 줄입니다. 공식 번호(1~84)는 늘 큰 글자 */
 .row__code--long { font-size: 17px; letter-spacing: -0.02em; }
 /* 가운데 칸: 부스 이름(두 줄까지) 아래 운영 학교 한 줄. 학교는 이름보다 한 단계 낮게(작고 · 옅고 · 보통 굵기),
    대기 분 · 상태 칩보다 먼저 눈에 띄지 않게 둡니다. 길면 한 줄에서 … 로 줄이고, 펼치면 끝까지 보입니다. */
@@ -973,9 +1004,10 @@ html.is-demo .row { scroll-margin-top: calc(56px + var(--demo-h) + env(safe-area
 .st--closed  { background: #fff; box-shadow: inset 0 0 0 1px var(--st-off-mark); color: var(--st-off); }
 .st--unknown { padding: 0; font-weight: 600; color: var(--muted-2); }
 
-/* 펼친 내용 — 이름 단과 줄을 맞춥니다(번호 칸 52px + 간격 12px) */
+/* 펼친 내용 — 이름 열과 줄을 맞춥니다(번호 열 + 간격 12px) */
 .row__more {
-  padding: 0 0 16px 64px;
+  position: relative;   /* 번호 띠 위 */
+  padding: 0 0 16px calc(var(--num-w) + 12px);
 }
 /* 체험 내용 · 입력 전 안내가 없으면 펼쳐도 빈칸을 두지 않습니다(펼침은 이름 · 학교를 끝까지 보여 줌) */
 .row__more:empty { display: none; }
@@ -1004,7 +1036,7 @@ html.is-demo .row { scroll-margin-top: calc(56px + var(--demo-h) + env(safe-area
 /* 아직 아무것도 받지 못했을 때의 빈 줄 여섯 개 */
 .sk {
   display: grid;
-  grid-template-columns: 52px minmax(0, 1fr) 84px;
+  grid-template-columns: var(--num-w) minmax(0, 1fr) 80px;
   column-gap: 12px;
   align-items: center;
   height: 68px;
@@ -1030,8 +1062,8 @@ html.is-demo .row { scroll-margin-top: calc(56px + var(--demo-h) + env(safe-area
 #pending { scroll-margin-top: 56px; }
 .pending__note { margin-top: 8px; font-size: 13.5px; line-height: 1.5; color: var(--muted); }
 .group--pending .rows { margin-top: 10px; border-top: 1px solid var(--line); }
-.row.is-pending .row__main { grid-template-columns: 52px minmax(0, 1fr); min-height: 56px; cursor: default; }
-.row.is-pending .row__code { white-space: normal; font-size: 12.5px; font-weight: 600; line-height: 1.3; letter-spacing: -0.01em; color: var(--muted-2); text-align: left; }
+.row.is-pending .row__main { grid-template-columns: var(--num-w) minmax(0, 1fr); min-height: 56px; align-items: start; cursor: default; }
+.row.is-pending .row__code { align-self: start; padding: 0 0 0 8px; white-space: normal; font-size: 12.5px; font-weight: 600; line-height: 1.3; letter-spacing: -0.01em; color: var(--muted-2); text-align: left; }
 /* 펼칠 수 없는 줄이라 긴 이름 · 학교도 여기서 끝까지 보여 줍니다(빈 대기 칸 자리까지 씁니다) */
 .row.is-pending .row__right { display: none; }
 .row.is-pending .row__name { display: block; -webkit-line-clamp: unset; overflow: visible; }
@@ -1070,35 +1102,42 @@ html.is-demo .row { scroll-margin-top: calc(56px + var(--demo-h) + env(safe-area
 }
 .map__fig .link { font-size: 13px; }
 
+/* 한눈에 칸 — 칸 사이 흰 틈 6px(한 줄 칸 수는 4px 때와 같음: 360 4 · 390 5 · 768 이상 7) + 칸마다 얇은 안쪽 선 + 모서리 4px.
+   같은 색 칸이 나란히 있어도 한 부스씩 떨어져 보입니다. 고른 칸의 보라 테두리(3px + 1px 띄움)는 이 틈 안에 들어가 옆 칸을 덮지 않습니다.
+   칸 높이는 폭의 1.1배로 모두 같고, 번호 · 대기 · 상태 세 줄 묶음을 칸 가운데(세로)에 둡니다. */
 .tiles {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
-  gap: 4px;
-  margin-top: 10px;
+  gap: 6px;
+  margin-top: 12px;
 }
 .tile {
+  --tile-edge: rgba(22, 32, 60, .14);
   position: relative;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
-  aspect-ratio: 1 / 1;
+  justify-content: center;
+  gap: 3px;
+  aspect-ratio: 1 / 1.1;
   min-height: 64px;
   min-width: 0;
-  padding: 6px 7px 7px;
+  padding: 6px 7px;
   border: 0;
+  border-radius: 4px;
   background: var(--line-2);
+  box-shadow: inset 0 0 0 1px var(--tile-edge);
   color: var(--muted-2);
   text-align: left;
   overflow: hidden;
 }
 /* 칸 안의 차례: 번호(가장 크게 · 왼쪽 위 고정) → 대기 분 → 상태 낱말. 세 줄 모두 왼쪽 끝을 맞춰
    번호만 훑어 내려가도 찾고, 그 바로 아래에서 대기 분을 읽습니다. 칸 크기는 그대로입니다. */
-.tile__no { font-size: 21px; font-weight: 800; line-height: 1; letter-spacing: -0.03em; white-space: nowrap; }
+.tile__no { font-size: 25px; font-weight: 800; line-height: 1; letter-spacing: -0.04em; white-space: nowrap; }
 .tile__v {
   display: flex;
   align-items: baseline;
   gap: 1px;
-  font-size: 17px;
+  font-size: 16px;
   font-weight: 800;
   line-height: 1;
   letter-spacing: -0.03em;
@@ -1116,16 +1155,29 @@ html.is-demo .row { scroll-margin-top: calc(56px + var(--demo-h) + env(safe-area
 .tile.is-normal { background: var(--st-normal); color: var(--ink); }
 .tile.is-busy   { background: var(--st-busy);   color: #fff; }
 .tile.is-pause,
-.tile.is-closed { background: #fff; box-shadow: inset 0 0 0 1px var(--st-off-mark); color: var(--st-off); }   /* 테두리 대신 안쪽 선 — 번호 자리가 다른 칸과 같게 */
+.tile.is-closed { --tile-edge: var(--st-off-mark); background: #fff; color: var(--st-off); }   /* 흰 칸은 회색 안쪽 선이 경계 — 테두리 대신 안쪽 선이라 번호 자리가 다른 칸과 같음 */
+.tile.is-unknown,
+.tile.is-idle { --tile-edge: var(--line); }
 .tile.is-pause .tile__v,
 .tile.is-closed .tile__v { font-size: 15px; font-weight: 700; letter-spacing: -0.02em; }
-/* 회색 바탕(--line-2) 위의 '정보 없음' 은 --muted-2 로는 4.3:1 이라 한 단계 진하게. 번호는 어느 칸에서나 진하게 */
+/* 중단 · 마감 칸의 번호는 상태 글자(회색)보다 한 단계 진하게 — 쉬는 부스도 번호로는 바로 찾습니다 */
+.tile.is-pause .tile__no,
+.tile.is-closed .tile__no { color: var(--ink-2); }
+/* 회색 바탕(--line-2) 위의 '정보 없음' 은 --muted-2 로는 4.3:1 이라 한 단계 진하게. 번호는 목록과 같은 진한 보라 */
 .tile.is-unknown { color: var(--muted); }
 .tile.is-unknown .tile__no,
-.tile.is-idle .tile__no { color: var(--ink); }
+.tile.is-idle .tile__no { color: var(--num-ink); }
 .tile.is-unknown .tile__v { color: var(--faint); }   /* '—' 는 장식. 뜻은 '정보 없음' 이 전합니다 */
 .tile.is-idle { color: var(--ink-2); }
-.tile.is-sel { outline: 2px solid var(--ink); outline-offset: 2px; z-index: 1; }
+/* 손가락 · 마우스 · 키보드 — 올리면 안쪽 선이 진해지고(마우스 있는 기기만), 키보드 초점은 남색 2px, 고른 칸은 보라 3px.
+   바깥 테두리는 모두 칸에서 1px 띄워 6px 틈 안(최대 4px)에 그려 옆 칸에 닿지 않습니다. */
+@media (hover: hover) {
+  .tile:hover { box-shadow: inset 0 0 0 2px rgba(22, 32, 60, .42); }
+}
+.tile:focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; z-index: 1; }
+/* 고른 칸 — 상태 색과 겹치지 않는 보라 테두리(3px)로. 키보드 초점이 함께 있어도 보라가 이깁니다 */
+.tile.is-sel,
+.tile.is-sel:focus-visible { outline: 3px solid var(--accent); outline-offset: 1px; z-index: 1; }
 
 .sq--free   { background: var(--st-free); }
 .sq--normal { background: var(--st-normal); box-shadow: inset 0 0 0 1px var(--st-edge); }
@@ -1162,17 +1214,21 @@ html.is-demo .row { scroll-margin-top: calc(56px + var(--demo-h) + env(safe-area
 .sheet__head {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
-  column-gap: 12px;
+  column-gap: 14px;
   align-items: start;
-  padding: 6px 44px 0 0;   /* 닫기 단추 자리 */
+  padding: 8px 44px 0 0;   /* 닫기 단추 자리 */
 }
+/* 상세 번호 — 목록의 번호 열과 같은 옅은 보라 칸 · 진한 보라 글자 · 같은 크기 */
 .sheet__code {
-  min-width: 40px;
-  font-size: 28px;
+  min-width: var(--num-w);
+  padding: 8px 10px;
+  background: var(--num-bg);
+  font-size: var(--num-fs);
   font-weight: 800;
-  line-height: 26px;
-  letter-spacing: -0.03em;
-  color: var(--ink);
+  line-height: 1;
+  letter-spacing: -0.035em;
+  color: var(--num-ink);
+  text-align: center;
   white-space: nowrap;
 }
 .sheet__id { min-width: 0; }
