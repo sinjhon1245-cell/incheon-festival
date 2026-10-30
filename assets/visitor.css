@@ -912,17 +912,18 @@ html.is-demo .row { scroll-margin-top: calc(56px + var(--demo-h) + env(safe-area
   .row:has(> .row__main[aria-expanded="true"]):hover::before { background: var(--accent); }
 }
 /* 부스 번호 — 줄에서 가장 먼저 읽히는 글자입니다(행사장에서는 번호 표지를 보고 찾습니다). 크기 · 굵기 · 진한 보라로 세우고,
-   늘 같은 폭 열 안에서 오른쪽 끝(안쪽 여백 12px)을 맞춰 1 · 2자리 번호의 일의 자리가 한 줄로 섭니다(숫자 폭 같음 —
-   html 의 tabular-nums). 긴 이름 · 학교는 가운데 열만 줄이 바뀌고 번호 열은 밀리지 않습니다. */
+   늘 같은 폭 번호 띠의 한가운데(가로 · 세로)에 둡니다 — 1 · 2자리 모두 띠 가운데라 줄마다 같은 자리로 보입니다.
+   긴 이름 · 학교는 가운데 열만 줄이 바뀌고 번호 열은 밀리지 않습니다. */
 .row__code {
-  align-self: center;   /* 줄의 세로 가운데(번호 띠 한가운데) */
-  padding-right: 12px;
+  align-self: center;   /* 줄(구분선 사이)의 세로 가운데 */
   font-size: var(--num-fs);
   font-weight: 800;
   line-height: 1;
   letter-spacing: -0.035em;
   color: var(--num-ink);
-  text-align: right;
+  text-align: center;   /* 번호 띠의 가로 가운데 */
+  /* 가운데 맞춤이라 숫자 폭을 같게 둘 까닭이 없습니다 — 글자 모양대로의 폭이라 '61' · '71' 처럼 1 이 든 번호도 눈에 가운데로 보입니다 */
+  font-variant-numeric: proportional-nums;
   white-space: nowrap;   /* 전체 번호(A-07)를 한 줄로 */
 }
 /* 세 글자 넘는 번호(협의용 예시의 'A-07' 같은 모양)는 같은 열에 들게 줄입니다. 공식 번호(1~84)는 늘 큰 글자 */
@@ -1220,14 +1221,14 @@ html.is-demo .row { scroll-margin-top: calc(56px + var(--demo-h) + env(safe-area
 /* 상세 번호 — 목록의 번호 열과 같은 옅은 보라 칸 · 진한 보라 글자 · 같은 크기 */
 .sheet__code {
   min-width: var(--num-w);
-  padding: 8px 12px 8px 8px;
+  padding: 8px 10px;
   background: var(--num-bg);
   font-size: var(--num-fs);
   font-weight: 800;
   line-height: 1;
   letter-spacing: -0.035em;
   color: var(--num-ink);
-  text-align: right;
+  text-align: center;
   white-space: nowrap;
 }
 .sheet__id { min-width: 0; }
