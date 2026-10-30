@@ -51,8 +51,6 @@
      글자 #3B2DAE 는 흰 바탕 9.8:1 · 띠(#F1EFFD) 위 9.0:1. 띠는 상태 색(초록 · 노랑 · 빨강 · 회색)과 겹치지 않는 보라입니다. */
   --num-ink:      #3B2DAE;
   --num-bg:       #F1EFFD;
-  --num-bg-hover: #E7E3FC;
-  --num-bg-open:  #E0DAFB;   /* 펼친 줄의 번호 띠 — 번호 글자 7.9:1 */
   --num-w:  56px;
   --num-fs: 30px;
 
@@ -873,8 +871,8 @@ html.is-demo .row { scroll-margin-top: calc(56px + var(--demo-h) + env(safe-area
 .zone + .rows { border-top: 0; }
 /* 목록 줄 — 세 열: ① 번호 열(고정 폭 · 옅은 보라 띠) │ ② 부스 이름 + 학교(남는 폭) │ ③ 대기 분 + 상태(고정 폭 · 오른쪽 끝).
    번호 열의 옅은 보라 띠는 줄 높이만큼 위아래로 차서 줄과 줄 사이에도 끊기지 않는 한 열로 보입니다(구분선만 가로지름).
-   번호는 줄(위 · 아래 구분선 사이)의 세로 가운데에 둡니다 — 이름이 한 줄이든 두 줄이든 칸 한가운데라 줄마다 같은 자리로 보입니다.
-   이름 첫 줄과 대기 분은 서로 같은 글자 바닥선(baseline)에 맞춥니다. */
+   번호와 대기 묶음(대기 분 + 상태 칩)은 줄(위 · 아래 구분선 사이)의 세로 가운데에 둡니다 — 이름이 한 줄이든 두 줄이든
+   양 끝 열이 칸 한가운데라 줄마다 같은 자리로 보입니다. 이름 · 학교는 위 여백에서 시작합니다. */
 .row {
   position: relative;
   border-bottom: 1px solid var(--line);
@@ -890,10 +888,10 @@ html.is-demo .row { scroll-margin-top: calc(56px + var(--demo-h) + env(safe-area
   background: var(--num-bg);
   pointer-events: none;
 }
-/* 펼친 줄은 번호 띠만 한 단계 진한 옅은 보라로 — '고른 것' 을 크게 칠하지 않고 펼쳐 둔 줄임만 알립니다(번호 글자 색 그대로) */
-.row:has(> .row__main[aria-expanded="true"])::before { background: var(--num-bg-open); }
+/* 번호 띠는 누르거나(펼침) 마우스를 올려도 색이 바뀌지 않습니다 — 여러 줄을 펼쳐도 '고른 줄' 처럼 보이지 않게.
+   펼침은 이름 · 학교 · 체험 내용이 끝까지 보이는 것으로 알 수 있고, 키보드 초점은 아래 :focus-visible 테두리로 보입니다. */
 .row__main {
-  --name-lh: 24px;
+  --name-lh: 22px;   /* 17px 굵은 이름 두 줄이 한 덩이로 읽히는 줄 간격(1.3) — 두 줄 이름 줄이 한 줄 이름 줄보다 지나치게 커지지 않게 */
   position: relative;   /* 번호 띠 위에 글자 */
   display: grid;
   grid-template-columns: var(--num-w) minmax(0, 1fr) 80px;
@@ -907,10 +905,6 @@ html.is-demo .row { scroll-margin-top: calc(56px + var(--demo-h) + env(safe-area
   text-align: left;
 }
 .row__main:focus-visible { outline-offset: -2px; }
-@media (hover: hover) {
-  .row:not(.is-pending):hover::before { background: var(--num-bg-hover); }
-  .row:has(> .row__main[aria-expanded="true"]):hover::before { background: var(--num-bg-open); }
-}
 /* 부스 번호 — 줄에서 가장 먼저 읽히는 글자입니다(행사장에서는 번호 표지를 보고 찾습니다). 크기 · 굵기 · 진한 보라로 세우고,
    늘 같은 폭 번호 띠의 한가운데(가로 · 세로)에 둡니다 — 1 · 2자리 모두 띠 가운데라 줄마다 같은 자리로 보입니다.
    긴 이름 · 학교는 가운데 열만 줄이 바뀌고 번호 열은 밀리지 않습니다. */
@@ -962,15 +956,16 @@ html.is-demo .row { scroll-margin-top: calc(56px + var(--demo-h) + env(safe-area
   overflow: visible;
 }
 .row.is-closed .row__name { color: var(--st-off); }
-/* 대기 분(32px)은 이름(17px)보다 글자 위쪽이 7px 높아, 기준선을 맞추면 이름을 7px 아래로 밀어 '20분' 줄만 7px 높아졌습니다.
-   위 여백을 7px 당겨 그 몫을 위 여백 안에서 쓰게 합니다 — 기준선은 그대로 맞고, 줄 높이는 대기 값 모양과 상관없이 같습니다. */
+/* 대기 분 + 상태 칩을 한 묶음으로 줄의 세로 가운데에 둡니다(바로 · 잠시 중단 · 마감 · 정보 없음도 같은 기준).
+   '20분' + 칩 묶음(54px)은 한 줄 이름 + 학교(45px)보다 조금 커서, 위아래 여백(14px)을 5px씩 빌려 씁니다 —
+   묶음 모양과 상관없이 줄 높이는 이름 줄 수로만 정해집니다. */
 .row__right {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  justify-content: flex-start;
+  align-self: center;
   gap: 4px;
-  margin-top: -7px;
+  margin: -5px 0;
   text-align: right;
 }
 
@@ -984,7 +979,8 @@ html.is-demo .row { scroll-margin-top: calc(56px + var(--demo-h) + env(safe-area
 }
 .v__n { font-size: 32px; font-weight: 800; letter-spacing: -0.04em; }
 .v__u { font-size: 14px; font-weight: 700; color: var(--ink-2); }
-.v--now  { font-size: 22px; font-weight: 800; letter-spacing: -0.02em; }
+/* '바로'(한글)는 숫자보다 글자가 아래로 차서, 2px 더 띄워 칩까지 보이는 간격을 'N분' 과 같게(약 6~7px) 맞춥니다 */
+.v--now  { margin-bottom: 2px; font-size: 22px; font-weight: 800; letter-spacing: -0.02em; }
 .v--word { font-size: 18px; font-weight: 700; letter-spacing: -0.02em; color: var(--st-off); }
 
 /* 상태 칩 — 한눈에 칸과 같은 칠(여유 초록 · 보통 샛노랑 · 혼잡 빨강 · 중단 흰 바탕 + 회색 테두리).
