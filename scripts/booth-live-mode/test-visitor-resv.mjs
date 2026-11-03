@@ -1,14 +1,15 @@
 /* ===================================================================
-   관람객 화면 현장예약 상자 시험 — 실제 Chrome 에서 자리 · 크기를 잽니다(협의용 예시 화면 ?demo=1 · 화면 안내 /example)
+   관람객 화면 상태 칸 · 상태 상자 시험 — 실제 Chrome 에서 자리 · 크기 · 색을 잽니다(협의용 예시 화면 ?demo=1 · 화면 안내 /example)
    ───────────────────────────────────────────────────────────────────
    서버 · Production 에 닿지 않습니다. 이 파일의 작은 웹 서버가 저장소(또는 --base 커밋)의 파일만 주고,
    예시 화면은 원래 서버를 읽지 않습니다(읽으려 하면 실패로 셉니다). 글꼴(Pretendard, jsDelivr)만 받습니다.
 
-     L  목록      상자 두 줄 '현장 / 예약' · '예약 / 마감' · 80px 칸 안 · 가로 · 세로 가운데 · 줄 높이 그대로 · 두 줄 이름
-     G  한눈에    같은 두 줄 · 같은 색 · 칸 안에 다 들어감
+     L  목록      모든 줄의 상태 칸 80px · 숫자 · 칩 · 상자의 오른쪽 끝이 같음 · 상자 80×58 · 칩 80px · 글자 크기 ·
+                  낱말('현장 / 예약' · '예약 / 마감' · '잠시 / 중단' · '마감') · 색 · 세로 가운데 · 줄 높이 같음 · 이름이 칸을 넘지 않음 · 두 줄 이름
+     G  한눈에    같은 낱말 · 같은 색 · 칸 안에 다 들어감 · 글자 크기 · 번호 자리 같음
      X  예시 화면 일곱 상태(5분 여유 · 20분 보통 · 30분 혼잡 · 현장 / 예약 · 예약 / 마감 · 잠시 중단 · 오늘 마감)가
-                  목록 · 한눈에 모두에 · 서버 요청 없음 · '실제 화면으로 돌아가기' 로 예시 표시가 사라짐
-     E  화면 안내 /example 의 목록 · 한눈에 미리보기가 관람객 화면과 같은 상자 · 칸 색
+                  목록 · 한눈에 모두에 · 지금 계신 부스(QR) 상자 · 칩 · 서버 요청 없음 · '실제 화면으로 돌아가기' 로 예시 표시가 사라짐
+     E  화면 안내 /example 의 목록 · 한눈에 미리보기가 관람객 화면과 같은 칸 · 상자 · 색(상자 CSS 는 글자 그대로)
    폭: 360 · 390 · 768 · 1024 · 1440
 
    쓰는 법: node scripts/booth-live-mode/test-visitor-resv.mjs --deps <puppeteer-core 가 설치된 폴더>
@@ -96,54 +97,75 @@ async function openPage(width, path, { longName = false } = {}) {
   await page.evaluate(() => document.fonts && document.fonts.ready);
   return { ctx, page };
 }
-const rowRight = (page, code) => page.evaluate((code) => {
-  const row = [...document.querySelectorAll('#list .row')].find((r) => (r.querySelector('.row__code') || {}).textContent === code);
-  if (!row) return null;
-  const rr = row.getBoundingClientRect(), col = row.querySelector('.row__right').getBoundingClientRect();
-  const box = row.querySelector('.rbox');
-  const b = box && box.getBoundingClientRect();
-  const lines = box ? [...box.querySelectorAll('.rbox__l')].map((l) => { const r = l.getBoundingClientRect(); return { t: l.textContent, l: r.left, r: r.right, w: l.scrollWidth, cw: l.clientWidth }; }) : [];
-  const cs = box && getComputedStyle(box);
-  return { rowH: rr.height, rowTop: rr.top, rowBottom: rr.bottom, col: { l: col.left, r: col.right, w: col.width },
-    box: b && { l: b.left, r: b.right, t: b.top, btm: b.bottom, w: b.width, h: b.height }, lines,
-    style: cs && { bg: cs.backgroundColor, ink: cs.color, edge: cs.borderTopColor, radius: cs.borderTopLeftRadius, fs: cs.fontSize, fw: cs.fontWeight },
-    name: row.querySelector('.row__name').getBoundingClientRect().height };
-}, code);
+// 목록 줄마다 오른쪽 상태 칸: 칸 · 그 안의 숫자 · 칩 · 상태 상자의 자리 · 크기 · 글자 · 색
+const rowsInfo = (page) => page.evaluate(() => [...document.querySelectorAll('#list .row')].map((row) => {
+  const R = (el) => { const r = el.getBoundingClientRect(); return { l: r.left, r: r.right, t: r.top, b: r.bottom, w: r.width, h: r.height }; };
+  const col = row.querySelector('.row__right');
+  const parts = [...col.children].filter((k) => !k.classList.contains('sr-only')).map((k) => {
+    const cs = getComputedStyle(k);
+    return { cls: k.className, box: R(k), fs: parseFloat(cs.fontSize), fw: Number(cs.fontWeight), bg: cs.backgroundColor, ink: cs.color, edge: cs.borderTopColor,
+      radius: parseFloat(cs.borderTopLeftRadius), text: k.textContent,
+      lines: [...k.querySelectorAll('.sbox__l')].map((l) => ({ t: l.textContent, sw: l.scrollWidth, cw: l.clientWidth })) };
+  });
+  // 이름 · 학교 글자가 실제로 닿는 오른쪽 끝(줄마다 글자 상자)
+  const textRight = Math.max(...[...row.querySelectorAll('.row__name, .row__org')].map((el) => {
+    const rg = document.createRange(); rg.selectNodeContents(el); return Math.max(...[...rg.getClientRects()].map((x) => x.right));
+  }));
+  return { code: row.querySelector('.row__code').textContent, row: R(row), col: R(col), parts, textRight,
+    nameLines: Math.round(row.querySelector('.row__name').getBoundingClientRect().height / 22), sr: (col.querySelector('.sr-only') || {}).textContent || '' };
+}));
+const near = (a, b, e = 0.5) => Math.abs(a - b) <= e;
+const isBox = (p) => /\bsbox\b/.test(p.cls);
+const isChip = (p) => /\bst\b/.test(p.cls) && !/st--unknown/.test(p.cls);
+const COLORS = {
+  resv:  { bg: 'rgb(239, 235, 254)', ink: 'rgb(59, 45, 174)', edge: 'rgb(203, 193, 246)' },
+  off:   { bg: 'rgb(241, 243, 247)', ink: 'rgb(70, 83, 107)', edge: 'rgb(201, 208, 220)' },
+  pause: { bg: 'rgb(255, 255, 255)', ink: 'rgb(90, 107, 133)', edge: 'rgb(138, 147, 171)' }
+};
+const CHIP = { free: 'rgb(8, 119, 63)', normal: 'rgb(244, 212, 0)', busy: 'rgb(229, 37, 33)' };
+// 대기 분이 없는 상태: 낱말 · 색 갈래 · 한 줄 여부
+const BOXES = { 'C-05': ['현장/예약', 'resv', false], 'C-06': ['예약/마감', 'off', false], 'B-03': ['잠시/중단', 'pause', false], 'C-01': ['마감', 'off', true] };
+const colorOk = (p, k) => !!p && p.bg === COLORS[k].bg && p.ink === COLORS[k].ink && p.edge === COLORS[k].edge;
 
 /* ── L · G · X : 예시 화면, 폭마다 ───────────────────────────────── */
 const WIDTHS = [360, 390, 768, 1024, 1440];
 const STATES = { 'A-02': ['is-free', '5분', '여유'], 'B-01': ['is-normal', '20분', '보통'], 'A-04': ['is-busy', '30분', '혼잡'],
-  'C-05': ['is-resv', '현장', '예약'], 'C-06': ['is-resv-closed', '예약', '마감'], 'B-03': ['is-pause', '중단', ''], 'C-01': ['is-closed', '마감', ''] };
-let boxColor = null, tileColor = null;
+  'C-05': ['is-resv', '현장', '예약'], 'C-06': ['is-resv-closed', '예약', '마감'], 'B-03': ['is-pause', '잠시', '중단'], 'C-01': ['is-closed', '마감', ''] };
 for (const W of WIDTHS) {
   const { ctx, page } = await openPage(W, '/visitor.html?demo=1');
   await until(() => page.$$eval('#list .row', (r) => r.length === 14));
-  const o = await rowRight(page, 'C-05'), c = await rowRight(page, 'C-06'), w = await rowRight(page, 'C-04');
-  const ok = o && o.box && c && c.box;
-  t(`L1 ${W}px 목록: '현장 / 예약' · '예약 / 마감' 두 줄 상자`, ok && o.lines.map((x) => x.t).join('/') === '현장/예약' && c.lines.map((x) => x.t).join('/') === '예약/마감', JSON.stringify(o && o.lines));
-  if (ok) {
-    t(`L2 ${W}px 목록: 상자가 80px 칸 안 · 가로 가운데(±1px)`, o.col.w === 80 && o.box.l >= o.col.l - 0.5 && o.box.r <= o.col.r + 0.5
-      && Math.abs((o.box.l + o.box.r) / 2 - (o.col.l + o.col.r) / 2) <= 1, JSON.stringify({ col: o.col, box: o.box }));
-    t(`L3 ${W}px 목록: 상자가 줄의 세로 가운데(±1.5px)`, Math.abs((o.box.t + o.box.btm) / 2 - (o.rowTop + o.rowBottom) / 2) <= 1.5, JSON.stringify(o));
-    t(`L4 ${W}px 목록: 줄 높이 = 같은 모양의 대기 줄(C-04 · 한 줄 이름)`, Math.abs(o.rowH - w.rowH) < 0.5 && Math.abs(c.rowH - w.rowH) < 0.5, `${o.rowH} · ${c.rowH} · 대기 ${w.rowH}`);
-    t(`L5 ${W}px 목록: 두 상자 크기 같음 · 글자 잘림 없음`, o.box.w === c.box.w && o.box.h === c.box.h && [...o.lines, ...c.lines].every((x) => x.w <= x.cw + 0.5 && x.l >= o.box.l - 400),
-      JSON.stringify([o.box, c.box]));
-    t(`L6 ${W}px 목록: 색 — 현장예약 옅은 보라 · 진한 보라 · 보라 테두리 / 예약 마감 옅은 회색 · 진한 회색 · 회색 테두리 · 둥근 모서리`,
-      o.style.bg === 'rgb(239, 235, 254)' && o.style.ink === 'rgb(59, 45, 174)' && o.style.edge === 'rgb(203, 193, 246)'
-      && c.style.bg === 'rgb(241, 243, 247)' && c.style.ink === 'rgb(70, 83, 107)' && c.style.edge === 'rgb(201, 208, 220)'
-      && parseFloat(o.style.radius) >= 4 && Number(o.style.fw) >= 700 && parseFloat(o.style.fs) >= 16, JSON.stringify([o.style, c.style]));
-    boxColor = boxColor || [o.style.bg, o.style.ink, c.style.bg, c.style.ink];
-  }
+  const rows = await rowsInfo(page);
+  const by = Object.fromEntries(rows.map((r) => [r.code, r]));
+  const edge = rows[0].col.r;
+  t(`L1 ${W}px 목록: 오른쪽 상태 칸이 모든 줄에서 80px · 같은 오른쪽 끝`, rows.every((r) => near(r.col.w, 80) && near(r.col.r, edge)), JSON.stringify(rows.map((r) => [r.code, r.col.w, r.col.r])));
+  t(`L2 ${W}px 목록: 숫자 · 칩 · 상태 상자의 오른쪽 끝이 모두 칸 끝과 같음`, rows.every((r) => r.parts.every((p) => near(p.box.r, edge))),
+    JSON.stringify(rows.map((r) => [r.code, r.parts.map((p) => [p.cls.split(' ')[0], Math.round(p.box.r * 10) / 10])])));
+  const boxes = rows.flatMap((r) => r.parts.filter(isBox)), chips = rows.flatMap((r) => r.parts.filter(isChip));
+  t(`L3 ${W}px 목록: 상태 상자는 모두 80×58 · 상태 칩은 모두 80px 폭`, boxes.length >= 4 && boxes.every((p) => near(p.box.w, 80) && near(p.box.h, 58)) && chips.length >= 8 && chips.every((p) => near(p.box.w, 80)),
+    JSON.stringify({ boxes: boxes.map((p) => [p.box.w, p.box.h]), chips: chips.map((p) => p.box.w) }));
+  t(`L4 ${W}px 목록: 상자 낱말 '현장 / 예약' · '예약 / 마감' · '잠시 / 중단' · '마감'(한 줄) · 화면 읽기 한 줄`, Object.entries(BOXES).every(([code, [words, , one]]) => {
+    const p = by[code] && by[code].parts[0];
+    return !!p && isBox(p) && p.lines.map((x) => x.t).join('/') === words && (one ? /sbox--one/.test(p.cls) : !/sbox--one/.test(p.cls)) && by[code].sr.length > 3;
+  }), JSON.stringify(Object.keys(BOXES).map((c) => by[c] && [c, by[c].parts.map((p) => p.lines.map((x) => x.t).join('/') || p.text), by[c].sr])));
+  t(`L5 ${W}px 목록: 글자 크기 — 상자 16px 이상(마감 20px) · 칩 15px 이상 · 굵게 · 잘림 없음`,
+    boxes.length >= 4 && boxes.every((p) => p.fs >= (/sbox--one/.test(p.cls) ? 20 : 16) && p.fw >= 700 && p.lines.every((x) => x.sw <= x.cw + 0.5)) && chips.every((p) => p.fs >= 15 && p.fw >= 700),
+    JSON.stringify({ boxes: boxes.map((p) => [p.fs, p.fw]), chips: chips.map((p) => [p.fs, p.fw]) }));
+  t(`L6 ${W}px 목록: 색 — 현장예약 보라 · 예약 마감 · 마감 회색 · 잠시 중단 흰 바탕 + 회색 테두리 · 칩은 예전 색`,
+    Object.entries(BOXES).every(([code, [, k]]) => colorOk(by[code] && by[code].parts[0], k))
+    && [['A-02', 'free'], ['B-01', 'normal'], ['A-04', 'busy']].every(([code, k]) => { const c = by[code].parts.find(isChip); return !!c && c.bg === CHIP[k]; }),
+    JSON.stringify(Object.keys(BOXES).map((c) => by[c] && by[c].parts[0] && [c, by[c].parts[0].bg, by[c].parts[0].ink, by[c].parts[0].edge])));
+  t(`L7 ${W}px 목록: 상태 칸이 줄의 세로 가운데(±1.5px)`, rows.every((r) => near((r.col.t + r.col.b) / 2, (r.row.t + r.row.b) / 2, 1.5)), '');
+  const oneLine = rows.filter((r) => r.nameLines === 1), hs = [...new Set(oneLine.map((r) => Math.round(r.row.h * 2) / 2))];
+  t(`L8 ${W}px 목록: 한 줄 이름 줄은 상태(대기 분 · 상자 · 정보 없음)와 상관없이 높이가 같음`, oneLine.length >= 5 && hs.length === 1, JSON.stringify(rows.map((r) => [r.code, r.nameLines, r.row.h])));
+  t(`L9 ${W}px 목록: 부스명 · 학교명이 상태 칸을 넘지 않음(칸 앞 8px 이상)`, rows.every((r) => r.textRight <= r.col.l - 8), JSON.stringify(rows.map((r) => [r.code, Math.round(r.textRight), Math.round(r.col.l)])));
   const ovf = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
-  t(`L7 ${W}px 목록: 가로 넘침 없음`, ovf <= 0, `넘침 ${ovf}px`);
-  // 예시 화면의 일곱 상태(목록)
-  const listStates = await page.evaluate(() => Object.fromEntries([...document.querySelectorAll('#list .row')].map((r) => [r.querySelector('.row__code').textContent,
-    (r.querySelector('.rbox') ? [...r.querySelectorAll('.rbox__l')].map((x) => x.textContent).join('/') : r.querySelector('.row__right').textContent.replace(/\s+/g, ''))])));
-  const wantList = { 'A-02': '5분여유', 'B-01': '20분보통', 'A-04': '30분혼잡', 'C-05': '현장/예약', 'C-06': '예약/마감', 'B-03': '잠시중단', 'C-01': '마감' };
+  t(`L10 ${W}px 목록: 가로 넘침 없음`, ovf <= 0, `넘침 ${ovf}px`);
+  const listStates = Object.fromEntries(rows.map((r) => [r.code, r.parts.map((p) => (isBox(p) ? p.lines.map((x) => x.t).join('/') : p.text.replace(/\s+/g, ''))).join('')]));
+  const wantList = { 'A-02': '5분여유', 'B-01': '20분보통', 'A-04': '30분혼잡', 'C-05': '현장/예약', 'C-06': '예약/마감', 'B-03': '잠시/중단', 'C-01': '마감' };
   t(`X1 ${W}px 예시 목록: 일곱 상태가 모두 보임`, Object.entries(wantList).every(([k, v]) => listStates[k] === v), JSON.stringify(listStates));
-  if (SHOTS && (W === 390 || W === 1440)) {
-    const zone = await page.evaluateHandle(() => [...document.querySelectorAll('#list .group')].pop() || [...document.querySelectorAll('#list .zone')].pop());
-    await zone.asElement().screenshot({ path: join(SHOTS, `list-zoneC-${W}.png`) });
+  if (SHOTS && [360, 390, 768, 1440].includes(W)) {
+    const groups = await page.$$('#list .group');
+    for (const [i, g] of groups.slice(1).entries()) await g.screenshot({ path: join(SHOTS, `list-zone${'BC'[i]}-${W}.png`) });
   }
 
   // 한눈에
@@ -151,33 +173,38 @@ for (const W of WIDTHS) {
   await until(() => page.$$eval('.tile', (x) => x.length === 14));
   const tiles = await page.evaluate(() => [...document.querySelectorAll('.tile')].map((el) => {
     const r = el.getBoundingClientRect(), cs = getComputedStyle(el);
-    const parts = ['.tile__v', '.tile__w'].map((s) => { const x = el.querySelector(s); const xr = x.getBoundingClientRect(); return { t: x.textContent, btm: xr.bottom, r: xr.right, sw: x.scrollWidth, cw: x.clientWidth }; });
-    return { no: el.querySelector('.tile__no').textContent, cls: el.className, v: parts[0], w: parts[1], btm: r.bottom, right: r.right, size: r.width, bg: cs.backgroundColor, ink: cs.color };
+    const parts = ['.tile__v', '.tile__w'].map((s) => { const x = el.querySelector(s); const xr = x.getBoundingClientRect(); return { t: x.textContent, btm: xr.bottom, sw: x.scrollWidth, cw: x.clientWidth, fs: parseFloat(getComputedStyle(x).fontSize) }; });
+    return { no: el.querySelector('.tile__no').textContent, noTop: el.querySelector('.tile__no').getBoundingClientRect().top - r.top, cls: el.className, v: parts[0], w: parts[1], btm: r.bottom, bg: cs.backgroundColor, ink: cs.color };
   }));
-  const byNo = Object.fromEntries(tiles.map((x) => [x.no, x]));
-  t(`G1 ${W}px 한눈에: 일곱 상태 칸(색 · 두 줄 낱말)`, Object.entries(STATES).every(([k, [cls, v, w]]) => byNo[k] && byNo[k].cls.includes(cls) && byNo[k].v.t === v && byNo[k].w.t === w),
-    JSON.stringify(Object.keys(STATES).map((k) => byNo[k] && [k, byNo[k].cls, byNo[k].v.t, byNo[k].w.t])));
-  const rv = byNo['C-05'], rc = byNo['C-06'];
-  t(`G2 ${W}px 한눈에: 현장예약 칸 글자가 칸 안에(아래 · 오른쪽 넘침 없음)`, [rv, rc].every((x) => x && x.v.btm <= x.btm - 1 && x.w.btm <= x.btm - 1 && x.v.sw <= x.v.cw + 0.5 && x.w.sw <= x.w.cw + 0.5),
-    JSON.stringify([rv, rc]));
-  t(`G3 ${W}px 한눈에: 목록 상자와 같은 색`, rv && boxColor && rv.bg === boxColor[0] && rv.ink === boxColor[1] && rc.bg === boxColor[2] && rc.ink === boxColor[3], JSON.stringify([rv && [rv.bg, rv.ink], rc && [rc.bg, rc.ink], boxColor]));
+  const tb = Object.fromEntries(tiles.map((x) => [x.no, x]));
+  t(`G1 ${W}px 한눈에: 일곱 상태 칸(낱말 — 목록과 같음)`, Object.entries(STATES).every(([k, [cls, v, w]]) => tb[k] && tb[k].cls.includes(cls) && tb[k].v.t === v && tb[k].w.t === w),
+    JSON.stringify(Object.keys(STATES).map((k) => tb[k] && [k, tb[k].cls, tb[k].v.t, tb[k].w.t])));
+  t(`G2 ${W}px 한눈에: 모든 칸 글자가 칸 안에(아래 · 옆 넘침 없음)`, tiles.every((x) => x.v.btm <= x.btm - 1 && x.w.btm <= x.btm - 1 && x.v.sw <= x.v.cw + 0.5 && x.w.sw <= x.w.cw + 0.5),
+    JSON.stringify(tiles.filter((x) => !(x.v.btm <= x.btm - 1 && x.w.btm <= x.btm - 1 && x.v.sw <= x.v.cw + 0.5 && x.w.sw <= x.w.cw + 0.5)).map((x) => x.no)));
+  t(`G3 ${W}px 한눈에: 글자 크기 — 상태 낱말 12px 이상 · 상자 낱말 14px 이상(마감 18px)`,
+    ['A-02', 'B-01', 'A-04'].every((k) => tb[k].w.fs >= 12) && ['C-05', 'C-06', 'B-03'].every((k) => tb[k].v.fs >= 14 && tb[k].w.fs >= 14) && tb['C-01'].v.fs >= 18,
+    JSON.stringify(Object.keys(STATES).map((k) => [k, tb[k].v.fs, tb[k].w.fs])));
+  t(`G4 ${W}px 한눈에: 목록 상자와 같은 색(보라 · 회색 · 흰 바탕)`, tb['C-05'].bg === COLORS.resv.bg && tb['C-05'].ink === COLORS.resv.ink
+    && tb['C-06'].bg === COLORS.off.bg && tb['C-01'].bg === COLORS.off.bg && tb['C-01'].ink === COLORS.off.ink && tb['B-03'].bg === COLORS.pause.bg && tb['B-03'].ink === COLORS.pause.ink,
+    JSON.stringify(['C-05', 'C-06', 'C-01', 'B-03'].map((k) => [k, tb[k].bg, tb[k].ink])));
+  t(`G5 ${W}px 한눈에: 번호가 칸마다 같은 높이(±1px)`, tiles.every((x) => near(x.noTop, tiles[0].noTop, 1)), JSON.stringify(tiles.map((x) => Math.round(x.noTop * 10) / 10)));
   const tovf = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
-  t(`G4 ${W}px 한눈에: 가로 넘침 없음`, tovf <= 0, `넘침 ${tovf}px`);
-  if (SHOTS && (W === 360 || W === 390 || W === 1440)) {
-    const zone = await page.evaluateHandle(() => [...document.querySelectorAll('#list .group')].filter((z) => z.querySelector('.tile')).pop());
-    await zone.asElement().screenshot({ path: join(SHOTS, `tiles-zoneC-${W}.png`) });
+  t(`G6 ${W}px 한눈에: 가로 넘침 없음`, tovf <= 0, `넘침 ${tovf}px`);
+  if (SHOTS && [360, 390, 1440].includes(W)) {
+    const groups = await page.$$('#list .group');
+    for (const [i, g] of groups.entries()) await g.screenshot({ path: join(SHOTS, `tiles-zone${'ABC'[i]}-${W}.png`) });
   }
-  if (SHOTS && W === 390) await page.screenshot({ path: join(SHOTS, `tiles-full-${W}.png`), fullPage: true });
   await ctx.close();
 }
 
-/* ── L8 : 두 줄 이름 ─────────────────────────────────────────────── */
+/* ── L11 : 두 줄 이름 ────────────────────────────────────────────── */
 for (const W of [360, 390]) {
   const { ctx, page } = await openPage(W, '/visitor.html?demo=1', { longName: true });
   await until(() => page.$$eval('#list .row', (r) => r.length === 14));
-  const o = await rowRight(page, 'C-05');
-  t(`L8 ${W}px 두 줄 이름: 상자가 줄 세로 가운데 · 80px 칸 안`, o && o.box && o.name > 30 && Math.abs((o.box.t + o.box.btm) / 2 - (o.rowTop + o.rowBottom) / 2) <= 1.5
-    && o.box.l >= o.col.l - 0.5 && o.box.r <= o.col.r + 0.5, JSON.stringify(o));
+  const rows = await rowsInfo(page);
+  const o = rows.find((r) => r.code === 'C-05'), edge = rows[0].col.r;
+  t(`L11 ${W}px 두 줄 이름: 상자가 줄 세로 가운데 · 같은 오른쪽 끝 · 이름이 칸을 넘지 않음`, !!o && o.nameLines >= 2 && near((o.col.t + o.col.b) / 2, (o.row.t + o.row.b) / 2, 1.5)
+    && o.parts.every((p) => near(p.box.r, edge)) && o.textRight <= o.col.l - 8, JSON.stringify(o));
   if (SHOTS && W === 390) {
     const row = await page.evaluateHandle(() => [...document.querySelectorAll('#list .row')].find((r) => r.querySelector('.row__code').textContent === 'C-05'));
     await row.asElement().screenshot({ path: join(SHOTS, `list-longname-${W}.png`) });
@@ -185,13 +212,23 @@ for (const W of [360, 390]) {
   await ctx.close();
 }
 
-/* ── X2 · X3 : 지금 계신 부스 · 실제 화면으로 돌아가기 ────────────── */
-{
-  const { ctx, page } = await openPage(390, '/visitor.html?demo=1&b=ex-c05');
+/* ── X2 · X3 : 지금 계신 부스(QR) · 실제 화면으로 돌아가기 ─────────── */
+for (const [id, words, k] of [['ex-c05', '현장/예약', 'resv'], ['ex-b03', '잠시/중단', 'pause'], ['ex-c01', '마감', 'off'], ['ex-a04', null, null]]) {
+  const { ctx, page } = await openPage(390, `/visitor.html?demo=1&b=${id}`);
   await until(() => page.$('#here .here__val'));
-  const here = await page.evaluate(() => { const b = document.querySelector('#here .rbox'); return b ? [...b.querySelectorAll('.rbox__l')].map((x) => x.textContent).join('/') + '|' + b.className : ''; });
-  t('X2 지금 계신 부스(QR): 같은 두 줄 상자(크게)', here === '현장/예약|rbox rbox--big', here);
-  if (SHOTS) await (await page.$('#here')).screenshot({ path: join(SHOTS, 'here-390.png') });
+  const h = await page.evaluate(() => {
+    const v = document.querySelector('#here .here__val'), vr = v.getBoundingClientRect();
+    const kids = [...v.children].filter((x) => !x.classList.contains('sr-only')).map((x) => { const r = x.getBoundingClientRect(), cs = getComputedStyle(x); return { cls: x.className, r: r.right, w: r.width, h: r.height, bg: cs.backgroundColor, ink: cs.color, edge: cs.borderTopColor,
+      lines: [...x.querySelectorAll('.sbox__l')].map((l) => l.textContent).join('/') }; });
+    return { right: vr.right, kids };
+  });
+  if (words) {
+    const b = h.kids[0];
+    t(`X2 지금 계신 부스(QR) ${id}: 같은 상태 상자(크게 88×64) '${words}' · 같은 색`, !!b && /sbox--big/.test(b.cls) && b.lines === words && near(b.w, 88) && near(b.h, 64) && colorOk(b, k), JSON.stringify(h));
+  } else {
+    t('X2 지금 계신 부스(QR) 대기 분: 큰 숫자 · 칩(88px)의 오른쪽 끝이 같음', h.kids.length === 2 && near(h.kids[1].w, 88) && h.kids.every((x) => near(x.r, h.right)), JSON.stringify(h));
+  }
+  if (SHOTS) await (await page.$('#here')).screenshot({ path: join(SHOTS, `here-${id}-390.png`) });
   await ctx.close();
 }
 {
@@ -211,24 +248,34 @@ t('X4 예시 화면(목록 · 한눈에 · 지금 계신 부스)은 서버(Supab
 
 /* ── E : 화면 안내(/example) ─────────────────────────────────────── */
 {
-  // 화면 안내의 상자 규칙은 관람객 화면 것을 글자 그대로 옮긴 것이어야 합니다(한쪽만 고치면 모양이 갈라짐)
-  const rboxCss = (file) => { const s = readFileSync(join(ROOT, file), 'utf8').replace(/\r/g, ''); const a = s.indexOf('.rbox {'); return a < 0 ? '' : s.slice(a, s.indexOf('}', s.indexOf('.rbox--closed {')) + 1); };
-  const a = rboxCss('assets/visitor.css'), b = rboxCss('live/example/example.css');
-  t('E0 화면 안내 example.css 의 상자 규칙 = visitor.css 와 글자 그대로', a.length > 100 && a === b, `${a.length} · ${b.length}`);
+  // 화면 안내의 상태 상자 규칙은 관람객 화면 것을 글자 그대로 옮긴 것이어야 합니다(한쪽만 고치면 모양이 갈라짐)
+  const sboxCss = (file) => { const s = readFileSync(join(ROOT, file), 'utf8').replace(/\r/g, ''); const a = s.indexOf('.sbox {'); return a < 0 ? '' : s.slice(a, s.indexOf('}', s.indexOf('.sbox--big.sbox--one {')) + 1); };
+  const a = sboxCss('assets/visitor.css'), b = sboxCss('live/example/example.css');
+  t('E0 화면 안내 example.css 의 상태 상자 규칙 = visitor.css 와 글자 그대로', a.length > 100 && a === b, `${a.length} · ${b.length}`);
 }
 for (const W of [390, 1440]) {
   const { ctx, page } = await openPage(W, '/example/');
   const ex = await page.evaluate(() => {
-    const box = (sel) => { const b = document.querySelector(sel); if (!b) return null; const cs = getComputedStyle(b); return { lines: [...b.querySelectorAll('.rbox__l')].map((x) => x.textContent).join('/'), bg: cs.backgroundColor, ink: cs.color, w: b.getBoundingClientRect().width, h: b.getBoundingClientRect().height }; };
+    const rows = [...document.querySelectorAll('.vr')].map((row) => {
+      const col = row.querySelector('.vr__right'), cr = col.getBoundingClientRect();
+      return { code: row.querySelector('.vr__code').textContent, colR: cr.right, colW: cr.width, parts: [...col.children].map((k) => { const r = k.getBoundingClientRect(), cs = getComputedStyle(k); return { cls: k.className, r: r.right, w: r.width, h: r.height, bg: cs.backgroundColor, ink: cs.color, edge: cs.borderTopColor,
+        lines: [...k.querySelectorAll('.sbox__l')].map((l) => l.textContent).join('/') }; }) };
+    });
     const tile = (cls) => { const el = document.querySelector('.vp__tiles .tile.' + cls); if (!el) return null; const cs = getComputedStyle(el); return { v: el.querySelector('.tile__v').textContent, w: el.querySelector('.tile__w').textContent, bg: cs.backgroundColor, ink: cs.color }; };
-    return { open: box('.vr .rbox:not(.rbox--closed)'), closed: box('.vr .rbox--closed'), tOpen: tile('is-resv'), tClosed: tile('is-resv-closed'),
-      tiles: document.querySelectorAll('.vp__tiles .tile').length, demo: !!document.querySelector('a[href="/?demo=1"]'), ovf: document.documentElement.scrollWidth - document.documentElement.clientWidth };
+    return { rows, tiles: document.querySelectorAll('.vp__tiles .tile').length, tPause: tile('is-pause'), tClosed: tile('is-closed'), tResv: tile('is-resv'), tResvClosed: tile('is-resv-closed'),
+      demo: !!document.querySelector('a[href="/?demo=1"]'), ovf: document.documentElement.scrollWidth - document.documentElement.clientWidth };
   });
-  t(`E1 ${W}px 화면 안내: 목록 미리보기 상자 = 관람객 화면(두 줄 · 색 · 크기)`, ex.open && ex.open.lines === '현장/예약' && ex.closed.lines === '예약/마감' && boxColor
-    && ex.open.bg === boxColor[0] && ex.open.ink === boxColor[1] && ex.closed.bg === boxColor[2] && ex.closed.ink === boxColor[3] && ex.open.w === 64 && ex.open.h === 50, JSON.stringify(ex));
-  t(`E2 ${W}px 화면 안내: 한눈에 미리보기 일곱 칸 · 현장예약 칸 = 관람객 화면 색 · 낱말`, ex.tiles === 7 && ex.tOpen && ex.tOpen.v + '/' + ex.tOpen.w === '현장/예약' && ex.tClosed.v + '/' + ex.tClosed.w === '예약/마감'
-    && boxColor && ex.tOpen.bg === boxColor[0] && ex.tClosed.bg === boxColor[2], JSON.stringify(ex));
-  t(`E3 ${W}px 화면 안내: 예시 화면(/?demo=1) 링크 · 가로 넘침 없음`, ex.demo && ex.ovf <= 0, JSON.stringify(ex));
+  const er = Object.fromEntries(ex.rows.map((r) => [r.code, r])), eEdge = ex.rows.length ? ex.rows[0].colR : 0;
+  const want = { 'D-03': ['잠시/중단', 'pause'], 'E-01': ['마감', 'off'], 'E-02': ['현장/예약', 'resv'], 'E-03': ['예약/마감', 'off'] };
+  const eParts = ex.rows.flatMap((r) => r.parts);
+  t(`E1 ${W}px 화면 안내 목록: 상태 칸 80px · 오른쪽 끝 같음 · 상자 80×58 · 칩 80px`, ex.rows.length === 7 && ex.rows.every((r) => near(r.colW, 80) && near(r.colR, eEdge) && r.parts.every((p) => near(p.r, eEdge)))
+    && eParts.filter((p) => /\bsbox\b/.test(p.cls)).length === 4 && eParts.filter((p) => /\bsbox\b/.test(p.cls)).every((p) => near(p.w, 80) && near(p.h, 58))
+    && eParts.filter((p) => /\bst\b/.test(p.cls)).every((p) => near(p.w, 80)), JSON.stringify(ex.rows));
+  t(`E2 ${W}px 화면 안내 목록: 상자 낱말 · 색 = 관람객 화면`, Object.entries(want).every(([c, [w, k]]) => er[c] && er[c].parts[0] && er[c].parts[0].lines === w && colorOk(er[c].parts[0], k)), JSON.stringify(Object.keys(want).map((c) => er[c])));
+  t(`E3 ${W}px 화면 안내 한눈에: 일곱 칸 · 낱말 · 색 = 관람객 화면`, ex.tiles === 7 && !!ex.tPause && ex.tPause.v + '/' + ex.tPause.w === '잠시/중단' && ex.tClosed.v === '마감'
+    && ex.tResv.v + '/' + ex.tResv.w === '현장/예약' && ex.tResvClosed.v + '/' + ex.tResvClosed.w === '예약/마감'
+    && ex.tResv.bg === COLORS.resv.bg && ex.tResvClosed.bg === COLORS.off.bg && ex.tClosed.bg === COLORS.off.bg && ex.tPause.bg === COLORS.pause.bg, JSON.stringify([ex.tPause, ex.tClosed, ex.tResv, ex.tResvClosed]));
+  t(`E4 ${W}px 화면 안내: 예시 화면(/?demo=1) 링크 · 가로 넘침 없음`, ex.demo && ex.ovf <= 0, JSON.stringify({ demo: ex.demo, ovf: ex.ovf }));
   if (SHOTS) await (await page.$('.card')).screenshot({ path: join(SHOTS, `example-visitor-card-${W}.png`) });
   await ctx.close();
 }

@@ -57,6 +57,11 @@
   --r-btn:  12px;
 
   --gutter: 16px;
+  /* 관람객 화면과 같은 상태 칸 · 상태 상자 크기(visitor.css 의 --stat-*) */
+  --stat-w: 80px;
+  --stat-h: 58px;
+  --stat-w-big: 88px;
+  --stat-h-big: 64px;
   --sans: 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, system-ui,
           'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', sans-serif;
 }
@@ -328,7 +333,7 @@ ul, ol { padding: 0; list-style: none; }
 }
 .vr {
   display: grid;
-  grid-template-columns: 52px minmax(0, 1fr) 84px;
+  grid-template-columns: 52px minmax(0, 1fr) var(--stat-w);
   column-gap: 12px;
   align-items: start;
   min-height: 68px;
@@ -362,67 +367,73 @@ ul, ol { padding: 0; list-style: none; }
   overflow: hidden;
 }
 .vr.is-closed .vr__name { color: var(--v-off); }
+/* 오른쪽 상태 칸 — 관람객 화면 .row__right 와 같이 모든 줄이 같은 폭 · 같은 오른쪽 끝, 줄의 세로 가운데 */
 .vr__right {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  justify-content: flex-start;
-  gap: 6px;
+  justify-content: center;
+  align-self: center;
+  gap: 4px;
+  width: var(--stat-w);
+  min-height: var(--stat-h);
   text-align: right;
 }
+.vr__right .st { width: 100%; }
 .v { display: flex; align-items: baseline; gap: 1px; line-height: .9; white-space: nowrap; }
 .v__n { font-size: 32px; font-weight: 800; letter-spacing: -0.04em; }
 .v__u { font-size: 14px; font-weight: 700; color: var(--ink-2); }
-.v--word { font-size: 18px; font-weight: 700; letter-spacing: -0.02em; color: var(--v-off); }
-/* 현장예약 두 줄 상자 — visitor.css 의 .rbox · .rbox__l · .rbox--big · .rbox--closed 를 글자 하나 다르지 않게 옮긴 것입니다
-   (scripts/booth-live-mode/test-ui.mjs 가 두 파일의 이 규칙이 같은지 봅니다). */
-.rbox {
-  --rbox-bg: #EFEBFE;
-  --rbox-ink: #3B2DAE;
-  --rbox-edge: #CBC1F6;
+/* 상태 상자 — visitor.css 의 .sbox ~ .sbox--big.sbox--one 을 글자 하나 다르지 않게 옮긴 것입니다
+   (scripts/booth-live-mode/test-visitor-resv.mjs 가 두 파일의 이 규칙이 같은지 봅니다). */
+.sbox {
+  --sbox-bg: #FFFFFF;
+  --sbox-ink: #5A6B85;
+  --sbox-edge: #8A93AB;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  align-self: center;
-  width: 64px;
-  height: 50px;
-  border: 1px solid var(--rbox-edge);
+  flex: none;
+  width: var(--stat-w);
+  height: var(--stat-h);
+  border: 1px solid var(--sbox-edge);
   border-radius: 6px;
-  background: var(--rbox-bg);
-  color: var(--rbox-ink);
-  font-size: 17px;
+  background: var(--sbox-bg);
+  color: var(--sbox-ink);
+  font-size: 16px;
   font-weight: 800;
-  line-height: 1.12;
+  line-height: 1.15;
   letter-spacing: -0.02em;
   text-align: center;
   white-space: nowrap;
 }
-.rbox__l { display: block; }
+.sbox__l { display: block; }
+.sbox--one { font-size: 20px; }
+.sbox--resv  { --sbox-bg: #EFEBFE; --sbox-ink: #3B2DAE; --sbox-edge: #CBC1F6; }
+.sbox--off   { --sbox-bg: #F1F3F7; --sbox-ink: #46536B; --sbox-edge: #C9D0DC; }
+.sbox--pause { --sbox-bg: #FFFFFF; --sbox-ink: #5A6B85; --sbox-edge: #8A93AB; }
 /* 지금 계신 부스(큰 값 자리): 같은 상자를 한 단계 크게 */
-.rbox--big { width: 84px; height: 64px; border-radius: 8px; font-size: 22px; }
-.rbox--closed {
-  --rbox-bg: #F1F3F7;
-  --rbox-ink: #46536B;
-  --rbox-edge: #C9D0DC;
-}
+.sbox--big { width: var(--stat-w-big); height: var(--stat-h-big); border-radius: 8px; font-size: 20px; }
+.sbox--big.sbox--one { font-size: 24px; }
 .st {
   display: inline-flex;
   align-items: center;
-  padding: 3px 8px;
-  border-radius: 4px;
-  font-size: 13px;
-  font-weight: 700;
+  justify-content: center;
+  min-height: 25px;
+  padding: 0 8px;
+  border-radius: 6px;
+  font-size: 15px;
+  font-weight: 800;
   line-height: 1.2;
+  letter-spacing: -0.02em;
   white-space: nowrap;
 }
 /* 관람객 화면의 상태 칩(visitor.css 의 .st 와 같은 칠). 대기 분 숫자는 남색 그대로입니다 */
 .st--free   { background: var(--v-free);   color: #fff; }
 .st--normal { background: var(--v-normal); color: var(--ink); }
 .st--busy   { background: var(--v-busy);   color: #fff; }
-.st--pause  { background: #fff; box-shadow: inset 0 0 0 1px var(--off-mark); color: var(--v-off); }
 
-/* 한눈에 보기 — visitor.css 의 한눈에 칸(.tile)과 같은 칠 · 크기 · 글자. 현장예약 칸은 위 상자와 같은 색 */
+/* 한눈에 보기 — visitor.css 의 한눈에 칸(.tile)과 같은 칠 · 크기 · 글자. 대기 분이 없는 칸은 위 상태 상자와 같은 색 · 낱말 */
 .vp__sub { padding: 14px 14px 0; border-top: 1px solid var(--line); font-size: 13px; font-weight: 700; color: var(--ink-2); }
 .vp__tiles {
   display: grid;
@@ -452,20 +463,22 @@ ul, ol { padding: 0; list-style: none; }
 .tile__no { font-size: 25px; font-weight: 800; line-height: 1; letter-spacing: -0.04em; white-space: nowrap; }
 .tile__v { display: flex; align-items: baseline; gap: 1px; font-size: 16px; font-weight: 800; line-height: 1; letter-spacing: -0.03em; white-space: nowrap; }
 .tile__u { font-size: 10.5px; font-weight: 700; }
-.tile__w { min-height: 11px; font-size: 11px; font-weight: 600; line-height: 1; white-space: nowrap; }
+.tile__w { min-height: 12px; font-size: 12px; font-weight: 700; line-height: 1; white-space: nowrap; }
 .tile.is-free   { background: var(--v-free);   color: #fff; }
 .tile.is-normal { background: var(--v-normal); color: var(--ink); }
 .tile.is-busy   { background: var(--v-busy);   color: #fff; }
-.tile.is-pause,
-.tile.is-closed { --tile-edge: var(--off-mark); background: #fff; color: var(--v-off); }
+.tile.is-pause { --tile-edge: var(--off-mark); background: #fff; color: var(--v-off); }
 .tile.is-resv        { --tile-edge: #CBC1F6; background: #EFEBFE; color: #3B2DAE; }
-.tile.is-resv-closed { --tile-edge: #C9D0DC; background: #F1F3F7; color: #46536B; }
+.tile.is-resv-closed,
+.tile.is-closed      { --tile-edge: #C9D0DC; background: #F1F3F7; color: #46536B; }
 .tile.is-pause .tile__v,
-.tile.is-closed .tile__v { font-size: 15px; font-weight: 700; letter-spacing: -0.02em; }
+.tile.is-pause .tile__w,
 .tile.is-resv .tile__v,
 .tile.is-resv-closed .tile__v,
 .tile.is-resv .tile__w,
 .tile.is-resv-closed .tile__w { min-height: 0; font-size: 14px; font-weight: 800; line-height: 1; letter-spacing: -0.02em; }
+.tile.is-closed .tile__v { font-size: 18px; font-weight: 800; letter-spacing: -0.02em; }
+.tile.is-closed .tile__w { min-height: 10px; }
 .tile.is-pause .tile__no,
 .tile.is-closed .tile__no { color: var(--ink-2); }
 

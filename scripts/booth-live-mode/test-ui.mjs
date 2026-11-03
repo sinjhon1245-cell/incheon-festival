@@ -151,15 +151,23 @@ function visitorPage(ver, snap, extra = '') {
 }
 async function snapFor(live, modes) { return (await snapshotOf(SNAP_NEW, { ...base, booth_live: live, booth_live_mode: modes })).body; }
 const rowsOf = (d) => [...d.querySelectorAll('#list .row')].map((r) => ({ code: txt(r.querySelector('.row__code')), right: r.querySelector('.row__right').innerHTML, cls: r.className }));
-// 현장예약 상자: 눈으로 보는 두 줄 · 화면 읽기 문장 · 상자 모양
-const boxOf = (el) => { const b = el && el.querySelector('.rbox'); return b ? { lines: [...b.querySelectorAll('.rbox__l')].map(txt), cls: b.className, hidden: b.getAttribute('aria-hidden'), sr: txt(el.querySelector('.sr-only')) } : null; };
+// 상태 상자(대기 분이 없는 상태): 눈으로 보는 낱말 · 화면 읽기 문장 · 상자 모양
+const boxOf = (el) => { const b = el && el.querySelector('.sbox'); return b ? { lines: [...b.querySelectorAll('.sbox__l')].map(txt), cls: b.className, hidden: b.getAttribute('aria-hidden'), sr: txt(el.querySelector('.sr-only')) } : null; };
 {
   const snapW = await snapFor(liveWait, []);
   const a = visitorPage('old', snapW), b = visitorPage('new', snapW);
   const ready = (d) => until(() => d.window.document.querySelectorAll('#list .row').length === 7 && d.window.document.getElementById('h-free'));
   await Promise.all([ready(a), ready(b)]);
   const ra = rowsOf(a.window.document), rb = rowsOf(b.window.document);
-  t('V1 현장대기만 있을 때: 목록(번호 · 오른쪽 값 · 줄 모양) = 예전 화면', ra.length === 7 && JSON.stringify(ra) === JSON.stringify(rb), JSON.stringify(rb[0]));
+  // 대기 분이 있는 줄 · 지난 값 줄은 예전과 같은 마크업. 잠시 중단 · 마감 줄만 같은 크기의 상태 상자로 바뀌었습니다(PR #60).
+  const same = [0, 1, 2, 5, 6];
+  t('V1 현장대기만 있을 때: 대기 분 줄 · 지난 값 줄(번호 · 오른쪽 값 · 줄 모양) = 예전 화면', ra.length === 7 && rb.length === 7
+    && JSON.stringify(same.map((i) => ra[i])) === JSON.stringify(same.map((i) => rb[i])), JSON.stringify(rb[0]));
+  const bd = b.window.document, rowR = (i) => bd.querySelectorAll('#list .row')[i].querySelector('.row__right');
+  const bp = boxOf(rowR(3)), bc = boxOf(rowR(4));
+  t('V1 잠시 중단 = 상태 상자 "잠시 / 중단"(흰 바탕) · 마감 = 한 줄 상자 "마감"(회색) · 화면 읽기는 "잠시 중단" · "오늘 마감"',
+    !!bp && bp.lines.join('/') === '잠시/중단' && /sbox--pause/.test(bp.cls) && bp.sr === '잠시 중단'
+    && !!bc && bc.lines.join('/') === '마감' && /sbox--off/.test(bc.cls) && /sbox--one/.test(bc.cls) && bc.sr === '오늘 마감', JSON.stringify([bp, bc]));
   const hero = (d) => [txt(d.getElementById('h-free')), txt(d.getElementById('h-total')), txt(d.getElementById('h-sub')),
     [...d.querySelectorAll('[data-count] [data-n]')].map(txt).join(',')].join('|');
   t('V1 현장대기만 있을 때: 큰 숫자 · 전체 · 아래 줄 · 상태 칩 = 예전 화면', hero(a.window.document) === hero(b.window.document), hero(b.window.document));
@@ -176,9 +184,9 @@ const boxOf = (el) => { const b = el && el.querySelector('.rbox'); return b ? { 
   const r = rowsOf(d);
   const rowEl = (i) => d.querySelectorAll('#list .row')[i].querySelector('.row__right');
   const b5 = boxOf(rowEl(5)), b6 = boxOf(rowEl(6));
-  t('V2 목록: 현장예약 운영 중 = 두 줄 상자 "현장 / 예약"(숫자 · 칩 · "분" · "운영 중" 글자 없음)', !!b5 && b5.lines.join('/') === '현장/예약' && !/closed/.test(b5.cls)
-    && !/v__n|st--|분/.test(r[5].right) && !/운영 중/.test(txt(rowEl(5).querySelector('.rbox'))) && /is-resv/.test(r[5].cls), r[5].right);
-  t('V2 목록: 예약 마감 = 같은 크기의 회색 상자 "예약 / 마감"', !!b6 && b6.lines.join('/') === '예약/마감' && /rbox--closed/.test(b6.cls) && /is-resv-closed/.test(r[6].cls), r[6].right);
+  t('V2 목록: 현장예약 운영 중 = 두 줄 상자 "현장 / 예약"(숫자 · 칩 · "분" · "운영 중" 글자 없음)', !!b5 && b5.lines.join('/') === '현장/예약' && !/sbox--off/.test(b5.cls)
+    && !/v__n|st--|분/.test(r[5].right) && !/운영 중/.test(txt(rowEl(5).querySelector('.sbox'))) && /sbox--resv/.test(b5.cls) && /is-resv/.test(r[5].cls), r[5].right);
+  t('V2 목록: 예약 마감 = 같은 크기의 회색 상자 "예약 / 마감"', !!b6 && b6.lines.join('/') === '예약/마감' && /sbox--off/.test(b6.cls) && /is-resv-closed/.test(r[6].cls), r[6].right);
   t('V2 목록: 화면 읽기 — 상자는 감추고 뜻 한 줄("현장예약 운영 중" · "현장예약 마감")', b5 && b5.hidden === 'true' && b5.sr === '현장예약 운영 중' && b6.hidden === 'true' && b6.sr === '현장예약 마감', JSON.stringify([b5, b6]));
   t('V2 목록: 현장예약 부스의 잠시 중단 = 잠시 중단', /잠시 중단/.test(r[3].right));
   t('V2 큰 숫자: 여유 1곳(현장예약 제외) · 전체 7곳', txt(d.getElementById('h-free')) === '1' && txt(d.getElementById('h-total')) === '7');
@@ -217,14 +225,14 @@ const boxOf = (el) => { const b = el && el.querySelector('.rbox'); return b ? { 
   await until(() => txt(dh.getElementById('here')).length > 0);
   const bh = boxOf(dh.querySelector('#here .here__val'));
   t('V4 QR 직접 진입(지금 계신 부스): 같은 두 줄 상자(크게) "현장 / 예약" + 짧은 안내(예약 시간 · 인원은 만들지 않음)',
-    !!bh && bh.lines.join('/') === '현장/예약' && /rbox--big/.test(bh.cls) && /현장에서 예약을 진행하는 부스예요/.test(txt(dh.getElementById('here')))
+    !!bh && bh.lines.join('/') === '현장/예약' && /sbox--big/.test(bh.cls) && /현장에서 예약을 진행하는 부스예요/.test(txt(dh.getElementById('here')))
     && !/분/.test(txt(dh.querySelector('#here .here__val'))) && !/시간|명|인원/.test(txt(dh.getElementById('here')).replace('대기', '')), txt(dh.getElementById('here')));
   vh.window.close();
   const vh2 = visitorPage('new', snapR, '?b=S07');
   const dh2 = vh2.window.document;
   await until(() => txt(dh2.getElementById('here')).length > 0);
   const bh2 = boxOf(dh2.querySelector('#here .here__val'));
-  t('V4 QR 직접 진입: 예약 마감 = 회색 상자 "예약 / 마감" + 바로 갈 수 있는 부스 안내', !!bh2 && bh2.lines.join('/') === '예약/마감' && /rbox--closed/.test(bh2.cls) && /바로 갈 수 있는/.test(txt(dh2.getElementById('here'))), txt(dh2.getElementById('here')));
+  t('V4 QR 직접 진입: 예약 마감 = 회색 상자 "예약 / 마감" + 바로 갈 수 있는 부스 안내', !!bh2 && bh2.lines.join('/') === '예약/마감' && /sbox--off/.test(bh2.cls) && /바로 갈 수 있는/.test(txt(dh2.getElementById('here'))), txt(dh2.getElementById('here')));
   vh2.window.close();
 
   const vo = visitorPage('old', snapR);
