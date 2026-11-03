@@ -403,7 +403,7 @@ ul, ol { padding: 0; list-style: none; }
 }
 .stag--pause    { --stag-bg: #FFFFFF; --stag-ink: #5A6B85; --stag-edge: #D5DAE3; }
 .stag--off      { --stag-bg: #F1F3F7; --stag-ink: #5A6B85; --stag-edge: #F1F3F7; }
-.stag--resv     { --stag-bg: #EFEBFE; --stag-ink: #3B2DAE; --stag-edge: #CBC1F6; box-shadow: inset 2px 0 0 #5B45E0; }
+.stag--resv     { --stag-bg: #EFEBFE; --stag-ink: #3B2DAE; --stag-edge: #5B45E0; border-width: 3px; }
 .stag--resv-off { --stag-bg: #F3F1FA; --stag-ink: #5A5385; --stag-edge: #DAD5EE; }
 /* 지금 계신 부스(큰 값 자리): 같은 표시를 한 단계만 크게(높이 38 · 15px) */
 .stag--big { width: auto; min-width: 84px; height: 38px; padding: 0 14px; font-size: 15px; }

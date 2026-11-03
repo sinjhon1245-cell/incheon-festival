@@ -973,7 +973,8 @@ html.is-demo .row { scroll-margin-top: calc(56px + var(--demo-h) + env(safe-area
    그림자 · 아이콘 · 큰 글씨 없이 옅은 바탕 · 얇은 테두리만 씁니다. 혼잡도로 읽히지 않게 초록 · 노랑 · 빨강을 쓰지 않습니다.
      잠시 중단   흰 바탕 · 옅은 회색 테두리 · 회색 글자(5.4:1)
      오늘 마감   아주 옅은 회색 바탕 · 차분한 회색 글자(4.9:1) · 테두리 없음
-     현장예약    옅은 보라 바탕 · 진한 보라 글자(부스 번호와 같은 #3B2DAE, 8.9:1) · 은은한 보라 테두리 · 왼쪽 얇은 보라 선(2px)
+     현장예약    옅은 보라 바탕 · 진한 보라 글자(부스 번호와 같은 #3B2DAE, 8.3:1) · 네 면 같은 진보라 테두리(#5B45E0, 3px —
+                 정수 px 라 화면 배율이 달라도 네 면 두께가 같음). 크기는 그대로 76×34(테두리가 안쪽으로 들어옴)
      예약 마감   채도를 낮춘 보라 회색 바탕 · 글자(6.0:1) — 오늘 마감(회색)과 다른 갈래, 현장예약보다 가라앉게
    이 규칙은 live/example/example.css 에 글자 그대로 옮겨 씁니다(시험이 견줌). */
 .stag {
@@ -999,7 +1000,7 @@ html.is-demo .row { scroll-margin-top: calc(56px + var(--demo-h) + env(safe-area
 }
 .stag--pause    { --stag-bg: #FFFFFF; --stag-ink: #5A6B85; --stag-edge: #D5DAE3; }
 .stag--off      { --stag-bg: #F1F3F7; --stag-ink: #5A6B85; --stag-edge: #F1F3F7; }
-.stag--resv     { --stag-bg: #EFEBFE; --stag-ink: #3B2DAE; --stag-edge: #CBC1F6; box-shadow: inset 2px 0 0 #5B45E0; }
+.stag--resv     { --stag-bg: #EFEBFE; --stag-ink: #3B2DAE; --stag-edge: #5B45E0; border-width: 3px; }
 .stag--resv-off { --stag-bg: #F3F1FA; --stag-ink: #5A5385; --stag-edge: #DAD5EE; }
 /* 지금 계신 부스(큰 값 자리): 같은 표시를 한 단계만 크게(높이 38 · 15px) */
 .stag--big { width: auto; min-width: 84px; height: 38px; padding: 0 14px; font-size: 15px; }
