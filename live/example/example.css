@@ -57,11 +57,8 @@
   --r-btn:  12px;
 
   --gutter: 16px;
-  /* 관람객 화면과 같은 상태 칸 · 상태 상자 크기(visitor.css 의 --stat-*) */
+  /* 관람객 화면과 같은 상태 칸 폭(visitor.css 의 --stat-w) */
   --stat-w: 80px;
-  --stat-h: 58px;
-  --stat-w-big: 88px;
-  --stat-h-big: 64px;
   --sans: 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, system-ui,
           'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', sans-serif;
 }
@@ -367,65 +364,61 @@ ul, ol { padding: 0; list-style: none; }
   overflow: hidden;
 }
 .vr.is-closed .vr__name { color: var(--v-off); }
-/* 오른쪽 상태 칸 — 관람객 화면 .row__right 와 같이 모든 줄이 같은 폭 · 같은 오른쪽 끝, 줄의 세로 가운데 */
+/* 오른쪽 상태 칸 — 관람객 화면 .row__right 와 같이 모든 줄이 같은 80px 칸, 안의 숫자 · 칩 · 상태 표시는 가로 가운데, 줄의 세로 가운데 */
 .vr__right {
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
+  align-items: center;
   justify-content: center;
   align-self: center;
   gap: 4px;
   width: var(--stat-w);
-  min-height: var(--stat-h);
-  text-align: right;
+  text-align: center;
 }
-.vr__right .st { width: 100%; }
 .v { display: flex; align-items: baseline; gap: 1px; line-height: .9; white-space: nowrap; }
 .v__n { font-size: 32px; font-weight: 800; letter-spacing: -0.04em; }
 .v__u { font-size: 14px; font-weight: 700; color: var(--ink-2); }
-/* 상태 상자 — visitor.css 의 .sbox ~ .sbox--big.sbox--one 을 글자 하나 다르지 않게 옮긴 것입니다
+/* 상태 표시 — visitor.css 의 .stag ~ .stag--big 을 글자 하나 다르지 않게 옮긴 것입니다
    (scripts/booth-live-mode/test-visitor-resv.mjs 가 두 파일의 이 규칙이 같은지 봅니다). */
-.sbox {
-  --sbox-bg: #FFFFFF;
-  --sbox-ink: #5A6B85;
-  --sbox-edge: #8A93AB;
+.stag {
+  --stag-bg: #FFFFFF;
+  --stag-ink: #5A6B85;
+  --stag-edge: #D5DAE3;
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
   flex: none;
-  width: var(--stat-w);
-  height: var(--stat-h);
-  border: 1px solid var(--sbox-edge);
-  border-radius: 6px;
-  background: var(--sbox-bg);
-  color: var(--sbox-ink);
-  font-size: 16px;
-  font-weight: 800;
-  line-height: 1.15;
+  width: 76px;
+  height: 34px;
+  padding: 0 4px;
+  border: 1px solid var(--stag-edge);
+  border-radius: 4px;
+  background: var(--stag-bg);
+  color: var(--stag-ink);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.2;
   letter-spacing: -0.02em;
-  text-align: center;
   white-space: nowrap;
 }
-.sbox__l { display: block; }
-.sbox--one { font-size: 20px; }
-.sbox--resv  { --sbox-bg: #EFEBFE; --sbox-ink: #3B2DAE; --sbox-edge: #CBC1F6; }
-.sbox--off   { --sbox-bg: #F1F3F7; --sbox-ink: #46536B; --sbox-edge: #C9D0DC; }
-.sbox--pause { --sbox-bg: #FFFFFF; --sbox-ink: #5A6B85; --sbox-edge: #8A93AB; }
-/* 지금 계신 부스(큰 값 자리): 같은 상자를 한 단계 크게 */
-.sbox--big { width: var(--stat-w-big); height: var(--stat-h-big); border-radius: 8px; font-size: 20px; }
-.sbox--big.sbox--one { font-size: 24px; }
+.stag--pause    { --stag-bg: #FFFFFF; --stag-ink: #5A6B85; --stag-edge: #D5DAE3; }
+.stag--off      { --stag-bg: #F1F3F7; --stag-ink: #5A6B85; --stag-edge: #F1F3F7; }
+.stag--resv     { --stag-bg: #EFEBFE; --stag-ink: #3B2DAE; --stag-edge: #CBC1F6; box-shadow: inset 2px 0 0 #5B45E0; }
+.stag--resv-off { --stag-bg: #F3F1FA; --stag-ink: #5A5385; --stag-edge: #DAD5EE; }
+/* 지금 계신 부스(큰 값 자리): 같은 표시를 한 단계만 크게(높이 38 · 15px) */
+.stag--big { width: auto; min-width: 84px; height: 38px; padding: 0 14px; font-size: 15px; }
 .st {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 25px;
-  padding: 0 8px;
-  border-radius: 6px;
-  font-size: 15px;
-  font-weight: 800;
+  width: 60px;
+  height: 22px;
+  padding: 0 4px;
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 700;
   line-height: 1.2;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.01em;
   white-space: nowrap;
 }
 /* 관람객 화면의 상태 칩(visitor.css 의 .st 와 같은 칠). 대기 분 숫자는 남색 그대로입니다 */
@@ -433,7 +426,7 @@ ul, ol { padding: 0; list-style: none; }
 .st--normal { background: var(--v-normal); color: var(--ink); }
 .st--busy   { background: var(--v-busy);   color: #fff; }
 
-/* 한눈에 보기 — visitor.css 의 한눈에 칸(.tile)과 같은 칠 · 크기 · 글자. 대기 분이 없는 칸은 위 상태 상자와 같은 색 · 낱말 */
+/* 한눈에 보기 — visitor.css 의 한눈에 칸(.tile)과 같은 칠 · 크기 · 글자. 대기 분이 없는 칸은 위 상태 표시와 같은 색 · 낱말(두 줄) */
 .vp__sub { padding: 14px 14px 0; border-top: 1px solid var(--line); font-size: 13px; font-weight: 700; color: var(--ink-2); }
 .vp__tiles {
   display: grid;
@@ -467,18 +460,18 @@ ul, ol { padding: 0; list-style: none; }
 .tile.is-free   { background: var(--v-free);   color: #fff; }
 .tile.is-normal { background: var(--v-normal); color: var(--ink); }
 .tile.is-busy   { background: var(--v-busy);   color: #fff; }
-.tile.is-pause { --tile-edge: var(--off-mark); background: #fff; color: var(--v-off); }
+.tile.is-pause { --tile-edge: #C3CAD6; background: #fff; color: #5A6B85; }
 .tile.is-resv        { --tile-edge: #CBC1F6; background: #EFEBFE; color: #3B2DAE; }
-.tile.is-resv-closed,
-.tile.is-closed      { --tile-edge: #C9D0DC; background: #F1F3F7; color: #46536B; }
+.tile.is-resv-closed { --tile-edge: #DAD5EE; background: #F3F1FA; color: #5A5385; }
+.tile.is-closed      { --tile-edge: #E1E5EC; background: #F1F3F7; color: #5A6B85; }
 .tile.is-pause .tile__v,
 .tile.is-pause .tile__w,
+.tile.is-closed .tile__v,
+.tile.is-closed .tile__w,
 .tile.is-resv .tile__v,
 .tile.is-resv-closed .tile__v,
 .tile.is-resv .tile__w,
-.tile.is-resv-closed .tile__w { min-height: 0; font-size: 14px; font-weight: 800; line-height: 1; letter-spacing: -0.02em; }
-.tile.is-closed .tile__v { font-size: 18px; font-weight: 800; letter-spacing: -0.02em; }
-.tile.is-closed .tile__w { min-height: 10px; }
+.tile.is-resv-closed .tile__w { min-height: 0; font-size: 14px; font-weight: 700; line-height: 1; letter-spacing: -0.02em; }
 .tile.is-pause .tile__no,
 .tile.is-closed .tile__no { color: var(--ink-2); }
 

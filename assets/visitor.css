@@ -53,11 +53,8 @@
   --num-bg:       #F1EFFD;
   --num-w:  56px;
   --num-fs: 30px;
-  /* 오른쪽 상태 칸 · 상태 상자 — 목록 줄 80×58, 지금 계신 부스 88×64. 모든 폭에서 같습니다. */
+  /* 오른쪽 상태 칸 80px(모든 폭에서 같음) — 그 가운데에 대기 분 숫자 · 상태 칩(60×22) · 한 줄 상태 표시(76×34) */
   --stat-w: 80px;
-  --stat-h: 58px;
-  --stat-w-big: 88px;
-  --stat-h-big: 64px;
 
   --gutter: 20px;
   --bar-h:  48px;
@@ -350,11 +347,11 @@ html.is-demo .row { scroll-margin-top: calc(56px + var(--demo-h) + env(safe-area
 .here__val {
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
+  align-items: center;
   gap: 6px;
-  text-align: right;
+  text-align: center;
 }
-.here__val .st:not(.st--unknown) { width: var(--stat-w-big); }   /* 칩도 상태 상자와 같은 폭 · 같은 오른쪽 끝 */
+.here__val .st:not(.st--unknown) { width: 68px; height: 24px; }   /* 큰 숫자 아래 칩도 한 단계만 크게, 숫자와 같은 가운데 */
 .here__age {
   margin-top: 12px;
   font-size: 13px;
@@ -944,22 +941,21 @@ html.is-demo .row { scroll-margin-top: calc(56px + var(--demo-h) + env(safe-area
   letter-spacing: -0.02em;
 }
 .row.is-closed .row__name { color: var(--st-off); }
-/* 오른쪽 상태 칸 — 모든 줄이 같은 폭(--stat-w 80px)이고, 숫자 · 상태 칩 · 상태 상자 모두 이 칸의 오른쪽 끝에 맞춥니다.
-   대기 분 줄('20분' + 칸 폭 칩, 58px)과 상자 줄(상태 상자 80×58)은 높이도 같아, 상태가 무엇이든 자리 · 크기가 같습니다.
-   묶음은 줄의 세로 가운데(이름이 두 줄이어도)에 두고, 한 줄 이름 + 학교(45px)보다 큰 만큼 위아래 여백(14px)을 5px씩 빌려 씁니다. */
+/* 오른쪽 상태 칸 — 모든 줄이 같은 80px 칸이고, 안의 숫자 · 상태 칩 · 상태 표시는 모두 칸의 가로 가운데에 둡니다
+   (숫자 가운데 = 칩 가운데 = 칸 가운데). 대기 분이 가장 큰 정보이고 칩 · 상태 표시는 그보다 작게 둡니다.
+   묶음은 줄의 세로 가운데(이름이 두 줄이어도)에 두고, '20분' + 칩 묶음(55px)이 한 줄 이름 + 학교(45px)보다 큰 만큼
+   위아래 여백(14px)을 6px씩 빌려 써서 줄 높이는 이름 줄 수로만 정해집니다(상태 때문에 줄이 높아지지 않음). */
 .row__right {
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
+  align-items: center;
   justify-content: center;
   align-self: center;
   gap: 4px;
   width: var(--stat-w);
-  min-height: var(--stat-h);
-  margin: -5px 0;
-  text-align: right;
+  margin: -6px 0;
+  text-align: center;
 }
-.row__right .st:not(.st--unknown) { width: 100%; }   /* 상태 칩은 칸 폭 그대로 — 오른쪽 끝 · 가로 크기가 줄마다 같음 */
 
 /* 줄 오른쪽 값 */
 .v {
@@ -973,64 +969,62 @@ html.is-demo .row { scroll-margin-top: calc(56px + var(--demo-h) + env(safe-area
 .v__u { font-size: 14px; font-weight: 700; color: var(--ink-2); }
 /* '바로'(한글)는 숫자보다 글자가 아래로 차서, 2px 더 띄워 칩까지 보이는 간격을 'N분' 과 같게(약 6~7px) 맞춥니다 */
 .v--now  { margin-bottom: 2px; font-size: 22px; font-weight: 800; letter-spacing: -0.02em; }
-/* 상태 상자 — 대기 분이 없는 상태는 모두 같은 크기(80×58, 지금 계신 부스는 88×64)의 상자에 짧은 낱말만, 가로 · 세로 가운데.
-   대기 분 숫자 · 상태 칩과 달리 혼잡도로 읽히지 않게 초록 · 노랑 · 빨강을 쓰지 않습니다.
-     현장 / 예약   옅은 보라 바탕 · 진한 보라 글자(부스 번호와 같은 #3B2DAE, 8.9:1) · 은은한 보라 테두리
-     예약 / 마감   옅은 회색 바탕 · 진한 회색 글자(7.0:1) · 회색 테두리
-     잠시 / 중단   흰 바탕 · 회색 글자(5.4:1) · 진한 회색 테두리(잠깐 쉬는 빈 칸)
-     마감          예약 마감과 같은 회색, 한 줄로 크게(20px) — 두 줄 상자들과 모양으로도 갈립니다
-   글자는 16px 800(마감 20px). 이 규칙은 live/example/example.css 에 글자 그대로 옮겨 씁니다(시험이 견줌). */
-.sbox {
-  --sbox-bg: #FFFFFF;
-  --sbox-ink: #5A6B85;
-  --sbox-edge: #8A93AB;
+/* 상태 표시 — 대기 분이 없는 상태를 80px 칸 안의 한 줄(76×34 · 14px 700 · 모서리 4px, 칩과 같음)로. 누르는 단추가 아니라 정보 표시라
+   그림자 · 아이콘 · 큰 글씨 없이 옅은 바탕 · 얇은 테두리만 씁니다. 혼잡도로 읽히지 않게 초록 · 노랑 · 빨강을 쓰지 않습니다.
+     잠시 중단   흰 바탕 · 옅은 회색 테두리 · 회색 글자(5.4:1)
+     오늘 마감   아주 옅은 회색 바탕 · 차분한 회색 글자(4.9:1) · 테두리 없음
+     현장예약    옅은 보라 바탕 · 진한 보라 글자(부스 번호와 같은 #3B2DAE, 8.9:1) · 은은한 보라 테두리 · 왼쪽 얇은 보라 선(2px)
+     예약 마감   채도를 낮춘 보라 회색 바탕 · 글자(6.0:1) — 오늘 마감(회색)과 다른 갈래, 현장예약보다 가라앉게
+   이 규칙은 live/example/example.css 에 글자 그대로 옮겨 씁니다(시험이 견줌). */
+.stag {
+  --stag-bg: #FFFFFF;
+  --stag-ink: #5A6B85;
+  --stag-edge: #D5DAE3;
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
   flex: none;
-  width: var(--stat-w);
-  height: var(--stat-h);
-  border: 1px solid var(--sbox-edge);
-  border-radius: 6px;
-  background: var(--sbox-bg);
-  color: var(--sbox-ink);
-  font-size: 16px;
-  font-weight: 800;
-  line-height: 1.15;
+  width: 76px;
+  height: 34px;
+  padding: 0 4px;
+  border: 1px solid var(--stag-edge);
+  border-radius: 4px;
+  background: var(--stag-bg);
+  color: var(--stag-ink);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.2;
   letter-spacing: -0.02em;
-  text-align: center;
   white-space: nowrap;
 }
-.sbox__l { display: block; }
-.sbox--one { font-size: 20px; }
-.sbox--resv  { --sbox-bg: #EFEBFE; --sbox-ink: #3B2DAE; --sbox-edge: #CBC1F6; }
-.sbox--off   { --sbox-bg: #F1F3F7; --sbox-ink: #46536B; --sbox-edge: #C9D0DC; }
-.sbox--pause { --sbox-bg: #FFFFFF; --sbox-ink: #5A6B85; --sbox-edge: #8A93AB; }
-/* 지금 계신 부스(큰 값 자리): 같은 상자를 한 단계 크게 */
-.sbox--big { width: var(--stat-w-big); height: var(--stat-h-big); border-radius: 8px; font-size: 20px; }
-.sbox--big.sbox--one { font-size: 24px; }
+.stag--pause    { --stag-bg: #FFFFFF; --stag-ink: #5A6B85; --stag-edge: #D5DAE3; }
+.stag--off      { --stag-bg: #F1F3F7; --stag-ink: #5A6B85; --stag-edge: #F1F3F7; }
+.stag--resv     { --stag-bg: #EFEBFE; --stag-ink: #3B2DAE; --stag-edge: #CBC1F6; box-shadow: inset 2px 0 0 #5B45E0; }
+.stag--resv-off { --stag-bg: #F3F1FA; --stag-ink: #5A5385; --stag-edge: #DAD5EE; }
+/* 지금 계신 부스(큰 값 자리): 같은 표시를 한 단계만 크게(높이 38 · 15px) */
+.stag--big { width: auto; min-width: 84px; height: 38px; padding: 0 14px; font-size: 15px; }
 
-/* 상태 칩(대기 분 아래) — 한눈에 칸과 같은 칠(여유 초록 · 보통 샛노랑 · 혼잡 빨강). 목록 · 지금 계신 부스에서는
-   상태 칸 폭 그대로 늘려 오른쪽 끝을 상자와 맞춥니다. 글자는 상자와 같은 갈래(15px 800). '정보 없음' 은 칩이 아닌 옅은 글자입니다. */
+/* 상태 칩(대기 분 아래) — 한눈에 칸과 같은 칠(여유 초록 · 보통 샛노랑 · 혼잡 빨강). 숫자보다 작은 보조 정보로
+   60×22 · 13px 700(지금 계신 부스 68×24), 숫자와 같은 가운데. '정보 없음' 은 칩이 아닌 옅은 글자입니다. */
 .st {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 25px;
-  padding: 0 8px;
-  border-radius: 6px;
-  font-size: 15px;
-  font-weight: 800;
+  width: 60px;
+  height: 22px;
+  padding: 0 4px;
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 700;
   line-height: 1.2;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.01em;
   white-space: nowrap;
 }
 .st .sq { display: none; }   /* 칩 자체가 표시라 네모는 감춥니다(마크업은 그대로) */
 .st--free    { background: var(--st-free);   color: #fff; }
 .st--normal  { background: var(--st-normal); color: var(--ink); }
 .st--busy    { background: var(--st-busy);   color: #fff; }
-.st--unknown { min-height: 0; padding: 0; font-size: 14px; font-weight: 600; letter-spacing: 0; color: var(--muted-2); }
+.st--unknown { width: auto; height: auto; padding: 0; font-size: 13px; font-weight: 600; letter-spacing: 0; color: var(--muted-2); }
 
 /* 값이 바뀐 줄을 잠깐 표시합니다. 움직임을 줄여 달라고 한 기기에서는 하지 않습니다. */
 @media (prefers-reduced-motion: no-preference) {
@@ -1161,24 +1155,23 @@ html.is-demo .row { scroll-margin-top: calc(56px + var(--demo-h) + env(safe-area
 .tile.is-free   { background: var(--st-free);   color: #fff; }
 .tile.is-normal { background: var(--st-normal); color: var(--ink); }
 .tile.is-busy   { background: var(--st-busy);   color: #fff; }
-.tile.is-pause { --tile-edge: var(--st-off-mark); background: #fff; color: var(--st-off); }   /* 흰 칸은 회색 안쪽 선이 경계 — 테두리 대신 안쪽 선이라 번호 자리가 다른 칸과 같음 */
+.tile.is-pause { --tile-edge: #C3CAD6; background: #fff; color: #5A6B85; }   /* 흰 칸은 옅은 회색 안쪽 선이 경계 — 테두리 대신 안쪽 선이라 번호 자리가 다른 칸과 같음 */
 .tile.is-unknown,
 .tile.is-idle { --tile-edge: var(--line); }
-/* 대기 분이 없는 칸 — 목록의 상태 상자(.sbox)와 같은 바탕 · 글자 · 테두리 색, 같은 낱말.
-   두 줄('현장 / 예약' · '예약 / 마감' · '잠시 / 중단')은 같은 크기 · 굵기로 한 낱말처럼(25 + 14 + 14px, 가장 좁은 65px 칸에도 듦),
-   마감은 한 줄 크게(18px). 칸 안 글자 덩이 높이가 대기 분 칸과 같아 번호가 칸마다 같은 자리에 옵니다. */
+/* 대기 분이 없는 칸 — 목록의 상태 표시(.stag)와 같은 색 갈래 · 같은 낱말을 칸에 맞게 두 줄로
+   ('현장 / 예약' · '예약 / 마감' · '잠시 / 중단' · '오늘 / 마감', 25 + 14 + 14px — 가장 좁은 65px 칸에도 듦).
+   칸 안 글자 덩이 높이가 대기 분 칸과 같아 번호가 칸마다 같은 자리에 옵니다. */
 .tile.is-resv        { --tile-edge: #CBC1F6; background: #EFEBFE; color: #3B2DAE; }
-.tile.is-resv-closed,
-.tile.is-closed      { --tile-edge: #C9D0DC; background: #F1F3F7; color: #46536B; }
+.tile.is-resv-closed { --tile-edge: #DAD5EE; background: #F3F1FA; color: #5A5385; }
+.tile.is-closed      { --tile-edge: #E1E5EC; background: #F1F3F7; color: #5A6B85; }
 .tile.is-pause .tile__v,
 .tile.is-pause .tile__w,
+.tile.is-closed .tile__v,
+.tile.is-closed .tile__w,
 .tile.is-resv .tile__v,
 .tile.is-resv-closed .tile__v,
 .tile.is-resv .tile__w,
-.tile.is-resv-closed .tile__w { min-height: 0; font-size: 14px; font-weight: 800; line-height: 1; letter-spacing: -0.02em; }
-.tile.is-closed .tile__v { font-size: 18px; font-weight: 800; letter-spacing: -0.02em; }
-.tile.is-closed .tile__w { min-height: 10px; }
-/* 중단 · 마감 칸의 번호는 상태 글자(회색)보다 한 단계 진하게 — 쉬는 부스도 번호로는 바로 찾습니다 */
+.tile.is-resv-closed .tile__w { min-height: 0; font-size: 14px; font-weight: 700; line-height: 1; letter-spacing: -0.02em; }
 .tile.is-pause .tile__no,
 .tile.is-closed .tile__no { color: var(--ink-2); }
 /* 회색 바탕(--line-2) 위의 '정보 없음' 은 --muted-2 로는 4.3:1 이라 한 단계 진하게. 번호는 목록과 같은 진한 보라 */
