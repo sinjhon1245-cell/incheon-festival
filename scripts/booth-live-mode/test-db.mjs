@@ -83,6 +83,12 @@ try {
     grant execute on function public.admin_set_booth_live(uuid,text,integer) to authenticated;
     grant execute on function public.booth_ctrl_set(text,text,integer) to anon, authenticated;
     grant execute on function public.booth_ctrl_touch(text) to anon, authenticated;`);
+  // Supabase 기본 권한(pg_default_acl — 2026-11-03 Production 에서 읽음): postgres 가 public 에 새로 만드는 표 · 함수 · 시퀀스에는
+  // anon · authenticated · service_role 의 모든 권한 · EXECUTE 가 저절로 붙습니다. migration 의 revoke 가 이를 거두는지 같은 조건에서 봅니다.
+  await su.query(`
+    alter default privileges for role postgres in schema public grant all on tables to anon, authenticated, service_role;
+    alter default privileges for role postgres in schema public grant execute on functions to anon, authenticated, service_role;
+    alter default privileges for role postgres in schema public grant usage, select, update on sequences to anon, authenticated, service_role;`);
 
   // 세션(두 운영자가 같은 부스 B1 · 다른 부스 B2) · QR 열쇠
   const tok = () => randomBytes(32).toString('base64url');            // 43자
@@ -168,6 +174,20 @@ try {
   await su.query('rollback').catch(() => {});
   t('T1 기존 상태 값은 그대로(B2 보통 20 · 시각 같음)', JSON.stringify(await live(B2)) === JSON.stringify(liveB2));
   t('T1 방식 줄 0 · 스위치 꺼짐', (await su.query(`select (select count(*) from public.booth_live_mode)::int n, (select enabled from public.booth_live_mode_config) e`)).rows[0].n === 0);
+  const acl = (await su.query(`select
+      has_table_privilege('anon', 'public.booth_live_mode', 'SELECT') t_sel,
+      has_table_privilege('authenticated', 'public.booth_live_mode', 'INSERT') t_ins,
+      has_column_privilege('anon', 'public.booth_live_mode', 'booth_id', 'SELECT') c_id,
+      has_column_privilege('anon', 'public.booth_live_mode', 'mode', 'SELECT') c_mode,
+      has_column_privilege('authenticated', 'public.booth_live_mode', 'updated_at', 'SELECT') c_at,
+      has_table_privilege('anon', 'public.booth_live_mode_config', 'SELECT') cfg_sel,
+      has_table_privilege('authenticated', 'public.booth_live_mode_config', 'UPDATE') cfg_upd,
+      has_function_privilege('anon', 'public.booth_session_mode(text,text)', 'EXECUTE') f_sess,
+      has_function_privilege('anon', 'public.booth_ctrl_mode(text,text)', 'EXECUTE') f_ctrl,
+      has_function_privilege('authenticated', 'private.booth_mode_op(uuid,text,uuid)', 'EXECUTE') f_op,
+      has_function_privilege('anon', 'public.admin_set_booth_live(uuid,text,integer)', 'EXECUTE') f_admin`)).rows[0];
+  t('T1 Supabase 기본 권한 아래에서도: 표 전체 권한 · 스위치 표는 거둠, 공개 열은 booth_id · mode 만, 전환 RPC 만 실행 · 관리자 함수 권한 그대로',
+    !acl.t_sel && !acl.t_ins && acl.c_id && acl.c_mode && !acl.c_at && !acl.cfg_sel && !acl.cfg_upd && acl.f_sess && acl.f_ctrl && !acl.f_op && !acl.f_admin, JSON.stringify(acl));
 
   // ── 스위치 꺼짐 = 바뀌기 전과 같음 ──
   const after = await scenario();
@@ -399,6 +419,18 @@ try {
   t('T14 되돌린 뒤에도 부스 · QR 열쇠 · 세션 표 그대로', (await fingerprint()) === fp0);
   r = await call(su, MIGRATION);
   t('T13 되돌린 뒤 migration 을 다시 적용할 수 있음', !r.err, r.err && r.err.message);
+  // Windows 에서 복사해 붙여 넣으면 줄 끝이 CRLF 가 될 수 있습니다. 함수 본문에 \r 이 들어가도 확인 칸이 멈추지 않아야 합니다.
+  await su.query(`drop table if exists private.booth_live_mode_backup`);
+  const crlf = (s) => s.replace(/\r?\n/g, '\r\n');
+  r = await call(su, crlf(ROLLBACK));
+  t('T15 CRLF 로 붙여 넣은 rollback 도 적용 · 확인 칸 통과', !r.err, r.err && r.err.message);
+  await su.query(`drop table if exists private.booth_live_mode_backup`);
+  r = await call(su, crlf(MIGRATION));
+  const crHas = (await su.query(`select count(*)::int n from pg_proc where proname = 'booth_op_set' and position(chr(13) in prosrc) > 0`)).rows[0].n;
+  t('T15 CRLF 로 붙여 넣은 migration 도 적용 · 확인 칸 통과(함수 본문에 \\r 이 들어간 경우)', !r.err && crHas === 1, r.err ? r.err.message : 'cr=' + crHas);
+  r = await sSet(anon, S1a, 'open', 25);
+  t('T15 CRLF 로 적용한 함수도 저장 정상', !r.err && (await live(B1)).congestion === '보통');
+  t('T14 CRLF 적용 · 되돌리기 뒤에도 부스 · QR 열쇠 · 세션 표 그대로', (await fingerprint()) === fp0);
 } catch (e) {
   t('시험 진행 중 오류', false, e.stack || String(e));
 } finally {

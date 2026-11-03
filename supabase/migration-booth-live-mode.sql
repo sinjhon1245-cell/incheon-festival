@@ -54,15 +54,15 @@ begin
      or pg_catalog.to_regclass('public.booth_live_mode_config') is not null then
     raise exception 'STOP: 운영 방식 표가 이미 있습니다(이미 적용함). 다시 적용하지 않습니다.';
   end if;
-  if (select md5(p.prosrc) from pg_catalog.pg_proc p where p.oid = 'private.booth_op_set(uuid,text,integer,uuid)'::regprocedure)
+  if (select md5(replace(p.prosrc, chr(13), '')) from pg_catalog.pg_proc p where p.oid = 'private.booth_op_set(uuid,text,integer,uuid)'::regprocedure)
      is distinct from '47b39587a259ede1172674269286f543' then v_bad := v_bad || ' private.booth_op_set'; end if;
-  if (select md5(p.prosrc) from pg_catalog.pg_proc p where p.oid = 'private.booth_op_touch(uuid,uuid)'::regprocedure)
+  if (select md5(replace(p.prosrc, chr(13), '')) from pg_catalog.pg_proc p where p.oid = 'private.booth_op_touch(uuid,uuid)'::regprocedure)
      is distinct from 'f4a7c7206aeb1ffaece995cf36e3888b' then v_bad := v_bad || ' private.booth_op_touch'; end if;
-  if (select md5(p.prosrc) from pg_catalog.pg_proc p where p.oid = 'public.booth_ctrl_set(text,text,integer)'::regprocedure)
+  if (select md5(replace(p.prosrc, chr(13), '')) from pg_catalog.pg_proc p where p.oid = 'public.booth_ctrl_set(text,text,integer)'::regprocedure)
      is distinct from 'c244c2caaaf3cb72efea6af1a90694af' then v_bad := v_bad || ' public.booth_ctrl_set'; end if;
-  if (select md5(p.prosrc) from pg_catalog.pg_proc p where p.oid = 'public.booth_ctrl_touch(text)'::regprocedure)
+  if (select md5(replace(p.prosrc, chr(13), '')) from pg_catalog.pg_proc p where p.oid = 'public.booth_ctrl_touch(text)'::regprocedure)
      is distinct from '133b47076c22d428ce6dcc0591702051' then v_bad := v_bad || ' public.booth_ctrl_touch'; end if;
-  if (select md5(p.prosrc) from pg_catalog.pg_proc p where p.oid = 'public.admin_set_booth_live(uuid,text,integer)'::regprocedure)
+  if (select md5(replace(p.prosrc, chr(13), '')) from pg_catalog.pg_proc p where p.oid = 'public.admin_set_booth_live(uuid,text,integer)'::regprocedure)
      is distinct from '778f69b8ceaac6eea38aaea71324c8c4' then v_bad := v_bad || ' public.admin_set_booth_live'; end if;
   if (select md5(pg_catalog.pg_get_constraintdef(c.oid)) from pg_catalog.pg_constraint c
        where c.conrelid = 'public.booth_live'::regclass and c.conname = 'booth_live_congestion_check')
