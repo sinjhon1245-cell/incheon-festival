@@ -390,7 +390,31 @@ button {
    6자리는 3 · 3 으로 조금 떼어 관리자 화면의 발급 PIN('483 921')과 같은 묶음으로 읽히게 합니다.
    과한 인증번호 화면처럼 보이지 않게 칸은 흰 바탕 · 1px 테두리만 두고, 다음에 채울 칸만 보라로 알립니다. */
 .pinfield { margin-top: 20px; }
+/* 이름표 줄: 'PIN 6자리' 와 오른쪽 끝의 '모두 지우기'. 칸 줄(6자리 350px · 4자리 240px)과 끝을 맞춥니다. */
+.pinhead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  max-width: 350px;
+}
+.pinfield:has(.pinslots--4) .pinhead { max-width: 240px; }
 .pinlabel { display: block; font-size: 16px; font-weight: 800; letter-spacing: -0.02em; }
+/* 숫자가 없을 때도 자리는 그대로 두고 감춥니다(줄이 움직이지 않게). 누르는 넓이는 여백을 빌려 44px 남짓 */
+.pinclear {
+  flex: none;
+  margin: -12px -6px -12px 0;
+  padding: 12px 6px;
+  border: 0;
+  background: none;
+  color: var(--accent-d);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.2;
+  cursor: pointer;
+}
+.pinclear.is-off { visibility: hidden; }
 .pinhint { margin-top: 2px; font-size: 13.5px; line-height: 1.5; color: var(--muted); }
 /* 공통 PIN 안내 속 숫자 — 위 'PIN 숫자' 규칙(700 · 남색 · 비례 숫자 · 자간 조금)을 글줄 크기로 */
 .pinhint__v {
@@ -438,9 +462,34 @@ button {
   animation: pincaret 1s steps(1) infinite;
 }
 @keyframes pincaret { 50% { opacity: 0; } }
-@media (prefers-reduced-motion: reduce) { .pinslot.is-next::after { animation: none; } }
+/* 고른 숫자(누른 칸): 보라 테두리 + 옅은 보라 바탕. 그 위에 치면 바뀌고 Backspace · Delete 면 그 숫자만 지워집니다 */
+.pinslot.is-sel { border-color: var(--accent); background: var(--accent-t); box-shadow: 0 0 0 3px var(--accent-t); color: var(--accent-d); }
+/* 숫자 앞의 커서(가운데 숫자를 지운 뒤) · 다 찬 뒤 끝의 커서 — 칸 안 왼쪽 · 오른쪽 끝의 세로선 */
+.pinslot.is-caret,
+.pinslot.is-end { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-t); }
+.pinslot.is-caret::before,
+.pinslot.is-end::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  width: 2px;
+  height: 24px;
+  margin-top: -12px;
+  border-radius: 1px;
+  background: var(--accent);
+  animation: pincaret 1s steps(1) infinite;
+}
+.pinslot.is-caret::before { left: 6px; }
+.pinslot.is-end::after { right: 6px; }
+@media (prefers-reduced-motion: reduce) {
+  .pinslot.is-next::after,
+  .pinslot.is-caret::before,
+  .pinslot.is-end::after { animation: none; }
+}
 .pinwrap.is-err .pinslot { border-color: var(--danger); }
-.pinwrap.is-err .pinslot.is-next { box-shadow: 0 0 0 3px var(--danger-t); }
+.pinwrap.is-err .pinslot.is-next,
+.pinwrap.is-err .pinslot.is-caret,
+.pinwrap.is-err .pinslot.is-end { box-shadow: 0 0 0 3px var(--danger-t); }
 .pinwrap.is-busy .pinslot { color: var(--muted); }
 /* 실제 글칸: 칸 그림 위에 겹쳐 두고 보이지 않게(누르면 숫자 자판 · 붙여넣기는 그대로) */
 .pinbox {
@@ -457,7 +506,10 @@ button {
   font-size: 16px;   /* 16px 보다 작으면 iOS 가 화면을 확대합니다 */
   opacity: 0;
   cursor: text;
+  touch-action: manipulation;   /* 두 번 눌러 확대하지 않음 — 칸을 빠르게 거듭 눌러도 칸 고르기로 */
 }
+/* 고른 글자의 브라우저 바탕색이 칸 그림 위에 비치지 않게(고른 칸은 칸 그림이 보여 줌) */
+.pinbox::selection { background: transparent; color: transparent; }
 .pinerr { margin-top: 8px; font-size: 14.5px; font-weight: 700; line-height: 1.5; color: var(--danger); }
 .pinfield__go { margin-top: 12px; }
 .pinnote { margin-top: 12px; font-size: 13px; line-height: 1.55; color: var(--muted); }

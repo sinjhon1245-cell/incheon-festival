@@ -173,6 +173,19 @@ ul, ol { padding: 0; list-style: none; }
   text-decoration: none;
 }
 .cta:hover { background: var(--accent-d); border-color: var(--accent-d); }
+/* 협의용 예시 화면으로 가는 보조 링크(단추 아래 한 줄) */
+.sublink {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  margin-top: 4px;
+  color: var(--accent-d);
+  font-size: 14.5px;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
 
 .facts {
   display: grid;
@@ -361,9 +374,38 @@ ul, ol { padding: 0; list-style: none; }
 .v__n { font-size: 32px; font-weight: 800; letter-spacing: -0.04em; }
 .v__u { font-size: 14px; font-weight: 700; color: var(--ink-2); }
 .v--word { font-size: 18px; font-weight: 700; letter-spacing: -0.02em; color: var(--v-off); }
-/* 현장예약 낱말(visitor.css 의 .v--resv 와 같음) — 현장예약은 행사 보라, 예약 마감은 마감과 같은 회색 */
-.v--resv { display: block; font-size: 16px; font-weight: 800; line-height: 1.2; letter-spacing: -0.03em; text-align: right; white-space: nowrap; color: var(--accent); }
-.v--resv-closed { font-weight: 700; color: var(--v-off); }
+/* 현장예약 두 줄 상자 — visitor.css 의 .rbox · .rbox__l · .rbox--big · .rbox--closed 를 글자 하나 다르지 않게 옮긴 것입니다
+   (scripts/booth-live-mode/test-ui.mjs 가 두 파일의 이 규칙이 같은지 봅니다). */
+.rbox {
+  --rbox-bg: #EFEBFE;
+  --rbox-ink: #3B2DAE;
+  --rbox-edge: #CBC1F6;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  align-self: center;
+  width: 64px;
+  height: 50px;
+  border: 1px solid var(--rbox-edge);
+  border-radius: 6px;
+  background: var(--rbox-bg);
+  color: var(--rbox-ink);
+  font-size: 17px;
+  font-weight: 800;
+  line-height: 1.12;
+  letter-spacing: -0.02em;
+  text-align: center;
+  white-space: nowrap;
+}
+.rbox__l { display: block; }
+/* 지금 계신 부스(큰 값 자리): 같은 상자를 한 단계 크게 */
+.rbox--big { width: 84px; height: 64px; border-radius: 8px; font-size: 22px; }
+.rbox--closed {
+  --rbox-bg: #F1F3F7;
+  --rbox-ink: #46536B;
+  --rbox-edge: #C9D0DC;
+}
 .st {
   display: inline-flex;
   align-items: center;
@@ -379,6 +421,53 @@ ul, ol { padding: 0; list-style: none; }
 .st--normal { background: var(--v-normal); color: var(--ink); }
 .st--busy   { background: var(--v-busy);   color: #fff; }
 .st--pause  { background: #fff; box-shadow: inset 0 0 0 1px var(--off-mark); color: var(--v-off); }
+
+/* 한눈에 보기 — visitor.css 의 한눈에 칸(.tile)과 같은 칠 · 크기 · 글자. 현장예약 칸은 위 상자와 같은 색 */
+.vp__sub { padding: 14px 14px 0; border-top: 1px solid var(--line); font-size: 13px; font-weight: 700; color: var(--ink-2); }
+.vp__tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+  gap: 6px;
+  padding: 10px 14px 16px;
+}
+@media (min-width: 600px) {
+  .vp__sub, .vp__tiles { padding-left: 16px; padding-right: 16px; }
+}
+.tile {
+  --tile-edge: rgba(22, 32, 60, .14);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  aspect-ratio: 1 / 1;
+  min-height: 64px;
+  min-width: 0;
+  padding: 4px 7px;
+  border-radius: 4px;
+  background: #F5F6FA;
+  box-shadow: inset 0 0 0 1px var(--tile-edge);
+  color: var(--muted-2);
+  overflow: hidden;
+}
+.tile__no { font-size: 25px; font-weight: 800; line-height: 1; letter-spacing: -0.04em; white-space: nowrap; }
+.tile__v { display: flex; align-items: baseline; gap: 1px; font-size: 16px; font-weight: 800; line-height: 1; letter-spacing: -0.03em; white-space: nowrap; }
+.tile__u { font-size: 10.5px; font-weight: 700; }
+.tile__w { min-height: 11px; font-size: 11px; font-weight: 600; line-height: 1; white-space: nowrap; }
+.tile.is-free   { background: var(--v-free);   color: #fff; }
+.tile.is-normal { background: var(--v-normal); color: var(--ink); }
+.tile.is-busy   { background: var(--v-busy);   color: #fff; }
+.tile.is-pause,
+.tile.is-closed { --tile-edge: var(--off-mark); background: #fff; color: var(--v-off); }
+.tile.is-resv        { --tile-edge: #CBC1F6; background: #EFEBFE; color: #3B2DAE; }
+.tile.is-resv-closed { --tile-edge: #C9D0DC; background: #F1F3F7; color: #46536B; }
+.tile.is-pause .tile__v,
+.tile.is-closed .tile__v { font-size: 15px; font-weight: 700; letter-spacing: -0.02em; }
+.tile.is-resv .tile__v,
+.tile.is-resv-closed .tile__v,
+.tile.is-resv .tile__w,
+.tile.is-resv-closed .tile__w { min-height: 0; font-size: 14px; font-weight: 800; line-height: 1; letter-spacing: -0.02em; }
+.tile.is-pause .tile__no,
+.tile.is-closed .tile__no { color: var(--ink-2); }
 
 /* ── 운영자 미리보기 — booth-ctrl.css 의 머리 · 현재 대기 · 대기시간 · 운영 상태 ── */
 .cp {

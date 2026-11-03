@@ -552,14 +552,23 @@
       return b.congestion === '중단' ? '잠시 중단' : (isNow(b) ? '바로 체험 가능' : '대기 ' + waitNum(b) + '분, ' + b.congestion);
     }
 
+    // 현장예약 상태 상자 — 두 줄 낱말('현장 / 예약' · '예약 / 마감')만, 목록 줄과 한눈에 칸이 같은 낱말 · 같은 색을 씁니다.
+    // 화면 읽기 프로그램에는 눈으로 보는 두 줄 대신 뜻 한 줄(statusSpeech)을 읽힙니다.
+    var RESV_WORDS = { '예약중': ['현장', '예약'], '예약마감': ['예약', '마감'] };
+    function resvBox(b, big) {
+      var w = RESV_WORDS[b.congestion];
+      return '<span class="rbox' + (b.congestion === '예약마감' ? ' rbox--closed' : '') + (big ? ' rbox--big' : '') + '" aria-hidden="true">' +
+          '<span class="rbox__l">' + w[0] + '</span><span class="rbox__l">' + w[1] + '</span></span>' +
+        '<span class="sr-only">' + esc(statusSpeech(b)) + '</span>';
+    }
+
     // 목록 줄 오른쪽: 위는 숫자(또는 낱말), 아래는 네모 + 상태.
-    // 현장예약은 80px 칸 안의 낱말 하나('현장예약' · '예약 마감') — 대기 분처럼 읽히지 않게 숫자 · 칩을 쓰지 않습니다.
+    // 현장예약은 80px 칸 안의 두 줄 상자(resvBox) — 대기 분처럼 읽히지 않게 숫자 · 혼잡 칩을 쓰지 않습니다.
     function rightHtml(b) {
       if (!liveOn()) return '';
       var c = b.congestion;
       if (!c) return '<span class="st st--unknown">정보 없음</span>';
-      if (c === '예약중') return '<span class="v v--resv">현장예약</span>';
-      if (c === '예약마감') return '<span class="v v--resv v--resv-closed">예약 마감</span>';
+      if (RESV_WORDS[c]) return resvBox(b);
       if (c === '마감') return '<span class="v v--word">마감</span>';
       if (c === '중단') return '<span class="st st--pause"><i class="sq sq--hollow" aria-hidden="true"></i>잠시 중단</span>';
       var m = core.meta(c);
@@ -574,8 +583,7 @@
       if (!liveOn()) return '';
       var c = b.congestion;
       if (!c) return '<span class="bigv bigv--none">정보 없음</span>';
-      if (c === '예약중') return '<span class="bigv bigv--word bigv--resv">현장예약</span>';
-      if (c === '예약마감') return '<span class="bigv bigv--word">예약 마감</span>';
+      if (RESV_WORDS[c]) return resvBox(b, true);   // 목록 · 한눈에와 같은 두 줄 상자(조금 크게)
       if (c === '마감') return '<span class="bigv bigv--word">마감</span>';
       if (c === '중단') return '<span class="bigv bigv--word">잠시 중단</span>';
       var m = core.meta(c);
@@ -1139,9 +1147,9 @@
       if (!liveOn()) return { cls: 'is-idle', v: '', w: '' };
       var c = b.congestion;
       if (!c) return { cls: 'is-unknown', v: '—', w: '정보 없음' };
-      // 현장예약: 칸 크기는 그대로, 짧은 낱말 두 줄('현장예약' + '운영 중' · '예약' + '마감')
-      if (c === '예약중') return { cls: 'is-resv', v: '현장예약', w: '운영 중' };
-      if (c === '예약마감') return { cls: 'is-resv-closed', v: '예약', w: '마감' };
+      // 현장예약: 칸 크기는 그대로, 목록 상자와 같은 두 줄 낱말('현장 / 예약' · '예약 / 마감') · 같은 색
+      if (c === '예약중') return { cls: 'is-resv', v: RESV_WORDS[c][0], w: RESV_WORDS[c][1] };
+      if (c === '예약마감') return { cls: 'is-resv-closed', v: RESV_WORDS[c][0], w: RESV_WORDS[c][1] };
       if (c === '마감') return { cls: 'is-closed', v: '마감', w: '' };
       if (c === '중단') return { cls: 'is-pause', v: '중단', w: '' };
       var v = isNow(b) ? '바로' : waitNum(b) + '<span class="tile__u">분</span>';
