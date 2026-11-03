@@ -361,8 +361,8 @@ ul, ol { padding: 0; list-style: none; }
 .v__n { font-size: 32px; font-weight: 800; letter-spacing: -0.04em; }
 .v__u { font-size: 14px; font-weight: 700; color: var(--ink-2); }
 .v--word { font-size: 18px; font-weight: 700; letter-spacing: -0.02em; color: var(--v-off); }
-/* 현장예약 두 줄 낱말(visitor.css 의 .v--resv 와 같음) — 예약 운영 중은 행사 보라, 예약 마감은 마감과 같은 회색 */
-.v--resv { display: block; font-size: 16px; font-weight: 800; line-height: 18px; letter-spacing: -0.02em; text-align: right; color: var(--accent); }
+/* 현장예약 낱말(visitor.css 의 .v--resv 와 같음) — 현장예약은 행사 보라, 예약 마감은 마감과 같은 회색 */
+.v--resv { display: block; font-size: 16px; font-weight: 800; line-height: 1.2; letter-spacing: -0.03em; text-align: right; white-space: nowrap; color: var(--accent); }
 .v--resv-closed { font-weight: 700; color: var(--v-off); }
 .st {
   display: inline-flex;

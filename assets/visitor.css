@@ -966,15 +966,15 @@ html.is-demo .row { scroll-margin-top: calc(56px + var(--demo-h) + env(safe-area
 /* '바로'(한글)는 숫자보다 글자가 아래로 차서, 2px 더 띄워 칩까지 보이는 간격을 'N분' 과 같게(약 6~7px) 맞춥니다 */
 .v--now  { margin-bottom: 2px; font-size: 22px; font-weight: 800; letter-spacing: -0.02em; }
 .v--word { font-size: 18px; font-weight: 700; letter-spacing: -0.02em; color: var(--st-off); }
-/* 현장예약 — 80px 칸 안의 두 줄 낱말('현장 / 예약' · '예약 / 마감'). 대기 분 숫자 · 상태 칩과 달리 낱말이라
-   혼잡도로 읽히지 않게 초록 · 노랑 · 빨강을 쓰지 않습니다. 예약 운영 중은 행사 보라(흰 바탕 6.2:1), 예약 마감은 마감과 같은 회색.
-   두 줄 묶음(2 × 18px)은 'N분 + 칩'(54px)보다 낮아 줄 높이를 바꾸지 않습니다. */
+/* 현장예약 — 80px 칸 안의 낱말 하나('현장예약' · '예약 마감'). 대기 분 숫자 · 상태 칩과 달리 낱말이라
+   혼잡도로 읽히지 않게 초록 · 노랑 · 빨강을 쓰지 않습니다. 현장예약은 행사 보라(흰 바탕 6.2:1), 예약 마감은 마감과 같은 회색.
+   '마감'(.v--word)과 같은 한 줄 높이라 줄 높이를 바꾸지 않습니다. */
 .v--resv {
   display: block;
   font-size: 16px;
   font-weight: 800;
-  line-height: 18px;
-  letter-spacing: -0.02em;
+  line-height: 1.2;
+  letter-spacing: -0.03em;
   text-align: right;
   white-space: nowrap;
   color: var(--accent);
@@ -1143,6 +1143,8 @@ html.is-demo .row { scroll-margin-top: calc(56px + var(--demo-h) + env(safe-area
 .tile.is-resv-closed .tile__v { font-size: 15px; font-weight: 700; letter-spacing: -0.02em; }
 .tile.is-resv .tile__no,
 .tile.is-resv-closed .tile__no { color: var(--ink-2); }
+/* '현장예약' 네 글자는 가장 좁은 칸(390px · 65px 칸)에도 한 줄로 들게 한 단계 작게 */
+.tile.is-resv .tile__v { font-size: 13px; letter-spacing: -0.05em; }
 /* 중단 · 마감 칸의 번호는 상태 글자(회색)보다 한 단계 진하게 — 쉬는 부스도 번호로는 바로 찾습니다 */
 .tile.is-pause .tile__no,
 .tile.is-closed .tile__no { color: var(--ink-2); }

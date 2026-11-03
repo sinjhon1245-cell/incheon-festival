@@ -100,6 +100,12 @@ try {
     out.check = (await su.query(`select md5(pg_get_constraintdef(oid)) h from pg_constraint where conname = 'booth_live_congestion_check'`)).rows[0]?.h;
     return out;
   };
+  // 공식 부스 · QR 열쇠 · 세션(사용 시각 제외)의 지문 — migration · 시험 · rollback 내내 같아야 합니다.
+  const fingerprint = async () => (await su.query(`select md5(
+      coalesce((select string_agg(row(b.*)::text, ',' order by b.id) from public.booths b), '') ||
+      coalesce((select string_agg(row(a.booth_id, a.token, a.created_at, a.disabled_at)::text, ',' order by a.booth_id) from public.booth_access a), '') ||
+      coalesce((select string_agg(row(s.id, s.booth_id, s.token_hash, s.expires_at, s.revoked_at)::text, ',' order by s.id) from public.booth_session s), '')) h`)).rows[0].h;
+  const fp0 = await fingerprint();
   const m0 = await md5s();
   t('T0 시험 기준 다섯 함수 = 2026-11-03 Production(md5)', Object.keys(PROD_MD5).every((k) => m0[k] === PROD_MD5[k]),
     JSON.stringify(m0));
@@ -177,36 +183,49 @@ try {
   t('T2 스위치 꺼짐: 읽기 = wait · reserve_enabled false', r.rows && r.rows[0].op_mode === 'wait' && r.rows[0].reserve_enabled === false, JSON.stringify(r));
 
   // ── 권한 ──
-  t('T3 anon: 방식 표에 쓰기 불가', !!(await call(anon, `insert into public.booth_live_mode (booth_id, mode, via) values ($1, 'reserve', 'pin')`, [B1])).err);
-  t('T3 anon: 스위치 · 전환 기록 읽기 불가', !!(await call(anon, `select * from public.booth_live_mode_config`)).err && !!(await call(anon, `select * from public.booth_live_mode_log`)).err);
-  t('T3 anon: private 전환 함수 직접 호출 불가', !!(await call(anon, `select * from private.booth_mode_op($1, 'reserve', 'pin', null)`, [B1])).err);
-  t('T3 anon: 스위치 켜기 불가', !!(await call(anon, `update public.booth_live_mode_config set enabled = true`)).err);
+  t('T3 anon: 방식 표에 쓰기 불가', !!(await call(anon, `insert into public.booth_live_mode (booth_id, mode) values ($1, 'reserve')`, [B1])).err);
+  t('T3 anon: 공개 열(booth_id · mode)만 읽기 — 바꾼 시각 · 전체 열(select *)은 거부',
+    !(await call(anon, `select booth_id, mode from public.booth_live_mode`)).err
+    && !!(await call(anon, `select updated_at from public.booth_live_mode`)).err
+    && !!(await call(anon, `select * from public.booth_live_mode`)).err);
+  t('T3 anon: 스위치 표 읽기 · 켜기 불가', !!(await call(anon, `select * from public.booth_live_mode_config`)).err
+    && !!(await call(anon, `update public.booth_live_mode_config set enabled = true`)).err);
+  t('T3 anon: private 전환 함수 직접 호출 불가', !!(await call(anon, `select * from private.booth_mode_op($1, 'reserve', null)`, [B1])).err);
   await anon.query(`select set_config('request.method', 'GET', false)`);
   r = await call(anon, `select * from public.booth_session_mode($1, 'reserve')`, [S1a]);
   t('T3 GET 요청은 빈 결과(전환 안 함)', r.rows && r.rows.length === 0, JSON.stringify(r));
   await anon.query(`select set_config('request.method', '', false)`);
+  const defs = (await su.query(`select p.proname, p.prosecdef, array_to_string(p.proconfig, ',') cfg from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+     where n.nspname in ('public', 'private') and p.proname in ('booth_session_mode', 'booth_ctrl_mode', 'booth_live_mode_enabled', 'booth_mode_op', 'booth_mode_of', 'booth_mode_check', 'booth_mode_lock', 'booth_live_kind')`)).rows;
+  t('T3 새 함수 8개: 공개 RPC 3개만 SECURITY DEFINER · 모두 search_path 비움',
+    defs.length === 8 && defs.every((d) => d.cfg === 'search_path=""' && d.prosecdef === ['booth_session_mode', 'booth_ctrl_mode', 'booth_live_mode_enabled'].includes(d.proname)),
+    JSON.stringify(defs));
 
-  // ── 켜기 · 전환 ──
+  // ── 켜기 · 한 번에 현장예약 ──
   await su.query(`update public.booth_live_mode_config set enabled = true`);
   await sSet(anon, S1a, 'open', 15);
+  const log0 = await logN();
   r = await call(anon, `select * from public.booth_session_mode($1, 'reserve')`, [S1a]);
-  t('T4 현장대기 → 현장예약: 지금 상태가 지워짐(과거 대기 15분 없음)', r.rows && r.rows[0].op_mode === 'reserve' && r.rows[0].congestion === null && !(await live(B1)), JSON.stringify(r));
-  const logRow = (await su.query(`select from_mode, to_mode, cleared_congestion, cleared_wait, via, session_id is not null s from public.booth_live_mode_log where booth_id = $1 order by id desc limit 1`, [B1])).rows[0];
-  t('T4 전환 기록: wait→reserve · 지운 값(보통 15) · pin · 세션', logRow && logRow.cleared_congestion === '보통' && logRow.cleared_wait === 15 && logRow.via === 'pin' && logRow.s, JSON.stringify(logRow));
-  const n0 = Number((await su.query(`select count(*) n from public.booth_live_mode_log`)).rows[0].n);
-  await sSet(anon, S1a, 'resv_open', null);
-  r = await call(anon, `select * from public.booth_session_mode($1, 'reserve')`, [S1a]);   // 응답을 잃고 다시 보냄
-  t('T4 같은 전환 재전송: 아무것도 바꾸지 않음(예약중 그대로 · 기록 늘지 않음)',
-    r.rows && (await live(B1))?.congestion === '예약중' && Number((await su.query(`select count(*) n from public.booth_live_mode_log`)).rows[0].n) === n0, JSON.stringify(r));
+  t('T4 현장대기 → 현장예약 한 번: 방식과 "현장예약 운영 중"(예약중)이 함께 저장 · 과거 대기 15분 없음',
+    r.rows && r.rows[0].op_mode === 'reserve' && r.rows[0].congestion === '예약중' && (await live(B1)).congestion === '예약중' && (await live(B1)).wait_minutes === 0, JSON.stringify(r));
+  const lg = (await su.query(`select congestion, source, session_id is not null s from public.booth_live_log where booth_id = $1 order by id desc limit 1`, [B1])).rows[0];
+  t('T4 기록: booth_live_log 에 예약중 · set · 세션 한 줄(운영자 저장과 같은 기록)', lg && lg.congestion === '예약중' && lg.source === 'set' && lg.s && (await logN()) === log0 + 1, JSON.stringify(lg));
+  const anonSees = (await anon2.query(`select booth_id, mode from public.booth_live_mode`)).rows;
+  t('T4 공개 읽기: 그 부스가 reserve 로 보임(booth_id · mode 만)', anonSees.length === 1 && anonSees[0].mode === 'reserve' && Object.keys(anonSees[0]).length === 2);
+  await sSet(anon, S1b, 'resv_closed', null);                                                // 다른 운영자가 예약 마감
+  const log1 = await logN();
+  r = await call(anon, `select * from public.booth_session_mode($1, 'reserve')`, [S1a]);     // 첫 기기가 응답을 잃고 다시 보냄
+  t('T4 같은 전환 재전송: 그사이 고른 예약 마감을 덮지 않음(기록도 늘지 않음)',
+    r.rows && (await live(B1)).congestion === '예약마감' && (await logN()) === log1, JSON.stringify(r));
 
   // ── 현장예약에서 쓰기 ──
   r = await sSet(anon, S1b, 'open', 15);    // 다른 운영자(옛 화면 · 못 보낸 누름)
-  t('T5 현장예약: 대기 분(open) 거부 — PIN 세션', r.err && r.err.hint === 'booth_mode_mismatch' && (await live(B1)).congestion === '예약중', JSON.stringify(r));
+  t('T5 현장예약: 대기 분(open) 거부 — PIN 세션', r.err && r.err.hint === 'booth_mode_mismatch' && (await live(B1)).congestion === '예약마감', JSON.stringify(r));
   r = await kSet(anon, K1, 'open', 20);
-  t('T5 현장예약: 대기 분(open) 거부 — QR 열쇠', r.err && r.err.hint === 'booth_mode_mismatch' && (await live(B1)).congestion === '예약중', JSON.stringify(r));
+  t('T5 현장예약: 대기 분(open) 거부 — QR 열쇠', r.err && r.err.hint === 'booth_mode_mismatch' && (await live(B1)).congestion === '예약마감', JSON.stringify(r));
   r = await aSet(B1, 'open', 10);
-  t('T5 현장예약: 대기 분(open) 거부 — 관리자 긴급 수정 · 예시 채우기', r.err && r.err.hint === 'booth_mode_mismatch' && (await live(B1)).congestion === '예약중', JSON.stringify(r));
-  for (const [m, want] of [['resv_closed', '예약마감'], ['pause', '중단'], ['closed', '마감'], ['resv_open', '예약중']]) {
+  t('T5 현장예약: 대기 분(open) 거부 — 관리자 긴급 수정 · 일괄 채우기', r.err && r.err.hint === 'booth_mode_mismatch' && (await live(B1)).congestion === '예약마감', JSON.stringify(r));
+  for (const [m, want] of [['resv_open', '예약중'], ['pause', '중단'], ['resv_open', '예약중'], ['resv_closed', '예약마감'], ['closed', '마감'], ['resv_open', '예약중']]) {
     r = await sSet(anon, S1b, m, null);
     t(`T5 현장예약: ${m} → ${want}`, !r.err && (await live(B1)).congestion === want && (await live(B1)).wait_minutes === 0, JSON.stringify(r.err || ''));
   }
@@ -222,7 +241,7 @@ try {
   // ── 다른 부스 · 끝난 세션 ──
   r = await call(anon, `select * from public.booth_session_mode($1, 'reserve')`, [S2]);
   t('T6 B2 세션은 B2만 바꿈(B1 그대로)', r.rows && (await su.query(`select mode from public.booth_live_mode where booth_id = $1`, [B1])).rows[0].mode === 'reserve'
-    && (await su.query(`select mode from public.booth_live_mode where booth_id = $1`, [B2])).rows[0].mode === 'reserve');
+    && (await su.query(`select mode from public.booth_live_mode where booth_id = $1`, [B2])).rows[0].mode === 'reserve' && (await live(B2)).congestion === '예약중');
   await call(anon, `select * from public.booth_session_mode($1, 'wait')`, [S2]);
   r = await call(anon, `select * from public.booth_session_mode($1, 'wait')`, [SX]);
   t('T6 끝난 세션으로 전환 거부(42501)', r.err && r.err.code === '42501');
@@ -233,23 +252,25 @@ try {
 
   // ── 현장예약 → 현장대기 → (이전 값이 되살아나지 않음) ──
   r = await call(anon, `select * from public.booth_ctrl_mode($1, 'wait')`, [K1]);
-  t('T7 현장예약 → 현장대기(QR): 예약 상태가 지워짐', r.rows && r.rows[0].op_mode === 'wait' && !(await live(B1)), JSON.stringify(r));
+  t('T7 현장예약 → 현장대기(QR): 예약 상태가 지워짐(정보 없음)', r.rows && r.rows[0].op_mode === 'wait' && r.rows[0].congestion === null && !(await live(B1)), JSON.stringify(r));
   r = await sTouch(anon, S1a);
   t('T7 현장대기로 돌아온 뒤 확인: 값 없음(이전 대기 15분 · 예약 상태가 되살아나지 않음)', r.err && r.err.code === '22023' && !(await live(B1)));
   r = await sSet(anon, S1a, 'open', 5);
-  t('T7 현장대기로 돌아온 뒤 대기 분 저장', !r.err && (await live(B1)).congestion === '여유');
+  t('T7 현장대기로 돌아온 뒤 새 대기 분 저장', !r.err && (await live(B1)).congestion === '여유');
   r = await sSet(anon, S1b, 'resv_open', null);   // 예약 때 못 보낸 누름
   t('T7 현장예약 때 못 보낸 누름은 현장대기에서 거부', r.err && r.err.hint === 'booth_mode_mismatch' && (await live(B1)).congestion === '여유');
+  r = await call(anon, `select * from public.booth_ctrl_mode($1, 'reserve')`, [K1]);
+  t('T7 QR 열쇠로 현장예약 한 번: 예약중 바로 저장', r.rows && r.rows[0].congestion === '예약중' && (await live(B1)).congestion === '예약중', JSON.stringify(r));
 
   // ── 23:00 초기화 ──
-  await call(anon, `select * from public.booth_session_mode($1, 'reserve')`, [S1a]);
-  await sSet(anon, S1a, 'resv_open', null);
   r = await call(su, `select private.rehearsal_live_reset() n`);
-  t('T8 23:00 초기화: 상태만 지움 · 방식(reserve) 유지', r.rows && !(await live(B1)) && (await su.query(`select mode from public.booth_live_mode where booth_id = $1`, [B1])).rows[0].mode === 'reserve');
+  t('T8 23:00 초기화: 당일 상태만 지움 · 방식(reserve) 유지', r.rows && !(await live(B1)) && (await su.query(`select mode from public.booth_live_mode where booth_id = $1`, [B1])).rows[0].mode === 'reserve');
   r = await sSet(anon, S1a, 'open', 10);
   t('T8 초기화 뒤에도 현장예약 부스에 대기 분 거부', r.err && r.err.hint === 'booth_mode_mismatch');
   r = await call(anon, `select * from public.booth_session_mode($1, 'reserve')`, [S1a]);
-  t('T8 초기화 직후 같은 전환: 아무것도 바꾸지 않음', r.rows && r.rows[0].op_mode === 'reserve' && r.rows[0].congestion === null);
+  t('T8 초기화 뒤 같은 방식 요청: 아무것도 바꾸지 않음(운영자가 "현장예약 운영 중" 을 눌러 그날 상태를 정함)', r.rows && r.rows[0].op_mode === 'reserve' && r.rows[0].congestion === null);
+  r = await sSet(anon, S1a, 'resv_open', null);
+  t('T8 초기화 뒤 현장예약 운영 중 저장', !r.err && (await live(B1)).congestion === '예약중');
   r = await call(admin, `select public.admin_reset_booth_live() n`);
   t('T8 관리자 전체 지우기도 방식은 유지', r.rows && (await su.query(`select count(*)::int n from public.booth_live_mode where mode = 'reserve'`)).rows[0].n === 1);
 
@@ -278,23 +299,22 @@ try {
   await call(anon, `select * from public.booth_session_mode($1, 'wait')`, [S1a]);
   await sSet(anon, S1a, 'open', 15);
   let x = await race(`select * from public.booth_session_mode($1, 'reserve')`, [S1a], `select * from public.booth_session_set($1, 'open', 30)`, [S1b]);
-  t('T10 동시: 전환 중 들어온 대기 분은 기다렸다가 거부 · 남는 것은 "현장예약 + 상태 없음"',
-    x.waited && x.b.err && x.b.err.hint === 'booth_mode_mismatch' && !(await live(B1)), JSON.stringify({ waited: x.waited, b: x.b.err }));
+  t('T10 동시: 전환 중 들어온 대기 분은 기다렸다가 거부 · 남는 것은 "현장예약 + 예약중"',
+    x.waited && x.b.err && x.b.err.hint === 'booth_mode_mismatch' && (await live(B1)).congestion === '예약중', JSON.stringify({ waited: x.waited, b: x.b.err }));
   // (2) 대기 분 저장이 먼저 잡고, 그 사이 전환
   await call(anon, `select * from public.booth_session_mode($1, 'wait')`, [S1a]);
   x = await race(`select * from public.booth_session_set($1, 'open', 45)`, [S1b], `select * from public.booth_session_mode($1, 'reserve')`, [S1a]);
-  t('T10 동시: 저장 뒤 전환 — 전환이 기다렸다가 그 값을 지움 · 남는 것은 "현장예약 + 상태 없음"',
-    x.waited && !x.a.err && x.b.rows && x.b.rows[0].op_mode === 'reserve' && !(await live(B1)), JSON.stringify({ waited: x.waited, a: x.a.err, b: x.b.err }));
+  t('T10 동시: 저장 뒤 전환 — 전환이 기다렸다가 그 값을 지우고 예약중 · 남는 것은 "현장예약 + 예약중"',
+    x.waited && !x.a.err && x.b.rows && x.b.rows[0].op_mode === 'reserve' && x.b.rows[0].congestion === '예약중' && (await live(B1)).congestion === '예약중', JSON.stringify({ waited: x.waited, a: x.a.err, b: x.b.err }));
   // (3) 두 운영자가 같은 전환을 동시에
   await call(anon, `select * from public.booth_session_mode($1, 'wait')`, [S1a]);
-  const nBefore = Number((await su.query(`select count(*) n from public.booth_live_mode_log where booth_id = $1`, [B1])).rows[0].n);
+  const nBefore = await logN();
   x = await race(`select * from public.booth_session_mode($1, 'reserve')`, [S1a], `select * from public.booth_session_mode($1, 'reserve')`, [S1b]);
-  t('T10 동시: 같은 전환 두 번 → 한 번만 기록', x.waited && !x.b.err && Number((await su.query(`select count(*) n from public.booth_live_mode_log where booth_id = $1`, [B1])).rows[0].n) === nBefore + 1);
-  // (4) 서로 반대 전환을 동시에 — 나중 것이 이김(둘 다 성공 · 상태 없음)
+  t('T10 동시: 같은 전환 두 번 → 한 번만 적힘(예약중 기록 1줄)', x.waited && !x.b.err && (await logN()) === nBefore + 1 && (await live(B1)).congestion === '예약중');
+  // (4) 서로 반대 전환을 동시에 — 나중 것이 이김
   x = await race(`select * from public.booth_session_mode($1, 'wait')`, [S1a], `select * from public.booth_ctrl_mode($1, 'reserve')`, [K1]);
-  t('T10 동시: 반대 전환 — 나중 요청 방식(reserve)으로 끝남 · 상태 없음', x.waited && !x.b.err && (await su.query(`select mode from public.booth_live_mode where booth_id = $1`, [B1])).rows[0].mode === 'reserve' && !(await live(B1)));
+  t('T10 동시: 반대 전환 — 나중 요청 방식(reserve)으로 끝남 · 방식과 상태가 맞음(예약중)', x.waited && !x.b.err && (await su.query(`select mode from public.booth_live_mode where booth_id = $1`, [B1])).rows[0].mode === 'reserve' && (await live(B1)).congestion === '예약중');
   // (5) 23:00 초기화와 전환이 겹침
-  await sSet(anon, S1a, 'resv_open', null);
   {
     const c1 = await connect('anon');
     await c1.query('begin');
@@ -305,15 +325,28 @@ try {
     const rr = await p;
     t('T10 23:00 초기화와 전환이 겹침: 둘 다 성공 · 방식 wait · 상태 없음', !rr.err && (await su.query(`select mode from public.booth_live_mode where booth_id = $1`, [B1])).rows[0].mode === 'wait' && !(await live(B1)));
   }
+  {
+    const c1 = await connect('anon');
+    await c1.query('begin');
+    await call(c1, `select * from public.booth_session_mode($1, 'reserve')`, [S1a]);
+    const p = call(su, `select private.rehearsal_live_reset() n`);
+    await sleep(200);
+    await c1.query('commit');
+    const rr = await p;
+    // 커밋 전 전환이 넣은 '예약중' 은 초기화가 보지 못하므로(초기화가 먼저 끝난 것과 같음) 남는 것은 "현장예약 + 예약중".
+    t('T10 초기화와 현장예약 전환이 겹침: 둘 다 성공 · 방식 reserve + 예약중(방식과 상태가 엇갈리지 않음)',
+      !rr.err && (await su.query(`select mode from public.booth_live_mode where booth_id = $1`, [B1])).rows[0].mode === 'reserve' && (await live(B1)).congestion === '예약중');
+  }
 
-  // ── 스위치 끄기(되돌리기 절차) ──
-  await call(anon, `select * from public.booth_session_mode($1, 'reserve')`, [S1a]);
+  // ── 스위치 끄기(긴급 비활성화) ──
   await sSet(anon, S1a, 'resv_open', null);
   const anonSeesOn = (await anon2.query(`select count(*)::int n from public.booth_live_mode`)).rows[0].n;
+  const rowsBeforeOff = (await su.query(`select (select count(*) from public.booth_live_mode)::int m, (select count(*) from public.booth_live)::int l`)).rows[0];
   await su.query(`update public.booth_live_mode_config set enabled = false`);
-  t('T11 끄기: 공개 읽기에서 방식 줄 0(켜져 있을 때는 보임)', anonSeesOn >= 1 && (await anon2.query(`select count(*)::int n from public.booth_live_mode`)).rows[0].n === 0);
+  t('T11 끄기: 공개 읽기에서 방식 줄 0(켜져 있을 때는 보임) · 운영 데이터는 지우지 않음', anonSeesOn >= 1 && (await anon2.query(`select count(*)::int n from public.booth_live_mode`)).rows[0].n === 0
+    && JSON.stringify((await su.query(`select (select count(*) from public.booth_live_mode)::int m, (select count(*) from public.booth_live)::int l`)).rows[0]) === JSON.stringify(rowsBeforeOff));
   r = await call(anon, `select * from public.booth_session_mode($1, null)`, [S1a]);
-  t('T11 끄기: 운영자 읽기 = wait · 남은 상태 예약중이 함께 옴', r.rows && r.rows[0].op_mode === 'wait' && r.rows[0].reserve_enabled === false && r.rows[0].congestion === '예약중', JSON.stringify(r));
+  t('T11 끄기: 운영자 읽기 = wait · 남은 상태 예약중이 함께 옴(화면이 숨김)', r.rows && r.rows[0].op_mode === 'wait' && r.rows[0].reserve_enabled === false && r.rows[0].congestion === '예약중', JSON.stringify(r));
   r = await sTouch(anon, S1a);
   t('T11 끄기: 남은 예약 상태를 확인으로 되살리지 않음(22023)', r.err && r.err.hint === 'booth_mode_mismatch');
   r = await sSet(anon, S1a, 'open', 20);
@@ -322,22 +355,32 @@ try {
   t('T11 끄기: 예약 상태 저장 거부', r.err && r.err.hint === 'booth_mode_mismatch');
   await su.query(`update public.booth_live_mode_config set enabled = true`);
   r = await call(anon, `select * from public.booth_session_mode($1, null)`, [S1a]);
-  t('T11 다시 켜면 정해 둔 방식(reserve)이 살아남 · 끈 동안 넣은 대기 값은 맞지 않는 값', r.rows && r.rows[0].op_mode === 'reserve');
+  t('T11 다시 켜면 정해 둔 방식(reserve)이 살아남', r.rows && r.rows[0].op_mode === 'reserve');
   r = await sTouch(anon, S1a);
-  t('T11 다시 켠 뒤 그 대기 값은 확인으로 되살리지 않음', r.err && r.err.hint === 'booth_mode_mismatch');
+  t('T11 다시 켠 뒤 끈 동안 넣은 대기 값은 확인으로 되살리지 않음', r.err && r.err.hint === 'booth_mode_mismatch');
 
-  // ── ops D: 테스트 설정 정리 ──
+  // ── ops D: 테스트 설정 정리(승인 절차) ──
   const OPS = sql('supabase/ops-booth-live-mode.sql');
   const cleanup = OPS.slice(OPS.indexOf('do $cleanup$'));
-  await call(su, cleanup);
-  t('T12 정리(미리 보기 v_apply=false): 아무것도 바꾸지 않음', (await su.query(`select count(*)::int n from public.booth_live_mode where mode = 'reserve'`)).rows[0].n === 1);
-  r = await call(su, cleanup.replace("v_apply boolean := false", "v_apply boolean := true"));
-  t('T12 정리(v_apply=true): 현장예약 → 현장대기 · 상태 지움 · 기록 via admin', !r.err
-    && (await su.query(`select count(*)::int n from public.booth_live_mode where mode = 'reserve'`)).rows[0].n === 0 && !(await live(B1))
-    && (await su.query(`select via from public.booth_live_mode_log order by id desc limit 1`)).rows[0].via === 'admin', JSON.stringify(r.err || ''));
+  const reserveN = async () => (await su.query(`select count(*)::int n from public.booth_live_mode where mode = 'reserve'`)).rows[0].n;
+  await call(anon, `select * from public.booth_session_mode($1, 'reserve')`, [S3]);
+  const n0 = await reserveN();
+  r = await call(su, cleanup);
+  t('T12 정리 그대로 실행(번호 없음 · 전부 아님): 아무 부스도 고르지 않음', !r.err && (await reserveN()) === n0 && n0 === 2, JSON.stringify(r.err || n0));
+  r = await call(su, cleanup.replace('v_all     boolean := false', 'v_all     boolean := true'));
+  t('T12 v_all 만 켬(승인 문구 없음): 미리 보기만', !r.err && (await reserveN()) === n0);
+  r = await call(su, cleanup.replace('v_all     boolean := false', 'v_all     boolean := true').replace("v_confirm text    := ''", "v_confirm text    := '1곳 정리'"));
+  t('T12 승인 문구의 곳 수가 다름(1곳 ≠ 2곳): 바꾸지 않음', !r.err && (await reserveN()) === n0);
+  r = await call(su, cleanup.replace("array[]::text[]", "array['S03']").replace("v_confirm text    := ''", "v_confirm text    := '1곳 정리'"));
+  t('T12 번호(S03) + 맞는 승인 문구: 그 부스만 현장대기 · 상태 지움', !r.err && (await reserveN()) === n0 - 1 && !(await live(B3))
+    && (await su.query(`select mode from public.booth_live_mode where booth_id = $1`, [B3])).rows[0].mode === 'wait' && (await live(B1)).congestion !== null, JSON.stringify(r.err || ''));
+  r = await call(su, cleanup.replace("array[]::text[]", "array['S01']").replace('v_all     boolean := false', 'v_all     boolean := true'));
+  t('T12 번호와 전부를 함께 쓰면 멈춤', !!r.err);
+
+  // ── 공식 부스 · QR · PIN · 세션은 그대로 ──
+  t('T14 부스 · QR 열쇠 · 세션 표가 migration · 시험 내내 그대로', (await fingerprint()) === fp0, '');
 
   // ── 되돌리기 ──
-  await call(anon, `select * from public.booth_session_mode($1, 'reserve')`, [S1a]);
   await sSet(anon, S1a, 'resv_open', null);
   const b2Before = await live(B2);
   r = await call(su, ROLLBACK);
@@ -345,14 +388,15 @@ try {
   const m1 = await md5s();
   t('T13 되돌린 다섯 함수 · CHECK = 2026-11-03 Production(md5)', Object.keys(PROD_MD5).every((k) => m1[k] === PROD_MD5[k]) && m1.check === PROD_CHECK_MD5);
   t('T13 예약 상태 줄만 지워지고 다른 부스 값은 그대로', !(await live(B1)) && JSON.stringify(await live(B2)) === JSON.stringify(b2Before));
-  t('T13 새 표 · 함수 없음 · 전환 기록은 private 백업으로', (await su.query(`select to_regclass('public.booth_live_mode') a, to_regclass('private.booth_live_mode_log_backup') b, to_regprocedure('public.booth_session_mode(text,text)') c`)).rows
-    .every((x) => x.a === null && x.b !== null && x.c === null));
+  t('T13 새 표 · 함수 없음 · 부스별 방식은 private 백업으로', (await su.query(`select to_regclass('public.booth_live_mode') a, to_regclass('private.booth_live_mode_backup') b, to_regprocedure('public.booth_session_mode(text,text)') c`)).rows
+    .every((y) => y.a === null && y.b !== null && y.c === null));
   const fp = (await su.query(`select has_function_privilege('anon','public.booth_ctrl_set(text,text,integer)','EXECUTE') a,
                                      has_function_privilege('anon','public.admin_set_booth_live(uuid,text,integer)','EXECUTE') b,
                                      has_function_privilege('authenticated','public.admin_set_booth_live(uuid,text,integer)','EXECUTE') c`)).rows[0];
   t('T13 함수 권한 그대로(anon: QR 저장 O · 관리자 수정 X)', fp.a === true && fp.b === false && fp.c === true, JSON.stringify(fp));
   r = await sSet(anon, S1a, 'open', 15);
   t('T13 되돌린 뒤 저장 정상', !r.err && (await live(B1)).congestion === '보통');
+  t('T14 되돌린 뒤에도 부스 · QR 열쇠 · 세션 표 그대로', (await fingerprint()) === fp0);
   r = await call(su, MIGRATION);
   t('T13 되돌린 뒤 migration 을 다시 적용할 수 있음', !r.err, r.err && r.err.message);
 } catch (e) {

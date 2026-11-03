@@ -6,7 +6,7 @@
 --     2. booth_live 의 현장예약 상태('예약중' · '예약마감') 줄을 지웁니다 — 옛 CHECK 에 맞지 않아서.
 --        그 부스는 관람객 화면에서 '정보 없음', 운영자는 대기 시간을 다시 누르면 됩니다. 다른 부스의 값은 그대로.
 --     3. 쓰기 다섯 함수를 2026-11-03 Production 정의 그대로 되돌립니다(끝에서 md5 로 확인).
---     4. 새 함수 · 정책 · 표를 지웁니다. 전환 기록(booth_live_mode_log)은 private.booth_live_mode_log_backup 으로 옮겨 둡니다.
+--     4. 새 함수 · 정책 · 표를 지웁니다. 부스별 운영 방식은 private.booth_live_mode_backup 에 복사해 둡니다.
 --     5. booth_live CHECK 를 원래 다섯 값으로 되돌립니다.
 --   바꾸지 않는 것: booths · zones · QR · PIN · 세션 · 23:00 예약 · 다른 부스의 booth_live 값 · booth_live_log.
 --   사용법: SQL Editor → 전체 붙여넣고 Run. 이미 되돌렸으면 STOP 으로 멈춥니다.
@@ -20,8 +20,8 @@ begin
   if pg_catalog.to_regclass('public.booth_live_mode') is null then
     raise exception 'STOP: 운영 방식 표가 없습니다(적용 전이거나 이미 되돌림).';
   end if;
-  if pg_catalog.to_regclass('private.booth_live_mode_log_backup') is not null then
-    raise exception 'STOP: private.booth_live_mode_log_backup 이 이미 있습니다. 확인 뒤 이름을 바꾸고 다시 실행하세요.';
+  if pg_catalog.to_regclass('private.booth_live_mode_backup') is not null then
+    raise exception 'STOP: private.booth_live_mode_backup 이 이미 있습니다. 확인 뒤 이름을 바꾸고 다시 실행하세요.';
   end if;
 end;
 $pre$;
@@ -252,7 +252,7 @@ $function$;
 -- 4. 새 함수 · 정책 · 표 ------------------------------------------------
 drop function public.booth_session_mode(text, text);
 drop function public.booth_ctrl_mode(text, text);
-drop function private.booth_mode_op(uuid, text, text, uuid);
+drop function private.booth_mode_op(uuid, text, uuid);
 drop function private.booth_mode_check(uuid, text);
 drop function private.booth_live_kind(text);
 drop function private.booth_mode_lock(uuid);
@@ -260,9 +260,9 @@ drop function private.booth_mode_of(uuid);
 drop policy "공개 부스 운영 방식 열람" on public.booth_live_mode;
 drop function public.booth_live_mode_enabled();
 
-create table private.booth_live_mode_log_backup as select * from public.booth_live_mode_log;
-revoke all on table private.booth_live_mode_log_backup from public, anon, authenticated;
-drop table public.booth_live_mode_log;
+-- 운영 방식 줄은 지우기 전에 private 에 남겨 둡니다(누가 어떤 방식이었는지 — 기록은 booth_live_log 에 그대로).
+create table private.booth_live_mode_backup as select * from public.booth_live_mode;
+revoke all on table private.booth_live_mode_backup from public, anon, authenticated;
 drop table public.booth_live_mode;
 drop table public.booth_live_mode_config;
 

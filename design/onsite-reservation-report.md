@@ -1,154 +1,159 @@
-# 현장예약 운영 방식 — 구현 결과 (DB 적용 전 검토용)
+# 현장예약 운영 방식 — 최종 구현 보고 (DB 적용 전 검토용)
 
-- 작성 2026-11-03 · 기준 `booth-live` 7633e48 · `main` 86ceb4c
-- 브랜치: `claude/onsite-reservation`(booth-live 기반) · `claude/onsite-reservation-admin`(main 기반)
-- **하지 않은 것**: 운영 DB 변경 · 마이그레이션 실행 · 운영 데이터 수정 · PR 생성 · 병합 · Production 배포. Production DB 는 읽기 전용 조회만 했습니다.
-- 시험: 자동 119개 모두 통과(DB 64 · 화면 47 · 관리 8) + 브라우저 5개 폭 비교.
+- 기준 `booth-live` 7633e48 · `main` 86ceb4c (두 기준 모두 변동 없음, 2026-11-03 확인)
+- 브랜치 `claude/onsite-reservation`(→ booth-live) · `claude/onsite-reservation-admin`(→ main)
+- **하지 않은 것**: 운영 Supabase 변경 · 운영 데이터 수정 · 기능 스위치 켜기 · PR 병합 · Vercel Production 배포.
+  Production DB 는 읽기 전용 조회만 했습니다(함수 md5 · 표 유무 · 부스 지문).
+- 자동 시험 **142개 모두 통과**(DB 76 · 화면 53 · 관리/포털 13) + 브라우저 5개 폭.
 
----
-
-## 1. 바뀐 파일
-
-### booth-live 브랜치 (`claude/onsite-reservation`)
-| 파일 | 내용 |
-|---|---|
-| `supabase/migration-booth-live-mode.sql` | 새 표 3개(방식 · 스위치 · 전환 기록), 쓰기 다섯 함수 교체(같은 이름 · 인자 · 반환), 전환 함수 2개, 상태 값 2개 추가. 한 트랜잭션, 적용 전 md5 확인 |
-| `supabase/rollback-booth-live-mode.sql` | 위를 되돌림. 다섯 함수를 2026-11-03 정의 그대로 복원하고 md5 로 확인 |
-| `supabase/ops-booth-live-mode.sql` | 상태 보기 · 켜기 · 끄기 · 남은 예약 상태 지우기 · 테스트 설정 정리(미리 보기 → 적용) |
-| `live/api/live-snapshot.mjs` | 방식 읽기, 부스마다 `opMode` · `reserve` 칸, 방식에 맞지 않는 값은 보내지 않음 |
-| `assets/booth-core.js` | 예약 상태 이름, 방식-상태 규칙(`modeAllows`), 방식 읽기/전환 API, 시연 저장소 |
-| `visitor.html` · `assets/visitor.css` | 목록 두 줄 낱말, 한눈에 칸, QR 직접 진입, 숫자 · 거르기 · 정렬 |
-| `booth-ctrl.html` · `assets/booth-ctrl.css` | 선택 줄, 확인창, 겹친 단추판, 전환 흐름, 저장 대기열 연동 |
-| `assets/mock-data.js` | 시연 부스 2곳(예약 운영 중 · 예약 마감) |
-| `live/example/index.html` · `example.css` | 예시 화면에 예약 두 줄 · 선택 줄 |
-| `scripts/booth-live-mode/*` | 시험 3개 + 복제 스키마 + 사용법 |
-| `design/onsite-reservation-plan.md` · 이 파일 | 분석 · 결과 보고 |
-
-### main 브랜치 (`claude/onsite-reservation-admin`)
-| 파일 | 내용 |
-|---|---|
-| `assets/booth-core.js` | 예약 상태 이름 · 규칙 · 방식 읽기(main 판) |
-| `assets/booth-admin.js` · `booth-admin.css` · `admin.css` | 운영 상태 '현장예약' 칸(있을 때만 7번째), 줄 낱말, 긴급 수정 단추를 방식에 맞게, **일괄 채우기 · 비우기에서 현장예약 부스 제외** |
-| `assets/portal.js` · `portal.css` | 운영 포털에서 예약 상태를 '입력 없음' 대신 낱말로 |
-
-QR 인쇄(`print-qr.html`) · 관리자 화면 부스 편집은 바뀌지 않습니다(대기 값을 고치는 칸이 없음).
+> 이 기능은 **온라인 예약이 아닙니다.** 예약 신청 · 시간 선택 · 명단 · 정원 · 알림 · 대기열 · 관람객 QR 접수는 없습니다.
+> 부스가 '현장예약으로 운영 중' 인지를 관람객에게 알리는 **운영 현황 안내**이고, 예약 접수는 각 부스가 자체로 합니다.
+> QR · PIN 은 지금처럼 운영자가 자기 부스 현황을 고치는 수단입니다.
 
 ---
 
-## 2. DB 구조 (주요 SQL)
+## 1. 최종 동작
+
+### 운영자
+| 지금 | 누름 | 결과(서버가 저장한 뒤에만 화면이 바뀜) |
+|---|---|---|
+| 현장대기 · 값 없음 | 현장예약 | 확인창 없이 바로: 방식 현장예약 + 상태 **현장예약 운영 중** |
+| 현장대기 · 대기 15분 | 현장예약 | 확인창 한 번("보통 15분은 지워지고, 관람객 화면에 바로 '현장예약 운영 중'") → 위와 같음 |
+| 현장예약(어떤 상태든) | 현장대기 | 확인창 한 번("…은 지워지고, 대기 시간을 누를 때까지 '정보 없음'") → 상태 비움 · "지금 대기 시간을 눌러 주세요" |
+| 현장예약 | 현장예약(이미 고름) | 아무 일 없음 |
+| 현장예약 운영 중 | 예약 마감 · 잠시 중단 · 오늘 마감 | 상태만 바뀜(방식 그대로) |
+| 잠시 중단(현장예약) | 현장예약 운영 중 | 운영 중으로 복귀 |
+| 23:00 뒤(현장예약 · 상태 없음) | — | '운영 상태 설정 필요' · "현장예약 운영 중을 눌러 주세요"(당일 상태만 초기화) |
+
+- 두 번째 상태 입력 단계는 없습니다. 현장예약 운영 중이 기본이고, 나머지 상태는 필요할 때만 누릅니다.
+- 전환 중·저장 중·연결 끊김 때는 전환을 받지 않습니다. 저장 대기열에 남은 누름은 방식이 바뀌면 버립니다(서버도 거부).
+- 답을 놓치면 화면은 원래 방식대로 두고 다시 읽어 맞춥니다. 같은 방식을 다시 보내도 서버는 아무것도 바꾸지 않습니다.
+- 두 칸(대기시간 8개 · 현장예약 2개)을 같은 자리에 겹쳐 두고, 기능이 켜져 있으면 '변동 없음' 자리도 비워 둡니다. 그래서 360~1440px 어디서나 전환해도 단추가 0px 움직입니다.
+
+### 관람객
+- 목록: 현장대기는 그대로 대기시간을 보여 주고, 현장예약은 80px 칸 안에 낱말 하나로 **현장예약**(보라) · **예약 마감**(회색)을 보여 줍니다.
+- 한눈에: 칸 크기·번호·간격은 그대로이고, **현장예약/운영 중** · **예약/마감**으로 보여 줍니다(흰 바탕 안쪽 선, 보라·회색).
+- QR 직접 진입(지금 계신 부스): '현장예약' + "현장에서 예약을 진행하는 부스예요." 한 줄. 예약 시간·인원 같은 정보는 만들지 않습니다.
+- 집계: 여유·보통·혼잡 숫자와 칩에서는 빼고, 아래 줄에 "· 현장예약 N곳 · 예약 마감 M곳"으로 따로 셉니다. '입력 없음'이나 '0분'으로 세지 않습니다.
+- 대기 짧은 순: 대기 있음 → 현장예약 운영 중 → 예약 마감 → 잠시 중단 → 정보 없음 → 오늘 마감.
+
+### 관리자 · 운영 포털 (main)
+- 부스 운영 현황: 현장예약 부스가 있을 때만 7번째 칸 '현장예약'이 생기고, 그 칸 아래 줄에 '예약 마감 N'을 따로 보여 줍니다. 줄에는 현장예약 운영 중·예약 마감 낱말이 나옵니다.
+- 현장예약 상태는 30분 '확인 필요'로 세지 않습니다(재확인 안내는 운영자 화면에만).
+- 긴급 수정: 현장예약 부스에는 대기시간 단추 대신 현장예약 운영 중·예약 마감·잠시 중단·오늘 마감·값 지우기만 보여 줍니다.
+- 대기시간 일괄 채우기·비우기(리허설·예시): 현장예약 부스는 대상에서 빼고, 서버도 대기 분을 거부합니다.
+- 운영 포털: '입력 없음' 대신 낱말로 보여 줍니다. 스위치가 꺼져 있거나 방식이 맞지 않는 값은 보여 주지 않습니다.
+- 새 관리 기능·예약 메뉴는 만들지 않았습니다.
+
+---
+
+## 2. DB 구조 (재검토 결과)
+
+| 구성 | 이전 안 | 최종 | 까닭 |
+|---|---|---|---|
+| 방식 표 `booth_live_mode` | booth_id · mode · updated_at · via · session_id | **booth_id · mode · updated_at** | via · session_id 는 쓰는 곳이 없음. 누가 바꿨는지는 현장예약 전환 때 적는 '예약중' 기록(booth_live_log · 세션)으로 남음 |
+| 공개 읽기 | 표 전체 SELECT | **열 권한 `select (booth_id, mode)`** + RLS(스위치가 켜졌을 때만) | 관람객 · 관리 화면이 쓰는 두 열만. `select *` · `updated_at` 은 거부 |
+| 전환 기록 표 `booth_live_mode_log` | 있음 | **없앰** | 위와 같은 까닭. 표 하나 줄임 |
+| 스위치 `booth_live_mode_config` | 있음 | 그대로(기본 false) | 긴급 비활성화 |
+| 상태 값 | 예약중 · 예약마감 | 그대로 | 예약 마감을 운영 중과 구분하려면 필요 |
+| 쓰기 다섯 함수 | 같은 문지기 | 그대로 | PIN · QR · 관리자 모든 길에서 방식에 맞지 않는 값을 거부(22023) |
+| 전환 함수 | 상태를 비움 | **현장예약 = 상태를 지우고 '예약중'을 같은 트랜잭션에 적음** | 한 번에 보이게 · 중간 상태 없음 |
 
 ```sql
--- 방식: 줄이 없으면 현장대기. 기존 84곳에는 줄을 넣지 않음 → 적용 직후 모두 현장대기
-create table public.booth_live_mode (
-  booth_id uuid primary key references public.booths(id) on delete cascade,
-  mode text not null check (mode in ('wait','reserve')), updated_at timestamptz not null default now(),
-  via text not null check (via in ('pin','qr','admin')), session_id uuid references public.booth_session(id) on delete set null);
--- 스위치(기본 false). 꺼지면 공개 읽기에서 방식 줄이 0줄 → 모두 현장대기
-create table public.booth_live_mode_config (id smallint primary key default 1 check (id = 1), enabled boolean not null default false, ...);
-create policy "공개 부스 운영 방식 열람" on public.booth_live_mode for select to anon, authenticated
-  using (public.booth_live_mode_enabled() and exists (select 1 from public.booths b where b.id = booth_live_mode.booth_id));
--- 상태 값: 예약중 · 예약마감 추가(잠시 중단 · 오늘 마감은 기존 '중단' · '마감')
-check (congestion = any (array['여유','보통','혼잡','중단','마감','예약중','예약마감']))
-```
-
-**쓰기 다섯 길에 같은 문지기** — `private.booth_op_set` · `private.booth_op_touch` · `booth_ctrl_set` · `booth_ctrl_touch` · `admin_set_booth_live`
-```sql
-perform private.booth_mode_lock(p_booth);          -- pg_advisory_xact_lock(hashtext('booth_live_mode'), hashtext(booth_id))
-perform private.booth_mode_check(p_booth, p_mode);  -- open 은 wait 에서만, resv_* 는 reserve 에서만 → 아니면 22023 booth_mode_mismatch
-```
-- QR 열쇠 함수는 예전에 PIN 함수의 사본이었는데, 이제 같은 함수(`booth_op_set` · `booth_op_touch`)를 그대로 부릅니다. 열쇠 검사 · 오류 문구 · 기록은 그대로입니다.
-- '변동 없음 · 지금 확인'도 지금 방식에 맞는 값만 시각을 새로 합니다. 스위치를 끈 뒤 남은 예약 상태는 되살리지 않습니다.
-
-**전환** — `booth_session_mode(p_session, p_mode)` · `booth_ctrl_mode(p_token, p_mode)`. p_mode 가 null 이면 읽기만 합니다.
-```sql
-perform private.booth_mode_lock(p_booth);
-if private.booth_mode_of(p_booth) <> p_mode then      -- 같으면 아무것도 안 함(재전송 안전)
-  delete from public.booth_live where booth_id = p_booth returning ...;   -- 과거 대기 · 예약 상태 제거
-  insert into public.booth_live_mode ... on conflict do update ...;
-  insert into public.booth_live_mode_log (..., cleared_congestion, cleared_wait, ...);
+-- private.booth_mode_op (같은 부스 advisory 잠금 안, 한 트랜잭션)
+if private.booth_mode_of(p_booth) <> p_mode then          -- 같은 방식이면 아무것도 안 함
+  delete from public.booth_live where booth_id = p_booth;  -- 과거 대기 · 예약 상태 제거
+  insert into public.booth_live_mode ... on conflict do update set mode = excluded.mode, updated_at = excluded.updated_at;
+  if p_mode = 'reserve' then
+    insert into public.booth_live (booth_id, congestion, wait_minutes, updated_at) values (p_booth, '예약중', 0, now());
+    insert into public.booth_live_log (booth_id, congestion, wait_minutes, source, session_id) values (p_booth, '예약중', 0, 'set', p_session);
+  end if;
 end if;
 ```
+
+**권한 점검**
+- 새 함수는 8개이고, 그중 SECURITY DEFINER 는 공개 RPC 3개뿐입니다: `booth_session_mode` · `booth_ctrl_mode` · `booth_live_mode_enabled`. 모두 `search_path=''`(시험 T3).
+- private 함수는 anon · authenticated 실행 권한을 거둡니다. 바꾸는 다섯 함수는 인자 · 반환 · 권한이 그대로입니다(CREATE OR REPLACE).
+- 전환 RPC 는 GET 요청을 받지 않습니다. PIN 은 `booth_session_resolve`, QR 은 열쇠 · 공개 부스 검사를 기존과 같은 방식으로 합니다.
+- 적용 SQL 은 시작 전에 다섯 함수와 CHECK 의 md5 가 2026-11-03 Production 과 같은지 보고, 다르면 멈춥니다. 끝에서 열 권한까지 확인합니다.
+
 **바꾸지 않는 것**: 23:00 cron · `rehearsal_live_reset` · `admin_reset_booth_live` · `admin_confirm_booth_live` · `booth_session_get/set/touch` · `booth_ctrl_get` · booths · zones · QR · PIN · 세션 · UUID.
 
 ---
 
-## 3. 요청하신 안전 상황별 처리와 시험
+## 3. 요청하신 15가지 확인
 
-| 상황 | 처리 | 시험 |
+| # | 항목 | 확인 |
 |---|---|---|
-| 오프라인에서 누른 대기시간이 저장 대기열에 남음 | 누름에 그때의 방식을 적어 둠. 방식이 바뀌면 화면이 버림. 보내더라도 서버가 22023 으로 거부 → 화면이 누름을 버리고 다시 읽음 | O4 · O5 · T5 · T7 |
-| 저장 대기열이 남은 채 운영 방식 변경 | 연결이 끊겼거나 보내는 중이면 전환을 받지 않음. 온라인이면 확인창에 "저장되지 않은 값은 버려요"를 알리고, 전환에 성공하면 그 누름을 버림 | O4 · O6 |
-| 두 운영자가 같은 부스를 동시에 조작 | 부스 단위 잠금으로 순서를 정함. 전환 중 들어온 대기 분은 기다렸다가 거부, 저장 뒤 전환은 그 값을 지움. 같은 전환 두 번은 기록 1번, 반대 전환은 나중 것으로 끝남. 다른 기기는 다음 읽기(1분 안)에서 알림 | T10(실제 연결 2개) · O4 · 브라우저 2창 |
-| 현장대기 → 현장예약 → 현장대기 | 전환할 때마다 상태 줄을 지움. 예전 값이 되살아나지 않음 | T7 · O7 |
-| 전환 응답을 못 받아 재전송 | 서버는 같은 방식이면 아무것도 바꾸지 않음. 화면은 원래 방식으로 둔 채 다시 읽어 맞추고, "이 기기가 바꾼 것"으로 알림 | T4 · O6 |
-| 이전 버전 운영자 화면이 열린 채 방식 변경 | 옛 화면이 보내는 대기 분은 서버가 거부(오류 문구 표시, 값은 안 들어감) | T5(PIN · QR) |
-| QR 열쇠 경로로 과거 대기시간 전송 | QR 함수도 같은 문지기를 거침 | T5 · T6 · T7 |
-| 23:00 초기화 직전 · 직후 전환 | 초기화는 상태 줄만 지우고 방식 표는 건드리지 않음. 겹쳐도 둘 다 성공해 "방식 유지 · 상태 없음" | T8 · T10(겹침) |
-| 관리자 일괄 입력이 현장예약 상태를 덮어씀 | 화면: 리허설 · 예시 일괄 채우기 · 비우기 대상에서 현장예약 부스 제외. 서버: 현장예약 부스의 대기 분은 거부. 긴급 수정은 방식에 맞는 단추만. 일괄 확인은 값을 바꾸지 않아 그대로 | T5 · A4 |
-| 기능 비활성화 시 기존과 동일 | 스위치 끔(기본): 26가지 입력의 결과 · 오류 문구 · 기록이 바뀌기 전과 같음. 관람객 스냅샷 · 목록 · 숫자 · 관리 판이 예전 화면과 같음 | T2 · S1 · V1 · O0 · O10 · A1 · A2 |
-
----
+| 1 | 현장예약 한 번 → 즉시 현장예약 운영 중 저장 | T4 · T7(QR) · O3 · O7b · 브라우저 |
+| 2 | 별도 단추 없이 관람객에게 표시 | O3(`resv_open` 호출 0회) · S2 · 브라우저(한눈에 A-01) |
+| 3 | 현장예약 → 예약 마감 | T5 · O3b |
+| 4 | 잠시 중단 → 현장예약 운영 중 복귀 | T5 · O3b |
+| 5 | 현장예약 → 현장대기 → 새 대기시간 | T7 · O7 |
+| 6 | 과거 대기시간이 되살아나지 않음 | T4 · T7 · O7 |
+| 7 | 전환 직후 다른 기기 반영 | O11(두 기기) · O4 · O5 · T10 |
+| 8 | 네트워크 오류 · 중복 전송 | O4 · O6 · T4(재전송이 예약 마감을 덮지 않음) · T10(같은 전환 2번 → 기록 1줄) |
+| 9 | PIN · QR 모두 | T4~T8(PIN · QR) · O 묶음(QR) |
+| 10 | 관리자 일괄 입력과 충돌 없음 | T5(관리자 대기 분 거부) · A4 · 리허설 · 예시 일괄 대상에서 제외(코드 — 자동 시험 없음) |
+| 11 | 스위치 OFF = 기존 그대로 | T2(26가지 입력 · 기록 동일) · T11 · S1 · V1 · O0 · O8 · O10 · A1 · A2 · A5 · P2 |
+| 12 | 23:00 뒤 방식 유지 · 당일 상태만 초기화 | T8 · T10(겹침) |
+| 13 | 84개 공식 부스 정보 변경 없음 | T14(부스 · QR · 세션 지문 동일) · migration 에 booths 쓰기 없음 · Production 미변경 |
+| 14 | 360 · 390 · 768 · 1024 · 1440px | §4 |
+| 15 | 관람객 UI · 자동 갱신 유지 | V1(현장대기만이면 목록 · 숫자 = 7633e48) · 스냅샷 캐시 · 받기 간격 코드 변경 없음 |
 
 ## 4. 시험 결과
 
-| 묶음 | 결과 | 어떻게 |
+| 묶음 | 결과 | 비고 |
 |---|---|---|
-| DB `test-db.mjs` | **64/64** | 로컬 PostgreSQL **17.6**(Production 과 같은 판)에 Production 정의를 올려 migration → 시험 → rollback. 기준 다섯 함수 md5 = Production, 되돌린 뒤 md5 = Production |
-| 화면 `test-ui.mjs` | **47/47** | 스냅샷 8 · 관람객 16 · 운영자 23. '바뀌기 전과 같음'은 7633e48 파일로 같은 입력을 그려 비교 |
-| 관리 `test-admin.mjs` | **8/8** | main 판 booth-admin 을 origin/main 판과 비교 |
+| DB `test-db.mjs` | **76/76** | 로컬 PostgreSQL 17.6(= Production). 기존 64개 + 열 권한 · 함수 보안 · 한 번에 현장예약 · 정리 승인 · 공식 부스 지문 |
+| 화면 `test-ui.mjs` | **53/53** | 기존 47개 + 확인창 조건 · 운영 중↔중단↔마감 · 두 기기. '예약 운영 중 단추를 따로 누름' 기대값은 요구에 맞게 바꿈 |
+| 관리 `test-admin.mjs` | **13/13** | 기존 8개 + 예약 마감 따로 · 확인 필요 제외 · 포털 3개 |
 | 빌드 | 통과 | `sh live/build.sh` |
 
-**화면 폭 비교(브라우저, 협의용 예시)**
-
-| 폭 | 관람객: 가로 넘침 · 오른쪽 열 · 줄 높이(예약/일반) · 한눈에 칸 | 운영자: 전환 전후 움직임 · 단추판 높이(대기/예약) |
+| 폭 | 관람객: 넘침 · 오른쪽 열 · 줄 높이 · 한눈에 칸 · '현장예약' 잘림 | 운영자: 전환 3번 동안 움직임 · 단추판 높이 |
 |---|---|---|
-| 360 | 0 · 80px · 73/73 · 75×75 | 0px · 136/136 |
-| 390 | 0 · 80px · 73/73 · 65×65 | 0px · 136/136 |
-| 768 | 0 · 80px · 73/73 · 67×67 | 0px · 136/136 |
-| 1024 | 0 · 80px · 73/73 · 67×67 | 0px · 148/148 |
-| 1440 | 0 · 80px · 73/73 · 67×67 | 0px · 148/148 |
-
-운영자 '움직임 0px' = 선택 줄 · 현재 상태 판 · 단추판 제목 · 단추판 · 잠시 중단 · 오늘 운영 마감의 위치 · 크기가 현장대기 → 현장예약 → 현장대기 전환 내내 같음.
+| 360 | 0 · 80 · 73/73/73 · 75×75 · 없음 | 0px · 136 |
+| 390 | 0 · 80 · 73/73/73 · 65×65 · 없음 | 0px · 136 |
+| 768 | 0 · 80 · 73/73/73 · 67×67 · 없음 | 0px · 136 |
+| 1024 | 0 · 80 · 73/73/73 · 67×67 · 없음 | 0px · 148 |
+| 1440 | 0 · 80 · 73/73/73 · 67×67 · 없음 | 0px · 148 |
 
 ---
 
-## 5. 기능을 끄면(복구 절차)
+## 5. 긴급 비활성화 (배포 없이)
 
-1. `ops-booth-live-mode.sql` C: `update public.booth_live_mode_config set enabled = false ...` — 배포 없이 바로.
-2. 그 순간부터:
-   - 서버는 모든 부스를 현장대기로 봅니다. 예약 상태 저장은 거부하고, 대기 분은 받습니다.
-   - 관람객 화면은 스냅샷 캐시가 지나면(최대 약 40초) 예약 부스를 '정보 없음'으로 보여 줍니다.
-   - 운영자 화면은 다음 읽기(1분 안)에서 선택 줄이 사라지고 현장대기 단추판이 됩니다. "운영본부가 현장예약을 꺼서 …" 알림이 뜨고, 남은 예약 상태는 '아직 입력 전'으로 보입니다.
-   - 관리 화면은 남은 예약 상태를 '미입력'으로 셉니다(관람객과 같음).
-3. 운영자가 대기 시간을 누르면 바로 덮어씁니다. 누르지 않아도 23:00 에 지워집니다. 바로 정리하려면 C-2(남은 예약 상태 지우기)를 실행합니다.
-4. 다시 켜면 정해 둔 방식이 그대로 살아납니다(방식 줄은 지우지 않음).
+```sql
+update public.booth_live_mode_config set enabled = false, updated_at = now() where id = 1;
+```
+- 서버는 모든 부스를 현장대기로 봅니다. 예약 상태 저장은 거부하고 대기 분은 받습니다.
+- 공개 읽기에서 방식 표가 0줄이 되어 관람객 · 관리 · 포털이 모두 현장대기로 그립니다. 남은 예약 상태는 보여 주지 않습니다.
+- 운영자 화면은 다음 읽기(1분 안)에서 선택 줄이 사라지고, 대기시간을 누르면 덮어씁니다.
+- **운영 데이터는 지우지 않습니다.** 다시 켜면 정해 둔 방식이 그대로 살아나고, 남은 상태는 23:00 에 지워집니다.
 
-**테스트 설정 정리(결정 5)**: `ops-booth-live-mode.sql` D 는 부스 번호(또는 전부)를 고르고 `v_apply=false`(미리 보기) → `true`(적용) 순서로 실행합니다. 방식을 현장대기로 바꾸고 그 부스의 상태를 지우며, 기록에는 `via=admin` 으로 남깁니다. 11-05 밤 일괄 초기화는 하지 않습니다.
+**테스트 설정 정리** (`ops-booth-live-mode.sql` D)
+- 기본은 미리 보기입니다.
+- 번호를 적지 않으면 아무 부스도 고르지 않습니다. 전부를 정리하려면 `v_all := true` 를 명시해야 합니다.
+- 실제로 바꾸려면 실행 결과의 승인 문구(예: `'3곳 정리'`)를 그대로 적어야 합니다. 곳 수가 다르면 멈춥니다.
 
----
+## 6. 배포 순서 (각 단계 승인 뒤)
 
-## 6. 배포 순서 (각 단계 승인 뒤, DB 실행은 사용자)
+1. **DB**: 사용자가 `supabase/migration-booth-live-mode.sql` 을 실행합니다. 스위치가 꺼진 채 들어가 동작은 지금과 같습니다(T2). 끝의 확인 쿼리가 mode_rows 0 · enabled false · live_rows 그대로 · published 84 이면 정상입니다.
+2. **main PR** 병합 → Pages. DB 보다 먼저 배포해도 됩니다(표가 없으면 현장대기, A2).
+3. **booth-live PR** 병합 → Vercel Production. DB 보다 먼저 배포해도 됩니다(함수가 없으면 지금과 같은 화면, O10 · S1).
+4. **실기기 검증**: 스위치를 켜고, 실제 한 곳에서 PIN · QR · 두 기기 · 오프라인 · 관람객 화면을 확인합니다.
+5. **11-05 정오까지 검증을 끝내지 못하면** 스위치를 끈 채로 둡니다. 코드가 배포돼 있어도 기존과 같게 동작합니다.
 
-1. **DB** `migration-booth-live-mode.sql` 실행. 스위치가 꺼진 채 들어가므로 동작은 지금과 같습니다(T2). 끝의 확인 쿼리가 mode_rows 0 · enabled false · live_rows 그대로 · 84 이면 정상입니다.
-2. **main** PR(관리 화면) 병합 → Pages. DB 보다 먼저 배포해도 됩니다(표가 없으면 현장대기로 봄, A2).
-3. **booth-live** PR(스냅샷 · 관람객 · 운영자 · 예시) 병합 → Vercel Production. DB 보다 먼저여도 됩니다(함수가 없으면 지금과 같은 화면, O10 · S1).
-4. **실기기 검증**: 스위치를 켜고(B) 예시 부스나 실제 한 곳에서 PIN · QR 두 길로 전환 · 저장 · 오프라인 · 두 기기를 확인한 뒤, 관람객 화면을 확인합니다.
-5. **11-05 정오까지 검증을 끝내지 못하면**: 스위치를 끈 채로 둡니다(C). 코드는 배포돼 있어도 지금 시스템과 같게 돕니다.
-
-## 7. 롤백 절차
+## 7. 롤백
 
 | 단계 | 방법 | 영향 |
 |---|---|---|
-| 가장 빠름 | 스위치 끄기(ops C) | 배포 · DB 구조 그대로, 모든 화면이 현장대기 |
-| 화면 되돌리기 | Vercel 이전 배포로 Promote / main 되돌림 커밋 | DB 가 적용돼 있어도 옛 화면은 그대로 돎(새 칸은 무시) |
-| DB 되돌리기 | `rollback-booth-live-mode.sql` | 예약 상태 줄만 지우고, 다섯 함수를 11-03 정의로 복원(md5 확인), 새 표 · 함수 제거, 전환 기록은 private 백업 |
-
----
+| 가장 빠름 | 스위치 끄기(§5) | 데이터 · 배포 그대로, 모든 화면 현장대기 |
+| 화면 | Vercel 이전 배포로 Promote · main 되돌림 커밋 | DB 가 적용돼 있어도 옛 화면은 그대로 동작(새 칸은 무시) |
+| DB | `supabase/rollback-booth-live-mode.sql` | 예약 상태 줄만 지우고, 다섯 함수를 11-03 정의로 복원(md5 확인), 방식은 `private.booth_live_mode_backup` 으로 백업한 뒤 새 표 · 함수 제거 |
 
 ## 8. 남은 일 · 한계
 
-- **실기기 검증 전**입니다(휴대폰 브라우저 · 실제 PIN · QR · 현장 와이파이). 위 시험은 로컬 DB와 jsdom, 데스크톱 브라우저의 예시 화면입니다.
-- 다른 기기의 전환을 알아채는 시간은 운영자 화면의 읽기 주기(1분)를 따릅니다. 저장을 누르면 그 자리에서 서버가 거부하고 바로 맞춥니다.
-- `/example/` 예시는 정적 화면이라 스위치와 상관없이 예약 두 줄 · 선택 줄이 보입니다. 리허설 뒤 그 페이지를 내릴 예정이면 그대로 두어도 됩니다.
-- 운영 포털(main)은 방식 표를 읽지 않아, 스위치를 끈 뒤 남은 예약 상태가 23:00 전까지 낱말로 보일 수 있습니다(관리 화면 · 관람객은 숨김).
-- Supabase Security Advisor 는 적용 뒤 한 번 확인하기를 권합니다. 새 표는 RLS 켜짐 · anon 은 SELECT 만, 함수 권한은 post 확인 칸에서 검사합니다.
+- **실기기 검증 전**입니다. 위 시험은 로컬 DB, jsdom, 데스크톱 브라우저의 예시 화면에서 했습니다.
+- 다른 기기의 전환은 운영자 화면이 다음에 읽을 때(1분 안) 반영됩니다. 그 사이에 누른 저장은 서버가 바로 거부하고 화면을 맞춥니다. 관람객 화면은 스냅샷 캐시(최대 약 40초)를 따릅니다.
+- 리허설 · 예시 일괄 채우기 대상에서 현장예약 부스를 빼는 부분은 코드로만 확인했습니다. 서버 거부는 T5 가 확인합니다.
+- `/example/` 은 정적 예시라 스위치와 상관없이 현장예약 줄 · 선택 줄이 보입니다(리허설 뒤 내릴 예정인 페이지).

@@ -172,11 +172,12 @@ const rowsOf = (d) => [...d.querySelectorAll('#list .row')].map((r) => ({ code: 
   const d = v.window.document;
   await until(() => d.querySelectorAll('#list .row').length === 7 && txt(d.getElementById('h-sub')));
   const r = rowsOf(d);
-  t('V2 목록: 예약 운영 중 = "현장 / 예약" 두 줄(80px 칸 · 숫자 · 칩 없음)', /현장<br>예약/.test(r[5].right) && !/v__n|st--/.test(r[5].right) && /is-resv/.test(r[5].cls), r[5].right);
-  t('V2 목록: 예약 마감 = "예약 / 마감" 두 줄', /예약<br>마감/.test(r[6].right) && /is-resv-closed/.test(r[6].cls), r[6].right);
+  t('V2 목록: 현장예약 운영 중 = "현장예약"(80px 칸 · 숫자 · 칩 없음 · "0분" 아님)', />현장예약</.test(r[5].right) && !/v__n|st--|분/.test(r[5].right) && /is-resv/.test(r[5].cls), r[5].right);
+  t('V2 목록: 예약 마감 = "예약 마감"(운영 중과 다른 낱말 · 회색)', />예약 마감</.test(r[6].right) && /v--resv-closed/.test(r[6].right) && /is-resv-closed/.test(r[6].cls), r[6].right);
   t('V2 목록: 현장예약 부스의 잠시 중단 = 잠시 중단', /잠시 중단/.test(r[3].right));
   t('V2 큰 숫자: 여유 1곳(현장예약 제외) · 전체 7곳', txt(d.getElementById('h-free')) === '1' && txt(d.getElementById('h-total')) === '7');
-  t('V2 아래 줄: "· 현장예약 2곳" 따로 셈', /현장예약 2곳/.test(txt(d.getElementById('h-sub'))), txt(d.getElementById('h-sub')));
+  t('V2 아래 줄: "· 현장예약 1곳 · 예약 마감 1곳" 따로 셈(입력 없음 · 0분 대기로 세지 않음)',
+    /현장예약 1곳 · 예약 마감 1곳/.test(txt(d.getElementById('h-sub'))) && /입력된 5곳/.test(txt(d.getElementById('h-sub'))), txt(d.getElementById('h-sub')));
   const chips = [...d.querySelectorAll('[data-count]')].map((x) => x.getAttribute('data-count') + ':' + txt(x.querySelector('[data-n]'))).join(',');
   t('V2 상태 칩: 여유 1 · 보통 1 · 혼잡 1 · 중단·마감 2(칩 수 그대로 네 개)', chips === '여유:1,보통:1,혼잡:1,off:2', chips);
   d.querySelector('[data-count="여유"]').click();
@@ -199,16 +200,18 @@ const rowsOf = (d) => [...d.querySelectorAll('#list .row')].map((r) => ({ code: 
   if (mapBtn) mapBtn.click();
   await until(() => dm.querySelectorAll('.tile').length === 7, 1500);
   const tile = (i) => { const el = dm.querySelectorAll('.tile')[i]; return el ? el.className + '|' + txt(el.querySelector('.tile__v')) + '|' + txt(el.querySelector('.tile__w')) : ''; };
-  t('V3 한눈에: 예약 운영 중 칸 = "예약 · 운영 중"(칸 크기 그대로 · 보라)', /is-resv\b/.test(tile(5)) && /\|예약\|운영 중$/.test(tile(5)), tile(5));
+  t('V3 한눈에: 현장예약 칸 = "현장예약 · 운영 중"(칸 크기 그대로 · 보라)', /is-resv\b/.test(tile(5)) && /\|현장예약\|운영 중$/.test(tile(5)), tile(5));
   t('V3 한눈에: 예약 마감 칸 = "예약 · 마감"', /is-resv-closed/.test(tile(6)) && /\|예약\|마감$/.test(tile(6)), tile(6));
   const lbl = dm.querySelectorAll('.tile')[5] ? txt(dm.querySelectorAll('.tile')[5].querySelector('.sr-only')) : '';
-  t('V3 한눈에: 화면 읽기 문장 "현장 예약 운영 중"', /현장 예약 운영 중/.test(lbl), lbl);
+  t('V3 한눈에: 화면 읽기 문장 "현장예약 운영 중"', /현장예약 운영 중/.test(lbl), lbl);
   vm.window.close();
 
   const vh = visitorPage('new', snapR, '?b=S06');
   const dh = vh.window.document;
   await until(() => txt(dh.getElementById('here')).length > 0);
-  t('V4 QR 직접 진입(지금 계신 부스): 예약 운영 중 = "현장 예약"', /현장 예약/.test(txt(dh.getElementById('here'))) && !/분/.test(txt(dh.querySelector('#here .here__val'))), txt(dh.getElementById('here')));
+  t('V4 QR 직접 진입(지금 계신 부스): "현장예약" + 짧은 안내(예약 시간 · 인원은 만들지 않음)',
+    /현장예약/.test(txt(dh.querySelector('#here .here__val'))) && /현장에서 예약을 진행하는 부스예요/.test(txt(dh.getElementById('here')))
+    && !/분/.test(txt(dh.querySelector('#here .here__val'))) && !/시간|명|인원/.test(txt(dh.getElementById('here')).replace('대기', '')), txt(dh.getElementById('here')));
   vh.window.close();
   const vh2 = visitorPage('new', snapR, '?b=S07');
   const dh2 = vh2.window.document;
@@ -260,7 +263,12 @@ function makeServer(opts = {}) {
       if (s.noModeFn) return { status: 404, body: { code: 'PGRST202', message: 'Could not find the function' } };
       if (a.p_mode) {
         if (!s.enabled) return err('22023', '지금은 운영 방식을 바꿀 수 없습니다.', 'booth_mode_off');
-        if (s.modeOf() !== a.p_mode) { s.live = null; s.mode = a.p_mode; s.switches++; }
+        // DB 와 같게: 현장예약은 지금 상태를 지우고 '예약중' 을 함께 적고, 현장대기는 지움. 같은 방식이면 아무것도 안 함.
+        if (s.modeOf() !== a.p_mode) {
+          s.mode = a.p_mode; s.switches++;
+          s.live = a.p_mode === 'reserve' ? { c: '예약중', w: 0, at: now() } : null;
+          if (a.p_mode === 'reserve') s.writes.push('예약중/0');
+        }
       }
       return { status: 200, body: [{ op_mode: s.modeOf(), mode_updated_at: null, reserve_enabled: s.enabled,
         congestion: s.live ? s.live.c : null, wait_minutes: s.live ? s.live.w : null, updated_at: s.live ? s.live.at : null }] };
@@ -332,24 +340,36 @@ function ctrlPage(srv) {
   await p.syncUntil(() => p.modesShown());
   t('O1 스위치 켬 → 다음 읽기에서 선택 줄(현장대기 고름) · 값 그대로', p.modesShown() && p.d.querySelector('.modes__b.is-on').getAttribute('data-opmode') === 'wait' && p.state() === '보통',
     srv.calls.join(' '));
-  // O2 확인창 아니요
+  // O2 저장된 대기 값이 있으면 확인창 한 번 — 아니요
   p.tab('reserve');
-  t('O2 현장예약을 누르면 확인창부터(바로 바꾸지 않음)', !p.$('mode-ask').hidden && /현장예약으로 바꿀까요/.test(txt(p.$('mode-ask-t'))) && srv.mode === 'wait');
+  t('O2 저장된 대기시간(보통 15분)이 있으면 확인창 한 번: 지워진다는 것 · 바로 "현장예약 운영 중" 으로 보인다는 것',
+    !p.$('mode-ask').hidden && /현장예약으로 바꿀까요/.test(txt(p.$('mode-ask-t'))) && /보통 15분/.test(txt(p.$('mode-ask-d'))) && /현장예약 운영 중/.test(txt(p.$('mode-ask-d'))) && srv.mode === 'wait',
+    txt(p.$('mode-ask-d')));
   p.d.querySelector('[data-act="mode-no"]').click();
   await sleep(50);
   t('O2 아니요 → 아무것도 바뀌지 않음', p.$('mode-ask').hidden && srv.mode === 'wait' && srv.live.c === '보통' && p.waitLive());
-  // O3 예 → 전환
+  // O3 예 → 한 번에 현장예약 운영 중
+  const w3 = srv.writes.length;
   p.tab('reserve');
   p.$('mode-yes').click();
-  await until(() => p.resvLive());
-  t('O3 예 → 서버 reserve · 상태 지움 → 화면 "운영 상태 설정 필요" · 제목 "예약 상태" · 현장예약 단추판',
-    srv.mode === 'reserve' && srv.live === null && p.state() === '운영 상태 설정 필요' && txt(p.$('pad-title')) === '예약 상태' && txt(p.$('now-cap')) === '현재 상태' && p.resvLive(), p.state());
+  await until(() => p.resvLive() && p.state() === '현장예약 운영 중');
+  t('O3 현장예약 한 번: 서버에 방식 + "현장예약 운영 중"(예약중) 함께 저장 → 화면 "현장예약 운영 중" · 단추 눌림(두 번째 단추를 누르지 않음)',
+    srv.mode === 'reserve' && srv.live && srv.live.c === '예약중' && p.state() === '현장예약 운영 중' && p.$('btn-resv-open').getAttribute('aria-pressed') === 'true'
+    && srv.writes.slice(w3).join(',') === '예약중/0' && srv.calls.filter((x) => x === 'booth_ctrl_set:resv_open').length === 0, p.state());
+  t('O3 제목 "예약 상태" · "현재 상태" · 안내 알림', txt(p.$('pad-title')) === '예약 상태' && txt(p.$('now-cap')) === '현재 상태' && /현장예약 운영 중/.test(p.toast()), p.toast());
   t('O3 숨긴 대기시간 단추는 누를 수 없음(inert · 눌러도 저장 안 함)', (() => { const before = srv.writes.length; p.wait(5); return srv.writes.length === before; })());
+  // O3b 현장예약 안에서 상태 바꾸기
+  p.$('btn-resv-closed').click();
+  await until(() => srv.live && srv.live.c === '예약마감' && p.state() === '예약 마감');
+  t('O3b 현장예약 → 예약 마감', srv.live.c === '예약마감' && p.$('btn-resv-closed').getAttribute('aria-pressed') === 'true');
+  p.$('btn-pause').click();
+  await until(() => srv.live && srv.live.c === '중단' && p.state() === '잠시 중단');
   p.$('btn-resv-open').click();
-  await until(() => srv.live && srv.live.c === '예약중');
-  t('O3 예약 운영 중 저장', srv.live && srv.live.c === '예약중');
-  await until(() => p.state() === '예약 운영 중');
-  t('O3 지금 상태 "예약 운영 중" · 단추 눌림', p.state() === '예약 운영 중' && p.$('btn-resv-open').getAttribute('aria-pressed') === 'true');
+  await until(() => srv.live && srv.live.c === '예약중' && p.state() === '현장예약 운영 중');
+  t('O3b 현장예약 → 잠시 중단 → 현장예약 운영 중 복귀(방식은 그대로)', srv.mode === 'reserve' && srv.live.c === '예약중' && p.resvLive());
+  p.tab('reserve');
+  await sleep(50);
+  t('O3b 이미 현장예약인 칸을 다시 눌러도 아무것도 하지 않음(확인창 · 서버 전환 없음)', p.$('mode-ask').hidden && srv.calls.filter((x) => x === 'booth_ctrl_mode:reserve').length === 1);
 
   // O4 못 보낸 누름 + 다른 기기 전환
   srv.offline = true;
@@ -370,11 +390,11 @@ function ctrlPage(srv) {
   t('O4 안내: 다른 기기에서 바꿨다는 알림', /다른 기기에서 운영 방식을|운영 방식이 바뀌어/.test(p.toast()), p.toast());
 
   // O5 서버가 방식이 맞지 않는다고 거부(이 화면은 아직 모름)
-  srv.mode = 'reserve';
+  srv.mode = 'reserve'; srv.live = { c: '예약중', w: 0, at: now() };   // 다른 기기가 현장예약으로 바꿈(서버가 예약중까지 적음)
   p.wait(10);
-  await until(() => p.resvLive(), 5000);
-  t('O5 이 화면이 모르는 사이 다른 기기가 현장예약으로 바꿈 → 대기 분 저장은 서버가 거부 → 누름 버리고 현장예약으로 맞춤',
-    p.resvLive() && !p.pendingStored() && !srv.writes.some((x) => /^여유\/10/.test(x)), p.toast());
+  await until(() => p.resvLive() && p.state() === '현장예약 운영 중', 5000);
+  t('O5 이 화면이 모르는 사이 다른 기기가 현장예약으로 바꿈 → 대기 분 저장은 서버가 거부 → 누름 버리고 "현장예약 운영 중" 으로 맞춤',
+    p.resvLive() && !p.pendingStored() && !srv.writes.some((x) => /^여유\/10/.test(x)) && p.state() === '현장예약 운영 중', p.toast());
 
   // O6 답을 잃은 전환
   srv.dropReply = true;
@@ -399,23 +419,28 @@ function ctrlPage(srv) {
   t('O6 저장 중에는 전환을 받지 않음 · 열리지 않은 확인창의 "네" 는 아무것도 보내지 않음',
     blocked && !srv.calls.slice(c0).some((x) => /booth_ctrl_mode:(reserve|wait|)$/.test(x) && x !== 'booth_ctrl_mode:null') && srv.mode === 'wait', srv.calls.slice(c0).join(' '));
 
-  // O7 현장대기 → 현장예약 → 현장대기: 이전 값이 살아나지 않음
+  // O7 현장대기 → 현장예약 → 현장대기: 이전 값이 살아나지 않음 · 새 대기시간 입력 안내
   p.wait(30);
   await until(() => srv.live && srv.live.c === '혼잡' && p.state() === '혼잡');
   await sleep(100);
   p.tab('reserve'); p.$('mode-yes').click();
-  await until(() => p.resvLive());
-  p.tab('wait'); p.$('mode-yes').click();
+  await until(() => p.resvLive() && p.state() === '현장예약 운영 중');
+  p.tab('wait');
+  t('O7 현장예약 → 현장대기도 확인창 한 번(예약 상태가 지워지고 "정보 없음" 으로 보인다는 것)', !p.$('mode-ask').hidden && /현장예약 운영 중/.test(txt(p.$('mode-ask-d'))) && /정보 없음/.test(txt(p.$('mode-ask-d'))));
+  p.$('mode-yes').click();
   await until(() => p.waitLive() && p.state() === '아직 입력 전');
-  t('O7 현장대기 → 현장예약 → 현장대기: 예전 "혼잡 30분" 이 되살아나지 않음(서버 · 화면 모두 비어 있음)',
-    srv.live === null && p.state() === '아직 입력 전' && p.d.querySelectorAll('.w.is-on').length === 0,
-    JSON.stringify({ live: srv.live, state: p.state(), mode: srv.mode, wait: p.waitLive(), toast: p.toast(), calls: srv.calls.slice(-8) }));
+  t('O7 현장대기 → 현장예약 → 현장대기: 예전 "혼잡 30분" 이 되살아나지 않음 · 새 대기시간 입력 안내',
+    srv.live === null && p.state() === '아직 입력 전' && p.d.querySelectorAll('.w.is-on').length === 0 && /대기 시간을 눌러/.test(txt(p.$('now-when')) + p.toast()),
+    JSON.stringify({ live: srv.live, state: p.state(), when: txt(p.$('now-when')), toast: p.toast() }));
+  // O7b 저장된 값이 없으면 확인창 없이 바로
+  p.tab('reserve');
+  await until(() => p.resvLive() && p.state() === '현장예약 운영 중');
+  t('O7b 지울 값이 없으면 확인창 없이 한 번에 "현장예약 운영 중"', p.$('mode-ask').hidden && srv.live.c === '예약중');
+  p.wait(5);   // 숨긴 단추 — 무시
+  p.$('btn-resv-open').click();
+  await sleep(200);
 
   // O8 스위치 끔(예약 상태가 남은 채)
-  p.tab('reserve'); p.$('mode-yes').click();
-  await until(() => p.resvLive());
-  p.$('btn-resv-open').click();
-  await until(() => srv.live && srv.live.c === '예약중');
   srv.enabled = false;
   await p.syncUntil(() => !p.modesShown() && p.waitLive());
   await sleep(100);
@@ -446,6 +471,21 @@ function ctrlPage(srv) {
   await until(() => srv.live.c === '혼잡');
   t('O10 DB 적용 전: 저장 정상', srv.live.c === '혼잡' && srv.live.w === 45);
   p.close();
+}
+{
+  // O11 두 기기: 한쪽이 현장예약으로 바꾸면 다른 쪽도 다음 읽기에서 "현장예약 운영 중"
+  const srv = makeServer({ enabled: true });
+  const a = ctrlPage(srv), b = ctrlPage(srv);
+  await until(() => a.modesShown() && b.modesShown(), 5000);
+  a.tab('reserve');
+  await until(() => a.resvLive() && a.state() === '현장예약 운영 중');
+  await b.syncUntil(() => b.resvLive() && b.state() === '현장예약 운영 중');
+  t('O11 두 기기: A 가 현장예약 → B 도 아무것도 누르지 않고 "현장예약 운영 중" · 알림', b.resvLive() && b.state() === '현장예약 운영 중' && /다른 기기에서/.test(b.toast()), b.toast());
+  b.$('btn-resv-closed').click();
+  await until(() => srv.live.c === '예약마감');
+  await a.syncUntil(() => a.state() === '예약 마감');
+  t('O11 두 기기: B 의 예약 마감이 A 에도 반영', a.state() === '예약 마감');
+  a.close(); b.close();
 }
 
 rmSync(TMP, { recursive: true, force: true });

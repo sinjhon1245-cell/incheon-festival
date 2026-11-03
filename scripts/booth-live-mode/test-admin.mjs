@@ -110,7 +110,9 @@ const ready = (p) => until(() => p.d.querySelector('.ost__grid') && p.d.querySel
   t('A3 현장예약 부스가 있으면 일곱 번째 칸 "현장예약 2" (여유 1 · 보통 1 · 미입력 1 — 섞지 않음)',
     p.d.querySelector('.ost__grid--7') && cells.includes('resv:2') && cells.includes('free:1') && cells.includes('normal:1') && cells.includes('missing:1'), cells.join(','));
   const row = (n) => txt([...p.d.querySelectorAll('.lv')].find((x) => /부스/.test(txt(x)) && txt(x).indexOf('부스' + n) >= 0));
-  t('A3 줄: 예약 운영 중 · 예약 마감 낱말', /예약 운영 중/.test(row(3)) && /예약 마감/.test(row(4)), row(3) + ' / ' + row(4));
+  t('A3 줄: 현장예약 운영 중 · 예약 마감 낱말', /현장예약 운영 중/.test(row(3)) && /예약 마감/.test(row(4)), row(3) + ' / ' + row(4));
+  const resvCell = p.d.querySelector('.ost__grid .st--resv');
+  t('A3 현장예약 칸 아래 줄: 그중 "예약 마감 1"(운영 중과 구분)', resvCell && /예약 마감 1/.test(txt(resvCell.querySelector('.st__o'))), resvCell && txt(resvCell));
   // 긴급 수정: 현장예약 부스는 대기 시간 대신 예약 상태 단추
   let picked = null;
   p.w.UI.pick = (o) => { picked = o; return Promise.resolve('resv_closed'); };
@@ -130,6 +132,42 @@ const ready = (p) => until(() => p.d.querySelector('.ost__grid') && p.d.querySel
   const c2 = [...off.d.querySelectorAll('.ost__grid .st')].map((x) => x.getAttribute('data-quick') + ':' + txt(x.querySelector('.st__n')));
   t('A5 스위치 끔(방식 0줄) + 남은 예약 상태 → 미입력으로 셈 · 여섯 칸', off.d.querySelectorAll('.ost__grid .st').length === 6 && c2.includes('missing:3'), c2.join(','));
   off.w.close();
+  // 40분 전에 넣은 예약 상태 · 대기 값: 대기 값만 '확인 필요'
+  const old40 = new Date(Date.now() - 40 * 60000).toISOString();
+  const st = adminPage('new', [{ booth_id: id(1), congestion: '보통', wait_minutes: 20, updated_at: old40 },
+    { booth_id: id(3), congestion: '예약중', wait_minutes: 0, updated_at: old40 }], [{ booth_id: id(3), mode: 'reserve' }]);
+  await ready(st);
+  const stale = txt(st.d.querySelector('.todo--stale .todo__n'));
+  t('A6 30분 넘은 현장예약 상태는 "확인 필요" 로 세지 않음(대기 값만 1곳)', stale === '1', stale);
+  st.w.close();
+}
+
+/* ── P. 운영 포털(portal.js) — 대기 현황 읽기 조각만 떼어 시험 ─────────── */
+{
+  const src = cur('assets/portal.js');
+  const a = src.indexOf('  // \'예약중\' · \'예약마감\''), b = src.indexOf('  // 색 네모 + 글자.');
+  const piece = src.slice(a, b);
+  async function portalOf(live, modes) {
+    const S = { boothLive: {}, settings: {} };
+    const C = {
+      selectSoft: (table) => Promise.resolve(table === 'booth_live' ? live : (modes === 'missing' ? [] : modes)),
+      isTableMissing: () => false, minLabel: (m) => m + '분'
+    };
+    const fn = new Function('S', 'C', 'window', piece + '\nreturn { selectBoothLive, applyBoothLive, boothLiveInfo, liveText };');
+    const P = fn(S, C, { FESTIVAL_CONFIG: {} });
+    P.applyBoothLive(await P.selectBoothLive());
+    return (bid) => { const i = P.boothLiveInfo(bid); return i ? P.liveText(i) + (i.stale ? '(흐림)' : '') : '입력 없음'; };
+  }
+  const t40 = new Date(Date.now() - 40 * 60000).toISOString();
+  const live = [{ booth_id: 'a', congestion: '예약중', wait_minutes: 0, updated_at: t40 },
+    { booth_id: 'b', congestion: '예약마감', wait_minutes: 0, updated_at: now },
+    { booth_id: 'c', congestion: '보통', wait_minutes: 15, updated_at: now }];
+  const on = await portalOf(live, [{ booth_id: 'a', mode: 'reserve' }, { booth_id: 'b', mode: 'reserve' }]);
+  t('P1 포털: 현장예약 운영 중 · 예약 마감을 "입력 없음" 대신 낱말로(40분 지나도 흐리지 않음)', on('a') === '현장예약 운영 중' && on('b') === '예약 마감' && on('c') === '보통 · 약 15분', [on('a'), on('b'), on('c')].join(' / '));
+  const off = await portalOf(live, []);
+  t('P2 포털: 스위치 끔(방식 0줄) → 남은 예약 상태는 보이지 않음 · 대기 값은 그대로', off('a') === '입력 없음' && off('b') === '입력 없음' && off('c') === '보통 · 약 15분');
+  const mis = await portalOf([{ booth_id: 'a', congestion: '여유', wait_minutes: 5, updated_at: now }], [{ booth_id: 'a', mode: 'reserve' }]);
+  t('P3 포털: 현장예약 부스에 남은 대기 값은 보이지 않음(방식 불일치)', mis('a') === '입력 없음');
 }
 
 const fail = results.filter((x) => !x.ok);

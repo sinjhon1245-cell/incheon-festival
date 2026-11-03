@@ -242,7 +242,7 @@
     '혼잡': { key: 'busy', label: '혼잡' },
     '중단': { key: 'pause', label: '잠시 중단' },
     '마감': { key: 'closed', label: '마감' },
-    '예약중': { key: 'resv', label: '예약 운영 중' },
+    '예약중': { key: 'resv', label: '현장예약 운영 중' },
     '예약마감': { key: 'resv-closed', label: '예약 마감' }
   };
   var UNKNOWN = { key: 'unknown', label: '정보 없음' };
@@ -1207,7 +1207,8 @@
   /* ── 운영 방식(현장대기 · 현장예약) ─────────────────────────────────────
      ctrlMode(token, mode) · sessMode(session, mode) — mode 가 null 이면 읽기만, 'wait' · 'reserve' 면 전환.
        → { op_mode, reserve_enabled, mode_updated_at, congestion, wait_minutes, congestion_updated_at, missing }
-     전환은 서버가 한 트랜잭션에서 그 부스의 지금 상태를 지우고 방식을 적습니다. 지금과 같은 방식이면 아무것도
+     전환은 서버가 한 트랜잭션에서 방식과 상태를 함께 적습니다(현장예약 = 지금 상태를 지우고 '예약중', 현장대기 =
+     지금 상태를 지움). 답의 congestion 이 그 결과입니다. 지금과 같은 방식이면 아무것도
      바꾸지 않습니다(답을 못 받아 다시 보내도 상태를 지우지 않음). 화면은 이 답을 받은 뒤에만 방식을 바꿉니다.
      DB 에 아직 함수가 없으면(적용 전 — PGRST202 · 404) 읽기는 '현장대기 · 기능 꺼짐'(missing: true)으로 답해
      운영자 화면이 지금과 똑같이 돕니다. 전환은 그대로 실패합니다.
@@ -1248,10 +1249,11 @@
         if (!row) throw badToken();
         if (!validOpMode(want)) throw makeError(MSG.BAD_OP_MODE, { code: '22023' });
         if (want && opModeOf(row.op_mode) !== want) {
+          // 서버와 같게: 현장예약은 '예약중'(현장예약 운영 중)을 함께 적고, 현장대기는 비웁니다.
           row.op_mode = want;
-          row.congestion = null;
-          row.wait_minutes = null;
-          row.updated_at = null;
+          row.congestion = want === 'reserve' ? '예약중' : null;
+          row.wait_minutes = want === 'reserve' ? 0 : null;
+          row.updated_at = want === 'reserve' ? new Date().toISOString() : null;
           row.touched = true;
           demoSave(st);
           demoNotify(row.id);

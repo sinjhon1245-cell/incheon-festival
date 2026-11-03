@@ -1,3 +1,5 @@
+> 최종 동작 · 구조는 design/onsite-reservation-report.md 가 기준입니다(이 문서는 11-03 분석 당시 기록).
+
 # 현장예약 운영 방식 — 분석과 설계 (구현 전 검토용)
 
 - 작성: 2026-11-03 · 기준 `booth-live` 7633e48 · 작업 브랜치 `claude/onsite-reservation`(로컬, 커밋 · 푸시 없음)

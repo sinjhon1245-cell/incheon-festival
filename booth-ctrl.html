@@ -252,8 +252,9 @@
 
       <!-- 운영 방식: 현장대기 | 현장예약. 서버 스위치(booth_live_mode_config)가 켜져 있을 때만 보입니다 —
            꺼져 있으면 이 줄이 없고 화면은 지금과 같습니다. 켜져 있으면 두 방식 모두에서 같은 자리 · 같은 높이로
-           늘 보여, 방식을 바꿔도 아래 단추가 움직이지 않습니다. 누르면 확인창을 띄우고, 서버가 바꿨다고
-           답한 뒤에만 고른 칸이 바뀝니다. -->
+           늘 보여, 방식을 바꿔도 아래 단추가 움직이지 않습니다. 현장예약을 누르면 '현장예약 운영 중' 까지 한 번에
+           저장되고(지워질 저장 값이 있을 때만 확인창 한 번), 서버가 답한 뒤에만 고른 칸이 바뀝니다.
+           온라인 예약 기능이 아닙니다 — 부스의 운영 현황을 관람객에게 알리는 칸입니다. -->
       <div class="modes" id="modes" role="group" aria-label="운영 방식" hidden>
         <button type="button" class="modes__b" data-opmode="wait" aria-pressed="true">현장대기</button>
         <button type="button" class="modes__b" data-opmode="reserve" aria-pressed="false">현장예약</button>
@@ -328,12 +329,12 @@
               <div class="waits" id="waits"></div>
               <div class="resvs is-away" id="resvs" aria-hidden="true">
                 <button type="button" class="rv" id="btn-resv-open" data-mode="resv_open" aria-pressed="false" tabindex="-1">
-                  <span class="rv__t">예약 운영 중</span>
+                  <span class="rv__t">현장예약 운영 중</span>
                   <span class="rv__s">현장에서 예약을 받고 있어요</span>
                 </button>
                 <button type="button" class="rv" id="btn-resv-closed" data-mode="resv_closed" aria-pressed="false" tabindex="-1">
                   <span class="rv__t">예약 마감</span>
-                  <span class="rv__s">오늘 새 예약은 끝 · 예약한 체험은 계속</span>
+                  <span class="rv__s">오늘 받을 예약이 끝났어요</span>
                 </button>
               </div>
             </div>
@@ -647,7 +648,7 @@
     function valueLabel(c, w) {
       if (c === '중단') return '잠시 중단';
       if (c === '마감') return '오늘 마감';
-      if (c === '예약중') return '예약 운영 중';
+      if (c === '예약중') return '현장예약 운영 중';
       if (c === '예약마감') return '예약 마감';
       return c + ' ' + (Number(w) || 0) + '분';
     }
@@ -1717,7 +1718,9 @@
     /* ── 운영 방식(현장대기 · 현장예약) ─────────────────────────────────
        읽기: 처음 읽은 뒤 · 1분 읽기(refresh)마다 · 서버가 '방식이 맞지 않음'(22023 booth_mode_mismatch)으로 거부했을 때.
        DB 에 기능이 아직 없거나 서버 스위치가 꺼져 있으면 늘 '현장대기' 이고 선택 줄이 보이지 않습니다(지금과 같은 화면).
-       전환: 확인창 '네' → 서버가 같은 트랜잭션에서 이 부스의 지금 상태를 지우고 방식을 적음 → 답을 받은 뒤에만 칸을 바꿈.
+       전환: 칸을 누름 → (지워질 저장 값이 있을 때만 확인창 한 번) → 서버가 같은 트랜잭션에서 방식과 상태를 함께 적음
+         (현장예약 = 지금 상태를 지우고 '현장예약 운영 중', 현장대기 = 지금 상태를 지움) → 답을 받은 뒤에만 칸 · 상태를 바꿈.
+         현장예약 안에서는 '현장예약 운영 중' · '예약 마감' · 잠시 중단 · 오늘 마감을 눌러 상태만 바꿉니다(방식은 그대로).
          · 연결이 안 되거나, 저장 · 확인을 보내는 중이면 받지 않습니다(줄 세워 두었다가 나중에 보내지 않음).
          · 답을 못 받으면 화면은 원래 방식 그대로 두고 서버를 다시 읽습니다. 같은 방식으로 다시 바꿔도 서버는
            아무것도 바꾸지 않습니다(이미 바뀌었으면 상태를 한 번 더 지우지 않음).
@@ -1753,11 +1756,11 @@
         unknowns = [];
         $('ask-close').hidden = true;
         if (was && tried) {
-          toast(modeLabel(opMode) + '으로 바뀐 것을 확인했어요. 지금 상태를 눌러 주세요.', 'info', 4000);
+          toast(modeLabel(opMode) + '으로 바뀐 것을 확인했어요.' + (opMode === 'wait' ? '\n지금 대기 시간을 눌러 주세요.' : ''), 'info', 4000);
         } else if (was && !mine) {
           toast(!reserveOn && wasOn
             ? '운영본부가 현장예약을 꺼서 현장대기로 돌아왔어요. 대기 시간을 눌러 주세요.'
-            : '다른 기기에서 운영 방식을 “' + modeLabel(opMode) + '”으로 바꿨어요. 지금 상태를 다시 눌러 주세요.', 'info', 5000);
+            : '다른 기기에서 운영 방식을 “' + modeLabel(opMode) + '”으로 바꿨어요.' + (opMode === 'wait' ? '\n지금 대기 시간을 눌러 주세요.' : ''), 'info', 5000);
         }
       }
       if (!reserveOn) closeModeAsk();
@@ -1770,13 +1773,17 @@
         return;
       }
       if (inflight || touching) { toast('저장하는 중이에요. 잠시 뒤 다시 바꿔 주세요.', 'info'); return; }
+      // 지워질 값(저장된 지금 상태 · 못 보낸 누름)이 없으면 묻지 않고 바로 바꿉니다. 있으면 한 번만, 짧게 알립니다.
+      var cur = fits(booth) ? { congestion: booth.congestion, wait_minutes: booth.wait_minutes } : null;
+      var pl = pendingLive(pending);
+      if (!cur && !pl) { switchMode(target); return; }
       modeAsk = target;
       $('mode-ask-t').textContent = modeLabel(target) + '으로 바꿀까요?';
+      var lost = [cur, pl].filter(Boolean).map(function (v) { return '“' + valueLabel(v.congestion, v.wait_minutes) + '”'; })
+        .filter(function (v, i, a) { return a.indexOf(v) === i; }).join(' · ');
       var d = target === 'reserve'
-        ? '지금 입력된 대기 상태가 지워지고, 관람객 화면에는 운영 상태를 고를 때까지 “정보 없음”으로 보여요. 바꾼 뒤 아래에서 지금 운영 상태를 눌러 주세요.'
-        : '지금 입력된 예약 상태가 지워지고, 관람객 화면에는 대기 시간을 누를 때까지 “정보 없음”으로 보여요. 바꾼 뒤 아래에서 지금 대기 시간을 눌러 주세요.';
-      var pl = pendingLive(pending);
-      if (pending && pl) d += '\n아직 저장되지 않은 “' + valueLabel(pl.congestion, pl.wait_minutes) + '”은 보내지 않고 버려요.';
+        ? lost + '은 지워지고, 관람객 화면에 바로 “현장예약 운영 중”으로 보여요.'
+        : lost + '은 지워지고, 대기 시간을 누를 때까지 관람객 화면에는 “정보 없음”으로 보여요.';
       $('mode-ask-d').textContent = d;
       $('mode-ask').hidden = false;
       try { $('mode-yes').focus(); } catch (e) { /* 무시 */ }
@@ -1801,7 +1808,8 @@
       api.mode(target).then(function (m) {
         modeBusy = '';
         if (dead) return;
-        // 서버가 지운 상태를 그대로 받습니다(전환 뒤에는 비어 있음).
+        // 서버가 같은 트랜잭션에서 적은 상태를 그대로 받습니다 — 현장예약은 '예약중'(현장예약 운영 중), 현장대기는 비어 있음.
+        // 서버가 답한 뒤에만 그립니다(이 화면이 상태를 먼저 꾸며 보이지 않음).
         if (booth) {
           var c = {};
           for (var k in booth) if (Object.prototype.hasOwnProperty.call(booth, k)) c[k] = booth[k];
@@ -1815,7 +1823,9 @@
         var ok = m.op_mode === target && m.reserve_enabled;
         applyMode(m, true);
         if (ok) {
-          toast(modeLabel(target) + '으로 바꿨어요. ' + (target === 'reserve' ? '지금 운영 상태를 눌러 주세요.' : '지금 대기 시간을 눌러 주세요.'), 'info', 4000);
+          toast(target === 'reserve'
+            ? '현장예약으로 바꿨어요.\n관람객 화면에 “현장예약 운영 중”으로 보여요.'
+            : '현장대기로 바꿨어요.\n지금 대기 시간을 눌러 주세요.', 'info', 4000);
           buzz();
         } else {
           toast('운영 방식을 바꾸지 못했어요. 다시 눌러 주세요.', 'error');
@@ -2326,7 +2336,7 @@
       var c = b && b.congestion;
       if (c === '중단') return '잠시 중단';
       if (c === '마감') return '오늘 마감';
-      if (c === '예약중') return '예약 운영 중';
+      if (c === '예약중') return '현장예약 운영 중';
       if (c === '예약마감') return '예약 마감';
       var w = Number(b && b.wait_minutes) || 0;
       return w === 0 ? '바로 입장' : w + '분';
@@ -2448,7 +2458,8 @@
       else if (c === '마감') stateText = '오늘 마감';
       else if (c === '예약중' || c === '예약마감') stateText = valueLabel(c, 0);
       else if (c) stateText = c;
-      // 현장예약에서 아직 고르지 않음(전환 직후 · 23:00 뒤): '예약 운영 중' 으로 꾸며 보이지 않고 설정을 부탁합니다.
+      // 현장예약인데 오늘 상태가 없음(23:00 초기화 뒤 · 스위치를 다시 켠 뒤): 꾸며 보이지 않고 설정을 부탁합니다.
+      // (현장예약으로 바꿀 때는 서버가 '현장예약 운영 중' 을 함께 적으므로 이 글이 보이지 않습니다.)
       else if (loaded) stateText = resv ? '운영 상태 설정 필요' : '아직 입력 전';
       else stateText = connBad ? '연결 기다리는 중' : '불러오는 중';
       $('now-state').textContent = stateText;
@@ -2472,7 +2483,7 @@
       } else if (modeBusy) {
         when = '운영 방식을 바꾸는 중…';
       } else if (loaded) {
-        when = resv ? '아래에서 지금 운영 상태를 눌러 주세요' : '아래에서 지금 대기 시간을 눌러 주세요';
+        when = resv ? '아래에서 “현장예약 운영 중”을 눌러 주세요' : '아래에서 지금 대기 시간을 눌러 주세요';
       } else if (connBad) {
         when = '연결되면 지금 상태를 보여 드려요';
       }
@@ -2503,7 +2514,14 @@
       }
       $('nudge').hidden = !nudge;
       if (nudge) $('nudge-text').innerHTML = nudgeHtml;
-      $('still').hidden = nudge || !!pending || !fits(booth);
+      // 현장예약 기능이 켜져 있으면 값이 없을 때(현장대기로 바꾼 직후 등)도 '변동 없음' 자리를 비워 두어(보이지 않게)
+      // 방식을 바꿔도 아래 단추가 움직이지 않게 합니다. 기능이 꺼져 있으면 지금처럼 숨깁니다.
+      var stillOff = nudge || !!pending || !fits(booth);
+      var ghost = stillOff && reserveOn && !nudge && !pending;
+      $('still').hidden = stillOff && !ghost;
+      $('still').classList.toggle('is-ghost', ghost);
+      $('still').disabled = ghost;
+      if (ghost) $('still').setAttribute('aria-hidden', 'true'); else $('still').removeAttribute('aria-hidden');
       // '맞아요' · '지금 확인' 을 보내는 동안에는 눌린 것이 보이게 글자를 바꿉니다(다시 눌러도 touch() 가 거릅니다).
       // '확인 중' 은 '맞아요' 와 폭이 같아 옆 글이 밀리지 않습니다.
       $('nudge-btn').textContent = touching ? '확인 중' : '맞아요';

@@ -832,6 +832,8 @@ button {
 /* 둘째 줄: 무엇이 바뀌는지(값은 그대로 · 확인 시각만) — 작은 보조 글씨 */
 .still__s { font-size: 12.5px; font-weight: 500; line-height: 1.4; color: var(--muted); }
 .still:active { transform: scale(0.99); }
+/* 현장예약 기능이 켜져 있을 때 값이 없으면 자리만 남깁니다(방식을 바꿔도 아래 단추가 움직이지 않게) */
+.still.is-ghost { visibility: hidden; pointer-events: none; }
 
 /* ── 대기시간 단추 ─────────────────────────────────────────────── */
 .pad { margin-top: 20px; }

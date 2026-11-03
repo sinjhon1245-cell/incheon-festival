@@ -24,8 +24,14 @@
 --     public.booth_session_mode(p_session, p_mode)   PIN 세션 — p_mode null 이면 읽기만, 'wait' · 'reserve' 면 전환
 --     public.booth_ctrl_mode(p_token, p_mode)        QR 열쇠 — 같은 일
 --     public.booth_live_mode_enabled()               스위치 읽기(공개)
---     전환은 같은 부스 잠금 안에서 booth_live 그 부스 줄을 지우고 방식을 적습니다(과거 대기 · 예약 상태가 되살아나지 않음).
---     지금 방식과 같은 전환은 아무것도 하지 않습니다(응답을 잃고 다시 보내도 상태를 지우지 않음).
+--     전환은 같은 부스 잠금 · 같은 트랜잭션 안에서 방식과 상태를 함께 적습니다(둘 중 하나만 남는 때가 없음).
+--       → 현장예약  그 부스의 지금 상태(대기 분 등)를 지우고 '예약중'(현장예약 운영 중)을 바로 적음 — 관람객에게 곧바로 보임.
+--                   기록은 booth_live_log 에 source 'set' · 세션과 함께 한 줄(지금 운영자 저장과 같은 기록).
+--       → 현장대기  그 부스의 지금 상태(예약 상태)를 지움 — 과거 대기 분을 되살리지 않고, 운영자가 새로 입력할 때까지 '정보 없음'.
+--     지금 방식과 같은 전환은 아무것도 하지 않습니다(응답을 잃고 다시 보내도 그사이 고른 예약 마감 등을 덮지 않음).
+--
+--   공개 범위: 방식 표는 anon · authenticated 에게 booth_id · mode 두 열만(열 권한) · 스위치가 켜져 있을 때만(RLS) 보입니다.
+--   이 기능은 온라인 예약이 아닙니다 — 예약 신청 · 시간 · 명단 · 정원은 다루지 않고, 부스의 운영 현황만 안내합니다.
 --
 --   바꾸지 않는 것: booths · zones · booth_access(QR) · booth_pin · booth_session · UUID · 84곳 데이터 · booth_live 값 ·
 --     23:00 예약(cron) · private.rehearsal_live_reset · admin_reset_booth_live · admin_confirm_booth_live ·
@@ -45,8 +51,7 @@ declare
   v_bad text := '';
 begin
   if pg_catalog.to_regclass('public.booth_live_mode') is not null
-     or pg_catalog.to_regclass('public.booth_live_mode_config') is not null
-     or pg_catalog.to_regclass('public.booth_live_mode_log') is not null then
+     or pg_catalog.to_regclass('public.booth_live_mode_config') is not null then
     raise exception 'STOP: 운영 방식 표가 이미 있습니다(이미 적용함). 다시 적용하지 않습니다.';
   end if;
   if (select md5(p.prosrc) from pg_catalog.pg_proc p where p.oid = 'private.booth_op_set(uuid,text,integer,uuid)'::regprocedure)
@@ -80,33 +85,16 @@ alter table public.booth_live_mode_config enable row level security;
 revoke all on table public.booth_live_mode_config from public, anon, authenticated;
 
 -- 1-2. 방식. 줄이 없으면 '현장대기'. 기존 84곳에는 줄을 넣지 않습니다(적용 직후 모두 현장대기).
+--      공개(anon · authenticated)는 booth_id · mode 두 열만 읽습니다(열 권한) — 바꾼 시각은 서버 함수 안에서만.
+--      누가 바꿨는지는 따로 두지 않습니다: 현장예약으로 바꿀 때 적는 '예약중' 이 booth_live_log 에 세션과 함께 남습니다.
 create table public.booth_live_mode (
   booth_id   uuid primary key references public.booths(id) on delete cascade,
   mode       text not null check (mode in ('wait', 'reserve')),
-  updated_at timestamptz not null default pg_catalog.now(),
-  via        text not null check (via in ('pin', 'qr', 'admin')),
-  session_id uuid references public.booth_session(id) on delete set null
+  updated_at timestamptz not null default pg_catalog.now()
 );
 alter table public.booth_live_mode enable row level security;
 revoke all on table public.booth_live_mode from public, anon, authenticated;
-grant select on table public.booth_live_mode to anon, authenticated;
-
--- 1-3. 전환 기록. 전환으로 지운 상태(cleared_*)도 남깁니다 — booth_live_log 는 congestion 이 NOT NULL 이라 '지움' 을 적을 수 없어서.
-create table public.booth_live_mode_log (
-  id                 bigint generated always as identity primary key,
-  booth_id           uuid not null references public.booths(id) on delete cascade,
-  from_mode          text not null check (from_mode in ('wait', 'reserve')),
-  to_mode            text not null check (to_mode in ('wait', 'reserve')),
-  cleared_congestion text,
-  cleared_wait       integer,
-  cleared_updated_at timestamptz,
-  via                text not null check (via in ('pin', 'qr', 'admin')),
-  session_id         uuid references public.booth_session(id) on delete set null,
-  created_at         timestamptz not null default pg_catalog.now()
-);
-create index booth_live_mode_log_booth_at on public.booth_live_mode_log (booth_id, created_at desc);
-alter table public.booth_live_mode_log enable row level security;
-revoke all on table public.booth_live_mode_log from public, anon, authenticated;
+grant select (booth_id, mode) on table public.booth_live_mode to anon, authenticated;
 
 -- 2. 스위치 · 도우미 ---------------------------------------------------
 create function public.booth_live_mode_enabled()
@@ -402,19 +390,18 @@ $function$;
 -- 4. 운영 방식 읽기 · 전환 --------------------------------------------
 -- p_mode null  : 읽기만(지금 방식 · 스위치 · 지금 상태)
 -- p_mode 값    : 스위치가 켜져 있을 때만. 지금과 같으면 아무것도 하지 않습니다.
---                다르면 같은 부스 잠금 안에서 booth_live 그 부스 줄을 지우고(과거 대기 · 예약 상태 제거) 방식을 적습니다.
-create function private.booth_mode_op(p_booth uuid, p_mode text, p_via text, p_session uuid)
+--                다르면 같은 부스 잠금 · 같은 트랜잭션 안에서 방식과 상태를 함께 바꿉니다.
+--                  현장예약  지금 상태를 지우고 '예약중'(현장예약 운영 중)을 적음 + booth_live_log 한 줄(source 'set' · 세션)
+--                  현장대기  지금 상태를 지움(과거 대기 분을 되살리지 않음 — 운영자가 새로 입력)
+create function private.booth_mode_op(p_booth uuid, p_mode text, p_session uuid)
  returns table(op_mode text, mode_updated_at timestamp with time zone, reserve_enabled boolean, congestion text, wait_minutes integer, updated_at timestamp with time zone)
  language plpgsql
  set search_path to ''
 as $function$
 #variable_conflict use_column
 declare
-  v_on    boolean := public.booth_live_mode_enabled();
-  v_cur   text;
-  v_old_c text;
-  v_old_w integer;
-  v_old_t timestamptz;
+  v_on  boolean := public.booth_live_mode_enabled();
+  v_cur text;
 begin
   if p_mode is not null then
     if not v_on then
@@ -426,18 +413,18 @@ begin
     perform private.booth_mode_lock(p_booth);
     v_cur := private.booth_mode_of(p_booth);
     if v_cur <> p_mode then
-      delete from public.booth_live as l where l.booth_id = p_booth
-      returning l.congestion, l.wait_minutes, l.updated_at into v_old_c, v_old_w, v_old_t;
-      insert into public.booth_live_mode as m (booth_id, mode, updated_at, via, session_id)
-      values (p_booth, p_mode, pg_catalog.now(), p_via, p_session)
+      delete from public.booth_live as l where l.booth_id = p_booth;
+      insert into public.booth_live_mode as m (booth_id, mode, updated_at)
+      values (p_booth, p_mode, pg_catalog.now())
       on conflict on constraint booth_live_mode_pkey do update
          set mode       = excluded.mode,
-             updated_at = excluded.updated_at,
-             via        = excluded.via,
-             session_id = excluded.session_id;
-      insert into public.booth_live_mode_log as g
-             (booth_id, from_mode, to_mode, cleared_congestion, cleared_wait, cleared_updated_at, via, session_id)
-      values (p_booth, v_cur, p_mode, v_old_c, v_old_w, v_old_t, p_via, p_session);
+             updated_at = excluded.updated_at;
+      if p_mode = 'reserve' then
+        insert into public.booth_live as l (booth_id, congestion, wait_minutes, updated_at)
+        values (p_booth, '예약중', 0, pg_catalog.now());
+        insert into public.booth_live_log as g (booth_id, congestion, wait_minutes, source, session_id)
+        values (p_booth, '예약중', 0, 'set', p_session);
+      end if;
     end if;
   end if;
 
@@ -453,7 +440,7 @@ begin
       left join public.booth_live      as l on l.booth_id = x.id;
 end;
 $function$;
-revoke all on function private.booth_mode_op(uuid, text, text, uuid) from public, anon, authenticated;
+revoke all on function private.booth_mode_op(uuid, text, uuid) from public, anon, authenticated;
 
 create function public.booth_session_mode(p_session text, p_mode text)
  returns table(op_mode text, mode_updated_at timestamp with time zone, reserve_enabled boolean, congestion text, wait_minutes integer, updated_at timestamp with time zone)
@@ -469,7 +456,7 @@ begin
     return;
   end if;
   select * into s from private.booth_session_resolve(p_session, p_mode is not null);
-  return query select * from private.booth_mode_op(s.booth_id, p_mode, 'pin', s.session_id);
+  return query select * from private.booth_mode_op(s.booth_id, p_mode, s.session_id);
 end;
 $function$;
 
@@ -501,7 +488,7 @@ begin
   if v_booth is null then
     raise exception '이 QR은 쓸 수 없습니다.' using errcode = '42501', hint = 'booth_token_invalid';
   end if;
-  return query select * from private.booth_mode_op(v_booth, p_mode, 'qr', null);
+  return query select * from private.booth_mode_op(v_booth, p_mode, null);
 end;
 $function$;
 
@@ -523,9 +510,12 @@ begin
     raise exception 'STOP: 스위치가 꺼져 있지 않습니다';
   end if;
   if has_table_privilege('anon', 'public.booth_live_mode', 'INSERT')
+     or has_table_privilege('anon', 'public.booth_live_mode', 'SELECT')              -- 표 전체가 아니라 열 두 개만
+     or not has_column_privilege('anon', 'public.booth_live_mode', 'booth_id', 'SELECT')
+     or not has_column_privilege('anon', 'public.booth_live_mode', 'mode', 'SELECT')
+     or has_column_privilege('anon', 'public.booth_live_mode', 'updated_at', 'SELECT')
      or has_table_privilege('anon', 'public.booth_live_mode_config', 'SELECT')
-     or has_table_privilege('anon', 'public.booth_live_mode_log', 'SELECT')
-     or has_function_privilege('anon', 'private.booth_mode_op(uuid,text,text,uuid)', 'EXECUTE') then
+     or has_function_privilege('anon', 'private.booth_mode_op(uuid,text,uuid)', 'EXECUTE') then
     raise exception 'STOP: 공개 권한이 예상과 다릅니다';
   end if;
 end;
