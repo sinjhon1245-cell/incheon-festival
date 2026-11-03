@@ -57,6 +57,8 @@
   --r-btn:  12px;
 
   --gutter: 16px;
+  /* 관람객 화면과 같은 상태 칸 폭(visitor.css 의 --stat-w) */
+  --stat-w: 80px;
   --sans: 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, system-ui,
           'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', sans-serif;
 }
@@ -173,6 +175,19 @@ ul, ol { padding: 0; list-style: none; }
   text-decoration: none;
 }
 .cta:hover { background: var(--accent-d); border-color: var(--accent-d); }
+/* 협의용 예시 화면으로 가는 보조 링크(단추 아래 한 줄) */
+.sublink {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  margin-top: 4px;
+  color: var(--accent-d);
+  font-size: 14.5px;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
 
 .facts {
   display: grid;
@@ -315,7 +330,7 @@ ul, ol { padding: 0; list-style: none; }
 }
 .vr {
   display: grid;
-  grid-template-columns: 52px minmax(0, 1fr) 84px;
+  grid-template-columns: 52px minmax(0, 1fr) var(--stat-w);
   column-gap: 12px;
   align-items: start;
   min-height: 68px;
@@ -349,36 +364,116 @@ ul, ol { padding: 0; list-style: none; }
   overflow: hidden;
 }
 .vr.is-closed .vr__name { color: var(--v-off); }
+/* 오른쪽 상태 칸 — 관람객 화면 .row__right 와 같이 모든 줄이 같은 80px 칸, 안의 숫자 · 칩 · 상태 표시는 가로 가운데, 줄의 세로 가운데 */
 .vr__right {
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
-  justify-content: flex-start;
-  gap: 6px;
-  text-align: right;
+  align-items: center;
+  justify-content: center;
+  align-self: center;
+  gap: 4px;
+  width: var(--stat-w);
+  text-align: center;
 }
 .v { display: flex; align-items: baseline; gap: 1px; line-height: .9; white-space: nowrap; }
 .v__n { font-size: 32px; font-weight: 800; letter-spacing: -0.04em; }
 .v__u { font-size: 14px; font-weight: 700; color: var(--ink-2); }
-.v--word { font-size: 18px; font-weight: 700; letter-spacing: -0.02em; color: var(--v-off); }
-/* 현장예약 낱말(visitor.css 의 .v--resv 와 같음) — 현장예약은 행사 보라, 예약 마감은 마감과 같은 회색 */
-.v--resv { display: block; font-size: 16px; font-weight: 800; line-height: 1.2; letter-spacing: -0.03em; text-align: right; white-space: nowrap; color: var(--accent); }
-.v--resv-closed { font-weight: 700; color: var(--v-off); }
+/* 상태 표시 — visitor.css 의 .stag ~ .stag--big 을 글자 하나 다르지 않게 옮긴 것입니다
+   (scripts/booth-live-mode/test-visitor-resv.mjs 가 두 파일의 이 규칙이 같은지 봅니다). */
+.stag {
+  --stag-bg: #FFFFFF;
+  --stag-ink: #5A6B85;
+  --stag-edge: #D5DAE3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 76px;
+  height: 34px;
+  padding: 0 4px;
+  border: 1px solid var(--stag-edge);
+  border-radius: 4px;
+  background: var(--stag-bg);
+  color: var(--stag-ink);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+}
+.stag--pause    { --stag-bg: #FFFFFF; --stag-ink: #5A6B85; --stag-edge: #D5DAE3; }
+.stag--off      { --stag-bg: #F1F3F7; --stag-ink: #5A6B85; --stag-edge: #F1F3F7; }
+.stag--resv     { --stag-bg: #EFEBFE; --stag-ink: #3B2DAE; --stag-edge: #5B45E0; border-width: 3px; }
+.stag--resv-off { --stag-bg: #F3F1FA; --stag-ink: #5A5385; --stag-edge: #DAD5EE; }
+/* 지금 계신 부스(큰 값 자리): 같은 표시를 한 단계만 크게(높이 38 · 15px) */
+.stag--big { width: auto; min-width: 84px; height: 38px; padding: 0 14px; font-size: 15px; }
 .st {
   display: inline-flex;
   align-items: center;
-  padding: 3px 8px;
+  justify-content: center;
+  width: 60px;
+  height: 22px;
+  padding: 0 4px;
   border-radius: 4px;
   font-size: 13px;
   font-weight: 700;
   line-height: 1.2;
+  letter-spacing: -0.01em;
   white-space: nowrap;
 }
 /* 관람객 화면의 상태 칩(visitor.css 의 .st 와 같은 칠). 대기 분 숫자는 남색 그대로입니다 */
 .st--free   { background: var(--v-free);   color: #fff; }
 .st--normal { background: var(--v-normal); color: var(--ink); }
 .st--busy   { background: var(--v-busy);   color: #fff; }
-.st--pause  { background: #fff; box-shadow: inset 0 0 0 1px var(--off-mark); color: var(--v-off); }
+
+/* 한눈에 보기 — visitor.css 의 한눈에 칸(.tile)과 같은 칠 · 크기 · 글자. 대기 분이 없는 칸은 위 상태 표시와 같은 색 · 낱말(두 줄) */
+.vp__sub { padding: 14px 14px 0; border-top: 1px solid var(--line); font-size: 13px; font-weight: 700; color: var(--ink-2); }
+.vp__tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+  gap: 6px;
+  padding: 10px 14px 16px;
+}
+@media (min-width: 600px) {
+  .vp__sub, .vp__tiles { padding-left: 16px; padding-right: 16px; }
+}
+.tile {
+  --tile-edge: rgba(22, 32, 60, .14);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  aspect-ratio: 1 / 1;
+  min-height: 64px;
+  min-width: 0;
+  padding: 4px 7px;
+  border-radius: 4px;
+  background: #F5F6FA;
+  box-shadow: inset 0 0 0 1px var(--tile-edge);
+  color: var(--muted-2);
+  overflow: hidden;
+}
+.tile__no { font-size: 25px; font-weight: 800; line-height: 1; letter-spacing: -0.04em; white-space: nowrap; }
+.tile__v { display: flex; align-items: baseline; gap: 1px; font-size: 16px; font-weight: 800; line-height: 1; letter-spacing: -0.03em; white-space: nowrap; }
+.tile__u { font-size: 10.5px; font-weight: 700; }
+.tile__w { min-height: 12px; font-size: 12px; font-weight: 700; line-height: 1; white-space: nowrap; }
+.tile.is-free   { background: var(--v-free);   color: #fff; }
+.tile.is-normal { background: var(--v-normal); color: var(--ink); }
+.tile.is-busy   { background: var(--v-busy);   color: #fff; }
+.tile.is-pause { --tile-edge: #C3CAD6; background: #fff; color: #5A6B85; }
+.tile.is-resv        { --tile-edge: #CBC1F6; background: #EFEBFE; color: #3B2DAE; }
+.tile.is-resv-closed { --tile-edge: #DAD5EE; background: #F3F1FA; color: #5A5385; }
+.tile.is-closed      { --tile-edge: #E1E5EC; background: #F1F3F7; color: #5A6B85; }
+.tile.is-pause .tile__v,
+.tile.is-pause .tile__w,
+.tile.is-closed .tile__v,
+.tile.is-closed .tile__w,
+.tile.is-resv .tile__v,
+.tile.is-resv-closed .tile__v,
+.tile.is-resv .tile__w,
+.tile.is-resv-closed .tile__w { min-height: 0; font-size: 14px; font-weight: 700; line-height: 1; letter-spacing: -0.02em; }
+.tile.is-pause .tile__no,
+.tile.is-closed .tile__no { color: var(--ink-2); }
 
 /* ── 운영자 미리보기 — booth-ctrl.css 의 머리 · 현재 대기 · 대기시간 · 운영 상태 ── */
 .cp {

@@ -53,6 +53,8 @@
   --num-bg:       #F1EFFD;
   --num-w:  56px;
   --num-fs: 30px;
+  /* 오른쪽 상태 칸 80px(모든 폭에서 같음) — 그 가운데에 대기 분 숫자 · 상태 칩(60×22) · 한 줄 상태 표시(76×34) */
+  --stat-w: 80px;
 
   --gutter: 20px;
   --bar-h:  48px;
@@ -345,10 +347,11 @@ html.is-demo .row { scroll-margin-top: calc(56px + var(--demo-h) + env(safe-area
 .here__val {
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
+  align-items: center;
   gap: 6px;
-  text-align: right;
+  text-align: center;
 }
+.here__val .st:not(.st--unknown) { width: 68px; height: 24px; }   /* 큰 숫자 아래 칩도 한 단계만 크게, 숫자와 같은 가운데 */
 .here__age {
   margin-top: 12px;
   font-size: 13px;
@@ -366,8 +369,6 @@ html.is-demo .row { scroll-margin-top: calc(56px + var(--demo-h) + env(safe-area
 .bigv__n { font-size: 48px; font-weight: 800; letter-spacing: -0.045em; }
 .bigv__u { font-size: 16px; font-weight: 700; color: var(--ink-2); }
 .bigv--now  { font-size: 36px; font-weight: 800; letter-spacing: -0.03em; }
-.bigv--word { font-size: 26px; font-weight: 800; letter-spacing: -0.03em; color: var(--st-off); }
-.bigv--resv { color: var(--accent); }   /* 현장 예약(운영 중). 예약 마감은 마감과 같은 회색 */
 .bigv--none { font-size: 15px; font-weight: 600; color: var(--muted-2); line-height: 1.4; }
 
 .here__alts {
@@ -896,7 +897,7 @@ html.is-demo .row { scroll-margin-top: calc(56px + var(--demo-h) + env(safe-area
   --name-lh: 22px;   /* 17px 굵은 이름 두 줄이 한 덩이로 읽히는 줄 간격(1.3) — 두 줄 이름 줄이 한 줄 이름 줄보다 지나치게 커지지 않게 */
   position: relative;   /* 번호 띠 위에 글자 */
   display: grid;
-  grid-template-columns: var(--num-w) minmax(0, 1fr) 80px;
+  grid-template-columns: var(--num-w) minmax(0, 1fr) var(--stat-w);
   column-gap: 12px;
   align-items: baseline;
   min-height: 68px;
@@ -940,17 +941,20 @@ html.is-demo .row { scroll-margin-top: calc(56px + var(--demo-h) + env(safe-area
   letter-spacing: -0.02em;
 }
 .row.is-closed .row__name { color: var(--st-off); }
-/* 대기 분 + 상태 칩을 한 묶음으로 줄의 세로 가운데에 둡니다(바로 · 잠시 중단 · 마감 · 정보 없음도 같은 기준).
-   '20분' + 칩 묶음(54px)은 한 줄 이름 + 학교(45px)보다 조금 커서, 위아래 여백(14px)을 5px씩 빌려 씁니다 —
-   묶음 모양과 상관없이 줄 높이는 이름 줄 수로만 정해집니다. */
+/* 오른쪽 상태 칸 — 모든 줄이 같은 80px 칸이고, 안의 숫자 · 상태 칩 · 상태 표시는 모두 칸의 가로 가운데에 둡니다
+   (숫자 가운데 = 칩 가운데 = 칸 가운데). 대기 분이 가장 큰 정보이고 칩 · 상태 표시는 그보다 작게 둡니다.
+   묶음은 줄의 세로 가운데(이름이 두 줄이어도)에 두고, '20분' + 칩 묶음(55px)이 한 줄 이름 + 학교(45px)보다 큰 만큼
+   위아래 여백(14px)을 6px씩 빌려 써서 줄 높이는 이름 줄 수로만 정해집니다(상태 때문에 줄이 높아지지 않음). */
 .row__right {
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
+  align-items: center;
+  justify-content: center;
   align-self: center;
   gap: 4px;
-  margin: -5px 0;
-  text-align: right;
+  width: var(--stat-w);
+  margin: -6px 0;
+  text-align: center;
 }
 
 /* 줄 오른쪽 값 */
@@ -965,41 +969,63 @@ html.is-demo .row { scroll-margin-top: calc(56px + var(--demo-h) + env(safe-area
 .v__u { font-size: 14px; font-weight: 700; color: var(--ink-2); }
 /* '바로'(한글)는 숫자보다 글자가 아래로 차서, 2px 더 띄워 칩까지 보이는 간격을 'N분' 과 같게(약 6~7px) 맞춥니다 */
 .v--now  { margin-bottom: 2px; font-size: 22px; font-weight: 800; letter-spacing: -0.02em; }
-.v--word { font-size: 18px; font-weight: 700; letter-spacing: -0.02em; color: var(--st-off); }
-/* 현장예약 — 80px 칸 안의 낱말 하나('현장예약' · '예약 마감'). 대기 분 숫자 · 상태 칩과 달리 낱말이라
-   혼잡도로 읽히지 않게 초록 · 노랑 · 빨강을 쓰지 않습니다. 현장예약은 행사 보라(흰 바탕 6.2:1), 예약 마감은 마감과 같은 회색.
-   '마감'(.v--word)과 같은 한 줄 높이라 줄 높이를 바꾸지 않습니다. */
-.v--resv {
-  display: block;
-  font-size: 16px;
-  font-weight: 800;
+/* 상태 표시 — 대기 분이 없는 상태를 80px 칸 안의 한 줄(76×34 · 14px 700 · 모서리 4px, 칩과 같음)로. 누르는 단추가 아니라 정보 표시라
+   그림자 · 아이콘 · 큰 글씨 없이 옅은 바탕 · 얇은 테두리만 씁니다. 혼잡도로 읽히지 않게 초록 · 노랑 · 빨강을 쓰지 않습니다.
+     잠시 중단   흰 바탕 · 옅은 회색 테두리 · 회색 글자(5.4:1)
+     오늘 마감   아주 옅은 회색 바탕 · 차분한 회색 글자(4.9:1) · 테두리 없음
+     현장예약    옅은 보라 바탕 · 진한 보라 글자(부스 번호와 같은 #3B2DAE, 8.3:1) · 네 면 같은 진보라 테두리(#5B45E0, 3px —
+                 정수 px 라 화면 배율이 달라도 네 면 두께가 같음). 크기는 그대로 76×34(테두리가 안쪽으로 들어옴)
+     예약 마감   채도를 낮춘 보라 회색 바탕 · 글자(6.0:1) — 오늘 마감(회색)과 다른 갈래, 현장예약보다 가라앉게
+   이 규칙은 live/example/example.css 에 글자 그대로 옮겨 씁니다(시험이 견줌). */
+.stag {
+  --stag-bg: #FFFFFF;
+  --stag-ink: #5A6B85;
+  --stag-edge: #D5DAE3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 76px;
+  height: 34px;
+  padding: 0 4px;
+  border: 1px solid var(--stag-edge);
+  border-radius: 4px;
+  background: var(--stag-bg);
+  color: var(--stag-ink);
+  font-size: 14px;
+  font-weight: 700;
   line-height: 1.2;
-  letter-spacing: -0.03em;
-  text-align: right;
+  letter-spacing: -0.02em;
   white-space: nowrap;
-  color: var(--accent);
 }
-.v--resv-closed { font-weight: 700; color: var(--st-off); }
+.stag--pause    { --stag-bg: #FFFFFF; --stag-ink: #5A6B85; --stag-edge: #D5DAE3; }
+.stag--off      { --stag-bg: #F1F3F7; --stag-ink: #5A6B85; --stag-edge: #F1F3F7; }
+.stag--resv     { --stag-bg: #EFEBFE; --stag-ink: #3B2DAE; --stag-edge: #5B45E0; border-width: 3px; }
+.stag--resv-off { --stag-bg: #F3F1FA; --stag-ink: #5A5385; --stag-edge: #DAD5EE; }
+/* 지금 계신 부스(큰 값 자리): 같은 표시를 한 단계만 크게(높이 38 · 15px) */
+.stag--big { width: auto; min-width: 84px; height: 38px; padding: 0 14px; font-size: 15px; }
 
-/* 상태 칩 — 한눈에 칸과 같은 칠(여유 초록 · 보통 샛노랑 · 혼잡 빨강 · 중단 흰 바탕 + 회색 테두리).
-   작게(13px · 모서리 4px) 두어 대기 분 숫자보다 앞서지 않게 합니다. '정보 없음' 은 칩이 아닌 옅은 글자입니다. */
+/* 상태 칩(대기 분 아래) — 한눈에 칸과 같은 칠(여유 초록 · 보통 샛노랑 · 혼잡 빨강). 숫자보다 작은 보조 정보로
+   60×22 · 13px 700(지금 계신 부스 68×24), 숫자와 같은 가운데. '정보 없음' 은 칩이 아닌 옅은 글자입니다. */
 .st {
   display: inline-flex;
   align-items: center;
-  padding: 3px 8px;
+  justify-content: center;
+  width: 60px;
+  height: 22px;
+  padding: 0 4px;
   border-radius: 4px;
   font-size: 13px;
   font-weight: 700;
   line-height: 1.2;
+  letter-spacing: -0.01em;
   white-space: nowrap;
 }
 .st .sq { display: none; }   /* 칩 자체가 표시라 네모는 감춥니다(마크업은 그대로) */
 .st--free    { background: var(--st-free);   color: #fff; }
 .st--normal  { background: var(--st-normal); color: var(--ink); }
 .st--busy    { background: var(--st-busy);   color: #fff; }
-.st--pause,
-.st--closed  { background: #fff; box-shadow: inset 0 0 0 1px var(--st-off-mark); color: var(--st-off); }
-.st--unknown { padding: 0; font-weight: 600; color: var(--muted-2); }
+.st--unknown { width: auto; height: auto; padding: 0; font-size: 13px; font-weight: 600; letter-spacing: 0; color: var(--muted-2); }
 
 /* 값이 바뀐 줄을 잠깐 표시합니다. 움직임을 줄여 달라고 한 기기에서는 하지 않습니다. */
 @media (prefers-reduced-motion: no-preference) {
@@ -1014,7 +1040,7 @@ html.is-demo .row { scroll-margin-top: calc(56px + var(--demo-h) + env(safe-area
 /* 아직 아무것도 받지 못했을 때의 빈 줄 여섯 개 */
 .sk {
   display: grid;
-  grid-template-columns: var(--num-w) minmax(0, 1fr) 80px;
+  grid-template-columns: var(--num-w) minmax(0, 1fr) var(--stat-w);
   column-gap: 12px;
   align-items: center;
   height: 68px;
@@ -1121,31 +1147,32 @@ html.is-demo .row { scroll-margin-top: calc(56px + var(--demo-h) + env(safe-area
 }
 .tile__u { font-size: 10.5px; font-weight: 700; }
 .tile__w {
-  min-height: 11px;
-  font-size: 11px;
-  font-weight: 600;
+  min-height: 12px;
+  font-size: 12px;
+  font-weight: 700;
   line-height: 1;
   white-space: nowrap;
 }
 .tile.is-free   { background: var(--st-free);   color: #fff; }
 .tile.is-normal { background: var(--st-normal); color: var(--ink); }
 .tile.is-busy   { background: var(--st-busy);   color: #fff; }
-.tile.is-pause,
-.tile.is-closed { --tile-edge: var(--st-off-mark); background: #fff; color: var(--st-off); }   /* 흰 칸은 회색 안쪽 선이 경계 — 테두리 대신 안쪽 선이라 번호 자리가 다른 칸과 같음 */
+.tile.is-pause { --tile-edge: #C3CAD6; background: #fff; color: #5A6B85; }   /* 흰 칸은 옅은 회색 안쪽 선이 경계 — 테두리 대신 안쪽 선이라 번호 자리가 다른 칸과 같음 */
 .tile.is-unknown,
 .tile.is-idle { --tile-edge: var(--line); }
-/* 현장예약 칸 — 흰 바탕 + 안쪽 선(중단 · 마감과 같은 모양). 예약 운영 중은 보라 선 · 보라 글자, 예약 마감은 회색 */
-.tile.is-resv        { --tile-edge: var(--accent); background: #fff; color: var(--accent); }
-.tile.is-resv-closed { --tile-edge: var(--st-off-mark); background: #fff; color: var(--st-off); }
+/* 대기 분이 없는 칸 — 목록의 상태 표시(.stag)와 같은 색 갈래 · 같은 낱말을 칸에 맞게 두 줄로
+   ('현장 / 예약' · '예약 / 마감' · '잠시 / 중단' · '오늘 / 마감', 25 + 14 + 14px — 가장 좁은 65px 칸에도 듦).
+   칸 안 글자 덩이 높이가 대기 분 칸과 같아 번호가 칸마다 같은 자리에 옵니다. */
+.tile.is-resv        { --tile-edge: #CBC1F6; background: #EFEBFE; color: #3B2DAE; }
+.tile.is-resv-closed { --tile-edge: #DAD5EE; background: #F3F1FA; color: #5A5385; }
+.tile.is-closed      { --tile-edge: #E1E5EC; background: #F1F3F7; color: #5A6B85; }
 .tile.is-pause .tile__v,
+.tile.is-pause .tile__w,
 .tile.is-closed .tile__v,
+.tile.is-closed .tile__w,
 .tile.is-resv .tile__v,
-.tile.is-resv-closed .tile__v { font-size: 15px; font-weight: 700; letter-spacing: -0.02em; }
-.tile.is-resv .tile__no,
-.tile.is-resv-closed .tile__no { color: var(--ink-2); }
-/* '현장예약' 네 글자는 가장 좁은 칸(390px · 65px 칸)에도 한 줄로 들게 한 단계 작게 */
-.tile.is-resv .tile__v { font-size: 13px; letter-spacing: -0.05em; }
-/* 중단 · 마감 칸의 번호는 상태 글자(회색)보다 한 단계 진하게 — 쉬는 부스도 번호로는 바로 찾습니다 */
+.tile.is-resv-closed .tile__v,
+.tile.is-resv .tile__w,
+.tile.is-resv-closed .tile__w { min-height: 0; font-size: 14px; font-weight: 700; line-height: 1; letter-spacing: -0.02em; }
 .tile.is-pause .tile__no,
 .tile.is-closed .tile__no { color: var(--ink-2); }
 /* 회색 바탕(--line-2) 위의 '정보 없음' 은 --muted-2 로는 4.3:1 이라 한 단계 진하게. 번호는 목록과 같은 진한 보라 */

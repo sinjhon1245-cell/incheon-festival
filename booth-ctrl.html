@@ -172,14 +172,19 @@
         </div>
         <!-- 입력 칸: 위의 예시 PIN(카드 안 숫자 한 줄)과 모양을 달리해 '보여 주는 값' 과 '넣는 칸' 이
              헷갈리지 않게 합니다. 자릿수만큼 칸을 그려 두고(pinslots, 화면용), 실제로 받는 것은 그 위에
-             투명하게 겹친 글칸 하나입니다 — 붙여넣기 · 숫자 자판 · 화면 읽기 프로그램은 보통 글칸처럼 움직입니다. -->
+             투명하게 겹친 글칸 하나입니다 — 붙여넣기 · 숫자 자판 · 화면 읽기 프로그램은 보통 글칸처럼 움직입니다.
+             칸을 누르면 그 칸을 고르고, 칸 그림은 글칸의 커서 · 고른 칸을 그대로 보여 줍니다(wire 의 PIN 칸 참고).
+             자릿수는 maxlength 로 막지 않습니다 — 띄어 쓴 PIN('482 915')을 붙여 넣으면 브라우저가 숫자를 세기 전에 잘라 버립니다. -->
         <div class="pinfield">
-          <label class="pinlabel" for="pin-input" id="pin-input-label">운영자 PIN 6자리</label>
+          <div class="pinhead" id="pin-head">
+            <label class="pinlabel" for="pin-input" id="pin-input-label">운영자 PIN 6자리</label>
+            <button type="button" class="pinclear" id="pin-clear" data-act="pin-clear" disabled>모두 지우기</button>
+          </div>
           <p class="pinhint" id="pin-input-hint">운영본부에서 받은 숫자 6자리를 입력해 주세요.</p>
           <div class="pinwrap" id="pin-wrap">
             <div class="pinslots" id="pin-slots" aria-hidden="true"></div>
             <input class="pinbox" id="pin-input" type="text" inputmode="numeric" pattern="[0-9]*"
-                   maxlength="6" autocomplete="one-time-code" enterkeyhint="go"
+                   autocomplete="one-time-code" enterkeyhint="go"
                    autocapitalize="off" autocorrect="off" spellcheck="false" aria-describedby="pin-input-hint pin-err" />
           </div>
           <p class="pinerr" id="pin-err" role="alert" hidden></p>
@@ -1154,24 +1159,174 @@
       paintSlots();
     }
     // PIN 칸 그림. 글칸의 값을 자릿수만큼의 칸에 한 글자씩 옮겨 그립니다(화면용 · aria-hidden).
-    // 다음에 채울 칸은 글칸에 커서가 있을 때만 보라 테두리로 알려 줍니다. 값이 그대로면 다시 그리지 않습니다.
+    // 글칸에 커서가 있을 때만, 글칸의 실제 커서 · 고른 칸을 그대로 보라로 보여 줍니다 — 칸에 보이는 자리와
+    // Backspace · Delete · 숫자가 고치는 자리가 늘 같습니다.
+    //   is-sel   고른 숫자(그 위에 치면 바뀌고, Backspace · Delete 면 그 숫자만 지워짐)
+    //   is-next  다음에 채울 빈 칸     is-caret  숫자 앞의 커서     is-end  다 찬 뒤 끝의 커서
+    // 값 · 커서가 그대로면 다시 그리지 않습니다.
     var slotKey = '';
     function paintSlots() {
       var input = $('pin-input');
       var v = input.value, focused = document.activeElement === input;
+      var s = focused ? input.selectionStart : -1, e = focused ? input.selectionEnd : -1;
+      if (s === null) { s = v.length; e = v.length; }
       var err = input.getAttribute('aria-invalid') === 'true';
-      var key = [PIN_LEN, v, focused, err, pin.busy].join('|');
+      var key = [PIN_LEN, v, focused, s, e, err, pin.busy].join('|');
       if (key === slotKey) return;
       slotKey = key;
       var html = '';
       for (var i = 0; i < PIN_LEN; i++) {
-        var cls = 'pinslot' + (i < v.length ? ' is-filled' : '') + (focused && i === v.length ? ' is-next' : '');
+        var cls = 'pinslot' + (i < v.length ? ' is-filled' : '');
+        if (focused) {
+          if (s !== e) cls += (i >= s && i < e) ? ' is-sel' : '';
+          else if (i === s) cls += i < v.length ? ' is-caret' : ' is-next';
+          else if (s >= PIN_LEN && i === PIN_LEN - 1) cls += ' is-end';
+        }
         html += '<span class="' + cls + '">' + (i < v.length ? esc(v.charAt(i)) : '') + '</span>';
       }
       var box = $('pin-slots');
       box.className = 'pinslots pinslots--' + PIN_LEN;
       box.innerHTML = html;
       $('pin-wrap').className = 'pinwrap' + (focused ? ' is-focus' : '') + (err ? ' is-err' : '') + (pin.busy ? ' is-busy' : '');
+      // '모두 지우기' 는 숫자가 있을 때만(자리는 늘 두어 줄이 움직이지 않음)
+      var clr = $('pin-clear');
+      clr.disabled = !v.length || pin.busy;
+      clr.className = 'pinclear' + (clr.disabled ? ' is-off' : '');
+    }
+
+    /* PIN 칸 고치기 — 글칸 하나로 받고, 칸 그림이 그 글칸을 그대로 따라갑니다.
+         칸을 누름     그 칸의 숫자를 고릅니다(빈 칸이면 다음에 채울 칸으로). 칸 그림과 글칸의 글자 자리가 달라
+                       브라우저에 맡기면 커서가 엉뚱한 곳(대개 끝)에 놓이기 때문입니다.
+         숫자를 침     그 자리에 들어가고 다음 칸으로. 다음 칸에 숫자가 있으면 골라 둡니다(이어 치면 차례로 덮어 씀).
+                       다 찬 PIN 의 커서 자리에서 치면 커서 뒤 숫자를 덮어 씁니다(자릿수는 그대로).
+         한 번에 들어온 글  붙여넣기 · 자판의 클립보드 제안 · 자동 채움. 숫자만 떼어, 자릿수 이상이면 PIN 전체로 봅니다
+                       ('482 915' · 'PIN: 482-915' → 482915). 숫자가 없는 글은 넣지 않습니다.
+         Backspace · Delete · 전체 선택은 브라우저 그대로입니다(고른 숫자 · 커서 앞뒤 숫자 하나만 지움).
+       PIN 값은 이 칸 밖으로 옮기거나 남기지 않습니다(submitPin 이 보낸 뒤 바로 지움). */
+    var pinSeq = 0;      // 글칸 값 · 커서를 바꿀 때마다 하나씩 — 늦게 오는 커서 맞추기가 그사이의 입력을 덮지 않게
+    var pinTap = null;   // 글칸을 누르기 시작한 곳 · 때(짧게 누른 것만 칸 고르기로)
+    function digitsOf(s) {
+      // 전각 숫자(０-９)도 숫자로 받습니다(일부 입력기)
+      return String(s || '').replace(/[０-９]/g, function (c) { return String.fromCharCode(c.charCodeAt(0) - 0xFEE0); })
+        .replace(/\D/g, '');
+    }
+    function pinSelect(a, b) {
+      pinSeq++;
+      try { $('pin-input').setSelectionRange(a, b); } catch (x) { /* 무시 */ }
+      paintSlots();
+    }
+    // i 번째 칸으로: 숫자가 있으면 그 숫자를 고르고, 없으면 다음에 채울 칸(값 끝)에 커서
+    function pinGoTo(i) {
+      var n = $('pin-input').value.length;
+      i = Math.max(0, i);
+      if (i < n) pinSelect(i, i + 1); else pinSelect(n, n);
+    }
+    // 바뀐 값을 글칸에 두고 커서를 놓습니다. 숫자를 넣은 뒤면 다음 칸의 숫자를 골라 둡니다.
+    function pinApply(v, caret, typed) {
+      var input = $('pin-input');
+      if (input.value !== v) input.value = v;
+      if (typed && caret < v.length) pinSelect(caret, caret + 1); else pinSelect(caret, caret);
+      if (!$('pin-err').hidden && v.length) pinErr('');
+      pinButton();
+    }
+    // 들어온 숫자 d 를 지금 커서 · 고른 칸 자리에. 자릿수 이상이면 PIN 전체를 그 숫자로 바꿉니다.
+    function pinPut(d) {
+      var input = $('pin-input'), v = input.value;
+      if (!d) { paintSlots(); return; }
+      if (d.length >= PIN_LEN) { pinApply(d.slice(0, PIN_LEN), PIN_LEN, false); return; }
+      var s = input.selectionStart === null ? v.length : input.selectionStart;
+      var e = input.selectionEnd === null ? v.length : input.selectionEnd;
+      var caret = s + d.length;
+      v = v.slice(0, s) + d + v.slice(e);
+      if (v.length > PIN_LEN) v = (v.slice(0, caret) + v.slice(caret + v.length - PIN_LEN)).slice(0, PIN_LEN);
+      pinApply(v, Math.min(caret, PIN_LEN), true);
+    }
+    function pinInput(e) {
+      if (e && e.isComposing) { paintSlots(); return; }   // 입력기가 글자를 만드는 중이면 끝난 뒤(compositionend)에
+      var input = $('pin-input'), raw = input.value;
+      var end = input.selectionEnd === null ? raw.length : input.selectionEnd;
+      var type = (e && e.inputType) || '';
+      var chunk = digitsOf(e && typeof e.data === 'string' ? e.data : '');
+      var v = digitsOf(raw), caret = digitsOf(raw.slice(0, end)).length;
+      if (chunk.length >= PIN_LEN) { pinApply(chunk.slice(0, PIN_LEN), PIN_LEN, false); return; }   // PIN 이 통째로 들어옴
+      if (v.length > PIN_LEN) {
+        // 다 찬 PIN 위에 친 숫자: 커서 뒤 숫자를 그만큼 덮어 씁니다. 끝에서 치면 그대로입니다.
+        v = (v.slice(0, caret) + v.slice(caret + v.length - PIN_LEN)).slice(0, PIN_LEN);
+        caret = Math.min(caret, PIN_LEN);
+      }
+      pinApply(v, caret, /^insert/.test(type) && chunk.length > 0);
+    }
+    // 누른 곳에서 가장 가까운 칸(6자리의 3 · 3 사이 틈은 가운데로 나눔)
+    function slotAt(x) {
+      var s = $('pin-slots').children, best = 0, d = Infinity;
+      for (var i = 0; i < s.length; i++) {
+        var r = s[i].getBoundingClientRect(), m = Math.abs(x - (r.left + r.width / 2));
+        if (m < d) { d = m; best = i; }
+      }
+      return best;
+    }
+    // 짧게 누른 것인가(끌어서 고르기 · 길게 눌러 붙여넣기 메뉴 · 두 번 눌러 전체 고르기는 브라우저 그대로)
+    function pinShortTap(x, y) {
+      var p = pinTap;
+      return !!p && Date.now() - p.at < 500 && Math.abs(x - p.x) < 12 && Math.abs(y - p.y) < 12;
+    }
+    function wirePinInput() {
+      var input = $('pin-input');
+      input.addEventListener('input', pinInput);
+      input.addEventListener('compositionend', function () { pinInput(null); });
+      input.addEventListener('paste', function (e) {
+        var cd = e.clipboardData || window.clipboardData;
+        var text = cd && cd.getData ? cd.getData('text') : null;
+        if (typeof text !== 'string') return;   // 못 읽으면 브라우저에 맡기고 input 에서 숫자만 남깁니다
+        e.preventDefault();
+        pinPut(digitsOf(text));
+      });
+      input.addEventListener('pointerdown', function (e) {
+        pinTap = { x: e.clientX, y: e.clientY, at: Date.now() };
+      });
+      // 누름은 막지 않고 브라우저에 그대로 둡니다 — 그 누름이 숫자 자판을 띄웁니다(안드로이드에서 뒤로 단추로 자판만
+      // 닫아 커서가 남은 글칸을 다시 누를 때도). 브라우저가 커서를 놓은 뒤(click) 누른 칸을 고릅니다.
+      input.addEventListener('click', function (e) {
+        if (e.detail > 1 || !pinShortTap(e.clientX, e.clientY)) { pinTap = null; paintSlots(); return; }
+        pinTap = null;
+        var i = slotAt(e.clientX);
+        pinGoTo(i);
+        // 일부 휴대폰 브라우저(iOS 등)는 click 뒤에 커서를 옮깁니다. 그사이 아무것도 바꾸지 않았으면 다시 맞춥니다.
+        var mine = pinSeq;
+        [60, 200].forEach(function (ms) {
+          setTimeout(function () {
+            var el = $('pin-input'), n = el.value.length, want = i < n ? [i, i + 1] : [n, n];
+            if (mine !== pinSeq || document.activeElement !== el) return;
+            if (el.selectionStart !== want[0] || el.selectionEnd !== want[1]) pinGoTo(i);
+            mine = pinSeq;
+          }, ms);
+        });
+      });
+      // 화살표 · Home · End 는 칸 단위로(그 칸의 숫자를 고름). Shift 와 함께면 브라우저 그대로(여러 칸 고르기).
+      input.addEventListener('keydown', function (e) {
+        var k = e.key;
+        if (e.isComposing || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+        if (k !== 'ArrowLeft' && k !== 'ArrowRight' && k !== 'Home' && k !== 'End') return;
+        var n = input.value.length, s = input.selectionStart, en = input.selectionEnd;
+        if (s === null) return;
+        e.preventDefault();
+        if (k === 'Home') pinGoTo(0);
+        else if (k === 'End') pinSelect(n, n);
+        else if (en - s > 1) pinGoTo(k === 'ArrowLeft' ? s : en);
+        else if (k === 'ArrowLeft') pinGoTo(s - 1);
+        else if (s + 1 >= n) pinSelect(n, n);
+        else pinGoTo(s + 1);
+      });
+      // 칸 그림은 커서가 움직일 때마다(브라우저가 옮긴 것까지) 다시 그립니다.
+      ['focus', 'blur', 'select', 'keyup', 'mouseup'].forEach(function (ev) { input.addEventListener(ev, paintSlots); });
+      document.addEventListener('selectionchange', function () { if (document.activeElement === input) paintSlots(); });
+    }
+    // '모두 지우기' — 빈 칸으로 돌리고 첫 칸에 커서(숫자 자판은 그대로)
+    function pinClear() {
+      var input = $('pin-input');
+      input.value = '';
+      try { input.focus(); } catch (x) { /* 무시 */ }
+      pinApply('', 0, false);
     }
     function pinButton() {
       var btn = $('pin-go');
@@ -2616,6 +2771,7 @@
       if (t.hasAttribute('data-booth')) { pickBooth(t.getAttribute('data-booth')); return; }
       // 주소 '#' 로 가는 링크 단추(최근 운영한 부스 · PIN)는 주소를 바꾸지 않습니다(바꾸면 hashchange 로 새로 엶).
       if (act && t.tagName === 'A') e.preventDefault();
+      if (act === 'pin-clear') { pinClear(); return; }
       if (act === 'pin-start') { openPin(readLastPin()); return; }
       if (act === 'pin-again') { openPin(readLastPin()); return; }
       if (act === 'copy-pin') {
@@ -2755,7 +2911,6 @@
       window.addEventListener('hashchange', function () { window.location.reload(); });
 
       // PIN 화면 글. 실제는 6자리(운영본부가 발급), 협의용 예시는 4자리(그 부스의 예시 PIN 을 화면에 보여 줌).
-      $('pin-input').setAttribute('maxlength', String(PIN_LEN));
       if (isMock) {
         $('pin-label').textContent = '협의용 예시 · 부스 운영 시작';
         $('pin-s1-title').textContent = '운영할 부스를 선택해 주세요';
@@ -2769,12 +2924,8 @@
       pinText.hint = $('pin-input-hint').textContent;
 
       // PIN 칸: 숫자만, 자릿수가 차면 '운영 시작' 을 켭니다. 보내기는 Enter · 단추 모두 submitPin.
-      $('pin-input').addEventListener('input', function () {
-        var v = this.value.replace(/\D/g, '').slice(0, PIN_LEN);
-        if (v !== this.value) this.value = v;
-        if (!$('pin-err').hidden && v.length) pinErr('');
-        pinButton();
-      });
+      // 칸 누르기 · 고치기 · 붙여넣기는 wirePinInput(위 'PIN 칸 고치기').
+      wirePinInput();
       // 부스 고르기의 찾기 칸: 칠 때마다 목록을 거르고, Enter 는 번호가 꼭 맞는(또는 하나뿐인) 부스로 바로 갑니다.
       $('pin-q').addEventListener('input', renderBoothPicks);
       $('pin-q').addEventListener('keydown', function (e) {
@@ -2784,9 +2935,6 @@
         var all = (r.other ? [r.other] : []).concat(r.list, r.more);
         if (r.other || r.exact || all.length === 1) pickBooth(all[0].id);
       });
-      // 칸 그림의 '다음 칸' 표시는 커서가 있을 때만 보입니다.
-      $('pin-input').addEventListener('focus', paintSlots);
-      $('pin-input').addEventListener('blur', paintSlots);
       paintSlots();
       $('pin-s3').addEventListener('submit', submitPin);
     }

@@ -552,16 +552,30 @@
       return b.congestion === '중단' ? '잠시 중단' : (isNow(b) ? '바로 체험 가능' : '대기 ' + waitNum(b) + '분, ' + b.congestion);
     }
 
-    // 목록 줄 오른쪽: 위는 숫자(또는 낱말), 아래는 네모 + 상태.
-    // 현장예약은 80px 칸 안의 낱말 하나('현장예약' · '예약 마감') — 대기 분처럼 읽히지 않게 숫자 · 칩을 쓰지 않습니다.
+    // 대기 분이 없는 상태의 표시 — 목록 · 지금 계신 부스는 한 줄 상태 표시(stag), 한눈에 칸은 같은 낱말을 두 줄로(tile).
+    //   현장예약   '현장예약'  옅은 보라 바탕 · 진한 보라 글자 · 은은한 보라 테두리 · 왼쪽 얇은 보라 선
+    //   예약 마감  '예약 마감' 채도를 낮춘 보라 회색(오늘 마감과 다른 갈래)
+    //   잠시 중단  '잠시 중단' 흰 바탕 · 옅은 회색 테두리        오늘 마감 '오늘 마감' 아주 옅은 회색 바탕 · 차분한 회색 글자
+    // 누르는 단추가 아니라 정보 표시입니다(그림자 · 아이콘 없음). 화면 읽기 프로그램에는 뜻 한 줄(statusSpeech)을 읽힙니다.
+    var STAT_TAG = {
+      '예약중':   { cls: 'stag--resv',     line: '현장예약',  tile: ['현장', '예약'] },
+      '예약마감': { cls: 'stag--resv-off', line: '예약 마감', tile: ['예약', '마감'] },
+      '중단':     { cls: 'stag--pause',    line: '잠시 중단', tile: ['잠시', '중단'] },
+      '마감':     { cls: 'stag--off',      line: '오늘 마감', tile: ['오늘', '마감'] }
+    };
+    function statTag(b, big) {
+      var s = STAT_TAG[b.congestion];
+      return '<span class="stag ' + s.cls + (big ? ' stag--big' : '') + '" aria-hidden="true">' + s.line + '</span>' +
+        '<span class="sr-only">' + esc(statusSpeech(b)) + '</span>';
+    }
+
+    // 목록 줄 오른쪽(모든 줄이 같은 80px 칸, 가로 가운데): 대기 분이 있으면 위는 숫자(가장 크게), 아래는 작은 상태 칩.
+    // 대기 분이 없는 상태는 한 줄 상태 표시(statTag) — 숫자 · 혼잡 칩을 쓰지 않아 대기 분처럼 읽히지 않습니다.
     function rightHtml(b) {
       if (!liveOn()) return '';
       var c = b.congestion;
       if (!c) return '<span class="st st--unknown">정보 없음</span>';
-      if (c === '예약중') return '<span class="v v--resv">현장예약</span>';
-      if (c === '예약마감') return '<span class="v v--resv v--resv-closed">예약 마감</span>';
-      if (c === '마감') return '<span class="v v--word">마감</span>';
-      if (c === '중단') return '<span class="st st--pause"><i class="sq sq--hollow" aria-hidden="true"></i>잠시 중단</span>';
+      if (STAT_TAG[c]) return statTag(b);
       var m = core.meta(c);
       var val = isNow(b)
         ? '<span class="v v--now">바로</span>'
@@ -574,10 +588,7 @@
       if (!liveOn()) return '';
       var c = b.congestion;
       if (!c) return '<span class="bigv bigv--none">정보 없음</span>';
-      if (c === '예약중') return '<span class="bigv bigv--word bigv--resv">현장예약</span>';
-      if (c === '예약마감') return '<span class="bigv bigv--word">예약 마감</span>';
-      if (c === '마감') return '<span class="bigv bigv--word">마감</span>';
-      if (c === '중단') return '<span class="bigv bigv--word">잠시 중단</span>';
+      if (STAT_TAG[c]) return statTag(b, true);   // 목록과 같은 한 줄 상태 표시(조금 크게)
       var m = core.meta(c);
       var val = isNow(b)
         ? '<span class="bigv bigv--now">바로</span>'
@@ -1139,11 +1150,12 @@
       if (!liveOn()) return { cls: 'is-idle', v: '', w: '' };
       var c = b.congestion;
       if (!c) return { cls: 'is-unknown', v: '—', w: '정보 없음' };
-      // 현장예약: 칸 크기는 그대로, 짧은 낱말 두 줄('현장예약' + '운영 중' · '예약' + '마감')
-      if (c === '예약중') return { cls: 'is-resv', v: '현장예약', w: '운영 중' };
-      if (c === '예약마감') return { cls: 'is-resv-closed', v: '예약', w: '마감' };
-      if (c === '마감') return { cls: 'is-closed', v: '마감', w: '' };
-      if (c === '중단') return { cls: 'is-pause', v: '중단', w: '' };
+      // 대기 분이 없는 상태: 칸 크기는 그대로, 목록과 같은 낱말 · 같은 색을 칸에 맞게 두 줄로('현장 / 예약' · '예약 / 마감' · '잠시 / 중단' · '오늘 / 마감')
+      var sb = STAT_TAG[c];
+      if (sb) {
+        var cls = { '예약중': 'is-resv', '예약마감': 'is-resv-closed', '중단': 'is-pause', '마감': 'is-closed' }[c];
+        return { cls: cls, v: sb.tile[0], w: sb.tile[1] };
+      }
       var v = isNow(b) ? '바로' : waitNum(b) + '<span class="tile__u">분</span>';
       return { cls: 'is-' + core.meta(c).key, v: v, w: c };
     }
