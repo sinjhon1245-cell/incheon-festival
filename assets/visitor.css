@@ -367,6 +367,7 @@ html.is-demo .row { scroll-margin-top: calc(56px + var(--demo-h) + env(safe-area
 .bigv__u { font-size: 16px; font-weight: 700; color: var(--ink-2); }
 .bigv--now  { font-size: 36px; font-weight: 800; letter-spacing: -0.03em; }
 .bigv--word { font-size: 26px; font-weight: 800; letter-spacing: -0.03em; color: var(--st-off); }
+.bigv--resv { color: var(--accent); }   /* 현장 예약(운영 중). 예약 마감은 마감과 같은 회색 */
 .bigv--none { font-size: 15px; font-weight: 600; color: var(--muted-2); line-height: 1.4; }
 
 .here__alts {
@@ -965,6 +966,20 @@ html.is-demo .row { scroll-margin-top: calc(56px + var(--demo-h) + env(safe-area
 /* '바로'(한글)는 숫자보다 글자가 아래로 차서, 2px 더 띄워 칩까지 보이는 간격을 'N분' 과 같게(약 6~7px) 맞춥니다 */
 .v--now  { margin-bottom: 2px; font-size: 22px; font-weight: 800; letter-spacing: -0.02em; }
 .v--word { font-size: 18px; font-weight: 700; letter-spacing: -0.02em; color: var(--st-off); }
+/* 현장예약 — 80px 칸 안의 두 줄 낱말('현장 / 예약' · '예약 / 마감'). 대기 분 숫자 · 상태 칩과 달리 낱말이라
+   혼잡도로 읽히지 않게 초록 · 노랑 · 빨강을 쓰지 않습니다. 예약 운영 중은 행사 보라(흰 바탕 6.2:1), 예약 마감은 마감과 같은 회색.
+   두 줄 묶음(2 × 18px)은 'N분 + 칩'(54px)보다 낮아 줄 높이를 바꾸지 않습니다. */
+.v--resv {
+  display: block;
+  font-size: 16px;
+  font-weight: 800;
+  line-height: 18px;
+  letter-spacing: -0.02em;
+  text-align: right;
+  white-space: nowrap;
+  color: var(--accent);
+}
+.v--resv-closed { font-weight: 700; color: var(--st-off); }
 
 /* 상태 칩 — 한눈에 칸과 같은 칠(여유 초록 · 보통 샛노랑 · 혼잡 빨강 · 중단 흰 바탕 + 회색 테두리).
    작게(13px · 모서리 4px) 두어 대기 분 숫자보다 앞서지 않게 합니다. '정보 없음' 은 칩이 아닌 옅은 글자입니다. */
@@ -1119,8 +1134,15 @@ html.is-demo .row { scroll-margin-top: calc(56px + var(--demo-h) + env(safe-area
 .tile.is-closed { --tile-edge: var(--st-off-mark); background: #fff; color: var(--st-off); }   /* 흰 칸은 회색 안쪽 선이 경계 — 테두리 대신 안쪽 선이라 번호 자리가 다른 칸과 같음 */
 .tile.is-unknown,
 .tile.is-idle { --tile-edge: var(--line); }
+/* 현장예약 칸 — 흰 바탕 + 안쪽 선(중단 · 마감과 같은 모양). 예약 운영 중은 보라 선 · 보라 글자, 예약 마감은 회색 */
+.tile.is-resv        { --tile-edge: var(--accent); background: #fff; color: var(--accent); }
+.tile.is-resv-closed { --tile-edge: var(--st-off-mark); background: #fff; color: var(--st-off); }
 .tile.is-pause .tile__v,
-.tile.is-closed .tile__v { font-size: 15px; font-weight: 700; letter-spacing: -0.02em; }
+.tile.is-closed .tile__v,
+.tile.is-resv .tile__v,
+.tile.is-resv-closed .tile__v { font-size: 15px; font-weight: 700; letter-spacing: -0.02em; }
+.tile.is-resv .tile__no,
+.tile.is-resv-closed .tile__no { color: var(--ink-2); }
 /* 중단 · 마감 칸의 번호는 상태 글자(회색)보다 한 단계 진하게 — 쉬는 부스도 번호로는 바로 찾습니다 */
 .tile.is-pause .tile__no,
 .tile.is-closed .tile__no { color: var(--ink-2); }

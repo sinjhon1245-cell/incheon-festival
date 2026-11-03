@@ -92,8 +92,14 @@
                             label:'여유'|'보통'|'혼잡'|'잠시 중단'|'마감'|'정보 없음'}
      staleMinutes()      → number  (cfg.freshnessThresholdMinutes, 기본 30)
      isStale(b, now?)    → boolean 입력이 있고, 마감이 아니고, staleMinutes 보다 오래됨
-     bucket(b, now?)     → '여유'|'보통'|'혼잡'|'off'(중단·마감)|'unknown'(없음·오래됨)
+     bucket(b, now?)     → '여유'|'보통'|'혼잡'|'off'(중단·마감)|'resv'(예약 운영 중·예약 마감)|'unknown'(없음·오래됨)
                            숫자 · 막대 · 거르기는 모두 이것으로 셉니다.
+     운영 방식(현장대기 'wait' · 현장예약 'reserve') — 정리된 부스마다 op_mode 칸
+       RESERVE_STATES    ['예약중','예약마감']  현장예약 상태(잠시 중단 · 마감은 STATES 의 것을 함께 씀)
+       liveKind(c)       → 'wait'(여유·보통·혼잡) | 'reserve'(예약중·예약마감) | 'any'(중단·마감·없음)
+       modeAllows(m, c)  → boolean  그 방식에 그 상태가 맞는가(서버와 같은 규칙). 맞지 않는 값은 그리지 않음
+       getModeRows()     → Promise<[{booth_id, mode}]>  서버 스위치가 꺼져 있거나 표가 없으면 []
+       ctrlMode(token, mode|null) · sessMode(session, mode|null) → 아래 '운영 방식' 설명
      ageMinutes(t, now?) → number|null  몇 분 지났는가 (0 이상, 읽을 수 없으면 null)
      formatAgo(t, now?)  → '방금' | 'N분 전' | 'N시간 전'(오늘) | 'M. D. HH:MM' | ''
      formatClock(t)      → 'HH:MM' (한국 시각) | ''
@@ -127,6 +133,7 @@
      congestionFor(wait) → '여유'(10분 이하)|'보통'(25분 이하)|'혼잡' — 서버와 같은 규칙
      deriveLive(mode, wait) → {congestion, wait_minutes} | null(허용되지 않는 값)
                            mode: 'open'(대기 시간) | 'pause'(잠시 중단) | 'closed'(오늘 마감)
+                                 | 'resv_open'(예약 운영 중) | 'resv_closed'(예약 마감)
      ctrlGet(token)      → Promise<ctrl부스 | null>  모르는 열쇠면 null
      ctrlSet(token, mode, waitMinutes) → Promise<ctrl부스>
      ctrlTouch(token)    → Promise<ctrl부스>   값은 그대로 두고 '지금 확인' 시각만 새로
@@ -207,6 +214,10 @@
     CTRL_NOT_INSTALLED: '부스 대기 현황 기능이 아직 켜지지 않았어요. 운영본부에 알려 주세요.',
     CTRL_OFFLINE: '연결이 불안정해 저장하지 못했어요.',
     CTRL_OTHER: '저장하지 못했어요. 잠시 뒤 다시 눌러 주세요.',
+    // 운영 방식(현장대기 · 현장예약). 서버 문구('…화면을 새로 고쳐 주세요')와 달리 화면이 스스로 다시 읽으므로 짧게.
+    MODE_CHANGED: '운영 방식이 바뀌어 저장하지 않았어요. 지금 방식에 맞게 다시 눌러 주세요.',
+    MODE_OFF: '지금은 운영 방식을 바꿀 수 없어요.',
+    BAD_OP_MODE: '허용되지 않는 운영 방식입니다.',
     // PIN 세션이 끝났을 때(SESSION_END). 화면에는 ctrlErrorText 가 이 문구를 줍니다.
     SESS_EXPIRED: 'PIN 로그인 시간이 끝났어요. PIN을 다시 입력해 주세요.',
     SESS_REVOKED: '운영본부가 이 부스의 PIN을 바꿨습니다. 새 PIN을 받았다면 다시 입력해 주세요.',
@@ -223,12 +234,16 @@
   };
 
   var STATES = ['여유', '보통', '혼잡', '중단', '마감'];
+  // 현장예약 부스의 상태(서버 booth_live.congestion 의 '예약중' · '예약마감'). 잠시 중단 · 오늘 마감은 STATES 의 것을 함께 씁니다.
+  var RESERVE_STATES = ['예약중', '예약마감'];
   var META = {
     '여유': { key: 'free', label: '여유' },
     '보통': { key: 'normal', label: '보통' },
     '혼잡': { key: 'busy', label: '혼잡' },
     '중단': { key: 'pause', label: '잠시 중단' },
-    '마감': { key: 'closed', label: '마감' }
+    '마감': { key: 'closed', label: '마감' },
+    '예약중': { key: 'resv', label: '예약 운영 중' },
+    '예약마감': { key: 'resv-closed', label: '예약 마감' }
   };
   var UNKNOWN = { key: 'unknown', label: '정보 없음' };
 
@@ -427,11 +442,27 @@
   }
 
   // 화면의 숫자 · 막대 · 거르기가 목록과 어긋나지 않도록 모두 이 칸으로 셉니다.
+  // 'resv' 는 현장예약 부스의 예약 운영 중 · 예약 마감 — 여유 · 보통 · 혼잡에 섞지 않습니다.
   function bucket(b, now) {
     if (!b || !b.congestion || isStale(b, now)) return 'unknown';
     if (b.congestion === '중단' || b.congestion === '마감') return 'off';
     if (b.congestion === '여유' || b.congestion === '보통' || b.congestion === '혼잡') return b.congestion;
+    if (b.congestion === '예약중' || b.congestion === '예약마감') return 'resv';
     return 'unknown';
+  }
+
+  /* 운영 방식(현장대기 'wait' · 현장예약 'reserve')과 상태 값이 맞는가 — 서버 private.booth_live_kind 와 같은 규칙.
+     대기 시간(여유 · 보통 · 혼잡)은 현장대기에만, 예약 상태는 현장예약에만, 잠시 중단 · 마감은 둘 다.
+     맞지 않는 값은 화면에 그리지 않습니다(전환 전에 남은 값이 보이거나 되살아나지 않게 · 서버도 거부). */
+  function liveKind(congestion) {
+    if (congestion === '여유' || congestion === '보통' || congestion === '혼잡') return 'wait';
+    if (congestion === '예약중' || congestion === '예약마감') return 'reserve';
+    return 'any';
+  }
+  function opModeOf(v) { return v === 'reserve' ? 'reserve' : 'wait'; }
+  function modeAllows(opMode, congestion) {
+    var k = liveKind(congestion);
+    return k === 'any' || k === opModeOf(opMode);
   }
 
   // 서버(booth_ctrl_set)와 같은 규칙. 운영자 화면의 단추 아래 힌트도 이것으로 만듭니다.
@@ -442,6 +473,8 @@
   function deriveLive(mode, wait) {
     if (mode === 'pause') return { congestion: '중단', wait_minutes: 0 };
     if (mode === 'closed') return { congestion: '마감', wait_minutes: 0 };
+    if (mode === 'resv_open') return { congestion: '예약중', wait_minutes: 0 };
+    if (mode === 'resv_closed') return { congestion: '예약마감', wait_minutes: 0 };
     if (mode !== 'open') return null;
     if (wait === null || wait === undefined || wait === '') return null;
     var w = Math.round(Number(wait));
@@ -569,6 +602,7 @@
         name: m.name || '',
         org: m.org || '',
         program: m.program || '',
+        op_mode: opModeOf(m.op_mode),
         congestion: hasLive ? m.congestion : null,
         wait_minutes: hasLive ? (Number(m.wait_minutes) || 0) : null,
         age_min: hasLive ? (Number(m.age_min) || 0) : null,
@@ -689,10 +723,11 @@
   }
 
   // 오늘(한국 날짜) 넣은 값만 씁니다. 어제 값이나 행사 전 시험 값이 아침에
-  // '지금 대기' 처럼 보이면 안 되기 때문입니다.
-  function liveFields(l, todayNum) {
+  // '지금 대기' 처럼 보이면 안 되기 때문입니다. opMode 를 주면 그 방식에 맞지 않는 값도 버립니다.
+  function liveFields(l, todayNum, opMode) {
     var none = { congestion: null, wait_minutes: null, congestion_updated_at: null };
     if (!l || !l.congestion) return none;
+    if (opMode !== undefined && !modeAllows(opMode, l.congestion)) return none;
     var p = kstParts(l.updated_at);
     if (!p || p.dayNum !== todayNum) return none;
     return {
@@ -715,7 +750,8 @@
     var todayNum = kstParts(nowOf(now)).dayNum;
 
     var list = (boothRows || []).map(function (b) {
-      var f = liveFields(has(live, b.id) ? live[b.id] : null, todayNum);
+      var opMode = opModeOf(b.op_mode);
+      var f = liveFields(has(live, b.id) ? live[b.id] : null, todayNum, opMode);
       // 표시 번호(code)는 데이터베이스가 zone_key + no 로 만듭니다. 비어 있으면 같은 셈법으로
       // 채우되, 구역이나 번호가 없으면(미배정 — 관람객에게는 오지 않음) '-00' 처럼 꾸며 내지 않습니다.
       var hasSlot = !!b.zone_key && b.no !== null && b.no !== undefined && b.no !== '';
@@ -728,6 +764,7 @@
         name: b.name || '',
         org: b.org || '',
         program: b.program || '',
+        op_mode: opMode,
         congestion: f.congestion,
         wait_minutes: f.wait_minutes,
         congestion_updated_at: f.congestion_updated_at
@@ -787,12 +824,36 @@
     if (isMock) {
       return demoAfter(function () {
         return demoState().rows.map(function (r) {
-          return { id: r.id, no: r.no, code: r.code, zone_key: r.zone_key, name: r.name, org: r.org, program: r.program };
+          return { id: r.id, no: r.no, code: r.code, zone_key: r.zone_key, name: r.name, org: r.org, program: r.program,
+                   op_mode: opModeOf(r.op_mode) };
         });
       });
     }
     return request('GET', 'booths?select=id,no,code,zone_key,name,org,program')
       .then(function (rows) { return rows || []; });
+  }
+
+  // 운영 방식(booth_live_mode). 서버 스위치가 꺼져 있으면 0줄(모두 현장대기)입니다.
+  // 표가 아직 없으면(DB 적용 전 — PGRST205) 빈 목록 — 지금과 같게 모두 현장대기로 그립니다.
+  function getModeRows() {
+    if (isMock) return Promise.resolve([]);   // 시연 값은 getBoothRows 가 함께 줍니다
+    return request('GET', 'booth_live_mode?select=booth_id,mode').then(function (rows) {
+      return rows || [];
+    }, function (err) {
+      if (err && (err.code === 'PGRST205' || err.status === 404)) return [];
+      throw err;
+    });
+  }
+  function withModes(boothRows, modeRows) {
+    var m = {};
+    (modeRows || []).forEach(function (r) { if (r && r.booth_id) m[r.booth_id] = r.mode; });
+    return (boothRows || []).map(function (b) {
+      if (!has(m, b.id)) return b;
+      var c = {};
+      for (var k in b) if (has(b, k)) c[k] = b[k];
+      c.op_mode = opModeOf(m[b.id]);
+      return c;
+    });
   }
 
   function getLiveRows() {
@@ -858,9 +919,9 @@
   }
 
   function load() {
-    return Promise.all([getSettings(), getZones(), getBoothRows(), getLiveRows()]).then(function (r) {
+    return Promise.all([getSettings(), getZones(), getBoothRows(), getLiveRows(), getModeRows()]).then(function (r) {
       var zones = sortZones(r[1] || []);
-      mem = { settings: r[0] || {}, zones: zones, boothRows: r[2] || [], liveRows: r[3] };
+      mem = { settings: r[0] || {}, zones: zones, boothRows: withModes(r[2] || [], r[4]), liveRows: r[3] };
       BoothCore.lastOkAt = new Date();
       saveSnapshot();
       return {
@@ -938,8 +999,11 @@
     var boothRows = [], liveRows = [];
     d.booths.forEach(function (b) {
       if (!b || !b.id) return;
-      boothRows.push({ id: b.id, no: b.no, code: b.code, zone_key: b.zone, name: b.name, org: b.org, program: b.program });
-      if (b.status) liveRows.push({ booth_id: b.id, congestion: b.status, wait_minutes: b.waitMinutes, updated_at: b.updatedAt });
+      boothRows.push({ id: b.id, no: b.no, code: b.code, zone_key: b.zone, name: b.name, org: b.org, program: b.program,
+                       op_mode: opModeOf(b.opMode) });
+      // 현장예약 상태는 옛 화면이 모르는 값이라 서버가 status 대신 reserve 칸('open' · 'closed')에 싣습니다.
+      var c = b.status || (b.reserve === 'open' ? '예약중' : (b.reserve === 'closed' ? '예약마감' : null));
+      if (c) liveRows.push({ booth_id: b.id, congestion: c, wait_minutes: b.waitMinutes, updated_at: b.updatedAt });
     });
     return {
       settings: {
@@ -1100,11 +1164,12 @@
         var st = demoState();
         var row = validToken(token) ? demoFind(st, token) : null;
         if (!row) throw badToken();
-        if (mode !== 'open' && mode !== 'pause' && mode !== 'closed') {
+        if (mode !== 'open' && mode !== 'pause' && mode !== 'closed' && mode !== 'resv_open' && mode !== 'resv_closed') {
           throw makeError(MSG.BAD_MODE, { code: '22023' });
         }
         var v = deriveLive(mode, wait);
         if (!v) throw makeError(MSG.BAD_WAIT, { code: '22023' });
+        if (!modeAllows(row.op_mode, v.congestion)) throw modeChangedError();
         row.congestion = v.congestion;
         row.wait_minutes = v.wait_minutes;
         row.updated_at = new Date().toISOString();
@@ -1126,6 +1191,7 @@
         var row = validToken(token) ? demoFind(st, token) : null;
         if (!row) throw badToken();
         if (!row.congestion) throw makeError(MSG.NO_VALUE, { code: '22023' });
+        if (!modeAllows(row.op_mode, row.congestion)) throw modeChangedError();
         row.updated_at = new Date().toISOString();
         row.touched = true;
         demoSave(st);
@@ -1136,6 +1202,71 @@
     if (!hasConfig) return Promise.reject(noConfigError());
     if (!TOKEN_RE.test(String(token || ''))) return Promise.reject(badToken());
     return rpc('booth_ctrl_touch', { p_token: token }).then(firstRow);
+  }
+
+  /* ── 운영 방식(현장대기 · 현장예약) ─────────────────────────────────────
+     ctrlMode(token, mode) · sessMode(session, mode) — mode 가 null 이면 읽기만, 'wait' · 'reserve' 면 전환.
+       → { op_mode, reserve_enabled, mode_updated_at, congestion, wait_minutes, congestion_updated_at, missing }
+     전환은 서버가 한 트랜잭션에서 그 부스의 지금 상태를 지우고 방식을 적습니다. 지금과 같은 방식이면 아무것도
+     바꾸지 않습니다(답을 못 받아 다시 보내도 상태를 지우지 않음). 화면은 이 답을 받은 뒤에만 방식을 바꿉니다.
+     DB 에 아직 함수가 없으면(적용 전 — PGRST202 · 404) 읽기는 '현장대기 · 기능 꺼짐'(missing: true)으로 답해
+     운영자 화면이 지금과 똑같이 돕니다. 전환은 그대로 실패합니다.
+     시연 모드는 이 브라우저의 예시 저장소에만 적습니다(서버 · 예약 없음). */
+  function modeChangedError() {
+    return makeError(MSG.MODE_CHANGED, { code: '22023', hint: 'booth_mode_mismatch' });
+  }
+  function modeInfo(r, missing) {
+    var f = liveFields(r ? { congestion: r.congestion, wait_minutes: r.wait_minutes, updated_at: r.updated_at } : null,
+      kstParts(nowOf()).dayNum);
+    return {
+      op_mode: opModeOf(r && r.op_mode),
+      reserve_enabled: !!(r && r.reserve_enabled === true),
+      mode_updated_at: (r && r.mode_updated_at) || null,
+      congestion: f.congestion,
+      wait_minutes: f.wait_minutes,
+      congestion_updated_at: f.congestion_updated_at,
+      missing: !!missing
+    };
+  }
+  function modeRowOf(rows) {
+    var r = (Object.prototype.toString.call(rows) === '[object Array]') ? rows[0] : rows;
+    if (!r) throw makeError(MSG.CTRL_OTHER, { code: 'EMPTY' });
+    return modeInfo(r, false);
+  }
+  // rpc() 는 함수 없음(PGRST202) · 실행 권한 없음을 NOT_INSTALLED 로 바꿔 줍니다(위 rpc 참고).
+  function modeFnMissing(err) {
+    return !!err && (err.code === 'NOT_INSTALLED' || err.code === 'PGRST202' || err.dbCode === 'PGRST202' || err.status === 404);
+  }
+  function validOpMode(mode) { return mode === null || mode === undefined || mode === 'wait' || mode === 'reserve'; }
+
+  function ctrlMode(token, mode) {
+    var want = mode === undefined ? null : mode;
+    if (isMock) {
+      return demoAfter(function () {
+        var st = demoState();
+        var row = validToken(token) ? demoFind(st, token) : null;
+        if (!row) throw badToken();
+        if (!validOpMode(want)) throw makeError(MSG.BAD_OP_MODE, { code: '22023' });
+        if (want && opModeOf(row.op_mode) !== want) {
+          row.op_mode = want;
+          row.congestion = null;
+          row.wait_minutes = null;
+          row.updated_at = null;
+          row.touched = true;
+          demoSave(st);
+          demoNotify(row.id);
+        }
+        return modeInfo({ op_mode: row.op_mode, reserve_enabled: true, mode_updated_at: null,
+          congestion: row.congestion, wait_minutes: row.wait_minutes, updated_at: demoUpdatedAt(row) }, false);
+      });
+    }
+    if (!hasConfig) return Promise.reject(noConfigError());
+    if (!TOKEN_RE.test(String(token || ''))) return Promise.reject(badToken());
+    if (!validOpMode(want)) return Promise.reject(makeError(MSG.BAD_OP_MODE, { code: '22023' }));
+    return rpc('booth_ctrl_mode', { p_token: token, p_mode: want }).then(modeRowOf, function (err) {
+      if (want === null && modeFnMissing(err)) return modeInfo(null, true);
+      throw err;
+    });
   }
 
   /* ── PIN 보조 로그인 ─────────────────────────────────────────────────
@@ -1234,6 +1365,17 @@
   function sessTouch(session) {
     return sessCall('booth_session_touch', { p_session: session }, session);
   }
+  function sessMode(session, mode) {
+    var want = mode === undefined ? null : mode;
+    if (isMock) return Promise.reject(sessionEnd('off'));
+    if (!hasConfig) return Promise.reject(noConfigError());
+    if (!SESSION_RE.test(String(session || ''))) return Promise.reject(sessionEnd('invalid'));
+    if (!validOpMode(want)) return Promise.reject(makeError(MSG.BAD_OP_MODE, { code: '22023' }));
+    return rpc('booth_session_mode', { p_session: session, p_mode: want }).then(modeRowOf, function (err) {
+      if (want === null && modeFnMissing(err)) return modeInfo(null, true);
+      return sessFail(err);
+    });
+  }
   function sessLogout(session) {
     if (isMock || !hasConfig || !SESSION_RE.test(String(session || ''))) return Promise.resolve(false);
     return rpc('booth_session_logout', { p_session: session }).then(function (v) { return v === true; });
@@ -1245,6 +1387,8 @@
     if (err.offline) return MSG.CTRL_OFFLINE;
     if (err.code === '42501') return MSG.CTRL_42501;
     if (err.code === 'PGRST202' || err.code === 'NOT_INSTALLED') return MSG.CTRL_NOT_INSTALLED;
+    if (err.hint === 'booth_mode_mismatch') return MSG.MODE_CHANGED;
+    if (err.hint === 'booth_mode_off') return MSG.MODE_OFF;
     if (err.code === '22023') return err.message || MSG.CTRL_OTHER;
     if (err.code === 'NO_CONFIG') return MSG.NO_CONFIG;
     return MSG.CTRL_OTHER;
@@ -1257,6 +1401,13 @@
   BoothCore.liveReady = isMock ? true : null;
   BoothCore.lastOkAt = null;
   BoothCore.STATES = STATES.slice();
+  BoothCore.RESERVE_STATES = RESERVE_STATES.slice();
+  BoothCore.liveKind = liveKind;
+  BoothCore.opModeOf = opModeOf;
+  BoothCore.modeAllows = modeAllows;
+  BoothCore.getModeRows = getModeRows;
+  BoothCore.ctrlMode = ctrlMode;
+  BoothCore.sessMode = sessMode;
   BoothCore.TOKEN_RE = TOKEN_RE;
   BoothCore.DEMO_TOKEN_RE = DEMO_TOKEN_RE;
 

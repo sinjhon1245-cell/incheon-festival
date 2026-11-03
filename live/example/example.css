@@ -361,6 +361,9 @@ ul, ol { padding: 0; list-style: none; }
 .v__n { font-size: 32px; font-weight: 800; letter-spacing: -0.04em; }
 .v__u { font-size: 14px; font-weight: 700; color: var(--ink-2); }
 .v--word { font-size: 18px; font-weight: 700; letter-spacing: -0.02em; color: var(--v-off); }
+/* 현장예약 두 줄 낱말(visitor.css 의 .v--resv 와 같음) — 예약 운영 중은 행사 보라, 예약 마감은 마감과 같은 회색 */
+.v--resv { display: block; font-size: 16px; font-weight: 800; line-height: 18px; letter-spacing: -0.02em; text-align: right; color: var(--accent); }
+.v--resv-closed { font-weight: 700; color: var(--v-off); }
 .st {
   display: inline-flex;
   align-items: center;
@@ -422,6 +425,11 @@ ul, ol { padding: 0; list-style: none; }
 .cp__meta { display: flex; flex-wrap: wrap; gap: 2px 1em; margin-top: 4px; font-size: 12.5px; font-weight: 600; line-height: 1.4; color: #445075; }
 .cp__metai { display: inline-flex; align-items: center; gap: .32em; min-width: 0; }
 .cp__ic { flex: none; width: 1.05em; height: 1.05em; color: var(--accent); opacity: .7; }
+
+/* 운영 방식 선택 줄(booth-ctrl.css 의 .modes) — 현장대기 고름 */
+.cp__modes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; margin-top: 10px; padding: 4px; border: 1px solid #D5DCE9; border-radius: 12px; background: var(--panel); }
+.cp__mode { display: flex; align-items: center; justify-content: center; min-height: 36px; border-radius: 9px; color: var(--ink-2); font-size: 14px; font-weight: 800; letter-spacing: -0.02em; }
+.cp__mode.is-on { background: var(--accent); color: var(--on); }
 
 /* 현재 대기 — 숫자 옆 작은 상태 글자판(여유 초록 · 흰 글자) */
 .cp__now { margin-top: 10px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 20px; background: var(--panel); }
