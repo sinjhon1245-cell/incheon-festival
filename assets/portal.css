@@ -2574,6 +2574,8 @@ button.boothops__row:hover { border-color: var(--primary); }
 .boothlive--normal { color: var(--warn); }
 .boothlive--busy { color: var(--danger); }
 .boothlive--pause, .boothlive--closed { color: var(--off); }
+.boothlive--resv { color: #5B45E0; }   /* 현장예약 — 혼잡도 색이 아닌 보라 */
+.boothlive--resv-closed { color: var(--off); }
 .boothlive--pause .boothlive__sq { background: none; box-shadow: inset 0 0 0 1.5px currentColor; }
 .boothlive.is-stale { color: var(--muted); }
 .boothlive__ago { font-weight: 500; color: var(--muted); }

@@ -217,7 +217,10 @@
     '보통': { key: 'normal', label: '보통' },
     '혼잡': { key: 'busy', label: '혼잡' },
     '중단': { key: 'pause', label: '잠시 중단' },
-    '마감': { key: 'closed', label: '마감' }
+    '마감': { key: 'closed', label: '마감' },
+    // 현장예약 상태(supabase/migration-booth-live-mode.sql). 잠시 중단 · 마감은 위의 것을 함께 씁니다.
+    '예약중': { key: 'resv', label: '예약 운영 중' },
+    '예약마감': { key: 'resv-closed', label: '예약 마감' }
   };
   var UNKNOWN = { key: 'unknown', label: '정보 없음' };
 
@@ -416,11 +419,26 @@
   }
 
   // 화면의 숫자 · 막대 · 거르기가 목록과 어긋나지 않도록 모두 이 칸으로 셉니다.
+  // 'resv' 는 현장예약 부스의 예약 운영 중 · 예약 마감 — 여유 · 보통 · 혼잡에 섞지 않습니다.
   function bucket(b, now) {
     if (!b || !b.congestion || isStale(b, now)) return 'unknown';
     if (b.congestion === '중단' || b.congestion === '마감') return 'off';
     if (b.congestion === '여유' || b.congestion === '보통' || b.congestion === '혼잡') return b.congestion;
+    if (b.congestion === '예약중' || b.congestion === '예약마감') return 'resv';
     return 'unknown';
+  }
+
+  /* 운영 방식(현장대기 'wait' · 현장예약 'reserve')과 상태 값이 맞는가 — 서버 private.booth_live_kind 와 같은 규칙
+     (booth-live 의 booth-core.js 와 같음). 대기 시간은 현장대기에만, 예약 상태는 현장예약에만, 잠시 중단 · 마감은 둘 다. */
+  function liveKind(congestion) {
+    if (congestion === '여유' || congestion === '보통' || congestion === '혼잡') return 'wait';
+    if (congestion === '예약중' || congestion === '예약마감') return 'reserve';
+    return 'any';
+  }
+  function opModeOf(v) { return v === 'reserve' ? 'reserve' : 'wait'; }
+  function modeAllows(opMode, congestion) {
+    var k = liveKind(congestion);
+    return k === 'any' || k === opModeOf(opMode);
   }
 
   // 서버(booth_ctrl_set)와 같은 규칙. 운영자 화면의 단추 아래 힌트도 이것으로 만듭니다.
@@ -431,6 +449,8 @@
   function deriveLive(mode, wait) {
     if (mode === 'pause') return { congestion: '중단', wait_minutes: 0 };
     if (mode === 'closed') return { congestion: '마감', wait_minutes: 0 };
+    if (mode === 'resv_open') return { congestion: '예약중', wait_minutes: 0 };
+    if (mode === 'resv_closed') return { congestion: '예약마감', wait_minutes: 0 };
     if (mode !== 'open') return null;
     if (wait === null || wait === undefined || wait === '') return null;
     var w = Math.round(Number(wait));
@@ -678,10 +698,11 @@
   }
 
   // 오늘(한국 날짜) 넣은 값만 씁니다. 어제 값이나 행사 전 시험 값이 아침에
-  // '지금 대기' 처럼 보이면 안 되기 때문입니다.
-  function liveFields(l, todayNum) {
+  // '지금 대기' 처럼 보이면 안 되기 때문입니다. opMode 를 주면 그 운영 방식에 맞지 않는 값도 버립니다.
+  function liveFields(l, todayNum, opMode) {
     var none = { congestion: null, wait_minutes: null, congestion_updated_at: null };
     if (!l || !l.congestion) return none;
+    if (opMode !== undefined && !modeAllows(opMode, l.congestion)) return none;
     var p = kstParts(l.updated_at);
     if (!p || p.dayNum !== todayNum) return none;
     return {
@@ -704,7 +725,8 @@
     var todayNum = kstParts(nowOf(now)).dayNum;
 
     var list = (boothRows || []).map(function (b) {
-      var f = liveFields(has(live, b.id) ? live[b.id] : null, todayNum);
+      var opMode = opModeOf(b.op_mode);
+      var f = liveFields(has(live, b.id) ? live[b.id] : null, todayNum, opMode);
       // 표시 번호(code)는 데이터베이스가 zone_key + no 로 만듭니다. 비어 있으면 같은 셈법으로
       // 채우되, 구역이나 번호가 없으면(미배정 — 관람객에게는 오지 않음) '-00' 처럼 꾸며 내지 않습니다.
       var hasSlot = !!b.zone_key && b.no !== null && b.no !== undefined && b.no !== '';
@@ -717,6 +739,7 @@
         name: b.name || '',
         org: b.org || '',
         program: b.program || '',
+        op_mode: opMode,
         congestion: f.congestion,
         wait_minutes: f.wait_minutes,
         congestion_updated_at: f.congestion_updated_at
@@ -843,10 +866,32 @@
     };
   }
 
+  // 운영 방식(booth_live_mode — supabase/migration-booth-live-mode.sql). 서버 스위치가 꺼져 있으면 0줄(모두 현장대기),
+  // 표가 아직 없으면(DB 적용 전 — PGRST205) 빈 목록 — 지금과 같게 모두 현장대기로 그립니다. 시연은 늘 빈 목록.
+  function getModeRows() {
+    if (isMock) return Promise.resolve([]);
+    return request('GET', 'booth_live_mode?select=booth_id,mode').then(function (rows) {
+      return rows || [];
+    }, function (err) {
+      if (err && (err.code === 'PGRST205' || err.status === 404)) return [];
+      throw err;
+    });
+  }
+  function withModes(boothRows, modeRows) {
+    var m = {};
+    (modeRows || []).forEach(function (r) { if (r && r.booth_id) m[r.booth_id] = r.mode; });
+    return (boothRows || []).map(function (b) {
+      var c = {};
+      for (var k in b) if (has(b, k)) c[k] = b[k];
+      c.op_mode = opModeOf(m[b.id]);
+      return c;
+    });
+  }
+
   function load() {
-    return Promise.all([getSettings(), getZones(), getBoothRows(), getLiveRows()]).then(function (r) {
+    return Promise.all([getSettings(), getZones(), getBoothRows(), getLiveRows(), getModeRows()]).then(function (r) {
       var zones = sortZones(r[1] || []);
-      mem = { settings: r[0] || {}, zones: zones, boothRows: r[2] || [], liveRows: r[3] };
+      mem = { settings: r[0] || {}, zones: zones, boothRows: withModes(r[2] || [], r[4]), liveRows: r[3] };
       BoothCore.lastOkAt = new Date();
       saveSnapshot();
       return {
@@ -860,8 +905,10 @@
 
   function refreshLive() {
     if (!mem) return load().then(function (p) { return p.booths; });
-    return getLiveRows().then(function (liveRows) {
+    return Promise.all([getLiveRows(), getModeRows()]).then(function (r) {
+      var liveRows = r[0];
       mem.liveRows = liveRows;
+      mem.boothRows = withModes(mem.boothRows, r[1]);
       BoothCore.lastOkAt = new Date();
       saveSnapshot();
       return normalize(mem.boothRows, liveRows, mem.zones);
@@ -1141,6 +1188,10 @@
   BoothCore.liveReady = isMock ? true : null;
   BoothCore.lastOkAt = null;
   BoothCore.STATES = STATES.slice();
+  BoothCore.liveKind = liveKind;
+  BoothCore.opModeOf = opModeOf;
+  BoothCore.modeAllows = modeAllows;
+  BoothCore.getModeRows = getModeRows;
   BoothCore.TOKEN_RE = TOKEN_RE;
   BoothCore.DEMO_TOKEN_RE = DEMO_TOKEN_RE;
 

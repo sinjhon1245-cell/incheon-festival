@@ -120,8 +120,14 @@
   }
   function loadLive() {
     if (DEMO) { demoPull(); data.liveAt = new Date(); data.failAt = null; return Promise.resolve(); }
-    return C.select('booth_live', { columns: 'booth_id,congestion,wait_minutes,updated_at', order: false }).then(function (rows) {
-      data.live = indexBy(rows || [], 'booth_id');
+    return Promise.all([
+      C.select('booth_live', { columns: 'booth_id,congestion,wait_minutes,updated_at', order: false }),
+      // 운영 방식(현장대기 · 현장예약 — supabase/migration-booth-live-mode.sql). 서버 스위치가 꺼져 있으면 0줄,
+      // 표가 아직 없거나 못 읽으면 모두 현장대기로 봅니다(지금과 같은 화면).
+      C.select('booth_live_mode', { columns: 'booth_id,mode', order: false }).then(null, function () { return []; })
+    ]).then(function (r) {
+      data.live = indexBy(r[0] || [], 'booth_id');
+      data.modes = indexBy(r[1] || [], 'booth_id');
       data.liveAt = new Date();
       data.failAt = null;
     });
@@ -218,8 +224,11 @@
       var slot = !!b.zone_key && b.no !== null && b.no !== undefined && b.no !== '';
       var shown = !!(b.is_published && slot && zz && zz.z.is_published);
       var l = data.live[b.id];
-      // 오늘(한국 날짜) 넣은 값만 지금 값입니다(관람객 화면과 같은 규칙).
-      var t = l && l.congestion && BC.kstDay(l.updated_at) === today ? l : null;
+      // 운영 방식 — 현장예약(reserve)이면 대기 시간 대신 예약 운영 중 · 예약 마감 · 잠시 중단 · 오늘 마감.
+      var opMode = data.modes && data.modes[b.id] && data.modes[b.id].mode === 'reserve' ? 'reserve' : 'wait';
+      // 오늘(한국 날짜) 넣은 값만 지금 값입니다(관람객 화면과 같은 규칙). 운영 방식에 맞지 않는 값(스위치를 끈 뒤 남은
+      // 예약 상태 등)도 관람객 화면처럼 '미입력' 으로 봅니다.
+      var t = l && l.congestion && BC.kstDay(l.updated_at) === today && BC.modeAllows(opMode, l.congestion) ? l : null;
       var cred = data.creds ? (data.creds[b.id] || { qr_state: 'none', pin_state: 'none', pin_sessions: 0, pin_failures_1h: 0, live_by: null }) : null;
       var r = {
         id: b.id, b: b, slot: slot, shown: shown,
@@ -230,9 +239,11 @@
         wait: t ? Number(t.wait_minutes) || 0 : null,
         at: t ? t.updated_at : null,
         by: t ? (t.by || (cred && cred.live_by) || null) : null,
-        cred: cred
+        cred: cred,
+        opMode: opMode
       };
-      r.state = !r.congestion ? 'missing' : (r.congestion === '중단' ? 'pause' : (r.congestion === '마감' ? 'closed' : 'open'));
+      r.state = !r.congestion ? 'missing' : (r.congestion === '중단' ? 'pause' : (r.congestion === '마감' ? 'closed'
+        : (r.congestion === '예약중' || r.congestion === '예약마감' ? 'resv' : 'open')));
       r.stale = BC.isStale({ congestion: r.congestion, congestion_updated_at: r.at });
       r.check = checkOf(r);
       r.qrIssue = !!(cred && shown && cred.qr_state !== 'on' && cred.pin_state !== 'on');
@@ -261,6 +272,7 @@
     if (q === 'missing') return r.state === 'missing';
     if (q === 'pause') return r.state === 'pause';
     if (q === 'closed') return r.state === 'closed';
+    if (q === 'resv') return r.state === 'resv';
     if (q === 'qr') return r.qrIssue;
     if (q === 'pin') return r.pinIssue;
     return true;
@@ -273,7 +285,7 @@
     if (r.state === 'missing') return 1;
     if (r.congestion === '혼잡') return 2;
     if (r.state === 'pause') return 3;
-    if (r.state === 'open') return 4;
+    if (r.state === 'open' || r.state === 'resv') return 4;   // 현장예약(예약 운영 중 · 예약 마감)도 정상 운영
     return 5;
   }
   function byCode(a, b) {
@@ -306,6 +318,8 @@
 
   /* ── 그리기 조각 ─────────────────────────────────────────────── */
   function stateText(r) {
+    if (r.state === 'resv') return r.congestion === '예약마감' ? '예약 마감' : '예약 운영 중';
+    if (r.state === 'missing' && r.opMode === 'reserve') return '현장예약 · 상태 미입력';
     return { open: '운영 중', pause: '잠시 중단', closed: '오늘 마감', missing: '현황 미입력' }[r.state];
   }
   function tone(r) {
@@ -484,7 +498,10 @@
   }
   /* 운영 상태 · 관리 조치 — 부스 운영 현황과 구역 현황이 같은 조각을 씁니다(구역 현황에서 누르면 그 걸러 보기로 부스 운영 현황).
      ST = 운영 상태 여섯 칸(마지막 입력 기준, 서로 겹치지 않음). 열쇠는 tone() 과 같은 값입니다. */
-  var ST = [['free', '여유'], ['normal', '보통'], ['busy', '혼잡'], ['pause', '일시 중단'], ['closed', '운영 종료'], ['missing', '미입력']];
+  // 현장예약(예약 운영 중 · 예약 마감)은 여유 · 보통 · 혼잡과 따로 셉니다. 칸은 그런 부스가 있을 때만 붙어,
+  // 현장예약을 쓰지 않으면(스위치 꺼짐 포함) 운영 상태 판이 지금과 같은 여섯 칸입니다.
+  var ST = [['free', '여유'], ['normal', '보통'], ['busy', '혼잡'], ['resv', '현장예약'], ['pause', '일시 중단'], ['closed', '운영 종료'], ['missing', '미입력']];
+  function stShown(c) { return ST.filter(function (x) { return x[0] !== 'resv' || c.resv.n > 0 || ui.quick === 'resv'; }); }
   function stateCount(rs) {
     var c = { total: rs.length, hid: 0, stale: 0, staleOpen: 0, stalePause: 0, checked: 0, qr: 0, pin: 0 };
     ST.forEach(function (x) { c[x[0]] = { n: 0, old: 0 }; });
@@ -492,7 +509,7 @@
       var k = c[tone(r)] ? tone(r) : 'missing';
       c[k].n++;
       if (!r.shown) c.hid++;
-      if (r.stale) { c[k].old++; c.stale++; if (r.state === 'open') c.staleOpen++; else if (r.state === 'pause') c.stalePause++; if (r.check) c.checked++; }
+      if (r.stale) { c[k].old++; c.stale++; if (r.state === 'open' || r.state === 'resv') c.staleOpen++; else if (r.state === 'pause') c.stalePause++; if (r.check) c.checked++; }
       if (r.qrIssue) c.qr++;
       if (r.pinIssue) c.pin++;
     });
@@ -513,7 +530,7 @@
   }
   function statusHtml(c) {
     var mins = BC.staleMinutes();
-    var cells = ST.map(function (x) {
+    var cells = stShown(c).map(function (x) {
       var v = c[x[0]], on = ui.view === 'live' && ui.quick === x[0];
       var allOld = v.n > 0 && v.old === v.n;
       return '<button class="st st--' + x[0] + (v.n ? '' : ' is-zero') + (allOld ? ' is-old' : '') + (on ? ' is-on' : '') + '" type="button" ' +
@@ -533,7 +550,7 @@
         '<span class="opanel__cap">마지막 입력 기준 · <span class="dashkey">점선</span> = ' + mins + '분 넘게 그대로</span>' + hid +
         '<button class="ost__all' + (allOn ? ' is-on' : '') + '" type="button" data-quick="all" aria-pressed="' + allOn + '">' +
           (ui.hidden ? '전체 부스' : '공개 부스') + ' <b>' + c.total + '</b>곳</button></div>' +
-      '<div class="ost__grid" role="group" aria-label="운영 상태로 걸러 보기">' + cells + '</div>' +
+      '<div class="ost__grid' + (stShown(c).length > 6 ? ' ost__grid--7' : '') + '" role="group" aria-label="운영 상태로 걸러 보기">' + cells + '</div>' +
       stBar(c) +
     '</section>';
   }
@@ -862,17 +879,23 @@
     if (r.state === 'open') return (r.wait === 0 ? '바로' : r.wait + '분') + ' · ' + r.congestion;
     return stateText(r);
   }
+  // 현장예약 부스는 대기 시간 단추 대신 예약 운영 중 · 예약 마감(서버도 현장예약 부스의 대기 분은 거부합니다).
+  // 운영 방식 자체는 운영자가 정하므로 여기서 바꾸지 않습니다.
   function override(r) {
-    var choices = (BC.WAIT_CHOICES || [0, 5, 10, 15, 20, 30, 45, 60]).map(function (w) {
-      var c = BC.congestionFor(w);
-      return { v: 'open:' + w, label: w === 0 ? '바로' : w + '분', sub: (w === 60 ? '이상 · ' : '') + c, tone: BC.meta(c).key };
-    }).concat([
+    var head = r.opMode === 'reserve'
+      ? [{ v: 'resv_open', label: '예약 운영 중', sub: '현장예약', tone: 'resv' },
+         { v: 'resv_closed', label: '예약 마감', sub: '오늘 새 예약 끝', tone: 'resv' }]
+      : (BC.WAIT_CHOICES || [0, 5, 10, 15, 20, 30, 45, 60]).map(function (w) {
+          var c = BC.congestionFor(w);
+          return { v: 'open:' + w, label: w === 0 ? '바로' : w + '분', sub: (w === 60 ? '이상 · ' : '') + c, tone: BC.meta(c).key };
+        });
+    var choices = head.concat([
       { v: 'pause', label: '잠시 중단', sub: '대기 0분', tone: 'pause' },
       { v: 'closed', label: '오늘 마감', sub: '관람객에게 마감', tone: 'closed' },
       { v: 'clear', label: '값 지우기 (현황 미입력으로)', tone: 'clear' }
     ]);
     UI.pick({
-      title: (r.code ? r.code + ' ' : '') + r.name + ' · 현황 수정',
+      title: (r.code ? r.code + ' ' : '') + r.name + ' · 현황 수정' + (r.opMode === 'reserve' ? ' (현장예약)' : ''),
       desc: '지금: ' + liveLabel(r) + (r.at ? ' · ' + BC.formatAgo(r.at) + ' 입력' : '') +
         (r.stale ? ' — ' + BC.staleMinutes() + '분 넘게 그대로입니다. 운영자와 확인한 값을 눌러 주세요.' : ''),
       choices: choices,
@@ -895,6 +918,7 @@
         }).then(function (ok) { if (ok) apply(r, 'closed', null); });
       }
       if (v === 'pause') return apply(r, 'pause', null);
+      if (v === 'resv_open' || v === 'resv_closed') return apply(r, v, null);
       apply(r, 'open', Number(v.slice(5)));
     });
   }
@@ -1512,8 +1536,9 @@
       return { r: r, s: m.mode === 'open' ? ['open', m.waits[j % m.waits.length]] : [m.mode] };
     });
   }
+  // 현장예약 부스는 일괄 채우기 · 비우기에서 뺍니다(운영자가 정한 예약 상태를 덮어쓰지 않음 · 서버도 대기 분은 거부).
   function exampleTargets(rows) {
-    return rows.filter(function (r) { return r.shown && BC.isSample(r.b); });
+    return rows.filter(function (r) { return r.shown && BC.isSample(r.b) && r.opMode !== 'reserve'; });
   }
   function paintExampleBtn(all) {
     var rows = all || rowsNow();
@@ -1659,8 +1684,9 @@
     if (e && (e.code === 'PGRST202' || e.code === '42883')) return '일괄 입력 기능을 사용할 수 없습니다. 서버 설정을 확인해 주세요.';
     return C.dataMessage(e);
   }
+  // 현장예약 부스는 대기시간 일괄 채우기 · 비우기에서 뺍니다(운영자가 정한 예약 상태를 덮어쓰지 않음 · 서버도 대기 분은 거부).
   function rhTargets(rows) {
-    return rh.st ? rows.filter(function (r) { return rh.st.ids[r.id]; }) : [];
+    return rh.st ? rows.filter(function (r) { return rh.st.ids[r.id] && r.opMode !== 'reserve'; }) : [];
   }
   // 권한 · 로그인 만료 · 행사 시작 — 다른 부스도 똑같이 거절되므로 남은 부스는 보내지 않습니다.
   function rhStop(e) {

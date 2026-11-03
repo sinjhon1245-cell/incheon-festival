@@ -1873,7 +1873,8 @@
      하루 규칙 — 오늘(한국 시각) 들어온 값만 씁니다. 첫날 오후 5시의
      '혼잡 30분' 이 둘째 날 아침까지 남아 있으면 실제 상황처럼 읽힙니다.
      한국은 서머타임이 없어 9시간을 더한 UTC 날짜가 곧 한국 날짜입니다. */
-  var CONGEST = { '여유': 'free', '보통': 'normal', '혼잡': 'busy', '중단': 'pause', '마감': 'closed' };
+  // '예약중' · '예약마감' = 현장예약 부스의 예약 운영 중 · 예약 마감(supabase/migration-booth-live-mode.sql)
+  var CONGEST = { '여유': 'free', '보통': 'normal', '혼잡': 'busy', '중단': 'pause', '마감': 'closed', '예약중': 'resv', '예약마감': 'resv-closed' };
   var liveAt = 0, liveSeq = 0;   // 마지막으로 읽기 시작한 때 · 늦게 온 옛 응답을 버리는 번호
 
   function kstDay(ms) { return new Date(ms + 9 * 3600000).toISOString().slice(0, 10); }
@@ -1943,6 +1944,8 @@
     var mins = Math.max(0, Math.floor((now - v.at) / 60000));
     var wait = cls === 'pause' ? '잠시 중단'
       : cls === 'closed' ? '오늘 마감'
+      : cls === 'resv' ? '현장 예약 운영 중'
+      : cls === 'resv-closed' ? '현장 예약 마감'
       : v.wait === 0 ? '바로' : '약 ' + v.wait + '분';
     return { label: v.congestion, cls: cls, wait: wait, at: v.at,
       ago: mins < 1 ? '방금' : C.minLabel(mins) + ' 전',
@@ -1962,7 +1965,7 @@
   /* 화면에 적는 한 줄. '중단 · 잠시 중단', '마감 · 오늘 마감' 처럼 같은 말이
      두 번 나오지 않게, 멈춘 부스는 뒤쪽 말만 씁니다. */
   function liveText(i) {
-    return i.cls === 'pause' || i.cls === 'closed' ? i.wait : i.label + ' · ' + i.wait;
+    return i.cls === 'pause' || i.cls === 'closed' || i.cls === 'resv' || i.cls === 'resv-closed' ? i.wait : i.label + ' · ' + i.wait;
   }
 
   // 색 네모 + 글자. 색만으로 뜻을 전하지 않도록 상태 말은 늘 함께 적습니다.
