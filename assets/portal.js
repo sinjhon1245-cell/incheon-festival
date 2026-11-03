@@ -1887,8 +1887,25 @@
   /* 표가 아직 없으면(migration-booth-live.sql 전) selectSoft 가 빈 배열을 줍니다.
      권한 · 네트워크 실패는 콘솔에만 남기고 null 을 줍니다 — 부스 대기
      현황 하나 때문에 포털 전체가 오류 화면이 되면 안 됩니다. */
+  // 운영 방식(booth_live_mode — 서버 스위치가 꺼져 있으면 0줄)도 함께 읽어, 방식에 맞지 않는 값은 버립니다
+  // (현장대기 부스의 예약 상태 · 현장예약 부스의 대기 분 — 스위치를 끈 뒤 남은 값 등. 관람객 화면과 같은 규칙).
+  // 방식 표가 없거나 못 읽으면 모두 현장대기로 봅니다(지금과 같음).
   function selectBoothLive() {
-    return C.selectSoft('booth_live', { columns: 'booth_id,congestion,wait_minutes,updated_at', order: false })
+    return Promise.all([
+      C.selectSoft('booth_live', { columns: 'booth_id,congestion,wait_minutes,updated_at', order: false }),
+      C.selectSoft('booth_live_mode', { columns: 'booth_id,mode', order: false }).then(null, function () { return []; })
+    ]).then(function (r) {
+      var rows = r[0];
+      if (!rows) return rows;
+      var resv = {};
+      (r[1] || []).forEach(function (m) { if (m && m.mode === 'reserve') resv[m.booth_id] = true; });
+      return rows.filter(function (l) {
+        var c = l && l.congestion;
+        if (c === '예약중' || c === '예약마감') return !!resv[l.booth_id];
+        if (c === '여유' || c === '보통' || c === '혼잡') return !resv[l.booth_id];
+        return true;
+      });
+    })
       .catch(function (e) { console.warn('[portal] 부스 대기 현황 조회 실패', e); return null; });
   }
 
@@ -1944,12 +1961,13 @@
     var mins = Math.max(0, Math.floor((now - v.at) / 60000));
     var wait = cls === 'pause' ? '잠시 중단'
       : cls === 'closed' ? '오늘 마감'
-      : cls === 'resv' ? '현장 예약 운영 중'
-      : cls === 'resv-closed' ? '현장 예약 마감'
+      : cls === 'resv' ? '현장예약 운영 중'
+      : cls === 'resv-closed' ? '예약 마감'
       : v.wait === 0 ? '바로' : '약 ' + v.wait + '분';
     return { label: v.congestion, cls: cls, wait: wait, at: v.at,
       ago: mins < 1 ? '방금' : C.minLabel(mins) + ' 전',
-      stale: cls !== 'closed' && mins > staleMinutes() };
+      // 현장예약 상태는 자주 바뀌는 값이 아니라 '30분 넘게 그대로' 로 흐리게 하지 않습니다(관리 화면과 같음)
+      stale: cls !== 'closed' && cls !== 'resv' && cls !== 'resv-closed' && mins > staleMinutes() };
   }
 
   /* 오늘 값은 있지만 문 열기 전에 넣어서 관람객에게 '정보 없음' 으로 보이는가.

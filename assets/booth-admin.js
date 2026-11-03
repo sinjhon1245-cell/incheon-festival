@@ -244,7 +244,9 @@
       };
       r.state = !r.congestion ? 'missing' : (r.congestion === '중단' ? 'pause' : (r.congestion === '마감' ? 'closed'
         : (r.congestion === '예약중' || r.congestion === '예약마감' ? 'resv' : 'open')));
-      r.stale = BC.isStale({ congestion: r.congestion, congestion_updated_at: r.at });
+      // 현장예약 상태(운영 중 · 예약 마감)는 자주 바뀌는 값이 아니라 30분 '확인 필요' 로 세지 않습니다
+      // (30분 재확인 안내는 운영자 화면에만 — 결정 4).
+      r.stale = r.state !== 'resv' && BC.isStale({ congestion: r.congestion, congestion_updated_at: r.at });
       r.check = checkOf(r);
       r.qrIssue = !!(cred && shown && cred.qr_state !== 'on' && cred.pin_state !== 'on');
       r.pinIssue = !!(cred && cred.pin_failures_1h >= PIN_FAIL_WARN);
@@ -318,7 +320,7 @@
 
   /* ── 그리기 조각 ─────────────────────────────────────────────── */
   function stateText(r) {
-    if (r.state === 'resv') return r.congestion === '예약마감' ? '예약 마감' : '예약 운영 중';
+    if (r.state === 'resv') return r.congestion === '예약마감' ? '예약 마감' : '현장예약 운영 중';
     if (r.state === 'missing' && r.opMode === 'reserve') return '현장예약 · 상태 미입력';
     return { open: '운영 중', pause: '잠시 중단', closed: '오늘 마감', missing: '현황 미입력' }[r.state];
   }
@@ -503,13 +505,14 @@
   var ST = [['free', '여유'], ['normal', '보통'], ['busy', '혼잡'], ['resv', '현장예약'], ['pause', '일시 중단'], ['closed', '운영 종료'], ['missing', '미입력']];
   function stShown(c) { return ST.filter(function (x) { return x[0] !== 'resv' || c.resv.n > 0 || ui.quick === 'resv'; }); }
   function stateCount(rs) {
-    var c = { total: rs.length, hid: 0, stale: 0, staleOpen: 0, stalePause: 0, checked: 0, qr: 0, pin: 0 };
+    var c = { total: rs.length, hid: 0, stale: 0, staleOpen: 0, stalePause: 0, checked: 0, qr: 0, pin: 0, resvClosed: 0 };
     ST.forEach(function (x) { c[x[0]] = { n: 0, old: 0 }; });
     rs.forEach(function (r) {
       var k = c[tone(r)] ? tone(r) : 'missing';
       c[k].n++;
       if (!r.shown) c.hid++;
-      if (r.stale) { c[k].old++; c.stale++; if (r.state === 'open' || r.state === 'resv') c.staleOpen++; else if (r.state === 'pause') c.stalePause++; if (r.check) c.checked++; }
+      if (r.stale) { c[k].old++; c.stale++; if (r.state === 'open') c.staleOpen++; else if (r.state === 'pause') c.stalePause++; if (r.check) c.checked++; }
+      if (r.congestion === '예약마감') c.resvClosed++;
       if (r.qrIssue) c.qr++;
       if (r.pinIssue) c.pin++;
     });
@@ -533,12 +536,15 @@
     var cells = stShown(c).map(function (x) {
       var v = c[x[0]], on = ui.view === 'live' && ui.quick === x[0];
       var allOld = v.n > 0 && v.old === v.n;
+      // 현장예약 칸: 수는 운영 중 + 예약 마감, 아래 줄에 그중 예약 마감 수를 따로(확인 필요는 세지 않음)
+      var rc = x[0] === 'resv' && c.resvClosed ? c.resvClosed : 0;
       return '<button class="st st--' + x[0] + (v.n ? '' : ' is-zero') + (allOld ? ' is-old' : '') + (on ? ' is-on' : '') + '" type="button" ' +
           'data-quick="' + x[0] + '" aria-pressed="' + on + '" aria-label="' + esc(x[1] + ' ' + v.n + '곳' +
+          (rc ? ' · 그중 예약 마감 ' + rc + '곳' : '') +
           (v.old ? ' · 그중 확인 필요 ' + v.old + '곳(' + mins + '분 넘게 그대로)' : '') + ' — 이 부스만 보기') + '">' +
         '<span class="st__l"><i aria-hidden="true"></i>' + x[1] + '</span>' +
         '<b class="st__n">' + v.n + '</b>' +
-        '<span class="st__o">' + (v.old ? '확인 필요 ' + v.old : '') + '</span>' +
+        '<span class="st__o">' + (rc ? '예약 마감 ' + rc : (v.old ? '확인 필요 ' + v.old : '')) + '</span>' +
       '</button>';
     }).join('');
     var allOn = ui.view === 'live' && ui.quick === 'all';
@@ -883,7 +889,7 @@
   // 운영 방식 자체는 운영자가 정하므로 여기서 바꾸지 않습니다.
   function override(r) {
     var head = r.opMode === 'reserve'
-      ? [{ v: 'resv_open', label: '예약 운영 중', sub: '현장예약', tone: 'resv' },
+      ? [{ v: 'resv_open', label: '현장예약 운영 중', sub: '현장예약', tone: 'resv' },
          { v: 'resv_closed', label: '예약 마감', sub: '오늘 새 예약 끝', tone: 'resv' }]
       : (BC.WAIT_CHOICES || [0, 5, 10, 15, 20, 30, 45, 60]).map(function (w) {
           var c = BC.congestionFor(w);

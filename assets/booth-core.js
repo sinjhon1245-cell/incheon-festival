@@ -219,7 +219,7 @@
     '중단': { key: 'pause', label: '잠시 중단' },
     '마감': { key: 'closed', label: '마감' },
     // 현장예약 상태(supabase/migration-booth-live-mode.sql). 잠시 중단 · 마감은 위의 것을 함께 씁니다.
-    '예약중': { key: 'resv', label: '예약 운영 중' },
+    '예약중': { key: 'resv', label: '현장예약 운영 중' },
     '예약마감': { key: 'resv-closed', label: '예약 마감' }
   };
   var UNKNOWN = { key: 'unknown', label: '정보 없음' };

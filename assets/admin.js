@@ -259,7 +259,8 @@
     if (!boothShown(r)) return false;
     if (DEMO) return AD.isStale(AD.liveOf(r.id));
     var l = liveMap ? liveMap[r.id] : null;
-    if (!l || !l.congestion || l.congestion === '마감') return false;
+    // 현장예약 상태(예약중 · 예약마감)는 부스 운영 현황처럼 '확인 필요' 로 세지 않습니다.
+    if (!l || !l.congestion || l.congestion === '마감' || l.congestion === '예약중' || l.congestion === '예약마감') return false;
     var t = Date.parse(String(l.updated_at || '').replace(' ', 'T').replace(/(\.\d{3})\d+/, '$1'));
     if (isNaN(t) || kstDayNum(t) !== kstDayNum(Date.now())) return false;   // 어제 값은 '정보 없음'
     return (Date.now() - t) / 60000 > STALE_MIN;
