@@ -19,6 +19,7 @@
    칸 설명
      id · code · zone_key · zone_label   부스와 구역 (코드는 영문·숫자만)
      name · org · program                화면에 보이는 이름과 설명
+     op_mode                             운영 방식. 'reserve'(현장예약)만 적습니다 — 없으면 '현장대기'
      congestion · wait_minutes           처음 펼칠 때의 상태. null 이면 '입력 전'
      age_min                             그 값을 몇 분 전에 넣은 것으로 칠지.
                                          펼친 시각이 아니라 '지금' 에서 셉니다 — 예시를
@@ -32,6 +33,7 @@
      혼잡 30분 · 혼잡 45분
      잠시 중단 · 오늘 마감
      현황 미등록(아직 아무것도 넣지 않음)
+     현장예약 — 예약 운영 중 · 예약 마감(화면 예시만. 예약 신청 · 예약자 관리는 없음)
      30분 넘게 그대로인 부스(50분 전 입력) — 운영자 · 관리 화면에서 '확인 필요'.
                                          관람객 화면은 오래됨을 표시하지 않고 값 그대로 보여 줍니다
 
@@ -131,6 +133,22 @@ window.MOCK_BOOTHS = [
     org: '협의용 예시 학교',
     program: '공공데이터 지도를 보며 동네 퀴즈를 풉니다.',
     congestion: '여유', wait_minutes: 10, age_min: 12
+  },
+  {
+    // 현장예약 — 예약 운영 중(관람객 화면 '현장 / 예약'). 실제 예약을 받거나 저장하지 않습니다.
+    id: 'ex-c05', code: 'C-05', zone_key: 'C', zone_label: '예시 구역 C',
+    name: 'VR 우주 탐험',
+    org: '협의용 예시 기관',
+    program: '현장에서 회차 예약을 받아 순서대로 체험합니다.',
+    op_mode: 'reserve', congestion: '예약중', wait_minutes: 0, age_min: 7
+  },
+  {
+    // 현장예약 — 예약 마감(오늘 신규 예약 접수 끝. '오늘 마감' 과 다름)
+    id: 'ex-c06', code: 'C-06', zone_key: 'C', zone_label: '예시 구역 C',
+    name: '드론 비행 교실',
+    org: '협의용 예시 학교',
+    program: '현장 예약 회차로 운영합니다.',
+    op_mode: 'reserve', congestion: '예약마감', wait_minutes: 0, age_min: 15
   }
 ];
 

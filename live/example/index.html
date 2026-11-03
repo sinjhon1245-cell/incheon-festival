@@ -43,7 +43,7 @@
           <h2 class="card__title" id="visitor-title">부스 대기 현황 확인</h2>
           <p class="card__text">행사장을 방문한 학생·교사·학부모가 부스별 대기시간과 현재 운영 상태를 확인하는 화면입니다.</p>
 
-          <div class="card__pv vp" role="img" aria-label="관람객 화면 미리보기. 위에 지금 여유로운 부스 수(1곳, 전체 5곳)와 상태별 부스 수가 있고, 아래 목록에 부스마다 번호, 이름, 운영기관, 대기시간과 상태(여유, 보통, 혼잡, 잠시 중단, 마감)를 한 줄씩 보여 줍니다.">
+          <div class="card__pv vp" role="img" aria-label="관람객 화면 미리보기. 위에 지금 여유로운 부스 수(1곳, 전체 7곳)와 상태별 부스 수가 있고, 아래 목록에 부스마다 번호, 이름, 운영기관, 대기시간과 상태(여유, 보통, 혼잡, 잠시 중단, 마감)를 한 줄씩 보여 줍니다. 현장예약 부스는 대기시간 대신 현장예약, 예약 마감으로 보입니다.">
             <div class="vp__band">
               <div class="vp__bandrow">
                 <p class="vp__title">부스 대기 현황</p>
@@ -55,7 +55,7 @@
               <p class="vp__label">지금 여유로운 부스</p>
               <div class="vp__fig">
                 <p class="vp__big"><b class="vp__num">1</b><span class="vp__unit">곳</span></p>
-                <p class="vp__total">전체 <b>5</b>곳</p>
+                <p class="vp__total">전체 <b>7</b>곳</p>
               </div>
               <div class="vp__dist">
                 <i class="dist dist--free"></i><i class="dist dist--normal"></i><i class="dist dist--busy"></i><i class="dist dist--off"></i>
@@ -67,7 +67,7 @@
                 <li class="cnt"><span class="cnt__w"><i class="sq sq--off"></i>중단·마감</span><b class="cnt__n">2</b></li>
               </ul>
             </div>
-            <p class="vp__tabs"><span class="vp__tab is-on">전체 <span class="vp__tabn">5</span></span><span class="vp__tab">A 구역 <span class="vp__tabn">1</span></span><span class="vp__tab">B 구역 <span class="vp__tabn">1</span></span><span class="vp__tab">C 구역 <span class="vp__tabn">1</span></span><span class="vp__tab">D 구역 <span class="vp__tabn">1</span></span></p>
+            <p class="vp__tabs"><span class="vp__tab is-on">전체 <span class="vp__tabn">7</span></span><span class="vp__tab">A 구역 <span class="vp__tabn">1</span></span><span class="vp__tab">B 구역 <span class="vp__tabn">1</span></span><span class="vp__tab">C 구역 <span class="vp__tabn">1</span></span><span class="vp__tab">D 구역 <span class="vp__tabn">1</span></span></p>
             <ul class="vp__rows">
               <li class="vr">
                 <span class="vr__code">A-02</span>
@@ -94,6 +94,17 @@
                 <span class="vr__body"><span class="vr__name">자율주행 미니카 체험</span><span class="vr__org">인천미래고등학교</span></span>
                 <span class="vr__right"><span class="v v--word">마감</span></span>
               </li>
+              <!-- 현장예약 부스(화면 예시만 — 실제 예약 신청 · 예약자 관리는 없습니다) -->
+              <li class="vr">
+                <span class="vr__code">E-02</span>
+                <span class="vr__body"><span class="vr__name">VR 우주 탐험</span><span class="vr__org">인천바다중학교</span></span>
+                <span class="vr__right"><span class="v v--resv">현장예약</span></span>
+              </li>
+              <li class="vr">
+                <span class="vr__code">E-03</span>
+                <span class="vr__body"><span class="vr__name">드론 비행 교실</span><span class="vr__org">인천하늘초등학교</span></span>
+                <span class="vr__right"><span class="v v--resv v--resv-closed">예약 마감</span></span>
+              </li>
             </ul>
           </div>
 
@@ -112,7 +123,7 @@
           <h2 class="card__title" id="ctrl-title">대기시간 입력</h2>
           <p class="card__text">각 부스 담당자가 QR 또는 PIN으로 접속해 현재 대기시간을 직접 입력하는 화면입니다.</p>
 
-          <div class="card__pv cp" role="img" aria-label="부스 운영자 화면 미리보기. 위에 부스 번호(A-01)와 부스 이름, 운영기관, 구역이 있고, 현재 대기(5분, 여유)와 마지막 입력 시각, 변동 없음 · 지금 확인 단추가 있습니다. 아래에 대기시간 단추(바로, 5분부터 60분 이상까지)와 운영 상태 단추(잠시 중단, 오늘 운영 마감)가 있고, 지금 저장된 값(5분)이 보라색으로 표시됩니다.">
+          <div class="card__pv cp" role="img" aria-label="부스 운영자 화면 미리보기. 위에 부스 번호(A-01)와 부스 이름, 운영기관, 구역, 운영 방식(현장대기 선택, 현장예약)이 있고, 현재 대기(5분, 여유)와 마지막 입력 시각, 변동 없음 · 지금 확인 단추가 있습니다. 아래에 대기시간 단추(바로, 5분부터 60분 이상까지)와 운영 상태 단추(잠시 중단, 오늘 운영 마감)가 있고, 지금 저장된 값(5분)이 보라색으로 표시됩니다.">
             <div class="cp__head">
               <p class="cp__code">A-01</p>
               <div class="cp__id">
@@ -123,6 +134,8 @@
                 </p>
               </div>
             </div>
+
+            <p class="cp__modes"><span class="cp__mode is-on">현장대기</span><span class="cp__mode">현장예약</span></p>
 
             <div class="cp__now">
               <p class="cp__nowcap">현재 대기</p>

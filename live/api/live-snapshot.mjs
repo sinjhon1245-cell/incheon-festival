@@ -25,6 +25,9 @@
    기관 이름 앞의 '[예시]' 같은 내부 표시도 떼어 냅니다.
    대기 값은 관람객 화면과 같은 때의 규칙(livePhase)을 여기서도 적용해, 보여 주면 안 되는 값은 아예
    보내지 않습니다(칸은 그대로 두고 status · waitMinutes · updatedAt 만 null).
+   운영 방식(현장대기 · 현장예약): 부스마다 opMode('wait' · 'reserve')를 싣습니다(booth_live_mode, 5초마다 함께 읽음).
+     현장예약 상태(예약 운영 중 · 예약 마감)는 status 가 아니라 reserve('open' · 'closed')에 싣고 status 는 null —
+     이 칸을 모르는 옛 화면에는 '정보 없음' 으로만 보입니다. 방식에 맞지 않는 값은 보내지 않습니다.
      행사 전(한국 날짜로 첫날 전) — 리허설: 오늘(한국 날짜) 넣은 값만 보냅니다. 관람객 화면이 맨 위에
                                     '리허설 중 · 실제 대기시간이 아닙니다' 띠를 붙입니다.
      행사 날 운영 시간(첫날의 여는 시각 ~ 끝날의 닫는 시각, 기본정보 event_start · event_end)
@@ -116,6 +119,18 @@ async function readLive() {
   }
 }
 
+// 운영 방식(현장대기 · 현장예약) — supabase/migration-booth-live-mode.sql 의 booth_live_mode.
+// 서버 스위치가 꺼져 있으면 RLS 가 0줄을 줍니다(모두 현장대기). 표가 아직 없으면(DB 적용 전) 빈 목록.
+// 그 밖의 실패는 booth_live 읽기와 같이 다룹니다 — 방식을 모른 채 예약 상태를 대기처럼 내보내지 않게.
+async function readModes() {
+  try {
+    return (await get('booth_live_mode?select=booth_id,mode')) || [];
+  } catch (err) {
+    if (err.code === 'PGRST205' || err.status === 404) return [];
+    throw err;
+  }
+}
+
 /* 지금 어떤 대기 값을 보내도 되는가 — 관람객 화면(booth-core eventInfo · applyOpenRule · visitor.html derive)과
    같은 읽기입니다. 여는 시각 = event_start 의 한국 시각, 닫는 시각 = event_end 의 한국 시각, 행사 날 = 두 날짜 사이.
      { key, from }  from(ms) 이후에 넣은 값만 보냄 · from 이 null 이면 아무 값도 보내지 않음
@@ -138,11 +153,18 @@ function livePhase(s, now) {
   return { key: 'open:' + day, from: dayStart + openMin * 60000 };               // 오늘 문 연 뒤 값만
 }
 
-function compose(m, liveRows, now) {
+// 상태 값이 어느 방식의 것인가(서버 private.booth_live_kind 와 같음).
+const WAIT_STATES = new Set(['여유', '보통', '혼잡']);
+const RESERVE_STATES = { '예약중': 'open', '예약마감': 'closed' };
+function kindOf(c) { return WAIT_STATES.has(c) ? 'wait' : (RESERVE_STATES[c] ? 'reserve' : 'any'); }
+
+function compose(m, liveRows, now, modeRows) {
   const s = m.settings || {};
   const phase = livePhase(s, now);
   const live = new Map();
   (liveRows || []).forEach((l) => { if (l && l.booth_id) live.set(l.booth_id, l); });
+  const modes = new Map();
+  (modeRows || []).forEach((r) => { if (r && r.booth_id && r.mode === 'reserve') modes.set(r.booth_id, 'reserve'); });
   const str = (v) => (v === null || v === undefined ? '' : String(v));
   return {
     version: 1,
@@ -157,9 +179,17 @@ function compose(m, liveRows, now) {
     zones: (m.zones || []).map((z) => ({ key: str(z.key), label: str(z.label), order: z.sort_order ?? null })),
     booths: (m.booths || []).map((b) => {
       const l = live.get(b.id);
+      const opMode = modes.get(b.id) || 'wait';
       // 지금 때에 보여도 되는 값만(livePhase). 값을 넣은 시각을 읽을 수 없으면 보내지 않습니다.
+      // 방식에 맞지 않는 값(현장예약인데 대기 분 · 현장대기인데 예약 상태)도 보내지 않습니다 — 서버가 전환 때
+      // 지우고 쓰기도 거부하지만, 스위치를 끈 뒤 남은 예약 상태 같은 경우까지 여기서 한 번 더 거릅니다.
       const at = l ? Date.parse(String(l.updated_at || '')) : NaN;
-      const show = !!(l && l.congestion) && phase.from !== null && !Number.isNaN(at) && at >= phase.from;
+      const c = l && l.congestion ? String(l.congestion) : '';
+      const k = kindOf(c);
+      const show = !!c && (k === 'any' || k === opMode) && phase.from !== null && !Number.isNaN(at) && at >= phase.from;
+      // 예약 상태는 status 에 싣지 않습니다. 이 칸을 모르는 옛 화면(배포 전에 열어 둔 탭)이 '0분' 처럼 잘못
+      // 그리지 않고 '정보 없음' 으로만 보이게, 새 칸 reserve('open' · 'closed')에 따로 둡니다.
+      const reserve = show && RESERVE_STATES[c] ? RESERVE_STATES[c] : null;
       return {
         id: b.id,
         no: b.no ?? null,
@@ -168,7 +198,9 @@ function compose(m, liveRows, now) {
         name: str(b.name),
         org: str(b.org).replace(/^\s*\[예시\]\s*/, ''),
         program: str(b.program),
-        status: show ? String(l.congestion) : null,
+        opMode,
+        status: show && !reserve ? c : null,
+        reserve,
         waitMinutes: show ? Number(l.wait_minutes ?? 0) : null,
         updatedAt: show ? l.updated_at : null
       };
@@ -189,15 +221,16 @@ function compose(m, liveRows, now) {
 async function rebuild() {
   const t0 = Date.now();
   const needMaster = !master || t0 - master.at >= MASTER_MS;
-  const [m, liveRows] = await Promise.all([
+  const [m, liveRows, modeRows] = await Promise.all([
     needMaster
       ? readMaster().then((v) => { master = { at: t0, ...v }; return master; },
         (err) => { if (master && t0 - master.at < KEEP_MS) return master; throw err; })
       : master,
-    readLive()
+    readLive(),
+    readModes()
   ]);
-  const body = JSON.stringify(compose(m, liveRows, t0));
-  snap = { at: t0, body, ms: Date.now() - t0, key: livePhase(m.settings, t0).key, m, liveRows };
+  const body = JSON.stringify(compose(m, liveRows, t0, modeRows));
+  snap = { at: t0, body, ms: Date.now() - t0, key: livePhase(m.settings, t0).key, m, liveRows, modeRows };
   console.log('[live-snapshot] supabase read', { master: needMaster, ms: snap.ms });
 }
 
@@ -244,7 +277,7 @@ export default {
       // 만든 뒤 때가 바뀌었으면(예: 16:59 에 만든 마지막 정상본을 17:00 뒤에 내줄 때) 지금 때로 다시 만듭니다.
       // Supabase 를 다시 읽지 않고 받아 둔 값으로만 만들며, 만든 시각(at · 마지막 정상본 10분 기준)은 그대로 둡니다.
       const t1 = Date.now(), key = livePhase(snap.m.settings, t1).key;
-      if (key !== snap.key) snap = { ...snap, key, body: JSON.stringify(compose(snap.m, snap.liveRows, t1)) };
+      if (key !== snap.key) snap = { ...snap, key, body: JSON.stringify(compose(snap.m, snap.liveRows, t1, snap.modeRows)) };
       const extra = { 'Vercel-CDN-Cache-Control': CDN_OK, 'X-Snapshot-Source': source };
       if (source === 'fresh') extra['Server-Timing'] = 'origin;dur=' + snap.ms;
       return reply(request, 200, snap.body, extra);
