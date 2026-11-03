@@ -1873,7 +1873,8 @@
      하루 규칙 — 오늘(한국 시각) 들어온 값만 씁니다. 첫날 오후 5시의
      '혼잡 30분' 이 둘째 날 아침까지 남아 있으면 실제 상황처럼 읽힙니다.
      한국은 서머타임이 없어 9시간을 더한 UTC 날짜가 곧 한국 날짜입니다. */
-  var CONGEST = { '여유': 'free', '보통': 'normal', '혼잡': 'busy', '중단': 'pause', '마감': 'closed' };
+  // '예약중' · '예약마감' = 현장예약 부스의 예약 운영 중 · 예약 마감(supabase/migration-booth-live-mode.sql)
+  var CONGEST = { '여유': 'free', '보통': 'normal', '혼잡': 'busy', '중단': 'pause', '마감': 'closed', '예약중': 'resv', '예약마감': 'resv-closed' };
   var liveAt = 0, liveSeq = 0;   // 마지막으로 읽기 시작한 때 · 늦게 온 옛 응답을 버리는 번호
 
   function kstDay(ms) { return new Date(ms + 9 * 3600000).toISOString().slice(0, 10); }
@@ -1886,8 +1887,25 @@
   /* 표가 아직 없으면(migration-booth-live.sql 전) selectSoft 가 빈 배열을 줍니다.
      권한 · 네트워크 실패는 콘솔에만 남기고 null 을 줍니다 — 부스 대기
      현황 하나 때문에 포털 전체가 오류 화면이 되면 안 됩니다. */
+  // 운영 방식(booth_live_mode — 서버 스위치가 꺼져 있으면 0줄)도 함께 읽어, 방식에 맞지 않는 값은 버립니다
+  // (현장대기 부스의 예약 상태 · 현장예약 부스의 대기 분 — 스위치를 끈 뒤 남은 값 등. 관람객 화면과 같은 규칙).
+  // 방식 표가 없거나 못 읽으면 모두 현장대기로 봅니다(지금과 같음).
   function selectBoothLive() {
-    return C.selectSoft('booth_live', { columns: 'booth_id,congestion,wait_minutes,updated_at', order: false })
+    return Promise.all([
+      C.selectSoft('booth_live', { columns: 'booth_id,congestion,wait_minutes,updated_at', order: false }),
+      C.selectSoft('booth_live_mode', { columns: 'booth_id,mode', order: false }).then(null, function () { return []; })
+    ]).then(function (r) {
+      var rows = r[0];
+      if (!rows) return rows;
+      var resv = {};
+      (r[1] || []).forEach(function (m) { if (m && m.mode === 'reserve') resv[m.booth_id] = true; });
+      return rows.filter(function (l) {
+        var c = l && l.congestion;
+        if (c === '예약중' || c === '예약마감') return !!resv[l.booth_id];
+        if (c === '여유' || c === '보통' || c === '혼잡') return !resv[l.booth_id];
+        return true;
+      });
+    })
       .catch(function (e) { console.warn('[portal] 부스 대기 현황 조회 실패', e); return null; });
   }
 
@@ -1943,10 +1961,13 @@
     var mins = Math.max(0, Math.floor((now - v.at) / 60000));
     var wait = cls === 'pause' ? '잠시 중단'
       : cls === 'closed' ? '오늘 마감'
+      : cls === 'resv' ? '현장예약 운영 중'
+      : cls === 'resv-closed' ? '예약 마감'
       : v.wait === 0 ? '바로' : '약 ' + v.wait + '분';
     return { label: v.congestion, cls: cls, wait: wait, at: v.at,
       ago: mins < 1 ? '방금' : C.minLabel(mins) + ' 전',
-      stale: cls !== 'closed' && mins > staleMinutes() };
+      // 현장예약 상태는 자주 바뀌는 값이 아니라 '30분 넘게 그대로' 로 흐리게 하지 않습니다(관리 화면과 같음)
+      stale: cls !== 'closed' && cls !== 'resv' && cls !== 'resv-closed' && mins > staleMinutes() };
   }
 
   /* 오늘 값은 있지만 문 열기 전에 넣어서 관람객에게 '정보 없음' 으로 보이는가.
@@ -1962,7 +1983,7 @@
   /* 화면에 적는 한 줄. '중단 · 잠시 중단', '마감 · 오늘 마감' 처럼 같은 말이
      두 번 나오지 않게, 멈춘 부스는 뒤쪽 말만 씁니다. */
   function liveText(i) {
-    return i.cls === 'pause' || i.cls === 'closed' ? i.wait : i.label + ' · ' + i.wait;
+    return i.cls === 'pause' || i.cls === 'closed' || i.cls === 'resv' || i.cls === 'resv-closed' ? i.wait : i.label + ' · ' + i.wait;
   }
 
   // 색 네모 + 글자. 색만으로 뜻을 전하지 않도록 상태 말은 늘 함께 적습니다.

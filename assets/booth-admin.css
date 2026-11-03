@@ -36,6 +36,8 @@ body { background: #fff; }
 .st--pause, .zst--pause     { --c: var(--off);    --cn: var(--ink);    --co: #BCC3D3; }
 .st--closed, .zst--closed   { --c: #BCC4D6;       --cn: var(--ink-2);  --co: #DDE2EC; }
 .st--missing, .zst--missing { --c: #E3A93B;       --cn: var(--warn);   --co: #F1D29A; }
+/* 현장예약(예약 운영 중 · 예약 마감) — 혼잡도 색이 아닌 보라(운영자 · 관람객 화면과 같은 뜻) */
+.st--resv, .zst--resv       { --c: #5B45E0;       --cn: #4634BE;       --co: #C9C0F7; }
 
 .odash { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
 @media (min-width: 1280px) { .odash { grid-template-columns: minmax(0, 1fr) minmax(300px, 340px); align-items: start; } }
@@ -61,6 +63,9 @@ body { background: #fff; }
 /* 상태 여섯 칸 — 윗선 = 상태색, 큰 수, 아래 점선 '확인 필요 ○'(있을 때만) */
 .ost__grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 @media (min-width: 700px) { .ost__grid { grid-template-columns: repeat(6, minmax(0, 1fr)); } }
+/* 현장예약 부스가 있을 때만 일곱 칸(없으면 위의 여섯 칸 그대로) */
+.ost__grid--7 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+@media (min-width: 700px) { .ost__grid--7 { grid-template-columns: repeat(7, minmax(0, 1fr)); } }
 .st { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 0; min-height: 96px; padding: 10px 12px;
   text-align: left; background: #fff; border: 1px solid var(--line); border-top: 4px solid var(--c); border-radius: 10px;
   font: inherit; color: var(--ink); cursor: pointer; }
@@ -93,6 +98,8 @@ body { background: #fff; }
 .stbar__s--busy-old { background: #E9AAB4; }
 .stbar__s--pause-old { background: #BCC3D3; }
 .stbar__s--closed-old { background: #DDE2EC; }
+.stbar__s--resv { background: #5B45E0; }
+.stbar__s--resv-old { background: #C9C0F7; }
 
 /* 관리 조치 — 한 줄 = 할 일 하나(누르면 그 부스만). 왼쪽 선 = 주황(데이터 점검) · 빨강(PIN 장애) */
 .oact__list { display: grid; gap: 8px; }
@@ -392,6 +399,8 @@ body { background: #fff; }
 .lv--normal .lv__dot { box-shadow: inset 0 0 0 1px rgba(22, 32, 60, .28); }
 .lv--busy    { --c: var(--danger); }
 .lv--pause, .lv--closed { --c: var(--off); }
+.lv--resv    { --c: #5B45E0; }   /* 현장예약 — 왼쪽 띠만 보라, 글은 '예약 운영 중' · '예약 마감' 낱말 */
+.lv.is-stale.lv--resv { --c: #C9C0F7; }
 .lv--missing { --c: var(--line-3, #C9D1E0); }
 /* 확인 필요(30분 이상 미갱신): 줄 전체를 주황으로 칠하지 않고, 왼쪽 띠는 마지막 입력 혼잡도의 옅은 색 —
    여유 · 보통 · 혼잡은 여전히 구분되지만 지금 확인된 값처럼 진하지 않게. 주황은 '확인 필요' 표 · 경과 시간에만. */
