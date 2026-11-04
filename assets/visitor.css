@@ -394,6 +394,7 @@ html.is-demo .row { scroll-margin-top: calc(56px + var(--demo-h) + env(safe-area
 }
 .alts li:last-child .alt { border-bottom: 0; }
 .alt__code { font-size: 20px; font-weight: 800; line-height: 1; letter-spacing: -0.03em; color: var(--num-ink); text-align: right; }
+.alt__code--word { font-size: 14px; }
 .alt__name {
   font-size: 14.5px;
   font-weight: 600;
@@ -681,10 +682,15 @@ html.is-demo .row { scroll-margin-top: calc(56px + var(--demo-h) + env(safe-area
 .tab[aria-pressed="true"] { color: var(--ink); }
 .tab[aria-pressed="true"]::after { background: var(--ink); }
 .tab__n { font-size: 13px; font-weight: 600; color: var(--muted-2); }
-/* 휴대폰: 학교급 탭 네 칸과 검색 단추가 옆으로 밀지 않고 한 화면에 들게 여백만 화면 폭에 맞춰 줄입니다(글자 크기는 그대로) */
-@media (max-width: 380px) {
-  .tabs { --tab-px: clamp(3px, calc((100vw - 292px) / 7), 12px); }
+/* 휴대폰: 탭 다섯 칸이 옆으로 밀지 않고 한 줄에 들게 줄인 이름을 쓰고, 칸을 줄 끝까지 고르게 벌립니다(글자 크기는 그대로) */
+.tab__short { display: none; }
+@media (max-width: 767px) {
+  .tab__wide { display: none; }
+  .tab__short { display: inline; }
+  .tabs { --tab-px: 4px; justify-content: space-between; }
   .tab { gap: 4px; }
+  .tab:last-child { padding-right: 0; }
+  .tab:last-child::after { right: 0; }
 }
 /* 짧은 구역 이름(A 메이커존). 그래도 길면 말줄임 — 전체 이름은 구역 제목 · title 에 */
 .tab__t { max-width: 9em; overflow: hidden; text-overflow: ellipsis; }
@@ -742,18 +748,6 @@ html.is-demo .row { scroll-margin-top: calc(56px + var(--demo-h) + env(safe-area
 .zpick__row:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
 .tab:focus-visible { outline-offset: -2px; }
 
-.bar__icon {
-  flex: none;
-  align-self: center;
-  display: grid;
-  place-items: center;
-  width: 44px;
-  height: 44px;
-  margin-right: -10px;
-  border: 0;
-  background: none;
-  color: var(--ink);
-}
 .bar__search {
   flex: 1;
   min-width: 0;
@@ -1145,6 +1139,8 @@ html.is-demo .row { scroll-margin-top: calc(56px + var(--demo-h) + env(safe-area
 /* 칸 안의 차례: 번호(가장 크게 · 왼쪽 위 고정) → 대기 분 → 상태 낱말. 세 줄 모두 왼쪽 끝을 맞춰
    번호만 훑어 내려가도 찾고, 그 바로 아래에서 대기 분을 읽습니다. 칸 크기는 그대로입니다. */
 .tile__no { font-size: 25px; font-weight: 800; line-height: 1; letter-spacing: -0.04em; white-space: nowrap; }
+/* 낱말이 든 번호(미래1)는 칸 폭에 맞춰 줄입니다 */
+.tile__no--word { font-size: 19px; }
 .tile__v {
   display: flex;
   align-items: baseline;

@@ -13,6 +13,7 @@
      T  터치     모바일 화면(390px · 터치) — 첫 누름 · 가운데 칸 다시 누름 · 숫자 자판(inputmode)
      S  보내기   덜 채움 · 틀린 PIN 뒤 다시 · 맞는 PIN · 횟수 제한 대기 · PIN 이 기록 · 주소 · 저장소에 남지 않음
      M  예시     협의용 예시(?demo, 4자리)도 같은 칸 규칙 · 예시 PIN 으로 열림
+     Z  미래채움 구역 카드 · 미래1 번호 · 같은 번호(고등 1)와 섞이지 않음 · PIN 로그인 · 머리글 · 상태 저장(320 · 390px)
 
    쓰는 법: node scripts/booth-live-mode/test-pin-input.mjs --deps <puppeteer-core 가 설치된 폴더>
               [--chrome <chrome.exe 경로>] [--base <커밋>] [--shots <폴더>]
@@ -85,25 +86,28 @@ ORIGIN = `http://127.0.0.1:${server.address().port}`;
 const PIN_OK = '482915';   // 이 시험의 가짜 서버만 아는 값
 const BOOTH = { id: '00000000-0000-4000-8000-000000000007', no: 7, code: '7', zone_key: 'A', name: '시험 부스', org: '시험 학교', program: '' };
 const BOOTH2 = { id: '00000000-0000-4000-8000-000000000008', no: 8, code: '8', zone_key: 'A', name: '시험 부스 둘', org: '시험 학교', program: '' };
-const fake = { logins: [], limited: 0, outside: [] };
+// 미래채움존 9곳과 번호가 같은 학교 부스(고등 1 ~ 12). 구역이 10곳 이상이면 찾기 칸이 나옵니다.
+const FUT = Array.from({ length: 9 }, (_, i) => ({ id: `00000000-0000-4000-8000-0000000001${i + 10}`, no: i + 1, code: `미래${i + 1}`, zone_key: '미래', name: `시험 미래 부스 ${i + 1}`, org: '시험 협동조합', program: '' }));
+const HIGH = Array.from({ length: 12 }, (_, i) => ({ id: `00000000-0000-4000-8000-0000000002${i + 10}`, no: i + 1, code: String(i + 1), zone_key: '고등', name: `시험 고등 부스 ${i + 1}`, org: '시험 고등학교', program: '' }));
+const ZONE_NAME = { A: 'A구역', 고등: '고등', 미래: '미래채움존' };
+const fake = { logins: [], limited: 0, outside: [], who: BOOTH, sets: [] };
+const boothRow = (b) => ({ booth_id: b.id, id: b.id, code: b.code, no: b.no, name: b.name, org: b.org, zone_key: b.zone_key, zone_label: ZONE_NAME[b.zone_key],
+  congestion: null, wait_minutes: null, updated_at: null, expires_at: new Date(Date.now() + 8 * 3600e3).toISOString() });
 function fakeAnswer(method, path, body) {
   const name = path.split('?')[0];
   if (method === 'GET' && name === 'settings') return [{ booth_pin_enabled: true, booth_sample_common_pin_enabled: false }];
-  if (method === 'GET' && name === 'zones') return [{ key: 'A', label: 'A구역', sort_order: 1 }];
-  if (method === 'GET' && name === 'booths') return [BOOTH, BOOTH2];
+  if (method === 'GET' && name === 'zones') return [{ key: 'A', label: 'A구역', sort_order: 1 }, { key: '고등', label: '고등', sort_order: 3 }, { key: '미래', label: '미래채움존', sort_order: 5 }];
+  if (method === 'GET' && name === 'booths') return [BOOTH, BOOTH2, ...HIGH, ...FUT];
   if (method === 'POST' && name === 'rpc/booth_pin_login') {
     fake.logins.push(body);
     if (fake.limited) return [{ ok: false, reason: 'limited', retry_after: fake.limited }];
-    if (body && body.p_pin === PIN_OK && body.p_booth_id === BOOTH.id) {
-      return [{ ok: true, session: 'S'.repeat(43), expires_at: new Date(Date.now() + 8 * 3600e3).toISOString(),
-        booth_id: BOOTH.id, id: BOOTH.id, code: BOOTH.code, no: BOOTH.no, name: BOOTH.name, org: BOOTH.org, zone_key: 'A', zone_name: 'A구역',
-        congestion: null, wait_minutes: null, updated_at: null }];
-    }
+    const hit = [BOOTH, ...FUT].find((b) => b.id === (body && body.p_booth_id));
+    if (hit && body.p_pin === PIN_OK) { fake.who = hit; return [{ ok: true, session: 'S'.repeat(43), ...boothRow(hit) }]; }
     return [{ ok: false, reason: 'invalid', retry_after: 0 }];
   }
   if (method === 'POST' && name.startsWith('rpc/booth_session')) {
-    return [{ booth_id: BOOTH.id, id: BOOTH.id, code: BOOTH.code, no: BOOTH.no, name: BOOTH.name, org: BOOTH.org, zone_key: 'A', zone_name: 'A구역',
-      congestion: null, wait_minutes: null, updated_at: null, expires_at: new Date(Date.now() + 8 * 3600e3).toISOString() }];
+    if (name === 'rpc/booth_session_set') fake.sets.push(body);
+    return [boothRow(fake.who)];
   }
   return [];
 }
@@ -374,6 +378,57 @@ for (const W of [360, 390, 768, 1024, 1440]) {
   t('M4  예시 틀린 PIN → 오류 · 칸 비움', (await val(page)) === '');
   await page.keyboard.type('0001'); await page.keyboard.press('Enter');
   t('M5  예시 맞는 PIN → 예시 운영 화면', await until(() => page.evaluate(() => !document.getElementById('v-main').hidden), 6000));
+  await ctx.close();
+}
+
+/* ── Z : 미래채움존 운영자 ───────────────────────────────────────── */
+for (const W of [390, 320]) {
+  const { ctx, page } = await openPage({ mobile: true });
+  if (W !== 390) await page.setViewport({ width: W, height: 800, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  await until(() => page.$eval('#start-pin', (e) => !e.hidden));
+  await page.click('[data-act="pin-start"]');
+  await until(() => page.$eval('#pin-s1', (e) => !e.hidden));
+  const card = await page.$eval('[data-zone="미래"]', (e) => e.innerText.replace(/\s+/g, ' ').trim());
+  t(`Z1 ${W}px 구역 카드: 미래 · 미래채움존 · 부스 9곳`, card === '미래 미래채움존 부스 9곳', card);
+  await page.click('[data-zone="미래"]');
+  await until(() => page.$eval('#pin-s2', (e) => !e.hidden));
+  const pick = await page.evaluate(() => ({ zone: document.getElementById('pin-zone-name').textContent, find: document.getElementById('pin-find').hidden,
+    no: [...document.querySelectorAll('#pin-booths .pick__k')].map((x) => x.textContent), ovf: document.documentElement.scrollWidth - document.documentElement.clientWidth }));
+  t(`Z2 ${W}px 부스 고르기: 미래1 ~ 미래9 번호 · 구역 안내 · 가로 넘침 없음`, pick.zone === '미래채움존 · 부스 9곳' && JSON.stringify(pick.no) === JSON.stringify(FUT.map((b) => b.code)) && pick.ovf <= 0, JSON.stringify(pick));
+  if (SHOTS) await page.screenshot({ path: join(SHOTS, `ctrl-future-pick-${W}.png`) });
+  await page.click(`[data-booth="${FUT[0].id}"]`);
+  await until(() => page.$eval('#pin-s3', (e) => !e.hidden));
+  const code = await page.$eval('#pin-code', (e) => e.textContent);
+  t(`Z3 ${W}px PIN 칸 위 번호: 미래1`, code === '미래1', code);
+  fake.logins.length = 0; fake.sets.length = 0;
+  await until(() => page.evaluate(() => document.activeElement && document.activeElement.id === 'pin-input'));
+  await page.keyboard.type(PIN_OK); await page.keyboard.press('Enter');
+  const opened = await until(() => page.evaluate(() => !document.getElementById('v-main').hidden), 6000);
+  const head = await page.evaluate(() => { const c = document.getElementById('h-code'); return { code: c.textContent, name: document.getElementById('h-name').textContent, org: document.getElementById('h-org').textContent, zone: document.getElementById('h-zone').textContent,
+    fit: (() => { const g = document.createRange(); g.selectNodeContents(c); return g.getBoundingClientRect().right <= c.getBoundingClientRect().right; })(), ovf: document.documentElement.scrollWidth - document.documentElement.clientWidth }; });
+  t(`Z4 ${W}px PIN 로그인은 그 부스 UUID 로 · 머리글 미래1 · 이름 · 기관 · 구역 · 넘침 없음`, opened && fake.logins.length === 1 && fake.logins[0].p_booth_id === FUT[0].id && head.code === '미래1' && head.name === FUT[0].name && head.org === FUT[0].org && head.zone === '미래채움존' && head.fit && head.ovf <= 0, JSON.stringify(head));
+  if (SHOTS) await page.screenshot({ path: join(SHOTS, `ctrl-future-main-${W}.png`) });
+  await page.click('#btn-pause');
+  const saved = await until(() => fake.sets.length > 0 || page.$eval('#mode-ask', (e) => !e.hidden), 3000);
+  if (!fake.sets.length && await page.$eval('#mode-ask', (e) => !e.hidden)) { await page.click('[data-act="mode-yes"]'); await until(() => fake.sets.length > 0, 3000); }
+  t(`Z5 ${W}px 잠시 중단 저장은 같은 세션 함수로`, saved && fake.sets.length >= 1 && fake.sets[0].p_mode === 'pause', JSON.stringify(fake.sets.map((x) => x.p_mode)));
+  await ctx.close();
+}
+{
+  const { ctx, page } = await openPage({ mobile: true });
+  await until(() => page.$eval('#start-pin', (e) => !e.hidden));
+  await page.click('[data-act="pin-start"]');
+  await until(() => page.$eval('#pin-s1', (e) => !e.hidden));
+  await page.click('[data-zone="고등"]');
+  await until(() => page.$eval('#pin-s2', (e) => !e.hidden));
+  const type = async (v) => { await page.$eval('#pin-q', (e, x) => { e.value = x; e.dispatchEvent(new Event('input', { bubbles: true })); }, v); await sleep(120); };
+  const rows = () => page.$$eval('#pin-booths .pick', (r) => r.map((x) => [x.dataset.booth, x.querySelector('.pick__k').textContent]));
+  await type('1');
+  const one = await rows();
+  t('Z6 고등 구역에서 1 은 고등 1 부스가 맨 위(미래1 과 섞이지 않음)', one[0] && one[0][0] === HIGH[0].id && one[0][1] === '01' && !one.some((x) => x[0] === FUT[0].id), JSON.stringify(one.slice(0, 3)));
+  await type('미래3');
+  const three = await rows();
+  t('Z7 고등 구역에서 미래3 을 치면 다른 구역 부스로 찾음', three[0] && three[0][0] === FUT[2].id && three[0][1] === '미래3', JSON.stringify(three));
   await ctx.close();
 }
 

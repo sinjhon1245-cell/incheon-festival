@@ -964,6 +964,8 @@
         .sort(function (a, b) { return Number(a.no) - Number(b.no) || core.compareCode(a.name, b.name); });
     }
     function codeOf(b) { return b.code || (b.zone_key + '-' + pad2(b.no)); }
+    // 부스 고르는 칸의 번호: 구역 안 번호(01). 번호가 낱말로 시작하는 구역(미래1)은 번호 그대로입니다.
+    function pickNo(b) { var c = codeOf(b); return /^[가-힣]+\d+$/.test(c) ? c : pad2(b.no); }
 
     function openPin(pre) {
       pin.pre = pre || null;
@@ -1027,7 +1029,7 @@
     function boothPick(b, other) {
       var org = core.displayOrganization(b.org);
       return '<button type="button" class="pick pick--booth' + (other ? ' pick--other' : '') + '" data-booth="' + esc(b.id) + '">' +
-        '<span class="pick__k num">' + esc(other ? codeOf(b) : pad2(b.no)) + '</span>' +
+        '<span class="pick__k num">' + esc(other ? codeOf(b) : pickNo(b)) + '</span>' +
         '<span class="pick__t">' + esc(b.name || '') +
           (org ? '<span class="pick__o">' + esc(org) + '</span>' : '') +
           (other ? '<span class="pick__s">' + esc(zoneNameOf(b.zone_key) + ' · 다른 구역') + '</span>' : '') + '</span></button>';
@@ -1035,7 +1037,7 @@
     function pickZone(key) {
       pin.zone = key;
       pin.booth = null;
-      $('pin-zone-name').textContent = schoolGradeZone(key)
+      $('pin-zone-name').textContent = schoolGradeZone(key) || key === '미래'
         ? zoneNameOf(key) + ' · 부스 ' + boothsIn(key).length + '곳'
         : zoneNameOf(key) + ' · ' + key + ' 구역';
       $('pin-find').hidden = boothsIn(key).length < PIN_FIND_MIN;

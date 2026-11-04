@@ -74,8 +74,8 @@
       </section>
       <div id="here" hidden></div>
       <section class="hero" id="hero" aria-label="지금 상황 요약"></section>
-      <!-- 부스가 많을 때(SEARCH_FIELD_MIN 곳 이상) 검색을 아이콘에만 두지 않고 검색칸 모양으로도 보여 줍니다.
-           누르면 붙박이 줄의 검색칸이 열립니다(붙박이 줄 높이는 그대로). -->
+      <!-- 검색칸 모양의 단추. 누르면 붙박이 줄의 검색칸이 열립니다(붙박이 줄 높이는 그대로). 검색은 이 단추 하나로 엽니다 —
+           탭 줄에 돋보기를 두면 휴대폰에서 탭 자리가 모자랍니다. -->
       <button type="button" class="qopen" id="search-field" data-act="search-open" hidden>
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" aria-hidden="true" focusable="false"><circle cx="10.5" cy="10.5" r="6.5" /><path d="M15.5 15.5 20.5 20.5" /></svg>
         <span>부스 이름 · 번호 · 학교명으로 찾기</span>
@@ -86,9 +86,6 @@
       <div class="col bar__in">
         <div class="bar__tabs" id="bar-tabs">
           <div class="tabs" id="tabs" role="group" aria-label="구역"></div>
-          <button type="button" class="bar__icon" id="search-open" aria-label="부스 검색">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" aria-hidden="true" focusable="false"><circle cx="10.5" cy="10.5" r="6.5" /><path d="M15.5 15.5 20.5 20.5" /></svg>
-          </button>
         </div>
         <form class="bar__search" id="search" role="search" hidden>
           <label class="sr-only" for="q">부스 검색</label>
@@ -320,6 +317,9 @@
     // 학교급 탭: 특수는 한 곳뿐이라 탭 줄에서는 중등과 함께 고릅니다. 구역 자체는 합치지 않습니다 —
     // 부스의 구역 · 구역 제목은 그대로이고, 목록 · 한눈에서 특수는 늘 중등 바로 아래입니다.
     var TAB_MAIN = '중등', TAB_JOIN = '특수';
+    // 탭 이름: 휴대폰에서 다섯 칸이 한 줄에 들게 줄인 말(화면 읽기 · title 은 늘 전체 이름). 구역 제목은 표의 이름 그대로입니다.
+    var TAB_SHORT = { '초등': '초', '중등': '중', '고등': '고', '미래': '미래' };
+    var TAB_WIDE = { '미래': '미래채움' };
     function zoneInTab(zoneKey, tabKey) {
       return zoneKey === tabKey || (tabKey === TAB_MAIN && zoneKey === TAB_JOIN);
     }
@@ -347,7 +347,7 @@
       var join = zs.filter(function (z) { return z.key === TAB_JOIN; })[0];
       if (!main || !join) return zs;
       return zs.filter(function (z) { return z !== join; }).map(function (z) {
-        return z === main ? { key: main.key, label: main.label + '·' + join.label, n: main.n + join.n } : z;
+        return z === main ? { key: main.key, label: main.label + '·' + join.label, short: '중·특', n: main.n + join.n } : z;
       });
     }
 
@@ -622,6 +622,7 @@
 
     // 줄 앞의 부스 번호는 늘 전체 번호(A-07)입니다. 구역 제목이 화면 위로 지나간 뒤에도
     // 07 이 A-07 인지 B-07 인지 바로 알 수 있게 합니다(부스가 수십 곳일 때).
+    var WORD_CODE = /[가-힣]/;   // 낱말이 든 번호(미래1)
     function codeLabel(b) {
       if (b.code) return b.code;
       if (b.zone_key && b.no !== null && b.no !== undefined && b.no !== '') return b.zone_key + '-' + pad2(b.no);
@@ -780,7 +781,7 @@
           html += '<p class="here__alts-h">' + (alt.scope === 'zone' ? '바로 갈 수 있는 같은 구역 부스' : '바로 갈 수 있는 다른 구역 부스') + '</p>' +
             '<ul class="alts">' + alt.list.map(function (x) {
               return '<li><button type="button" class="alt" data-go="' + esc(x.id) + '">' +
-                '<span class="alt__code">' + esc(x.code) + '</span>' +
+                '<span class="alt__code' + (WORD_CODE.test(x.code) ? ' alt__code--word' : '') + '">' + esc(x.code) + '</span>' +
                 '<span class="alt__name">' + esc(x.name) +
                   (alt.scope === 'any' ? '<span class="alt__zone">' + esc(x.zone_name) + '</span>' : '') + '</span>' +
                 '<span class="alt__v"><i class="sq" aria-hidden="true"></i>' + (isNow(x) ? '바로' : waitNum(x) + '분') + '</span>' +
@@ -948,8 +949,8 @@
       if (multi && S.ui.q) S.ui.search = true;
       $('bar-tabs').hidden = searchMode;
       $('search').hidden = !searchMode;
-      // 부스가 많으면 요약 아래에 검색칸 모양의 단추를 하나 더 둡니다(검색칸이 열려 있으면 숨김).
-      $('search-field').hidden = searchMode || S.booths.length + S.unplaced.length < SEARCH_FIELD_MIN;
+      // 요약 아래의 검색칸 모양 단추(검색칸이 열려 있으면 숨김).
+      $('search-field').hidden = searchMode;
       S.multi = multi;
       var cancel = $('search-cancel');
       if (multi) { cancel.textContent = '취소'; cancel.hidden = false; }
@@ -969,12 +970,18 @@
       var restore = focusKey(tabs);
       // 탭에는 짧은 이름(A 스쿨존)만 둡니다. 전체 이름은 목록의 구역 제목 · 탭의 title 에 있습니다.
       // 구역이 ZONE_SELECT_MIN 곳 이상이면 탭을 늘어놓지 않고 [전체] · [고른 구역] · [구역 선택 ▾](아래 패널 — renderPick)으로 줄입니다.
+      function tabNameHtml(z) {
+        var wide = TAB_WIDE[z.key] || (z.key ? shortZone(z) : z.label);
+        var short = z.short || TAB_SHORT[z.key] || wide;
+        if (short === wide) return '<span class="tab__t">' + esc(wide) + '</span>';
+        return '<span class="tab__t"><span class="tab__wide">' + esc(wide) + '</span><span class="tab__short">' + esc(short) + '</span></span>';
+      }
       function tabHtml(z) {
         var on = S.ui.zone === z.key;
         var full = z.key ? z.label + ' · 부스 ' + z.n + '곳' : '전체 부스 ' + z.n + '곳';
         return '<button type="button" class="tab" data-zone="' + esc(z.key) + '" aria-pressed="' + on + '"' +
           ' title="' + esc(full) + '" aria-label="' + esc(full) + '">' +
-          '<span class="tab__t">' + esc(z.key ? shortZone(z) : z.label) + '</span><span class="tab__n">' + z.n + '</span></button>';
+          tabNameHtml(z) + '<span class="tab__n">' + z.n + '</span></button>';
       }
       var all = { key: '', label: '전체', n: S.booths.length };
       if (ts.length >= ZONE_SELECT_MIN) {
@@ -1064,7 +1071,6 @@
     // 구역 코드와 이름의 끝말만 둡니다(A 메이커존). 이름이 이미 짧거나('로봇존' → 'A 로봇존')
     // 구역 코드가 들어 있으면('A구역') 그대로 씁니다. 표에 칸을 새로 두지 않고 이름에서 만듭니다.
     var ZONE_SELECT_MIN = 7;
-    var SEARCH_FIELD_MIN = 20;
     function shortZone(z) {
       var key = String(z.key || ''), label = String(z.label || '').trim();
       if (!label) return key;
@@ -1185,7 +1191,7 @@
     function tileInner(b) {
       var p = tileParts(b);
       return '<span class="sr-only">' + esc(tileLabel(b)) + '</span>' +
-        '<span class="tile__no" aria-hidden="true">' + esc(codeLabel(b)) + '</span>' +
+        '<span class="tile__no' + (WORD_CODE.test(codeLabel(b)) ? ' tile__no--word' : '') + '" aria-hidden="true">' + esc(codeLabel(b)) + '</span>' +
         '<span class="tile__v" aria-hidden="true">' + p.v + '</span>' +
         '<span class="tile__w" aria-hidden="true">' + esc(p.w) + '</span>';
     }
@@ -1685,7 +1691,7 @@
       S.ui.q = '';
       $('q').value = '';
       render(had);
-      if (refocus) { var b = $('search-open'); if (b && !b.closest('[hidden]')) b.focus(); }
+      if (refocus) { var b = $('search-field'); if (b && !b.hidden) b.focus(); }
     }
 
     // 지금 계신 부스의 대안을 누르면, 전체 목록에서 그 부스 줄로 옮겨 잠깐 표시합니다(펼침 없음).
