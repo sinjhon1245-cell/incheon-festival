@@ -986,6 +986,12 @@
         pin.zones = (r[0] || []).filter(function (z) {
           return booths.some(function (b) { return b.zone_key === z.key; });
         });
+        // 미래채움존과 체험존은 서로 다른 운영 구역. 행사 안내와 같은 순서로 표시합니다.
+        var futureAt = pin.zones.findIndex(function (z) { return z.key === '미래'; });
+        var experienceAt = pin.zones.findIndex(function (z) { return z.key === '체험'; });
+        if (futureAt >= 0 && experienceAt >= 0 && futureAt > experienceAt) {
+          pin.zones.splice(experienceAt, 0, pin.zones.splice(futureAt, 1)[0]);
+        }
         if (!pin.zones.length) {
           // 고를 부스가 없음(아직 공개 전). 단추는 [뒤로] 하나만 둡니다.
           $('pin-s0-title').textContent = '현재 PIN으로 시작할 수 있는 부스가 없습니다.';
@@ -1037,7 +1043,7 @@
     function pickZone(key) {
       pin.zone = key;
       pin.booth = null;
-      $('pin-zone-name').textContent = schoolGradeZone(key) || key === '체험'
+      $('pin-zone-name').textContent = schoolGradeZone(key) || key === '체험' || key === '미래'
         ? zoneNameOf(key) + ' · 부스 ' + boothsIn(key).length + '곳'
         : zoneNameOf(key) + ' · ' + key + ' 구역';
       $('pin-find').hidden = boothsIn(key).length < PIN_FIND_MIN;
@@ -2545,8 +2551,8 @@
       $('h-code').textContent = code;
       $('h-code').className = 'head__code num';
       $('h-name').textContent = h ? (h.name || '') : '부스 정보를 불러오는 중';
-      // 체험존 프로그램명은 긴 이름이 많아 두 줄로 줄이지 않습니다
-      $('h-name').className = 'head__name' + (h ? '' : ' is-muted') + (/^체험\d+$/.test(code) ? ' head__name--full' : '');
+      // 체험존·미래채움존 프로그램명은 긴 이름이 많아 두 줄로 줄이지 않습니다
+      $('h-name').className = 'head__name' + (h ? '' : ' is-muted') + (/^(체험|미래)\d+$/.test(code) ? ' head__name--full' : '');
       // 운영기관 · 구역은 각각 아이콘과 함께 따로 둡니다(값은 전과 같음 — 기관은 '[예시]' 를 뗀 이름, 구역은 구역 이름).
       var org = h ? core.displayOrganization(h.org) : '', zone = h ? (h.zone_name || '') : '';
       $('h-org').textContent = org;
