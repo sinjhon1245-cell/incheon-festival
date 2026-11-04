@@ -1649,7 +1649,7 @@
     return Promise.all(pool).then(function () { return { done: done, failed: failed, skipped: skipped }; });
   }
 
-  /* ── 행사 전 리허설: 공개 부스 105곳(현장예약은 제외)의 대기시간 채우기 · 비우기 ─────────────────
+  /* ── 행사 전 리허설: 공개 부스 105곳의 대기시간·현장예약 예시 채우기 · 비우기 ─────────────────
      위 '예시 현황' 과 같은 도구를 실제 부스에 씁니다 — 같은 비율(EXAMPLE_MIX · examplePlan), 같은 4곳씩 보내기(runPool),
      같은 확인창 · 진행 표시 · '성공 N · 실패 N' 알림. 다른 것은 대상과 문지기입니다.
        · 대상: DB 가 정한 공개 부스 105곳(admin_rehearsal_status 의 target_ids = 학교84+미래9+체험12).
@@ -1690,9 +1690,19 @@
     if (e && (e.code === 'PGRST202' || e.code === '42883')) return '일괄 입력 기능을 사용할 수 없습니다. 서버 설정을 확인해 주세요.';
     return C.dataMessage(e);
   }
-  // 현장예약 부스는 대기시간 일괄 채우기 · 비우기에서 뺍니다(운영자가 정한 예약 상태를 덮어쓰지 않음 · 서버도 대기 분은 거부).
+  // 대상은 공개 105곳 전부입니다. 현장예약 방식의 부스도 '예약중' 예시를 넣거나 값을 비울 수 있습니다.
+  // 운영 방식 자체(booth_live_mode)는 변경하지 않으며 행사 당일 운영 방식은 현장에서 최종 결정합니다.
   function rhTargets(rows) {
-    return rh.st ? rows.filter(function (r) { return r.shown && rh.st.ids[r.id] && r.opMode !== 'reserve'; }) : [];
+    return rh.st ? rows.filter(function (r) { return r.shown && rh.st.ids[r.id]; }) : [];
+  }
+  // 실제 방식과 예시 상태를 맞춰야 관람객 화면에 표시됩니다(운영 모드 불일치는 서버가 거절).
+  // 현장대기 방식에는 기존 여유/보통/혼잡/중단/마감 비율을 적용하고,
+  // 현장예약 방식에는 '현장예약 운영 중' 예시를 적용합니다.
+  function rhPlan(targets) {
+    var wait = targets.filter(function (r) { return r.opMode !== 'reserve'; });
+    var reserve = targets.filter(function (r) { return r.opMode === 'reserve'; });
+    return examplePlan(wait).concat(reserve.map(function (r) { return { r: r, s: ['resv_open'] }; }))
+      .sort(function (a, b) { return a.r.id < b.r.id ? -1 : a.r.id > b.r.id ? 1 : 0; });
   }
   // 권한 · 로그인 만료 · 행사 시작 — 다른 부스도 똑같이 거절되므로 남은 부스는 보내지 않습니다.
   function rhStop(e) {
@@ -1700,9 +1710,10 @@
     return !!e && (e.hint === 'rehearsal_closed' || e.code === '42501' || e.code === 'PGRST301' || /행사가 시작되어|JWT|expired/i.test(m));
   }
   function mixSummary(plan) {
-    var c = { '여유': 0, '보통': 0, '혼잡': 0, pause: 0, closed: 0 };
-    plan.forEach(function (j) { if (j.s[0] === 'open') c[BC.congestionFor(j.s[1])]++; else c[j.s[0]]++; });
-    return '여유 ' + c['여유'] + ' · 보통 ' + c['보통'] + ' · 혼잡 ' + c['혼잡'] + ' · 잠시 중단 ' + c.pause + ' · 오늘 마감 ' + c.closed + '곳';
+    var c = { '여유': 0, '보통': 0, '혼잡': 0, pause: 0, closed: 0, resv_open: 0 };
+    plan.forEach(function (j) { if (j.s[0] === 'open') c[BC.congestionFor(j.s[1])]++; else if (Object.prototype.hasOwnProperty.call(c, j.s[0])) c[j.s[0]]++; });
+    return '여유 ' + c['여유'] + ' · 보통 ' + c['보통'] + ' · 혼잡 ' + c['혼잡'] +
+      ' · 잠시 중단 ' + c.pause + ' · 오늘 마감 ' + c.closed + ' · 현장예약 ' + c.resv_open + '곳';
   }
   function rhStamp(t) {
     var p = BC.kstParts(t);
@@ -1732,7 +1743,7 @@
   function rhHtml(all) {
     var head = '<div class="rhpanel__head"><h2 class="rhpanel__title" id="lv-rh-title">대기시간 일괄 입력' +
         '<span class="rhpanel__n">공개 부스 ' + (rh.st ? rh.st.n : '…') + '곳</span></h2>' +
-      '<p class="rhpanel__desc">행사 전 운영 점검을 위해 공식 부스에 예시 대기시간을 한 번에 입력하거나 비웁니다. ' +
+      '<p class="rhpanel__desc">행사 전 공개 부스 105곳에 예시 대기시간·현장예약 상태를 한 번에 입력하거나 비웁니다. ' +
         '입력값은 행사 전 관람객 화면에도 표시됩니다. 공개 주소를 아는 사람은 누구나 볼 수 있습니다. QR·PIN·기존 대기 기록은 유지됩니다.</p></div>';
     if (!rh.st) {
       if (rh.err) {
@@ -1746,7 +1757,7 @@
     var withVal = targets.filter(function (r) { return !!r.congestion; }).length;
     var html = head + '<dl class="rhpanel__facts">' +
       rhFact('지금 값 있음', withVal + ' / ' + targets.length + '곳', false) +
-      rhFact('일괄 적용 대상', targets.length + ' / ' + s.n + '곳 · 현장예약 ' + Math.max(0, s.n - targets.length) + '곳 제외', false) +
+      rhFact('일괄 적용 대상', targets.length + ' / ' + s.n + '곳 · 현장예약 예시 ' + targets.filter(function (r) { return r.opMode === 'reserve'; }).length + '곳 포함', targets.length !== s.n) +
       rhFact('자동 초기화(23:00)', rhResetText(), s.reset !== 'on' || s.lastSt === 'failed') +
       rhFact('쓸 수 있는 때', s.closed ? '닫힘 · 행사 기간' : (rhLastDay() ? rhLastDay() + '까지' : '행사 전까지'), s.closed) +
       '</dl>';
@@ -1833,13 +1844,13 @@
       var withVal = targets.filter(function (r) { return !!r.congestion; });
       var byOp = withVal.filter(function (r) { return r.by === 'qr' || r.by === 'pin'; }).length;
       var message = fill
-        ? '공개 부스 중 현장예약을 제외한 ' + targets.length + '곳에 운영 점검용 예시 대기시간을 저장합니다.\n' + mixSummary(examplePlan(targets)) + '\n' +
+        ? '공개 부스 ' + targets.length + '곳 전체에 운영 점검용 예시 상태를 저장합니다.\n' + mixSummary(rhPlan(targets)) + '\n' +
           '행사 전 관람객 화면에도 표시됩니다(공개 주소). 외부에서 볼 수 있다는 점을 확인해 주세요.' +
           (withVal.length ? '\n\n현재 대기값이 있는 ' + withVal.length + '곳' + (byOp ? '(운영자 입력 ' + byOp + '곳 포함)' : '') +
             '은 예시값으로 덮어씁니다.' : '') +
-          '\n매일 23:00에 현재 대기값만 자동 초기화됩니다. 기존 대기 기록·QR·PIN은 유지됩니다.'
-        : '공개 부스 중 현장예약을 제외한 ' + targets.length + '곳의 현재 대기값을 모두 비웁니다(값 있는 곳 ' + withVal.length + '곳).\n' +
-          '운영자 입력값도 비워질 수 있습니다. 기존 대기 기록·QR·PIN·부스 정보는 유지됩니다.';
+          '\n매일 23:00에 현재 대기·현장예약 표시값이 초기화됩니다. 부스 운영 방식·기존 대기 기록·QR·PIN은 유지됩니다.'
+        : '공개 부스 ' + targets.length + '곳의 현재 대기·현장예약 표시값을 모두 비웁니다(값 있는 곳 ' + withVal.length + '곳).\n' +
+          '운영자 입력값도 비워질 수 있습니다. 운영 방식과 기존 대기 기록·QR·PIN·부스 정보는 유지됩니다.';
       return UI.confirm({
         title: fill ? '예시 대기시간을 일괄 입력할까요?' : '현재 대기시간을 일괄 비울까요?',
         message: message,
@@ -1869,7 +1880,7 @@
         jobs = retry.filter(function (j) { return rh.st.ids[j.r.id]; });
       } else {
         var targets = rhTargets(rowsNow());
-        jobs = fill ? examplePlan(targets) : targets.map(function (r) { return { r: r, s: ['clear'] }; });
+        jobs = fill ? rhPlan(targets) : targets.map(function (r) { return { r: r, s: ['clear'] }; });
       }
       rh.total = jobs.length;
       return runPool(jobs, 'admin_rehearsal_set_live', function (n) { rh.done = n; paintRehearsal(); }, rhStop);
