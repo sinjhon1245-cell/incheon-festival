@@ -36,7 +36,7 @@
   # 앞 커밋을 찾지 못해 git diff 가 오류를 내도(0 이 아니므로) 빌드합니다.
   # 작은따옴표 문자열(TOML literal)이라 안의 큰따옴표가 그대로 넘어갑니다.
   # build.sh 에 복사할 파일을 더하면 여기에도 같이 더하세요.
-  ignore = '[ -n "$CACHED_COMMIT_REF" ] && [ "$CACHED_COMMIT_REF" != "$COMMIT_REF" ] && git diff --quiet "$CACHED_COMMIT_REF" "$COMMIT_REF" -- . ../visitor.html ../booth-ctrl.html ../assets/config.js ../assets/booth-core.js ../assets/mock-data.js ../assets/visitor.css ../assets/booth-ctrl.css'
+  ignore = '[ -n "$CACHED_COMMIT_REF" ] && [ "$CACHED_COMMIT_REF" != "$COMMIT_REF" ] && git diff --quiet "$CACHED_COMMIT_REF" "$COMMIT_REF" -- . ../visitor.html ../booth-ctrl.html ../assets/config.js ../assets/booth-core.js ../assets/mock-data.js ../assets/venue-map.js ../assets/map ../assets/visitor.css ../assets/booth-ctrl.css'
 
 # 운영자 화면의 '관람객 화면' 링크는 시연(?demo) 때 같은 사이트의
 # visitor.html?demo 로 갑니다(운영 포털에는 그 이름으로 있습니다).

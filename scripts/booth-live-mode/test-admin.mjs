@@ -65,7 +65,7 @@ function adminPage(ver, live, modes) {
   html = html.replace(/<script src="https:\/\/cdn[^"]*"><\/script>/, '').replace(/<link rel="stylesheet"[^>]*>/g, '');
   const calls = [];
   for (const f of ['config.js', 'ui.js', 'booth-core.js', 'mock-data.js', 'admin-demo.js', 'pin-status.js', 'booth-admin.js']) {
-    html = html.replace(`<script src="assets/${f}"></script>`, () => `<script>${src('assets/' + f)}\n</script>`);
+    html = html.replace(new RegExp(`<script src="assets/${f.replace('.', '\\.')}(\\?[^"]*)?"></script>`), () => `<script>${src('assets/' + f)}\n</script>`);
   }
   html = html.replace('<script src="assets/core.js"></script>', '<script>window.Core = window.__fakeCore();</script>');
   const dom = new JSDOM(html, {

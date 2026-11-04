@@ -67,8 +67,7 @@ function expBooths(now) {
     ['wait', '중단', null, 0], ['wait', '마감', null, 0], ['wait', '여유', null, 10], ['wait', '보통', null, 20], ['wait', '혼잡', null, 45], ['wait', '여유', null, 0]];
   return EXP.map(([type, name], i) => { const [opMode, status, reserve, waitMinutes] = st[i]; return { id: `x${i + 1}`, no: i + 1, code: `체험${i + 1}`, zone: '체험', name, org: '', program: '', type, opMode, status, reserve, waitMinutes, updatedAt: status || reserve ? now : null }; });
 }
-function fixture(withFut) {
-  const now = new Date();
+function fixture(withFut, now = new Date()) {
   const zoneOf = (n) => (n <= 29 ? '고등' : n === 48 ? '특수' : n <= 55 ? '중등' : '초등');
   const states = [['여유', 5], ['보통', 15], ['혼잡', 30], ['여유', 10], ['보통', 20], ['혼잡', 45], ['중단', 0]];
   const booths = Array.from({ length: 84 }, (_, i) => {
@@ -92,7 +91,7 @@ const nZone = (k) => data.booths.filter((b) => b.zone === k).length;
 const counts = () => ({ all: data.booths.length, e: nZone('초등'), m: nZone('중등'), h: nZone('고등'), s: nZone('특수'), f: nZone('체험'), u: nZone('미래') });
 
 /* ── 파일 · 서버 ─────────────────────────────────────────────────── */
-const MAP = { 'visitor.html': 'visitor.html', 'assets/visitor.css': 'assets/visitor.css', 'assets/booth-core.js': 'assets/booth-core.js', 'assets/mock-data.js': 'assets/mock-data.js', 'assets/config.js': 'assets/config.js' };
+const MAP = { 'visitor.html': 'visitor.html', 'assets/visitor.css': 'assets/visitor.css', 'assets/booth-core.js': 'assets/booth-core.js', 'assets/venue-map.js': 'assets/venue-map.js', 'assets/mock-data.js': 'assets/mock-data.js', 'assets/config.js': 'assets/config.js' };
 let ROOT = REPO, TMP = null;
 if (BASE) {
   TMP = mkdtempSync(join(tmpdir(), 'tabs-base-'));
@@ -116,9 +115,22 @@ await new Promise((r) => server.listen(47000 + Math.floor(Math.random() * 1000),
 const ORIGIN = `http://127.0.0.1:${server.address().port}`;
 const browser = await puppeteer.launch({ executablePath: CHROME, headless: true, args: ['--no-first-run', '--no-default-browser-check'] });
 
+// 시계에 묶인 시험은 이 시각을 씁니다. 행사일 낮 12시(한국)라 자정 전후에 돌려도 '오늘' 판단이 달라지지 않습니다.
+// 앱은 그대로 두고, 시험 브라우저의 Date 만 이 시각에서 흐르게 합니다.
+const NOON = Date.parse('2026-11-06T03:00:00Z');
+let clockAt = 0;
+function pinClock(at) {
+  const Real = Date, diff = at - Real.now();
+  class Pinned extends Real {
+    constructor(...a) { if (a.length) super(...a); else super(Real.now() + diff); }
+    static now() { return Real.now() + diff; }
+  }
+  window.Date = Pinned;
+}
 async function open(W, q = '') {
   const ctx = await browser.createBrowserContext();
   const page = await ctx.newPage();
+  if (clockAt) await page.evaluateOnNewDocument(pinClock, clockAt);
   await page.setViewport({ width: W, height: 844, deviceScaleFactor: 2, isMobile: W < 768, hasTouch: W < 768 });
   await page.setRequestInterception(true);
   page.on('request', (req) => { const u = req.url(); if (u.startsWith(ORIGIN + '/') || u.startsWith('data:') || /^https:\/\/cdn\.jsdelivr\.net\/gh\/orioncactus\/pretendard/.test(u)) req.continue(); else req.abort(); });
@@ -146,7 +158,7 @@ async function tabsAt(W, N) {
     const R = (el) => el.getBoundingClientRect();
     const box = document.getElementById('tabs');
     const tabs = [...box.querySelectorAll('.tab')].map((b) => { const r = R(b), s = getComputedStyle(b), n = b.querySelector('.tab__n'); return { t: b.innerText.replace(/\s+/g, ''), aria: b.getAttribute('aria-label'), cut: [...b.querySelectorAll('.tab__t')].some((x) => x.scrollWidth > x.clientWidth + 0.5), l: r.left, r: r.right, fs: parseFloat(s.fontSize), nfs: parseFloat(getComputedStyle(n).fontSize), h: r.height, top: Math.round(R(b.querySelector('.tab__t')).top), ntop: Math.round(R(n).top) }; });
-    return { tabs, icon: !!document.getElementById('search-open'), field: !document.getElementById('search-field').hidden, scroll: box.scrollWidth - box.clientWidth, more: box.classList.contains('is-more'), vw: document.documentElement.clientWidth, ovf: document.documentElement.scrollWidth - document.documentElement.clientWidth };
+    return { tabs, icon: !!document.getElementById('search-open'), field: !document.getElementById('search').hidden, scroll: box.scrollWidth - box.clientWidth, more: box.classList.contains('is-more'), vw: document.documentElement.clientWidth, ovf: document.documentElement.scrollWidth - document.documentElement.clientWidth };
   });
   const mobile = W < 768;
   const name = (wide, short) => (mobile ? short : wide);
@@ -159,7 +171,7 @@ async function tabsAt(W, N) {
   const gaps = m.tabs.slice(1).map((x, i) => x.l - m.tabs[i].r);
   t(`T2 ${tag} 옆으로 밀지 않고 모두 한 화면 · 끝 흐림 없음 · 잘림 · 겹침 없음`, m.tabs.length === 5 && m.scroll <= 0 && !m.more && m.tabs.every((x) => x.l >= 0 && x.r <= m.vw + 0.5 && !x.cut) && gaps.every((g) => g >= 0) && m.ovf <= 0, JSON.stringify({ scroll: m.scroll, more: m.more, gaps, vw: m.vw }));
   t(`T3 ${tag} 글자 15px · 숫자 13px 그대로`, m.tabs.every((x) => x.fs === 15 && x.nfs === 13), JSON.stringify(m.tabs.map((x) => [x.fs, x.nfs])));
-  t(`T4 ${tag} 탭 줄 돋보기 없음 · 위쪽 검색칸은 있음`, !m.icon && m.field, JSON.stringify({ icon: m.icon, field: m.field }));
+  t(`T4 ${tag} 탭 줄 돋보기 없음 · 위쪽 검색칸이 늘 보임`, !m.icon && m.field, JSON.stringify({ icon: m.icon, field: m.field }));
   const wantAria = joined ? `미래채움존·체험존 · 부스 ${N.u + N.f}곳` : `체험존 · 부스 ${N.f}곳`;
   t(`T5 ${tag} 화면 읽기에는 전체 이름과 곳 수`, m.tabs[0].aria === `전체 부스 ${N.all}곳` && m.tabs[2].aria === `중등·특수 · 부스 ${N.m + N.s}곳` && m.tabs[4].aria === wantAria, JSON.stringify(m.tabs.map((x) => x.aria)));
   if (SHOTS && N.f) {
@@ -265,10 +277,9 @@ for (const W of [320, 360, 375, 390, 414, 768, 1024, 1440]) await tabsAt(W, N);
 
   // 검색(위쪽 검색칸)
   await click(page, tabSel('')); await sleep(60);
-  await click(page, '#search-field'); await sleep(100);
-  const opened = await page.evaluate(() => !document.getElementById('search').hidden && document.getElementById('bar-tabs').hidden);
-  t('Q1 위쪽 검색칸을 누르면 검색이 열림', opened);
-  const type = async (v) => { await page.evaluate((x) => { const i = document.getElementById('q'); i.value = x; i.dispatchEvent(new Event('input', { bubbles: true })); }, v); await sleep(260); };
+  const opened = await page.evaluate(() => !document.getElementById('search').hidden && !document.getElementById('bar-tabs').hidden);
+  t('Q1 검색칸과 구역 탭이 함께 보임', opened);
+  const type = async (v) => { await page.evaluate((x) => { const i = document.getElementById('q'); i.value = x; i.dispatchEvent(new Event('input', { bubbles: true })); i.form.requestSubmit(); }, v); await sleep(260); };
   await type('체험3');
   t('Q2 번호로 찾기: 체험3', JSON.stringify(await listNos(page)) === JSON.stringify(['체험3']) && (await heads(page)).length === 0, JSON.stringify(await listNos(page)));
   await type('미래3');
@@ -287,8 +298,8 @@ for (const W of [320, 360, 375, 390, 414, 768, 1024, 1440]) await tabsAt(W, N);
     await type('시험 부스 1');
     t('Q5 구역을 가리지 않고 찾음', (await rowCount(page)) > 1 && (await heads(page)).length === 0, String(await rowCount(page)));
   }
-  await click(page, '#search-cancel'); await sleep(120);
-  t('Q6 검색 닫으면 전체로 · 탭 줄 돌아옴', (await rowCount(page)) === N.all && await page.evaluate(() => !document.getElementById('bar-tabs').hidden), String(await rowCount(page)));
+  await click(page, '#search-btn'); await sleep(120);
+  t('Q6 초기화하면 전체로 · 탭 줄 그대로', (await rowCount(page)) === N.all && await page.evaluate(() => !document.getElementById('bar-tabs').hidden), String(await rowCount(page)));
 
   // 한눈에
   await click(page, '[data-view="grid"]'); await sleep(120);
@@ -343,9 +354,10 @@ console.log('참고  가장 긴 프로그램명의 줄 수: ' + JSON.stringify(L
 
 /* ── 지금 계신 부스(QR 주소 ?b=) · 행사 중: 낱말 번호가 칸 안에 ─ */
 if (!SNAP_FILE) {
-  data = fixture(true);
-  data.event.start = new Date(Date.now() - 36e5).toISOString();
-  data.event.end = new Date(Date.now() + 36e5).toISOString();
+  clockAt = NOON;
+  data = fixture(true, new Date(NOON));
+  data.event.start = new Date(NOON - 36e5).toISOString();
+  data.event.end = new Date(NOON + 36e5).toISOString();
   for (const [W, id, code, far, zone] of [[320, 'x5', '체험5', '체험12', '체험'], [390, 'x5', '체험5', '체험12', '체험'], [320, 'f4', '미래4', '미래9', '미래'], [390, 'f4', '미래4', '미래9', '미래']]) {
     const { ctx, page } = await open(W, '?b=' + id);
     const h = await page.evaluate(() => {
@@ -360,6 +372,8 @@ if (!SNAP_FILE) {
     await ctx.close();
   }
 }
+
+clockAt = 0;
 
 /* ── 미래채움존 공개 전(96곳): 숫자를 고정하지 않음 ───────────── */
 if (!SNAP_FILE) {
