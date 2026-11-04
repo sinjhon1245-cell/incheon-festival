@@ -286,7 +286,7 @@ for (const W of [320, 360, 375, 390, 414, 768, 1024, 1440]) await tabsAt(W, N);
     await type('시험 부스 1');
     t('Q5 구역을 가리지 않고 찾음', (await rowCount(page)) > 1 && (await heads(page)).length === 0, String(await rowCount(page)));
   }
-  await click(page, '#search-reset'); await sleep(120);
+  await click(page, '#search-btn'); await sleep(120);
   t('Q6 초기화하면 전체로 · 탭 줄 그대로', (await rowCount(page)) === N.all && await page.evaluate(() => !document.getElementById('bar-tabs').hidden), String(await rowCount(page)));
 
   // 한눈에

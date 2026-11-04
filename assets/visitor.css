@@ -639,7 +639,7 @@ html.is-demo .row { scroll-margin-top: calc(56px + var(--demo-h) + env(safe-area
 .ph--num   { width: 112px; height: clamp(56px, 16vw, 80px); margin-top: 14px; }
 .ph--bar   { height: 8px; margin-top: 20px; }
 
-/* 요약 아래의 검색칸. 입력은 치는 대로 걸리고, 검색 단추는 자판을 내려 결과를 보여 주며, 초기화는 검색 조건만 풉니다. */
+/* 요약 아래의 검색칸. 입력은 치는 대로 걸립니다. 단추는 하나로, 검색어가 없으면 '검색', 있으면 '초기화' 입니다. */
 .qform {
   display: flex;
   align-items: stretch;
@@ -678,27 +678,21 @@ html.is-demo .row { scroll-margin-top: calc(56px + var(--demo-h) + env(safe-area
 .qform__box input::placeholder { color: var(--muted); opacity: 1; font-size: 15px; font-weight: 500; }
 .qform__box input::-webkit-search-decoration,
 .qform__box input::-webkit-search-cancel-button { -webkit-appearance: none; }
+/* 글자가 바뀌어도 입력칸이 움직이지 않게 폭을 고정합니다. */
 .qform__btn {
   flex: none;
-  min-width: 44px;
-  padding: 0 12px;
-  border: 1px solid var(--ink);
-  background: #fff;
-  color: var(--ink);
+  width: 72px;
+  padding: 0;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: #fff;
   font-size: 15px;
   font-weight: 700;
   line-height: 1;
   white-space: nowrap;
   cursor: pointer;
 }
-.qform__btn--go { border-color: var(--accent); background: var(--accent); color: #fff; }
-@media (max-width: 374px) {
-  .qform { gap: 4px; }
-  .qform__box { gap: 5px; padding: 0 7px; }
-  .qform__box svg { width: 16px; height: 16px; }
-  .qform__box input::placeholder { font-size: 13px; letter-spacing: -0.03em; }
-  .qform__btn { padding: 0 7px; font-size: 14px; }
-}
+.qform__btn.is-reset { border-color: var(--ink); background: #fff; color: var(--ink); }
 
 /* ── 6. 붙박이 줄 (구역) ────────────────────────────── */
 .bar {
