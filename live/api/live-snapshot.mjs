@@ -28,6 +28,7 @@
    운영 방식(현장대기 · 현장예약): 부스마다 opMode('wait' · 'reserve')를 싣습니다(booth_live_mode, 5초마다 함께 읽음).
      현장예약 상태(예약 운영 중 · 예약 마감)는 status 가 아니라 reserve('open' · 'closed')에 싣고 status 는 null —
      이 칸을 모르는 옛 화면에는 '정보 없음' 으로만 보입니다. 방식에 맞지 않는 값은 보내지 않습니다.
+   체험존 유형: booths.booth_type 이 있는 부스에만 type('게임' · '교육')을 싣습니다. 없는 부스의 응답은 전과 글자까지 같습니다.
      행사 전(한국 날짜로 첫날 전) — 리허설: 오늘(한국 날짜) 넣은 값만 보냅니다. 관람객 화면이 맨 위에
                                     '리허설 중 · 실제 대기시간이 아닙니다' 띠를 붙입니다.
      행사 날 운영 시간(첫날의 여는 시각 ~ 끝날의 닫는 시각, 기본정보 event_start · event_end)
@@ -88,10 +89,22 @@ async function readMaster() {
   const [settings, zones, booths, unplaced] = await Promise.all([
     get('settings?select=event_title,venue,date_label,time_label,event_start,event_end,booth_map_url,booth_map_alt&order=id.asc&limit=1'),
     get('zones?select=key,label,sort_order&order=sort_order.asc,key.asc'),
-    get('booths?select=id,no,code,zone_key,name,org,program'),
+    readBooths(),
     readUnplaced()
   ]);
   return { settings: (settings && settings[0]) || {}, zones: zones || [], booths: booths || [], unplaced: unplaced || [] };
+}
+
+// 유형 칸(booth_type)은 supabase/migration-booth-experience-zone.sql 로 생깁니다. 칸이 없는 DB 는 400 으로 답하므로
+// 그때는 예전 칸만 읽습니다. 화면을 DB 보다 먼저 배포해도, 칸을 되돌려도 관람객 화면이 멈추지 않습니다.
+const BOOTH_COLS = 'id,no,code,zone_key,name,org,program';
+async function readBooths() {
+  try {
+    return await get('booths?select=' + BOOTH_COLS + ',booth_type');
+  } catch (err) {
+    if (err.status === 400) return get('booths?select=' + BOOTH_COLS);
+    throw err;
+  }
 }
 
 // 배치 준비 중(사전 안내) 부스 — supabase/migration-booth-preview.sql 의 booth_preview_list().
@@ -198,6 +211,7 @@ function compose(m, liveRows, now, modeRows) {
         name: str(b.name),
         org: str(b.org).replace(/^\s*\[예시\]\s*/, ''),
         program: str(b.program),
+        ...(b.booth_type ? { type: str(b.booth_type) } : {}),
         opMode,
         status: show && !reserve ? c : null,
         reserve,

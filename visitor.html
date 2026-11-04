@@ -318,8 +318,9 @@
     // 부스의 구역 · 구역 제목은 그대로이고, 목록 · 한눈에서 특수는 늘 중등 바로 아래입니다.
     var TAB_MAIN = '중등', TAB_JOIN = '특수';
     // 탭 이름: 휴대폰에서 다섯 칸이 한 줄에 들게 줄인 말(화면 읽기 · title 은 늘 전체 이름). 구역 제목은 표의 이름 그대로입니다.
-    var TAB_SHORT = { '초등': '초', '중등': '중', '고등': '고', '미래': '미래' };
-    var TAB_WIDE = { '미래': '미래채움' };
+    var TAB_SHORT = { '초등': '초', '중등': '중', '고등': '고', '체험': '체험' };
+    // 체험존 유형 배지. 제목 글자가 아니라 booth_type 칸에서 옵니다. 이 표에 없는 값은 배지를 그리지 않습니다.
+    var KIND_CLS = { '게임': 'kind--game', '교육': 'kind--edu' };
     function zoneInTab(zoneKey, tabKey) {
       return zoneKey === tabKey || (tabKey === TAB_MAIN && zoneKey === TAB_JOIN);
     }
@@ -357,7 +358,7 @@
     // 이 기기에 남아 있던 예전 값에도 표시가 보이지 않게 한 번 더 거릅니다.
     function orgText(b) { return core.displayOrganization(b.org); }
     function hay(b) {
-      return norm([b.code, String(b.code || '').replace(/-/g, ''), looseCode(b), looseCode(b, '-'), b.name, orgText(b), b.program, b.zone_name].join(' '));
+      return norm([b.code, String(b.code || '').replace(/-/g, ''), looseCode(b), looseCode(b, '-'), b.name, orgText(b), b.program, b.zone_name, b.booth_type].join(' '));
     }
     // 앞의 0 을 뺀 부스 번호: 'B-03' → 'b3'(sep 이 '-' 이면 'b-3'). 'b3' · 'B-3' 으로 쳐도 B-03 이 찾아집니다.
     function looseCode(b, sep) {
@@ -622,7 +623,7 @@
 
     // 줄 앞의 부스 번호는 늘 전체 번호(A-07)입니다. 구역 제목이 화면 위로 지나간 뒤에도
     // 07 이 A-07 인지 B-07 인지 바로 알 수 있게 합니다(부스가 수십 곳일 때).
-    var WORD_CODE = /[가-힣]/;   // 낱말이 든 번호(미래1)
+    var WORD_CODE = /[가-힣]/;   // 낱말이 든 번호(체험1)
     function codeLabel(b) {
       if (b.code) return b.code;
       if (b.zone_key && b.no !== null && b.no !== undefined && b.no !== '') return b.zone_key + '-' + pad2(b.no);
@@ -971,7 +972,7 @@
       // 탭에는 짧은 이름(A 스쿨존)만 둡니다. 전체 이름은 목록의 구역 제목 · 탭의 title 에 있습니다.
       // 구역이 ZONE_SELECT_MIN 곳 이상이면 탭을 늘어놓지 않고 [전체] · [고른 구역] · [구역 선택 ▾](아래 패널 — renderPick)으로 줄입니다.
       function tabNameHtml(z) {
-        var wide = TAB_WIDE[z.key] || (z.key ? shortZone(z) : z.label);
+        var wide = z.key ? shortZone(z) : z.label;
         var short = z.short || TAB_SHORT[z.key] || wide;
         if (short === wide) return '<span class="tab__t">' + esc(wide) + '</span>';
         return '<span class="tab__t"><span class="tab__wide">' + esc(wide) + '</span><span class="tab__short">' + esc(short) + '</span></span>';
@@ -1159,12 +1160,18 @@
     // 줄: 번호 | 부스 이름 + 운영 학교 | 대기 분 + 상태 칩. 읽기 전용 정보 줄이라 단추가 아닙니다(누름 · 펼침 · 초점 없음).
     // 이름 · 학교는 줄여 감추지 않고 필요한 만큼 줄을 바꿔 끝까지 보입니다(누르지 않고 읽음).
     // 학교 이름은 '운영기관:' 같은 꼬리표 없이 이름만(예시 부스의 내부 표시는 orgText 가 뗍니다).
+    // 체험존은 이름 앞에 유형 배지를 두고, 긴 프로그램명은 두 줄까지 보입니다(전체 이름은 title 과 화면 읽기로 남습니다).
+    function rowNameHtml(b) {
+      var name = esc(b.name || '이름 미정'), cls = KIND_CLS[b.booth_type];
+      if (!cls) return '<span class="row__name">' + name + '</span>';
+      return '<span class="row__name row__name--typed" title="' + name + '"><span class="kind ' + cls + '">' + esc(b.booth_type) + '</span>' + name + '</span>';
+    }
     function rowHtml(b) {
       var org = orgText(b);
       return '<li class="' + rowCls(b) + '" data-id="' + esc(b.id) + '">' +
         '<div class="row__main">' +
           '<span class="row__code' + (codeLabel(b).length > 2 ? ' row__code--long' : '') + '">' + esc(codeLabel(b)) + '</span>' +
-          '<span class="row__body"><span class="row__name">' + esc(b.name || '이름 미정') + '</span>' +
+          '<span class="row__body">' + rowNameHtml(b) +
             (org ? '<span class="row__org">' + esc(org) + '</span>' : '') + '</span>' +
           '<span class="row__right">' + rightHtml(b) + '</span>' +
         '</div>' +
@@ -1191,9 +1198,14 @@
     function tileInner(b) {
       var p = tileParts(b);
       return '<span class="sr-only">' + esc(tileLabel(b)) + '</span>' +
-        '<span class="tile__no' + (WORD_CODE.test(codeLabel(b)) ? ' tile__no--word' : '') + '" aria-hidden="true">' + esc(codeLabel(b)) + '</span>' +
+        '<span class="tile__no' + tileNoCls(codeLabel(b)) + '" aria-hidden="true">' + esc(codeLabel(b)) + '</span>' +
         '<span class="tile__v" aria-hidden="true">' + p.v + '</span>' +
         '<span class="tile__w" aria-hidden="true">' + esc(p.w) + '</span>';
+    }
+
+    function tileNoCls(code) {
+      if (!WORD_CODE.test(code)) return '';
+      return code.length > 3 ? ' tile__no--word tile__no--word2' : ' tile__no--word';
     }
 
     function tileLabel(b) {

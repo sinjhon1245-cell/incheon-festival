@@ -1,5 +1,5 @@
 -- ===================================================================
--- 되돌리기: 미래채움존 9곳(supabase/migration-booth-future-zone.sql · publish-booth-future-zone.sql)
+-- 되돌리기: 체험존 12곳(supabase/migration-booth-experience-zone.sql · publish-booth-experience-zone.sql)
 --
 -- 문제가 생기면 1번만 돌립니다. 관람객 · 운영자 화면에서 바로 사라지고 전체가 84곳으로 돌아가며,
 -- 부스 · QR · PIN 은 그대로 남아 고친 뒤 다시 공개할 수 있습니다.
@@ -11,13 +11,13 @@
 -- ── 1. 공개 거두기(권장) ─────────────────────────────────────────
 -- 운영자 세션은 이 뒤로 '지금은 이 부스를 운영할 수 없습니다' 로 멈춥니다. 다시 공개하면 이어서 씁니다.
 begin;
-update public.booths set is_published = false where zone_key = '미래' and is_published;
-update public.zones set is_published = false where key = '미래' and is_published;
+update public.booths set is_published = false where zone_key = '체험' and is_published;
+update public.zones set is_published = false where key = '체험' and is_published;
 commit;
 
 
 -- ── 2. 등록 없애기(행사 전 취소할 때만) ──────────────────────────
--- 아래 주석을 풀어 실행합니다. 9곳의 QR · PIN · 세션 · 상태 · 기록이 함께 지워집니다.
+-- 아래 주석을 풀어 실행합니다. 12곳의 QR · PIN · 세션 · 상태 · 기록이 함께 지워집니다.
 -- 공개 중이거나 입력 기록이 있으면 멈춥니다. 그때는 1번으로 거두기만 합니다.
 --
 -- begin;
@@ -26,11 +26,11 @@ commit;
 --   v_pub integer;
 --   v_log integer;
 -- begin
---   select count(*) into v_pub from public.booths where zone_key = '미래' and is_published;
+--   select count(*) into v_pub from public.booths where zone_key = '체험' and is_published;
 --   if v_pub <> 0 then
---     raise exception '공개 중인 미래채움존 부스가 %곳 있습니다. 1번을 먼저 돌려 주세요.', v_pub;
+--     raise exception '공개 중인 체험존 부스가 %곳 있습니다. 1번을 먼저 돌려 주세요.', v_pub;
 --   end if;
---   select count(*) into v_log from public.booth_live_log g join public.booths b on b.id = g.booth_id where b.zone_key = '미래';
+--   select count(*) into v_log from public.booth_live_log g join public.booths b on b.id = g.booth_id where b.zone_key = '체험';
 --   if v_log <> 0 then
 --     raise exception '입력 기록이 %줄 있습니다. 기록을 지우지 않게 멈춥니다.', v_log;
 --   end if;
@@ -38,10 +38,11 @@ commit;
 -- $check$;
 --
 -- -- 인쇄용 PIN 사본을 무효로 돌립니다(Vault 항목 이름은 남고 값은 못 쓰게 됩니다).
--- select private.booth_pin_vault_revoke(b.id) from public.booths b where b.zone_key = '미래';
+-- select private.booth_pin_vault_revoke(b.id) from public.booths b where b.zone_key = '체험';
 --
--- delete from public.booths where zone_key = '미래';
--- delete from public.zones where key = '미래';
+-- delete from public.booths where zone_key = '체험';
+-- delete from public.zones where key = '체험';
+-- alter table public.booths drop column if exists booth_type;
 --
 -- -- 함수를 2026-11-04 정의로 돌립니다.
 -- create or replace function public.booths_before_write()

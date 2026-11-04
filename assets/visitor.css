@@ -945,6 +945,30 @@ html.is-demo .row { scroll-margin-top: calc(56px + var(--demo-h) + env(safe-area
   letter-spacing: -0.02em;
 }
 .row.is-closed .row__name { color: var(--st-off); }
+/* 체험존: 이름 앞의 유형 배지. 상태 칩보다 약하게 — 작은 글자 · 옅은 바탕 · 얇은 테두리이고,
+   상태 색(초록 · 노랑 · 빨강 · 보라 · 회색)과 겹치지 않는 색만 씁니다. 체험존 이름만 두 줄까지 보입니다. */
+.kind {
+  display: inline-block;
+  margin-right: 5px;
+  padding: 0 4px;
+  border: 1px solid;
+  border-radius: 3px;
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 16px;
+  letter-spacing: 0;
+  vertical-align: 2px;
+}
+.kind--game { background: #FBF1E7; border-color: #E9CFB3; color: #84541F; }
+.kind--edu  { background: #E9F2FA; border-color: #BCD3E8; color: #27577F; }
+.row__name--typed {
+  font-size: 16px;
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
 /* 오른쪽 상태 칸 — 모든 줄이 같은 80px 칸이고, 안의 숫자 · 상태 칩 · 상태 표시는 모두 칸의 가로 가운데에 둡니다
    (숫자 가운데 = 칩 가운데 = 칸 가운데). 대기 분이 가장 큰 정보이고 칩 · 상태 표시는 그보다 작게 둡니다.
    묶음은 줄의 세로 가운데(이름이 두 줄이어도)에 두고, '20분' + 칩 묶음(55px)이 한 줄 이름 + 학교(45px)보다 큰 만큼
@@ -1139,8 +1163,9 @@ html.is-demo .row { scroll-margin-top: calc(56px + var(--demo-h) + env(safe-area
 /* 칸 안의 차례: 번호(가장 크게 · 왼쪽 위 고정) → 대기 분 → 상태 낱말. 세 줄 모두 왼쪽 끝을 맞춰
    번호만 훑어 내려가도 찾고, 그 바로 아래에서 대기 분을 읽습니다. 칸 크기는 그대로입니다. */
 .tile__no { font-size: 25px; font-weight: 800; line-height: 1; letter-spacing: -0.04em; white-space: nowrap; }
-/* 낱말이 든 번호(미래1)는 칸 폭에 맞춰 줄입니다 */
+/* 낱말이 든 번호(체험1)는 칸 폭에 맞춰 줄입니다 */
 .tile__no--word { font-size: 19px; }
+.tile__no--word2 { font-size: 16.5px; }
 .tile__v {
   display: flex;
   align-items: baseline;

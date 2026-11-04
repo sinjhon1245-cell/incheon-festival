@@ -964,7 +964,7 @@
         .sort(function (a, b) { return Number(a.no) - Number(b.no) || core.compareCode(a.name, b.name); });
     }
     function codeOf(b) { return b.code || (b.zone_key + '-' + pad2(b.no)); }
-    // 부스 고르는 칸의 번호: 구역 안 번호(01). 번호가 낱말로 시작하는 구역(미래1)은 번호 그대로입니다.
+    // 부스 고르는 칸의 번호: 구역 안 번호(01). 번호가 낱말로 시작하는 구역(체험1)은 번호 그대로입니다.
     function pickNo(b) { var c = codeOf(b); return /^[가-힣]+\d+$/.test(c) ? c : pad2(b.no); }
 
     function openPin(pre) {
@@ -1037,7 +1037,7 @@
     function pickZone(key) {
       pin.zone = key;
       pin.booth = null;
-      $('pin-zone-name').textContent = schoolGradeZone(key) || key === '미래'
+      $('pin-zone-name').textContent = schoolGradeZone(key) || key === '체험'
         ? zoneNameOf(key) + ' · 부스 ' + boothsIn(key).length + '곳'
         : zoneNameOf(key) + ' · ' + key + ' 구역';
       $('pin-find').hidden = boothsIn(key).length < PIN_FIND_MIN;

@@ -764,6 +764,7 @@
         name: b.name || '',
         org: b.org || '',
         program: b.program || '',
+        booth_type: b.booth_type || '',
         op_mode: opMode,
         congestion: f.congestion,
         wait_minutes: f.wait_minutes,
@@ -1000,7 +1001,7 @@
     d.booths.forEach(function (b) {
       if (!b || !b.id) return;
       boothRows.push({ id: b.id, no: b.no, code: b.code, zone_key: b.zone, name: b.name, org: b.org, program: b.program,
-                       op_mode: opModeOf(b.opMode) });
+                       booth_type: b.type, op_mode: opModeOf(b.opMode) });
       // 현장예약 상태는 옛 화면이 모르는 값이라 서버가 status 대신 reserve 칸('open' · 'closed')에 싣습니다.
       var c = b.status || (b.reserve === 'open' ? '예약중' : (b.reserve === 'closed' ? '예약마감' : null));
       if (c) liveRows.push({ booth_id: b.id, congestion: c, wait_minutes: b.waitMinutes, updated_at: b.updatedAt });

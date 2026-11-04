@@ -142,30 +142,30 @@ const ready = (p) => until(() => p.d.querySelector('.ost__grid') && p.d.querySel
   st.w.close();
 }
 
-/* ── F. 미래채움존 — 학교 부스와 같은 표 · 같은 화면, 번호가 같아도 섞이지 않음 ─── */
+/* ── F. 체험존 — 학교 부스와 같은 표 · 같은 화면, 번호가 같아도 섞이지 않음 ─── */
 {
-  // 학교 부스와 번호가 같은 미래채움존 부스를 같은 표에 넣어 봅니다. 화면 코드는 고치지 않습니다.
+  // 학교 부스와 번호가 같은 체험존 부스(운영기관 비움)를 같은 표에 넣어 봅니다. 화면 코드는 고치지 않습니다.
   const keep = { zones: TABLES.zones, booths: TABLES.booths };
   const fid = (n) => '00000000-0000-4000-8000-0000000001' + (n + 10);
-  TABLES.zones = [{ key: '고등', label: '고등', sort_order: 3, is_published: true }, { key: '미래', label: '미래채움존', sort_order: 5, is_published: true }];
+  TABLES.zones = [{ key: '고등', label: '고등', sort_order: 3, is_published: true }, { key: '체험', label: '체험존', sort_order: 5, is_published: true }];
   TABLES.booths = [1, 2, 3].map((n) => ({ id: id(n), zone_key: '고등', no: n, code: String(n), name: '학교 부스' + n, org: '시험고등학교', program: '', is_published: true }))
-    .concat([1, 2, 3].map((n) => ({ id: fid(n), zone_key: '미래', no: n, code: '미래' + n, name: '미래 부스' + n, org: '시험 협동조합', program: '', is_published: true })));
+    .concat([1, 2, 3].map((n) => ({ id: fid(n), zone_key: '체험', no: n, code: '체험' + n, name: '체험 부스' + n, org: '', program: '', is_published: true })));
   const p = adminPage('new', [{ booth_id: id(1), congestion: '여유', wait_minutes: 5, updated_at: now },
     { booth_id: fid(1), congestion: '보통', wait_minutes: 20, updated_at: now },
     { booth_id: fid(2), congestion: '예약중', wait_minutes: 0, updated_at: now }], [{ booth_id: fid(2), mode: 'reserve' }]);
   await until(() => p.d.querySelector('.ost__grid') && p.d.querySelectorAll('.lv').length >= 6);
   const codes = () => [...p.d.querySelectorAll('.lv__code')].map(txt);
-  t('F1 현황 목록: 학교 1 · 2 · 3 과 미래1 · 미래2 · 미래3 이 따로 보임', ['1', '2', '3', '미래1', '미래2', '미래3'].every((c) => codes().includes(c)) && codes().length === 6, codes().join(','));
+  t('F1 현황 목록: 학교 1 · 2 · 3 과 체험1 · 체험2 · 체험3 이 따로 보임', ['1', '2', '3', '체험1', '체험2', '체험3'].every((c) => codes().includes(c)) && codes().length === 6, codes().join(','));
   const opts = [...p.d.querySelectorAll('#lv-zone option')].map(txt);
-  t('F2 구역 고르기: 고등구역 · 미래 · 미래채움존 으로 구분', opts.includes('고등구역') && opts.includes('미래 · 미래채움존'), opts.join(' | '));
+  t('F2 구역 고르기: 고등구역 · 체험 · 체험존 으로 구분', opts.includes('고등구역') && opts.includes('체험 · 체험존'), opts.join(' | '));
   const cells = [...p.d.querySelectorAll('.ost__grid .st')].map((x) => x.getAttribute('data-quick') + ':' + txt(x.querySelector('.st__n')));
-  t('F3 운영 상태 판: 미래채움존도 같은 규칙으로 셈(여유 1 · 보통 1 · 현장예약 1 · 미입력 3)', ['free:1', 'normal:1', 'resv:1', 'missing:3'].every((c) => cells.includes(c)), cells.join(','));
+  t('F3 운영 상태 판: 체험존도 같은 규칙으로 셈(여유 1 · 보통 1 · 현장예약 1 · 미입력 3)', ['free:1', 'normal:1', 'resv:1', 'missing:3'].every((c) => cells.includes(c)), cells.join(','));
   const sel = p.d.querySelector('#lv-zone');
-  sel.value = '미래';
+  sel.value = '체험';
   sel.dispatchEvent(new p.w.Event('change', { bubbles: true }));
   await until(() => codes().length === 3);
-  t('F4 구역 미래만 고르면 미래1 ~ 미래3 만', codes().join(',') === '미래1,미래2,미래3', codes().join(','));
-  const row = [...p.d.querySelectorAll('.lv')].find((x) => /미래2/.test(txt(x)));
+  t('F4 구역 체험만 고르면 체험1 ~ 체험3 만', codes().join(',') === '체험1,체험2,체험3', codes().join(','));
+  const row = [...p.d.querySelectorAll('.lv')].find((x) => /체험2/.test(txt(x)));
   t('F5 줄: 현장예약 운영 중 낱말', /현장예약 운영 중/.test(txt(row)), txt(row));
   p.w.UI.pick = () => Promise.resolve('resv_closed');
   const btn = row.querySelector('[data-act="override"]');
