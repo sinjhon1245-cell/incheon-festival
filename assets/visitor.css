@@ -345,6 +345,7 @@ html.is-demo .row { scroll-margin-top: calc(56px + var(--demo-h) + env(safe-area
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+.here__name--full { display: block; overflow: visible; }
 .here__val {
   display: flex;
   flex-direction: column;
@@ -403,6 +404,8 @@ html.is-demo .row { scroll-margin-top: calc(56px + var(--demo-h) + env(safe-area
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* 체험존 프로그램명은 긴 이름이 많아 … 로 줄이지 않고 줄을 바꿉니다 */
+.alt__name--full { white-space: normal; overflow: visible; }
 .alt__zone { display: block; font-size: 12px; font-weight: 500; color: var(--muted); }
 .alt__v {
   display: inline-flex;
@@ -946,7 +949,7 @@ html.is-demo .row { scroll-margin-top: calc(56px + var(--demo-h) + env(safe-area
 }
 .row.is-closed .row__name { color: var(--st-off); }
 /* 체험존: 이름 앞의 유형 배지. 상태 칩보다 약하게 — 작은 글자 · 옅은 바탕 · 얇은 테두리이고,
-   상태 색(초록 · 노랑 · 빨강 · 보라 · 회색)과 겹치지 않는 색만 씁니다. 체험존 이름만 두 줄까지 보입니다. */
+   상태 색(초록 · 노랑 · 빨강 · 보라 · 회색)과 겹치지 않는 색만 씁니다. 긴 프로그램명이 많아 체험존 이름만 한 단계 작게 둡니다. */
 .kind {
   display: inline-block;
   margin-right: 5px;
@@ -961,14 +964,7 @@ html.is-demo .row { scroll-margin-top: calc(56px + var(--demo-h) + env(safe-area
 }
 .kind--game { background: #FBF1E7; border-color: #E9CFB3; color: #84541F; }
 .kind--edu  { background: #E9F2FA; border-color: #BCD3E8; color: #27577F; }
-.row__name--typed {
-  font-size: 16px;
-  display: -webkit-box;
-  overflow: hidden;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
-}
+.row__name--typed { font-size: 16px; }
 /* 오른쪽 상태 칸 — 모든 줄이 같은 80px 칸이고, 안의 숫자 · 상태 칩 · 상태 표시는 모두 칸의 가로 가운데에 둡니다
    (숫자 가운데 = 칩 가운데 = 칸 가운데). 대기 분이 가장 큰 정보이고 칩 · 상태 표시는 그보다 작게 둡니다.
    묶음은 줄의 세로 가운데(이름이 두 줄이어도)에 두고, '20분' + 칩 묶음(55px)이 한 줄 이름 + 학교(45px)보다 큰 만큼

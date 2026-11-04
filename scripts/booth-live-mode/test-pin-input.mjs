@@ -404,9 +404,9 @@ for (const W of [390, 320]) {
   await until(() => page.evaluate(() => document.activeElement && document.activeElement.id === 'pin-input'));
   await page.keyboard.type(PIN_OK); await page.keyboard.press('Enter');
   const opened = await until(() => page.evaluate(() => !document.getElementById('v-main').hidden), 6000);
-  const head = await page.evaluate(() => { const c = document.getElementById('h-code'); return { code: c.textContent, name: document.getElementById('h-name').textContent, org: document.getElementById('h-org').textContent, zone: document.getElementById('h-zone').textContent,
+  const head = await page.evaluate(() => { const c = document.getElementById('h-code'); const hn = document.getElementById('h-name'); return { code: c.textContent, name: hn.textContent, whole: hn.scrollHeight <= hn.clientHeight + 1 && getComputedStyle(hn).overflowY !== 'hidden', org: document.getElementById('h-org').textContent, zone: document.getElementById('h-zone').textContent,
     fit: (() => { const g = document.createRange(); g.selectNodeContents(c); return g.getBoundingClientRect().right <= c.getBoundingClientRect().right; })(), ovf: document.documentElement.scrollWidth - document.documentElement.clientWidth }; });
-  t(`Z4 ${W}px PIN 로그인은 그 부스 UUID 로 · 머리글 체험1 · 긴 이름 그대로 · 기관 없음 · 구역 · 넘침 없음`, opened && fake.logins.length === 1 && fake.logins[0].p_booth_id === FUT[0].id && head.code === '체험1' && head.name === FUT[0].name && head.org === '' && head.zone === '체험존' && head.fit && head.ovf <= 0, JSON.stringify(head));
+  t(`Z4 ${W}px PIN 로그인은 그 부스 UUID 로 · 머리글 체험1 · 긴 이름 전체가 보임 · 기관 없음 · 구역 · 넘침 없음`, opened && fake.logins.length === 1 && fake.logins[0].p_booth_id === FUT[0].id && head.code === '체험1' && head.name === FUT[0].name && head.org === '' && head.zone === '체험존' && head.whole && head.fit && head.ovf <= 0, JSON.stringify(head));
   if (SHOTS) await page.screenshot({ path: join(SHOTS, `ctrl-exp-main-${W}.png`) });
   await page.click('#btn-pause');
   const saved = await until(() => fake.sets.length > 0 || page.$eval('#mode-ask', (e) => !e.hidden), 3000);

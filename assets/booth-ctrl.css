@@ -725,6 +725,7 @@ button {
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+.head__name--full { display: block; overflow: visible; }
 .head__name.is-muted { color: var(--muted); font-weight: 600; }
 .head__meta {
   display: flex;

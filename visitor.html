@@ -758,7 +758,7 @@
       var html = '<section class="here" aria-labelledby="here-label">' +
         '<p class="here__label" id="here-label"><i class="sq" aria-hidden="true"></i>지금 계신 부스</p>' +
         '<div class="here__main">' +
-          '<div><span class="here__code">' + esc(b.code) + '</span><p class="here__name">' + esc(b.name) + '</p></div>' +
+          '<div><span class="here__code">' + esc(b.code) + '</span><p class="here__name' + (KIND_CLS[b.booth_type] ? ' here__name--full' : '') + '">' + esc(b.name) + '</p></div>' +
           '<div class="here__val">' + bigHtml(b) + '</div>' +
         '</div>';
       if (mode === 'live') {
@@ -783,7 +783,7 @@
             '<ul class="alts">' + alt.list.map(function (x) {
               return '<li><button type="button" class="alt" data-go="' + esc(x.id) + '">' +
                 '<span class="alt__code' + (WORD_CODE.test(x.code) ? ' alt__code--word' : '') + '">' + esc(x.code) + '</span>' +
-                '<span class="alt__name">' + esc(x.name) +
+                '<span class="alt__name' + (KIND_CLS[x.booth_type] ? ' alt__name--full' : '') + '">' + esc(x.name) +
                   (alt.scope === 'any' ? '<span class="alt__zone">' + esc(x.zone_name) + '</span>' : '') + '</span>' +
                 '<span class="alt__v"><i class="sq" aria-hidden="true"></i>' + (isNow(x) ? '바로' : waitNum(x) + '분') + '</span>' +
               '</button></li>';
@@ -1160,11 +1160,11 @@
     // 줄: 번호 | 부스 이름 + 운영 학교 | 대기 분 + 상태 칩. 읽기 전용 정보 줄이라 단추가 아닙니다(누름 · 펼침 · 초점 없음).
     // 이름 · 학교는 줄여 감추지 않고 필요한 만큼 줄을 바꿔 끝까지 보입니다(누르지 않고 읽음).
     // 학교 이름은 '운영기관:' 같은 꼬리표 없이 이름만(예시 부스의 내부 표시는 orgText 가 뗍니다).
-    // 체험존은 이름 앞에 유형 배지를 두고, 긴 프로그램명은 두 줄까지 보입니다(전체 이름은 title 과 화면 읽기로 남습니다).
+    // 체험존은 이름 앞에 유형 배지를 둡니다. 프로그램명은 줄여 감추지 않고 필요한 만큼 줄을 바꿉니다.
     function rowNameHtml(b) {
       var name = esc(b.name || '이름 미정'), cls = KIND_CLS[b.booth_type];
       if (!cls) return '<span class="row__name">' + name + '</span>';
-      return '<span class="row__name row__name--typed" title="' + name + '"><span class="kind ' + cls + '">' + esc(b.booth_type) + '</span>' + name + '</span>';
+      return '<span class="row__name row__name--typed"><span class="kind ' + cls + '">' + esc(b.booth_type) + '</span>' + name + '</span>';
     }
     function rowHtml(b) {
       var org = orgText(b);

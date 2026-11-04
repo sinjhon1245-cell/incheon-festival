@@ -10,7 +10,7 @@
                 옆으로 밀지 않고 한 화면 · 잘림 없음 · 글자 15px · 탭 줄 돋보기 없음
      F  거르기  목록 · 한눈에 곳 수 · 구역 제목 · 중등 25 아래 특수 1 · 별도 특수 탭 없음 · 전체 구역 순서 ·
                 체험 탭(체험1 ~ 체험12 순서 · 프로그램명 · 상태)
-     B  배지    게임 4 · 교육 8 · 네모 배지 · 이름 글자와 분리 · 상태 칩보다 약함 · 두 줄까지 · 상태 칸 자리 그대로
+     B  배지    게임 4 · 교육 8 · 네모 배지 · 이름 글자와 분리 · 상태 칩보다 약함 · 이름 전체가 보임 · 상태 칸 자리 그대로 · 학교 줄 그대로
      S  정렬    번호순 · 대기 짧은 순 · 상태 고름에서 중등·특수 탭의 구역 제목 · 구역 안 순서 · 다른 탭의 기존 동작
      Q  검색    위쪽 검색칸으로 열기 · 구역을 가리지 않는 기존 동작 · 번호(체험3) · 프로그램명 · 유형으로 찾기
      D  자료    상단 집계 합 = 전체 · 현장예약 · 정보 없음 · 집계는 탭과 상관없이 그대로
@@ -173,8 +173,8 @@ for (const W of [320, 360, 375, 390, 414, 768, 1024, 1440]) await tabsAt(W, N);
   t(`F4 고등: ${N.h}곳`, (await rowCount(page)) === N.h && JSON.stringify(await heads(page)) === JSON.stringify([H('고등', N.h)]), JSON.stringify(await heads(page)));
   await click(page, tabSel('체험')); await sleep(80);
   t(`F5 체험: ${N.f}곳 · 체험1 ~ 체험12 순서`, (await rowCount(page)) === N.f && JSON.stringify(await listNos(page)) === JSON.stringify(EXP.map((_, i) => `체험${i + 1}`)), JSON.stringify(await listNos(page)));
-  const exp = await page.$$eval('#list .row', (r) => r.map((x) => { const n = x.querySelector('.row__name'), k = n.querySelector('.kind'), c = x.querySelector('.row__code'); return { name: [...n.childNodes].filter((y) => y.nodeType === 3).map((y) => y.textContent).join(''), title: n.title, kind: k && k.textContent, cls: k && k.className, org: !!x.querySelector('.row__org'), right: x.querySelector('.row__right').textContent.replace(/\s+/g, ''), fit: c.scrollWidth <= c.clientWidth + 0.5 }; }));
-  t('F6 체험: 프로그램명은 받은 그대로 · 상태 표시 · 운영기관 줄 없음 · 번호 잘림 없음', exp.every((x, i) => x.name === EXP[i][1] && x.title === EXP[i][1] && x.right.length > 0 && !x.org && x.fit), JSON.stringify(exp.slice(0, 2)));
+  const exp = await page.$$eval('#list .row', (r) => r.map((x) => { const n = x.querySelector('.row__name'), k = n.querySelector('.kind'), c = x.querySelector('.row__code'); return { name: [...n.childNodes].filter((y) => y.nodeType === 3).map((y) => y.textContent).join(''), kind: k && k.textContent, cls: k && k.className, org: !!x.querySelector('.row__org'), right: x.querySelector('.row__right').textContent.replace(/\s+/g, ''), fit: c.scrollWidth <= c.clientWidth + 0.5 }; }));
+  t('F6 체험: 프로그램명은 받은 그대로 · 상태 표시 · 운영기관 줄 없음 · 번호 잘림 없음', exp.every((x, i) => x.name === EXP[i][1] && x.right.length > 0 && !x.org && x.fit), JSON.stringify(exp.slice(0, 2)));
   t('B1 유형 배지: 게임 4 · 교육 8 · 받은 순서대로 · 글자는 두 글자', exp.filter((x) => x.kind === '게임').length === 4 && exp.filter((x) => x.kind === '교육').length === 8 && exp.every((x, i) => x.kind === EXP[i][0]), JSON.stringify(exp.map((x) => x.kind)));
   const look = await page.evaluate(() => {
     const st = (el) => { const s = getComputedStyle(el), r = el.getBoundingClientRect(); return { h: r.height, w: r.width, fs: parseFloat(s.fontSize), rad: parseFloat(s.borderRadius), bg: s.backgroundColor, bd: s.borderTopColor, bw: parseFloat(s.borderTopWidth), fw: Number(s.fontWeight), c: s.color }; };
@@ -264,18 +264,18 @@ const CUT = {};
 for (const W of [320, 360, 375, 390, 414, 768, 1024]) {
   const { ctx, page } = await open(W);
   await click(page, tabSel('체험')); await sleep(120);
-  const r = await page.$$eval('#list .row', (rows) => rows.map((x) => { const n = x.querySelector('.row__name'), c = x.querySelector('.row__code'), rg = document.createRange(); rg.selectNodeContents(c); const b = c.getBoundingClientRect(), a = rg.getBoundingClientRect(), right = x.querySelector('.row__right').getBoundingClientRect(); return { code: c.textContent, h: n.getBoundingClientRect().height, cut: n.scrollHeight > n.clientHeight + 1, fit: a.left >= b.left - 0.5 && a.right <= b.right + 0.5, rw: Math.round(right.width), rl: Math.round(right.left) }; }));
-  t(`B4 ${W}px 이름은 두 줄까지 · 번호(체험12)가 번호 띠 안에`, r.length === N.f && r.every((x) => x.h <= 45 && x.fit), JSON.stringify(r.filter((x) => x.h > 45 || !x.fit)));
-  const school = await page.evaluate(async () => { document.querySelector('#tabs [data-zone="초등"]').click(); await new Promise((d) => setTimeout(d, 80)); const b = document.querySelector('#list .row .row__right').getBoundingClientRect(); return { rw: Math.round(b.width), rl: Math.round(b.left) }; });
-  t(`B5 ${W}px 상태 칸 자리 · 폭이 학교 부스 줄과 같음`, r.every((x) => x.rw === school.rw && x.rl === school.rl), JSON.stringify([school, r[0]]));
-  CUT[W] = r.filter((x) => x.cut).map((x) => x.code);
+  const r = await page.$$eval('#list .row', (rows) => rows.map((x) => { const n = x.querySelector('.row__name'), c = x.querySelector('.row__code'), rg = document.createRange(); rg.selectNodeContents(c); const b = c.getBoundingClientRect(), a = rg.getBoundingClientRect(), right = x.querySelector('.row__right').getBoundingClientRect(); const ns = getComputedStyle(n); return { code: c.textContent, lines: Math.round(n.getBoundingClientRect().height / parseFloat(ns.lineHeight)), cut: n.scrollHeight > n.clientHeight + 1 || ns.webkitLineClamp !== 'none' || ns.textOverflow === 'ellipsis' || ns.overflowY === 'hidden', fit: a.left >= b.left - 0.5 && a.right <= b.right + 0.5, rw: Math.round(right.width), rl: Math.round(right.left) }; }));
+  t(`B4 ${W}px 프로그램명 전체가 보임(… 없음) · 번호(체험12)가 번호 띠 안에`, r.length === N.f && r.every((x) => !x.cut && x.fit), JSON.stringify(r.filter((x) => x.cut || !x.fit)));
+  const school = await page.evaluate(async () => { document.querySelector('#tabs [data-zone="초등"]').click(); await new Promise((d) => setTimeout(d, 80)); const b = document.querySelector('#list .row .row__right').getBoundingClientRect(), n = document.querySelector('#list .row .row__name'); return { rw: Math.round(b.width), rl: Math.round(b.left), fs: parseFloat(getComputedStyle(n).fontSize), typed: n.classList.contains('row__name--typed') }; });
+  t(`B5 ${W}px 상태 칸 자리 · 폭이 학교 부스 줄과 같음 · 학교 이름은 17px 그대로`, r.every((x) => x.rw === school.rw && x.rl === school.rl) && school.fs === 17 && !school.typed, JSON.stringify([school, r[0]]));
+  CUT[W] = Math.max(...r.map((x) => x.lines));
   await click(page, '[data-view="grid"]'); await sleep(120);
   await click(page, tabSel('체험')); await sleep(120);
   const fit = await page.$$eval('#list .tile', (ts) => ts.map((x) => { const r = x.getBoundingClientRect(), n = x.querySelector('.tile__no'), rg = document.createRange(); rg.selectNodeContents(n); return { t: n.textContent, in: rg.getBoundingClientRect().right <= r.right - 6, w: Math.round(r.width) }; }));
   t(`G4 ${W}px 한눈에 번호(체험12)가 칸 안에`, fit.length === N.f && fit.every((x) => x.in), JSON.stringify(fit.filter((x) => !x.in)));
   await ctx.close();
 }
-console.log('참고  두 줄을 넘어 … 로 줄어드는 이름: ' + JSON.stringify(CUT));
+console.log('참고  가장 긴 프로그램명의 줄 수: ' + JSON.stringify(CUT));
 
 /* ── 지금 계신 부스(QR 주소 ?b=) · 행사 중: 낱말 번호가 칸 안에 ─ */
 if (!SNAP_FILE) {
@@ -287,10 +287,11 @@ if (!SNAP_FILE) {
     const h = await page.evaluate(() => {
       const inside = (el) => { const g = document.createRange(); g.selectNodeContents(el); const a = g.getBoundingClientRect(), b = el.parentElement.getBoundingClientRect(); return a.left >= b.left - 0.5 && a.right <= b.right + 0.5; };
       const code = document.querySelector('.here__code');
-      const alts = [...document.querySelectorAll('.alt')].map((x) => { const c = x.querySelector('.alt__code'), n = x.querySelector('.alt__name'), g = document.createRange(); g.selectNodeContents(c); return { t: c.textContent, clear: g.getBoundingClientRect().right <= n.getBoundingClientRect().left, in: inside(c) }; });
-      return { code: code && code.textContent, alts, ovf: document.documentElement.scrollWidth - document.documentElement.clientWidth };
+      const alts = [...document.querySelectorAll('.alt')].map((x) => { const c = x.querySelector('.alt__code'), n = x.querySelector('.alt__name'), g = document.createRange(); g.selectNodeContents(c); return { t: c.textContent, clear: g.getBoundingClientRect().right <= n.getBoundingClientRect().left, in: inside(c), whole: n.scrollWidth <= n.clientWidth + 0.5 && getComputedStyle(n).whiteSpace === 'normal' }; });
+      const hn = document.querySelector('.here__name');
+      return { code: code && code.textContent, whole: !!hn && hn.scrollHeight <= hn.clientHeight + 1 && getComputedStyle(hn).overflowY !== 'hidden', alts, ovf: document.documentElement.scrollWidth - document.documentElement.clientWidth };
     });
-    t(`H1 ${W}px 지금 계신 부스 체험5 · 같은 구역 여유 부스 번호(체험12)가 이름과 겹치지 않음`, h.code === '체험5' && h.alts.length >= 2 && h.alts.some((x) => x.t === '체험12') && h.alts.every((x) => /^체험/.test(x.t) && x.clear && x.in) && h.ovf <= 0, JSON.stringify(h));
+    t(`H1 ${W}px 지금 계신 부스 체험5 · 같은 구역 여유 부스 번호(체험12)가 이름과 겹치지 않음`, h.code === '체험5' && h.whole && h.alts.length >= 2 && h.alts.some((x) => x.t === '체험12') && h.alts.every((x) => /^체험/.test(x.t) && x.clear && x.in && x.whole) && h.ovf <= 0, JSON.stringify(h));
     if (SHOTS) await page.screenshot({ path: join(SHOTS, `here-exp-${W}.png`) });
     await ctx.close();
   }
