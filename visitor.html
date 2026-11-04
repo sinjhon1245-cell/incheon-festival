@@ -317,8 +317,8 @@
     // 학교급 탭: 특수는 한 곳뿐이라 탭 줄에서는 중등과 함께 고릅니다. 구역 자체는 합치지 않습니다 —
     // 부스의 구역 · 구역 제목은 그대로이고, 목록 · 한눈에서 특수는 늘 중등 바로 아래입니다.
     var TAB_MAIN = '중등', TAB_JOIN = '특수';
-    // 탭 이름: 휴대폰에서 다섯 칸이 한 줄에 들게 줄인 말(화면 읽기 · title 은 늘 전체 이름). 구역 제목은 표의 이름 그대로입니다.
-    var TAB_SHORT = { '초등': '초', '중등': '중', '고등': '고', '체험': '체험' };
+    // 탭 이름: 휴대폰에서 미래채움존과 체험존을 별도 탭으로 보여 줄 때 쓰는 짧은 말(화면 읽기 · title 은 늘 전체 이름). 구역 제목은 표의 이름 그대로입니다.
+    var TAB_SHORT = { '초등': '초', '중등': '중', '고등': '고', '미래': '미래', '체험': '체험' };
     // 체험존 유형 배지. 제목 글자가 아니라 booth_type 칸에서 옵니다. 이 표에 없는 값은 배지를 그리지 않습니다.
     var KIND_CLS = { '게임': 'kind--game', '교육': 'kind--edu' };
     function zoneInTab(zoneKey, tabKey) {
@@ -335,6 +335,10 @@
       S.booths.forEach(function (b) {
         if (!seen[b.zone_key]) { seen[b.zone_key] = true; out.push({ key: b.zone_key, label: b.zone_name || '기타', n: n[b.zone_key] }); }
       });
+      // 두 구역 모두 있을 때 관람객은 '미래채움 → 체험' 순서로 찾아 봅니다.
+      var futureAt = out.findIndex(function (z) { return z.key === '미래'; });
+      var experienceAt = out.findIndex(function (z) { return z.key === '체험'; });
+      if (futureAt >= 0 && experienceAt >= 0 && futureAt > experienceAt) out.splice(experienceAt, 0, out.splice(futureAt, 1)[0]);
       var keys = out.map(function (z) { return z.key; });
       var main = keys.indexOf(TAB_MAIN), join = keys.indexOf(TAB_JOIN);
       if (main >= 0 && join >= 0) out.splice(main + (join > main ? 1 : 0), 0, out.splice(join, 1)[0]);
@@ -968,6 +972,8 @@
       }
       S.keys.tabs = key;
       var tabs = $('tabs');
+      // 학교 4구역(중·특 통합) + 미래 + 체험 = 다섯 구역 탭, 전체 포함 여섯 칸.
+      tabs.classList.toggle('tabs--six', ts.length === 5);
       var restore = focusKey(tabs);
       // 탭에는 짧은 이름(A 스쿨존)만 둡니다. 전체 이름은 목록의 구역 제목 · 탭의 title 에 있습니다.
       // 구역이 ZONE_SELECT_MIN 곳 이상이면 탭을 늘어놓지 않고 [전체] · [고른 구역] · [구역 선택 ▾](아래 패널 — renderPick)으로 줄입니다.
