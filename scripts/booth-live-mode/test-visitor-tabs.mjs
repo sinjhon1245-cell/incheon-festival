@@ -67,8 +67,7 @@ function expBooths(now) {
     ['wait', '중단', null, 0], ['wait', '마감', null, 0], ['wait', '여유', null, 10], ['wait', '보통', null, 20], ['wait', '혼잡', null, 45], ['wait', '여유', null, 0]];
   return EXP.map(([type, name], i) => { const [opMode, status, reserve, waitMinutes] = st[i]; return { id: `x${i + 1}`, no: i + 1, code: `체험${i + 1}`, zone: '체험', name, org: '', program: '', type, opMode, status, reserve, waitMinutes, updatedAt: status || reserve ? now : null }; });
 }
-function fixture(withFut) {
-  const now = new Date();
+function fixture(withFut, now = new Date()) {
   const zoneOf = (n) => (n <= 29 ? '고등' : n === 48 ? '특수' : n <= 55 ? '중등' : '초등');
   const states = [['여유', 5], ['보통', 15], ['혼잡', 30], ['여유', 10], ['보통', 20], ['혼잡', 45], ['중단', 0]];
   const booths = Array.from({ length: 84 }, (_, i) => {
@@ -116,9 +115,22 @@ await new Promise((r) => server.listen(47000 + Math.floor(Math.random() * 1000),
 const ORIGIN = `http://127.0.0.1:${server.address().port}`;
 const browser = await puppeteer.launch({ executablePath: CHROME, headless: true, args: ['--no-first-run', '--no-default-browser-check'] });
 
+// 시계에 묶인 시험은 이 시각을 씁니다. 행사일 낮 12시(한국)라 자정 전후에 돌려도 '오늘' 판단이 달라지지 않습니다.
+// 앱은 그대로 두고, 시험 브라우저의 Date 만 이 시각에서 흐르게 합니다.
+const NOON = Date.parse('2026-11-06T03:00:00Z');
+let clockAt = 0;
+function pinClock(at) {
+  const Real = Date, diff = at - Real.now();
+  class Pinned extends Real {
+    constructor(...a) { if (a.length) super(...a); else super(Real.now() + diff); }
+    static now() { return Real.now() + diff; }
+  }
+  window.Date = Pinned;
+}
 async function open(W, q = '') {
   const ctx = await browser.createBrowserContext();
   const page = await ctx.newPage();
+  if (clockAt) await page.evaluateOnNewDocument(pinClock, clockAt);
   await page.setViewport({ width: W, height: 844, deviceScaleFactor: 2, isMobile: W < 768, hasTouch: W < 768 });
   await page.setRequestInterception(true);
   page.on('request', (req) => { const u = req.url(); if (u.startsWith(ORIGIN + '/') || u.startsWith('data:') || /^https:\/\/cdn\.jsdelivr\.net\/gh\/orioncactus\/pretendard/.test(u)) req.continue(); else req.abort(); });
@@ -267,7 +279,7 @@ for (const W of [320, 360, 375, 390, 414, 768, 1024, 1440]) await tabsAt(W, N);
   await click(page, tabSel('')); await sleep(60);
   const opened = await page.evaluate(() => !document.getElementById('search').hidden && !document.getElementById('bar-tabs').hidden);
   t('Q1 검색칸과 구역 탭이 함께 보임', opened);
-  const type = async (v) => { await page.evaluate((x) => { const i = document.getElementById('q'); i.value = x; i.dispatchEvent(new Event('input', { bubbles: true })); }, v); await sleep(260); };
+  const type = async (v) => { await page.evaluate((x) => { const i = document.getElementById('q'); i.value = x; i.dispatchEvent(new Event('input', { bubbles: true })); i.form.requestSubmit(); }, v); await sleep(260); };
   await type('체험3');
   t('Q2 번호로 찾기: 체험3', JSON.stringify(await listNos(page)) === JSON.stringify(['체험3']) && (await heads(page)).length === 0, JSON.stringify(await listNos(page)));
   await type('미래3');
@@ -342,9 +354,10 @@ console.log('참고  가장 긴 프로그램명의 줄 수: ' + JSON.stringify(L
 
 /* ── 지금 계신 부스(QR 주소 ?b=) · 행사 중: 낱말 번호가 칸 안에 ─ */
 if (!SNAP_FILE) {
-  data = fixture(true);
-  data.event.start = new Date(Date.now() - 36e5).toISOString();
-  data.event.end = new Date(Date.now() + 36e5).toISOString();
+  clockAt = NOON;
+  data = fixture(true, new Date(NOON));
+  data.event.start = new Date(NOON - 36e5).toISOString();
+  data.event.end = new Date(NOON + 36e5).toISOString();
   for (const [W, id, code, far, zone] of [[320, 'x5', '체험5', '체험12', '체험'], [390, 'x5', '체험5', '체험12', '체험'], [320, 'f4', '미래4', '미래9', '미래'], [390, 'f4', '미래4', '미래9', '미래']]) {
     const { ctx, page } = await open(W, '?b=' + id);
     const h = await page.evaluate(() => {
@@ -359,6 +372,8 @@ if (!SNAP_FILE) {
     await ctx.close();
   }
 }
+
+clockAt = 0;
 
 /* ── 미래채움존 공개 전(96곳): 숫자를 고정하지 않음 ───────────── */
 if (!SNAP_FILE) {

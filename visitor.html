@@ -49,18 +49,14 @@
 
   <header class="band">
     <div class="col band__in">
-      <div class="band__top">
+      <div class="band__text">
         <h1 class="band__title">부스 대기 현황</h1>
-        <button type="button" class="mapbtn" id="map-open" aria-haspopup="dialog" aria-label="배치도 보기">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M18 8c0 3.613-3.869 7.429-5.393 8.795a1 1 0 0 1-1.214 0C9.87 15.429 6 11.613 6 8a6 6 0 0 1 12 0"/><circle cx="12" cy="8" r="2"/><path d="M8.714 14h-3.71a1 1 0 0 0-.948.683l-2.004 6A1 1 0 0 0 3 22h18a1 1 0 0 0 .948-1.316l-2-6a1 1 0 0 0-.949-.684h-3.712"/></svg>
-          <span>배치도<span class="mapbtn__more"> 보기</span></span>
-        </button>
-      </div>
-      <div class="band__sub">
         <p class="band__event" id="band-event"></p>
-        <p class="sync" id="sync" hidden><i class="sync__sq" aria-hidden="true"></i><span id="sync-text"></span></p>
-        <button type="button" class="sync-btn" id="refresh" hidden>새로고침</button>
       </div>
+      <button type="button" class="mapbtn" id="map-open" aria-haspopup="dialog" aria-label="배치도 보기">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M18 8c0 3.613-3.869 7.429-5.393 8.795a1 1 0 0 1-1.214 0C9.87 15.429 6 11.613 6 8a6 6 0 0 1 12 0"/><circle cx="12" cy="8" r="2"/><path d="M8.714 14h-3.71a1 1 0 0 0-.948.683l-2.004 6A1 1 0 0 0 3 22h18a1 1 0 0 0 .948-1.316l-2-6a1 1 0 0 0-.949-.684h-3.712"/></svg>
+        <span>배치도<span class="mapbtn__more"> 보기</span></span>
+      </button>
     </div>
   </header>
 
@@ -79,7 +75,14 @@
         <button type="button" class="line-btn demoinfo__btn" data-act="demo-exit">실제 화면으로 돌아가기</button>
       </section>
       <div id="here" hidden></div>
-      <section class="hero" id="hero" aria-label="지금 상황 요약"></section>
+      <!-- 요약은 다시 그려지므로 자동 갱신 표시는 그 밖에 두고 제목 줄 오른쪽에 맞춥니다. -->
+      <div class="herowrap">
+        <div class="livebar">
+          <button type="button" class="sync" id="sync" aria-pressed="true" hidden><i class="sync__dot" aria-hidden="true"></i><span id="sync-text"></span><span class="sync__every" id="sync-every"></span></button>
+          <button type="button" class="sync-btn" id="refresh" hidden>새로고침</button>
+        </div>
+        <section class="hero" id="hero" aria-label="지금 상황 요약"></section>
+      </div>
       <!-- 검색칸은 늘 열려 있습니다. 구역 탭은 아래 붙박이 줄에 따로 있어, 검색 중에도 다른 탭으로 옮길 수 있습니다. -->
       <form class="qform" id="search" role="search" hidden>
         <label class="qform__box">
@@ -87,7 +90,7 @@
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" aria-hidden="true" focusable="false"><circle cx="10.5" cy="10.5" r="6.5" /><path d="M15.5 15.5 20.5 20.5" /></svg>
           <input type="search" id="q" placeholder="부스번호 · 학교명 검색" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="search" />
         </label>
-        <!-- 검색어가 없으면 '검색', 있으면 '초기화'(renderBar). submit 이면 Enter 가 이 단추를 눌러 초기화되므로 button 입니다. -->
+        <!-- 적용된 검색이 있으면 '초기화', 아니면 '검색'(syncSearchBtn). submit 이면 Enter 가 이 단추를 눌러 초기화되므로 button 입니다. -->
         <button type="button" class="qform__btn" id="search-btn">검색</button>
       </form>
     </div>
@@ -295,6 +298,7 @@
       zpick: false,     // '구역 선택' 패널이 열려 있는가
       hereParam: null,
       hereGone: false,
+      autoOff: false,   // 관람객이 자동 갱신을 끔(이 화면에서만, 새로 열면 다시 켜짐)
       mode: 'normal'    // 서버가 스냅샷에 실어 보내는 받기 방식(normal · conserve · manual). 화면에 이름을 보이지 않습니다
     };
 
@@ -712,7 +716,7 @@
     }
     // 지금 자동으로 받는 간격의 배수(0 = 자동으로 받지 않음).
     function autoFactor(now) {
-      if (!liveWindow(now).on) return 0;
+      if (S.autoOff || !liveWindow(now).on) return 0;   // 관람객이 끈 때도 같은 길입니다(타이머를 새로 두지 않음)
       return Object.prototype.hasOwnProperty.call(MODES, S.mode) ? MODES[S.mode] : 1;
     }
 
@@ -736,7 +740,9 @@
       var s = S.settings || {};
       var line = [s.event_title, s.venue].filter(Boolean).join(' · ');
       var lag = isLagging(), bad = false, text = '', show = true;
-      var auto = autoFactor(Date.now()) > 0;
+      var now = Date.now(), f = autoFactor(now), auto = f > 0;
+      // 관람객이 켜고 끌 수 있는 때(운영본부가 수동으로 돌렸거나 행사 시간 밖이면 자동 갱신 자체가 없습니다).
+      var can = S.hasData && S.mode !== 'manual' && liveWindow(now).on;
       // '새로고침' 단추는 운영본부가 자동 갱신을 멈춘 때(manual)에만 둡니다. 관람객에게 까닭은 말하지 않습니다.
       var manualBtn = S.mode === 'manual' && S.hasData && liveWindow(Date.now()).on;
       if (S.info && S.info.phase === 'after') show = false;
@@ -744,14 +750,20 @@
       else if (lag) { text = '연결 지연'; bad = true; }
       else if (!S.fresh) text = '불러오는 중';
       else if (auto) text = '자동 갱신';
+      else if (can) text = '자동 갱신 꺼짐';
       else show = false; // 자동으로 받지 않는 동안에는 '자동 갱신' 이라고 하지 않습니다
-      var key = [line, show, text, bad, manualBtn].join('|');
+      var on = text === '자동 갱신';
+      var every = on ? Math.round(POLL_MS * f / 1000) + '초마다' : '';
+      var key = [line, show, text, bad, manualBtn, can, every, S.autoOff].join('|');
       if (key === S.keys.band) return;
       S.keys.band = key;
       $('band-event').textContent = line;
       $('sync').hidden = !show;
-      $('sync').className = 'sync' + (bad ? ' is-lag' : '');
+      $('sync').className = 'sync' + (bad ? ' is-lag' : '') + (on ? ' is-on' : '');
+      $('sync').disabled = !can;
+      $('sync').setAttribute('aria-pressed', S.autoOff ? 'false' : 'true');
       $('sync-text').textContent = text;
+      $('sync-every').textContent = every;
       $('refresh').hidden = !manualBtn;
       if (s.event_title) document.title = '부스 대기 현황 | ' + s.event_title;
     }
@@ -1004,9 +1016,7 @@
       // 숨어 있던 탭 줄은 폭이 0 이라 그때 잰 흐림(is-more)이 틀립니다. 다시 보일 때 고쳐 잽니다.
       var tabsWereHidden = $('bar').hidden;
       $('search').hidden = !show;
-      var btn = $('search-btn');
-      btn.textContent = S.ui.q ? '초기화' : '검색';
-      btn.classList.toggle('is-reset', !!S.ui.q);
+      syncSearchBtn();
       if (!show) { $('bar').hidden = true; return; }
       var zs = zoneList();
       var multi = zs.length >= 2;
@@ -1767,9 +1777,35 @@
       }
     }
 
+    /* 검색: 입력칸의 글과 적용된 검색어(S.ui.q)는 따로입니다. 치는 동안에는 목록도 요청도 그대로이고,
+       '검색' · Enter 로만 적용합니다. 단추 글자는 입력 여부가 아니라 적용 상태를 따릅니다.
+         적용된 검색이 있고 입력칸이 그 검색어와 같거나 비었으면 '초기화', 그 밖에는 '검색'. */
+    function searchApplied() {
+      var v = norm($('q').value);
+      return !!S.ui.q && (!v || v === norm(S.ui.q));
+    }
+    function syncSearchBtn() {
+      var on = searchApplied(), btn = $('search-btn');
+      btn.textContent = on ? '초기화' : '검색';
+      btn.classList.toggle('is-reset', on);
+    }
+    // 입력칸이 비었으면 아무것도 하지 않습니다(Enter 가 초기화를 대신하지 않습니다).
+    function applySearch() {
+      var v = $('q').value;
+      if (!norm(v)) return;
+      if (norm(v) !== norm(S.ui.q)) {
+        S.ui.q = v;
+        // 검색은 구역 · 상태 고름과 겹쳐 걸지 않습니다. 겹치면 '혼잡' 을 눌러 둔 채 여유 부스를 찾을 때
+        // '찾는 부스가 없어요' 가 나오고 결과 줄도 검색 결과 수를 알리지 못합니다.
+        if (S.ui.count || S.ui.zone) { S.ui.count = ''; S.ui.zone = ''; navCommit(false); }
+        render(false);
+      }
+      $('q').blur();   // 휴대폰 자판을 내려 결과가 보이게
+      showResults(true);
+      showResults(false);
+    }
     // 검색 조건만 풉니다. 보기 · 정렬은 그대로이고 검색칸도 그대로 있습니다.
     function resetSearch() {
-      if (!S.ui.q) return;
       S.ui.q = '';
       $('q').value = '';
       render(false);
@@ -1905,7 +1941,15 @@
           case 'zone-pick':
             if (S.zpick) closePick(false); else openPick();
             break;
-          case 'search-btn': resetSearch(); break;   // 검색어가 없으면('검색') 아무 일도 하지 않습니다
+          case 'search-btn':
+            if (searchApplied()) resetSearch(); else applySearch();
+            break;
+          case 'sync':
+            // 끄면 다음 차례를 거두고, 켜면 기존 resume 이 이어 받습니다. 타이머는 늘 하나입니다.
+            S.autoOff = !S.autoOff;
+            if (S.autoOff) schedule(); else resume(false);
+            render(false);
+            break;
           case 'demo-exit':
             // 실제 화면은 새로 연 페이지에서 처음부터 그립니다. 이 페이지에서 모드만 바꾸면 예시 값이
             // 기억(S)에 남아 실제 값과 섞일 수 있습니다. replace 라 뒤로 가기에 예시 화면이 끼지 않습니다.
@@ -1921,26 +1965,11 @@
         }
       });
 
-      $('q').addEventListener('input', function () {
-        S.ui.q = this.value;
-        // 검색은 구역처럼 상태 고름(여유 · 혼잡 ...)과도 겹쳐 걸지 않습니다. 겹치면 '혼잡' 을
-        // 눌러 둔 채 여유 부스 'A-01' 을 찾을 때 '찾는 부스가 없어요' 가 나오고, 결과 줄도
-        // '혼잡 부스만 보는 중' 에 머물러 검색 결과 수가 보이지 않습니다. 구역도 같습니다(검색은 구역을 가리지 않음).
-        // 치기 시작하면 상태 · 구역 고름을 풉니다.
-        if ((S.ui.count || S.ui.zone) && norm(this.value)) { S.ui.count = ''; S.ui.zone = ''; navCommit(false); }
-        render(false);
-        // 검색 단추는 붙박이 줄에 있어 목록 한가운데서도 열 수 있습니다. 목록이 짧아지면
-        // 브라우저는 스크롤 위치만 줄여서, 결과 줄과 가장 잘 맞는 앞쪽 부스가 화면 위로
-        // 숨습니다. 결과 줄이 붙박이 줄 아래에 오면 더 움직이지 않으니 글자마다 튀지 않습니다.
-        // 치는 동안에는 부드럽게 움직이면 다음 글자와 겹치므로 바로 옮깁니다.
-        showResults(true, true);
-      });
+      // 치는 동안에는 단추 글자만 맞춥니다. 목록은 '검색' · Enter 로 적용할 때 바뀝니다.
+      $('q').addEventListener('input', syncSearchBtn);
       $('search').addEventListener('submit', function (e) {
         e.preventDefault();
-        if (!norm($('q').value)) return;   // 검색어가 없으면 아무것도 하지 않습니다
-        $('q').blur();                     // 휴대폰 자판을 내려 결과가 보이게
-        showResults(true);
-        showResults(false);
+        applySearch();
       });
       $('tabs').addEventListener('scroll', tabsFade, { passive: true });
       window.addEventListener('resize', tabsFade);
