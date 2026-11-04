@@ -241,29 +241,47 @@ ul, ol { padding: 0; list-style: none; }
   background: #fff;
   font-variant-numeric: tabular-nums;
 }
-.vp__band { padding: 12px 16px 13px; background: var(--accent); color: #fff; }
-.vp__bandrow { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-.vp__title { font-size: 18px; font-weight: 800; line-height: 24px; letter-spacing: -0.03em; }
-/* 오른쪽 '자동 갱신' — 관람객 화면 띠의 흰 네모 + 글 */
-.vp__sync { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; white-space: nowrap; }
-.vp__syncsq { display: inline-block; width: 7px; height: 7px; background: #fff; }
-.vp__event {
+/* 위 띠 — 제목 · 행사명과 오른쪽 배치도 단추(관람객 화면 .mapbtn 을 줄인 것) */
+.vp__band { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 14px; background: var(--accent); color: #fff; }
+.vp__bandtext { min-width: 0; }
+.vp__title { font-size: 18px; font-weight: 800; line-height: 24px; letter-spacing: -0.03em; white-space: nowrap; }
+.vp__event { margin-top: 2px; font-size: 12px; line-height: 17px; color: rgba(255, 255, 255, .85); word-break: keep-all; }
+.vp__mapbtn {
+  flex: none;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 68px;
+  height: 58px;
+  border-radius: 7px;
+  background: #fff;
+  color: var(--accent);
   font-size: 12px;
-  line-height: 17px;
-  color: rgba(255, 255, 255, .85);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.02em;
 }
+.vp__mapbtn svg { width: 19px; height: 19px; }
 /* 큰 숫자 — 관람객 화면 .hero 의 '지금 여유로운 부스' (숫자 · 분포 막대 · 상태별 수) */
 .vp__hero { padding: 16px 14px 14px; }
+.vp__labelrow { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .vp__label { font-size: 12.5px; font-weight: 600; color: var(--muted); }
+/* 자동 갱신 상태 — 관람객 화면 .sync 와 같은 초록 맥박 */
+.vp__sync { display: inline-flex; align-items: center; gap: 5px; color: var(--ink-2); font-size: 11px; font-weight: 700; line-height: 1; white-space: nowrap; }
+.vp__syncdot { width: 8px; height: 8px; border-radius: 50%; background: var(--v-free); animation: vp-pulse 2s ease-in-out infinite; }
+@keyframes vp-pulse {
+  0%, 100% { transform: scale(.8); }
+  50% { transform: scale(1.25); }
+}
+@media (prefers-reduced-motion: reduce) { .vp__syncdot { animation: none; } }
 .vp__fig { display: flex; align-items: flex-end; justify-content: space-between; gap: 10px; margin-top: 6px; }
 .vp__big { display: flex; align-items: baseline; gap: 3px; line-height: .86; }
 .vp__num { font-size: 48px; font-weight: 800; letter-spacing: -0.055em; }
 .vp__unit { font-size: 15px; font-weight: 700; }
-.vp__total { margin-bottom: 1px; font-size: 12.5px; font-weight: 600; color: var(--muted); white-space: nowrap; }
-.vp__total b { color: var(--ink); font-weight: 700; }
+.vp__total { margin-bottom: 1px; font-size: 12.5px; font-weight: 500; color: var(--muted-2); white-space: nowrap; }
+.vp__total b { margin: 0 1px 0 2px; color: var(--ink); font-size: 21px; font-weight: 800; letter-spacing: -0.03em; }
 /* 분포 막대: 칸 너비는 부스 수에 비례(이 그림은 여유 1 · 보통 1 · 혼잡 1 · 현장예약 1 · 중단마감 3 으로 고정) */
 .vp__dist { display: flex; gap: 2px; height: 6px; margin-top: 12px; }
 .dist { flex: 1 1 0; min-width: 4px; }
@@ -283,6 +301,11 @@ ul, ol { padding: 0; list-style: none; }
 .sq--busy   { background: var(--v-busy); }
 .sq--resv   { background: var(--accent); }
 .sq--off    { background: var(--off-mark); }
+/* 검색칸 — 관람객 화면 .qform 을 줄인 것(단추 하나: 검색어를 적용하면 초기화로 바뀝니다) */
+.vp__q { display: flex; gap: 5px; height: 36px; margin: 2px 14px 4px; }
+.vp__qbox { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; padding: 0 9px; background: var(--sink); color: var(--muted); font-size: 12.5px; font-weight: 500; white-space: nowrap; overflow: hidden; }
+.vp__qbox svg { flex: none; color: var(--ink); }
+.vp__qbtn { flex: none; display: flex; align-items: center; justify-content: center; width: 56px; background: var(--accent); color: #fff; font-size: 12.5px; font-weight: 700; }
 /* 구역 탭 — 실제 화면은 옆으로 밀어 보는 줄이라 그림에서도 넘치는 탭은 잘라 둡니다 */
 .vp__tabs {
   display: flex;
@@ -295,9 +318,15 @@ ul, ol { padding: 0; list-style: none; }
 .vp__tab { flex: none; padding: 8px 0 7px; border-bottom: 2px solid transparent; font-size: 13px; font-weight: 700; color: var(--muted); }
 .vp__tab.is-on { border-bottom-color: var(--ink); color: var(--ink); }
 .vp__tabn { font-weight: 600; color: var(--muted-2); }
+/* 보기 · 정렬 — 관람객 화면 .seg 를 줄인 것 */
+.vp__ctl { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px; padding: 10px 14px 4px; }
+.vp__seg { display: inline-flex; border: 1px solid var(--line); font-size: 11.5px; font-weight: 600; color: var(--muted); }
+.vp__seg span { display: flex; align-items: center; height: 28px; padding: 0 9px; white-space: nowrap; }
+.vp__seg .is-on { background: var(--ink); color: #fff; font-weight: 700; }
 .vp__rows { padding: 0 14px; }
 @media (min-width: 600px) {
-  .vp__hero, .vp__tabs, .vp__rows { padding-left: 16px; padding-right: 16px; }
+  .vp__hero, .vp__tabs, .vp__rows, .vp__ctl { padding-left: 16px; padding-right: 16px; }
+  .vp__q { margin-left: 16px; margin-right: 16px; }
 }
 /* 목록 줄 — visitor.css 의 .row · .row__main · .row__code · .row__org · .row__name 과 같은 값(옅은 보라 번호 띠 · 세로 가운데) */
 .vr {
@@ -407,6 +436,31 @@ ul, ol { padding: 0; list-style: none; }
 
 /* 한눈에 보기 — visitor.css 의 한눈에 칸(.tile)과 같은 칠 · 크기 · 글자. 대기 분이 없는 칸은 위 상태 표시와 같은 색 · 낱말(두 줄) */
 .vp__sub { padding: 14px 14px 0; border-top: 1px solid var(--line); font-size: 13px; font-weight: 700; color: var(--ink-2); }
+/* 배치도 칸 — 창으로 열리는 화면이라 목록 미리보기와 따로 둡니다. 좁을 때는 관람객 카드 바로 아래,
+   두 카드 나란히일 때는 그 아래 한 줄을 씁니다(글 · 지도가 위 두 카드의 내용 폭과 같은 줄에 옵니다) */
+.vmcard { min-width: 0; padding: 20px 16px; border: 1px solid var(--line); border-radius: var(--r-card); background: var(--panel); }
+@media (min-width: 600px) { .vmcard { padding: 24px; } }
+@media (min-width: 1024px) {
+  .vmcard { grid-column: 1 / -1; grid-row: 2; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 70px; align-items: start; }
+  .vmcard .vm { margin-top: 0; }
+  @supports (grid-template-rows: subgrid) { .vmcard { grid-row: 6; } }
+  /* 두 미리보기의 아래 끝이 맞도록 관람객 미리보기의 목록 줄 · 끝 여백(.vp__tiles)만 조금 좁힙니다 */
+  .vr { min-height: 0; padding-top: 11px; padding-bottom: 11px; }
+}
+/* 배치도 창 — 관람객 화면 .vmap 을 줄인 것. 주황은 지도 안의 위치 표시에만 씁니다 */
+.vm { margin-top: 16px; overflow: hidden; }
+.vm__top { padding: 9px 11px 6px; background: var(--accent); color: #fff; font-size: 13px; font-weight: 800; }
+.vm__zones { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; padding: 2px 8px 8px; background: var(--accent); }
+.vm__zones span { display: flex; align-items: center; justify-content: center; min-height: 30px; padding: 1px 2px; border: 1px solid rgba(255, 255, 255, .6); border-radius: 5px; color: #fff; font-size: 10px; font-weight: 700; letter-spacing: -0.03em; line-height: 1.15; text-align: center; word-break: keep-all; }
+.vm__zones .is-on { background: #fff; color: var(--accent); }
+.vm__stage { position: relative; aspect-ratio: 16 / 10; overflow: hidden; background: #fff; border: 1px solid var(--line); border-top: 0; }
+.vm__img { position: absolute; top: -4.5%; left: -42.25%; width: 225.35%; max-width: none; height: auto; }
+.vm__hl { position: absolute; box-sizing: border-box; border: 2px solid rgba(255, 121, 0, .55); border-radius: 4px; }
+.vm__mini { position: absolute; top: 6px; right: 6px; width: 34%; padding: 2px; border: 1px solid #C9CEDC; border-radius: 4px; background: #fff; box-shadow: 0 1px 3px rgba(22, 32, 60, .22); }
+.vm__minimap { position: relative; display: block; aspect-ratio: 1600 / 508; overflow: hidden; background: url("/assets/map/venue-map-v1.jpg") no-repeat 0 11.27% / 100% auto; }
+.vm__miniview { position: absolute; left: 18.75%; top: 0; width: 44.4%; height: 78.7%; box-sizing: border-box; border: 1.5px solid #FF7900; background: rgba(255, 121, 0, .16); }
+.vm__tools { position: absolute; right: 6px; bottom: 6px; display: flex; flex-direction: column; gap: 4px; }
+.vm__tools span { display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; border: 1px solid var(--line); border-radius: 4px; background: #fff; color: var(--ink); font-size: 15px; font-weight: 700; line-height: 1; box-shadow: 0 1px 2px rgba(22, 32, 60, .2); }
 .vp__tiles {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
@@ -416,6 +470,7 @@ ul, ol { padding: 0; list-style: none; }
 @media (min-width: 600px) {
   .vp__sub, .vp__tiles { padding-left: 16px; padding-right: 16px; }
 }
+@media (min-width: 1024px) { .vp__tiles { padding-bottom: 12px; } }
 .tile {
   --tile-edge: rgba(22, 32, 60, .14);
   display: flex;

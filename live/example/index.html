@@ -42,16 +42,19 @@
             <p class="card__guide">현장예약 부스는 대기시간 대신 ‘현장예약’으로 표시됩니다. 예약은 부스에서 직접 접수합니다.</p>
           </div>
 
-          <div class="card__pv vp" role="img" aria-label="관람객 화면 미리보기. 위에 지금 여유로운 부스 수(1곳, 전체 7곳)와 상태별 부스 수가 있고, 아래 목록에 부스마다 번호, 이름, 운영기관, 대기시간과 상태(여유, 보통, 혼잡, 잠시 중단, 마감)를 한 줄씩 보여 줍니다. 잠시 중단, 오늘 마감, 현장예약, 예약 마감 부스는 대기시간 대신 한 줄 상태 표시(잠시 중단, 오늘 마감, 현장예약, 예약 마감)로 보입니다. 맨 아래 한눈에 보기에는 같은 일곱 부스를 칸으로 보여 줍니다.">
+          <div class="card__pv vp" role="img" aria-label="관람객 화면 미리보기. 위 띠에 제목과 배치도 단추가 있고, 지금 여유로운 부스 수(1곳, 전체 7곳)와 자동 갱신 상태, 상태별 부스 수, 검색칸, 구역 탭, 보기와 정렬 단추가 차례로 있습니다. 아래 목록에 부스마다 번호, 이름, 운영기관, 대기시간과 상태(여유, 보통, 혼잡, 잠시 중단, 마감, 현장예약, 예약 마감)가 있고, 같은 부스를 칸으로 보는 한눈에 보기가 그 아래에 있습니다.">
             <div class="vp__band">
-              <div class="vp__bandrow">
+              <div class="vp__bandtext">
                 <p class="vp__title">부스 대기 현황</p>
-                <p class="vp__sync"><i class="vp__syncsq"></i>자동 갱신</p>
+                <p class="vp__event">2026 인천 AI미래채움 교육페스티벌 · 인천 상상플랫폼</p>
               </div>
-              <p class="vp__event">2026 인천 AI미래채움 교육페스티벌 · 인천 상상플랫폼</p>
+              <span class="vp__mapbtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M18 8c0 3.613-3.869 7.429-5.393 8.795a1 1 0 0 1-1.214 0C9.87 15.429 6 11.613 6 8a6 6 0 0 1 12 0"/><circle cx="12" cy="8" r="2"/><path d="M8.714 14h-3.71a1 1 0 0 0-.948.683l-2.004 6A1 1 0 0 0 3 22h18a1 1 0 0 0 .948-1.316l-2-6a1 1 0 0 0-.949-.684h-3.712"/></svg>배치도</span>
             </div>
             <div class="vp__hero">
-              <p class="vp__label">지금 여유로운 부스</p>
+              <div class="vp__labelrow">
+                <p class="vp__label">지금 여유로운 부스</p>
+                <p class="vp__sync"><i class="vp__syncdot"></i>자동 갱신 중</p>
+              </div>
               <div class="vp__fig">
                 <p class="vp__big"><b class="vp__num">1</b><span class="vp__unit">곳</span></p>
                 <p class="vp__total">전체 <b>7</b>곳</p>
@@ -67,7 +70,9 @@
                 <li class="cnt"><span class="cnt__w"><i class="sq sq--off"></i>중단·마감</span><b class="cnt__n">3</b></li>
               </ul>
             </div>
+            <p class="vp__q"><span class="vp__qbox"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" aria-hidden="true" focusable="false"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.5-4.5"/></svg>부스번호 · 학교명 검색</span><span class="vp__qbtn">검색</span></p>
             <p class="vp__tabs"><span class="vp__tab is-on">전체 <span class="vp__tabn">7</span></span><span class="vp__tab">A 구역 <span class="vp__tabn">1</span></span><span class="vp__tab">B 구역 <span class="vp__tabn">1</span></span><span class="vp__tab">C 구역 <span class="vp__tabn">1</span></span><span class="vp__tab">D 구역 <span class="vp__tabn">1</span></span></p>
+            <p class="vp__ctl"><span class="vp__seg"><span class="is-on">목록</span><span>한눈에</span></span><span class="vp__seg"><span class="is-on">번호순</span><span>대기 짧은 순</span></span></p>
             <ul class="vp__rows">
               <li class="vr">
                 <span class="vr__code">A-02</span>
@@ -128,6 +133,28 @@
               <div class="facts__row"><dt>실제 주소</dt><dd>incheon-live.vercel.app</dd></div>
               <div class="facts__row"><dt>로그인</dt><dd>필요 없음</dd></div>
             </dl>
+          </div>
+        </section>
+
+        <section class="vmcard" aria-labelledby="map-who map-title">
+          <div>
+            <p class="card__who" id="map-who">관람객</p>
+            <h2 class="card__title" id="map-title">행사장 배치도 보기</h2>
+            <p class="card__text">화면 위쪽의 배치도 단추로 열고, 구역을 고르면 그 위치를 주황색 외곽선으로 표시한 뒤 확대합니다. 오른쪽 위 작은 지도에서 지금 보는 범위를 확인합니다.</p>
+          </div>
+          <!-- 배치도 창: 스쿨존 45~84 를 고른 뒤의 모습. 공식 배치도의 한 부분을 그대로 쓰고, 주황 외곽선 · 미니맵 자리는 실제 좌표(assets/venue-map.js)에서 계산한 값입니다. -->
+          <div class="vm" role="img" aria-label="행사장 배치도 창 미리보기. 위 띠에 제목과 구역 단추 여덟 개(전체 보기, 스쿨존 01~44, 스쿨존 45~84, 미래채움존, 체험존, 빅테크존, 홍보존, 부스 명단)가 있고, 스쿨존 45~84를 고른 상태입니다. 지도에는 그 구역이 주황색 외곽선으로 표시되고, 오른쪽 위 작은 지도에 지금 보는 범위가, 오른쪽 아래에 확대와 축소 단추가 있습니다.">
+            <p class="vm__top">행사장 배치도</p>
+            <p class="vm__zones"><span>전체 보기</span><span>스쿨존 01~44</span><span class="is-on">스쿨존 45~84</span><span>미래채움존</span><span>체험존</span><span>빅테크존</span><span>홍보존</span><span>부스 명단</span></p>
+            <div class="vm__stage">
+              <img class="vm__img" src="/assets/map/venue-map-v1.jpg" alt="" loading="lazy" decoding="async" />
+              <i class="vm__hl" style="left:12.54%;top:22.3%;width:79%;height:8.8%"></i>
+              <i class="vm__hl" style="left:8.45%;top:38.96%;width:20.85%;height:8.78%"></i>
+              <i class="vm__hl" style="left:41.83%;top:38.96%;width:45.07%;height:17.34%"></i>
+              <i class="vm__hl" style="left:50.14%;top:63.29%;width:15.92%;height:8.78%"></i>
+              <span class="vm__mini"><span class="vm__minimap"><i class="vm__miniview"></i></span></span>
+              <span class="vm__tools"><span>+</span><span>−</span></span>
+            </div>
           </div>
         </section>
 

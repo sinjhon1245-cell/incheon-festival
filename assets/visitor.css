@@ -539,14 +539,15 @@ html.is-demo .row { scroll-margin-top: calc(56px + var(--demo-h) + env(safe-area
   letter-spacing: -0.055em;
 }
 .hero__unit { font-size: 20px; font-weight: 700; }
+/* 읽을 곳은 숫자입니다. '전체' · '곳' 은 차분하게 두고 숫자만 키웁니다(누르는 곳이 아니라 꾸밈은 없습니다). */
 .hero__total {
   margin-bottom: 2px;
   font-size: 15px;
-  font-weight: 600;
-  color: var(--muted);
+  font-weight: 500;
+  color: var(--muted-2);
   white-space: nowrap;
 }
-.hero__total b { color: var(--ink); font-weight: 800; }
+.hero__total b { margin: 0 1px 0 2px; color: var(--ink); font-size: 26px; font-weight: 800; letter-spacing: -0.03em; }
 .hero__sub {
   margin-top: 12px;
   font-size: 14px;

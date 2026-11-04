@@ -278,7 +278,7 @@ cp ../assets/booth-core.js ../assets/mock-data.js ../assets/venue-map.js ../asse
 if [ -d ../assets/map ]; then mkdir -p dist/assets/map && cp ../assets/map/* dist/assets/map/; fi
 
 # 화면 안내(/example): 두 화면을 소개하고 각 화면으로 보내는 정적 페이지.
-# 스크립트 · 데이터 요청이 없고, 이 폴더(live/example) 안의 두 파일만 씁니다.
+# 스크립트 · 데이터 요청이 없고, 이 폴더(live/example) 안의 두 파일과 미리보기용 배치도 그림(/assets/map)만 씁니다.
 mkdir -p dist/example
 cp example/index.html example/example.css dist/example/
 
