@@ -317,6 +317,13 @@
       return c;
     }
 
+    // 학교급 탭: 특수는 한 곳뿐이라 탭 줄에서는 중등과 함께 고릅니다. 구역 자체는 합치지 않습니다 —
+    // 부스의 구역 · 구역 제목은 그대로이고, 목록 · 한눈에서 특수는 늘 중등 바로 아래입니다.
+    var TAB_MAIN = '중등', TAB_JOIN = '특수';
+    function zoneInTab(zoneKey, tabKey) {
+      return zoneKey === tabKey || (tabKey === TAB_MAIN && zoneKey === TAB_JOIN);
+    }
+
     // 실제로 부스가 있는 구역만, zones 순서대로. zones 에 없는 구역은 뒤에 붙입니다.
     function zoneList() {
       var out = [], seen = {}, n = {};
@@ -327,7 +334,21 @@
       S.booths.forEach(function (b) {
         if (!seen[b.zone_key]) { seen[b.zone_key] = true; out.push({ key: b.zone_key, label: b.zone_name || '기타', n: n[b.zone_key] }); }
       });
+      var keys = out.map(function (z) { return z.key; });
+      var main = keys.indexOf(TAB_MAIN), join = keys.indexOf(TAB_JOIN);
+      if (main >= 0 && join >= 0) out.splice(main + (join > main ? 1 : 0), 0, out.splice(join, 1)[0]);
       return out;
+    }
+
+    // 탭 줄에 놓는 칸. zoneList() 와 같되 중등 · 특수를 한 칸으로 묶습니다(칸의 key 는 중등).
+    function zoneTabs() {
+      var zs = zoneList();
+      var main = zs.filter(function (z) { return z.key === TAB_MAIN; })[0];
+      var join = zs.filter(function (z) { return z.key === TAB_JOIN; })[0];
+      if (!main || !join) return zs;
+      return zs.filter(function (z) { return z !== join; }).map(function (z) {
+        return z === main ? { key: main.key, label: main.label + '·' + join.label, n: main.n + join.n } : z;
+      });
     }
 
     function searching() { return !!searchTest(); }
@@ -474,7 +495,7 @@
         // 어느 구역에 묶여 있는지 알 수 없기 때문입니다. 검색어가 비었거나 'ㄹ' 처럼
         // 낱자모뿐일 때도 같아야 합니다. 그렇지 않으면 'ㄹ' → '로' → 'ㄹ' 로 칠 때마다
         // 목록이 고른 구역 하나와 전체 구역 사이를 오갑니다. 검색칸을 닫으면 고른 구역으로 돌아갑니다.
-        if (!searchOpen() && u.zone && b.zone_key !== u.zone) return false;
+        if (!searchOpen() && u.zone && !zoneInTab(b.zone_key, u.zone)) return false;
         // 상태 고름과 검색은 함께 걸리지 않습니다(bind() 의 숫자 단추 · 검색칸 처리 참고).
         if (u.count && bucketOf(b) !== u.count) return false;
         if (q && !q(hay(b))) return false;
@@ -515,8 +536,11 @@
 
     // 검색칸이 열려 있으면 검색어가 비었거나 낱자모뿐이어도 묶지 않습니다. 치는 동안
     // 묶음 ↔ 한 줄 목록이 글자마다 바뀌며 화면이 튀지 않게 visible() 과 같은 조건을 씁니다.
+    // 중등·특수 탭은 대기 짧은 순 · 상태 고름에서도 구역 제목으로 나눕니다(특수가 중등 아래, 각 구역 안의 순서는 그 정렬대로).
     function isGrouped() {
-      return effSort() === 'code' && !searching() && !searchOpen() && !S.ui.count && zoneList().length >= 2;
+      if (searching() || searchOpen() || zoneList().length < 2) return false;
+      if (zoneTabs().length < zoneList().length && S.ui.zone === TAB_MAIN) return true;
+      return effSort() === 'code' && !S.ui.count;
     }
 
     function zoneGroups(items) {
@@ -932,7 +956,8 @@
       else { cancel.textContent = '지우기'; cancel.hidden = !S.ui.q; }
       if (!multi) return;
 
-      var key = zs.map(function (z) { return z.key + ':' + z.label + ':' + z.n; }).join(',') + '|' + S.ui.zone + '|' + S.booths.length;
+      var ts = zoneTabs();
+      var key = ts.map(function (z) { return z.key + ':' + z.label + ':' + z.n; }).join(',') + '|' + S.ui.zone + '|' + S.booths.length;
       if (key === S.keys.tabs) {
         // 15초 · 20초마다 도는 그리기에서는 탭 줄을 건드리지 않습니다. 손으로 옆으로 밀어 둔
         // 자리를 되돌리지 않으려는 것입니다. 검색을 닫아 탭 줄이 다시 보일 때만 맞춥니다.
@@ -952,13 +977,13 @@
           '<span class="tab__t">' + esc(z.key ? shortZone(z) : z.label) + '</span><span class="tab__n">' + z.n + '</span></button>';
       }
       var all = { key: '', label: '전체', n: S.booths.length };
-      if (zs.length >= ZONE_SELECT_MIN) {
-        var cur = zs.filter(function (z) { return z.key === S.ui.zone; })[0];
+      if (ts.length >= ZONE_SELECT_MIN) {
+        var cur = ts.filter(function (z) { return z.key === S.ui.zone; })[0];
         tabs.innerHTML = tabHtml(all) + (cur ? tabHtml(cur) : '') +
           '<button type="button" class="tab tab--sel" id="zone-pick" data-act="zone-pick" aria-expanded="' + S.zpick + '" aria-controls="zone-panel">' +
             '<span class="tab__t">구역 선택</span><span class="tab__caret" aria-hidden="true">▾</span></button>';
       } else {
-        tabs.innerHTML = [all].concat(zs).map(tabHtml).join('');
+        tabs.innerHTML = [all].concat(ts).map(tabHtml).join('');
       }
       restoreFocus(tabs, restore);
       // 탭을 새로 만들어도 줄의 scrollLeft 는 그대로 남습니다. 여유 수 · 다른 구역 대안 ·
@@ -980,7 +1005,7 @@
     }
     function renderPick() {
       var panel = $('zone-panel');
-      var zs = zoneList();
+      var zs = zoneTabs();
       var can = !$('bar').hidden && !$('bar-tabs').hidden && zs.length >= ZONE_SELECT_MIN;
       if (!can) S.zpick = false;
       var btn = $('zone-pick');
@@ -1090,7 +1115,7 @@
       if (S.ui.count && liveOn()) {
         // 위의 숫자는 행사 전체 수라, 구역 안에서 거르는 중이면 구역과 실제 곳 수를 함께 알립니다.
         // '× 필터 해제' 는 이 상태 고름만 풉니다(구역 · 보기 · 정렬은 그대로).
-        var zz = (!searchOpen() && S.ui.zone) ? zoneList().filter(function (z) { return z.key === S.ui.zone; })[0] : null;
+        var zz = (!searchOpen() && S.ui.zone) ? zoneTabs().filter(function (z) { return z.key === S.ui.zone; })[0] : null;
         var word = COUNT_WORD[S.ui.count];
         html = '<span class="result__t">' + (zz ? esc(shortZone(zz)) + ' · ' : '') + esc(word) + ' 부스만 보는 중 <b>' + items.length + '곳</b></span>' +
           '<button type="button" class="link result__clear" data-act="clear-count" aria-label="' + esc(word) + ' 필터 해제">' +
@@ -1827,6 +1852,8 @@
       });
       $('tabs').addEventListener('scroll', tabsFade, { passive: true });
       window.addEventListener('resize', tabsFade);
+      // 글꼴은 글자가 그려질 때 조각으로 내려받습니다. 대체 글꼴은 폭이 달라, 조각이 온 뒤 끝 흐림을 다시 잽니다(탭이 다 들어가는데 끝이 흐려지지 않게).
+      if (document.fonts && document.fonts.addEventListener) document.fonts.addEventListener('loadingdone', tabsFade);
       window.addEventListener('resize', function () { if (S.zpick) fitPick(); });
 
       document.addEventListener('keydown', function (e) {
