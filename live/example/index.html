@@ -20,7 +20,6 @@
        아래 미리보기는 실제 화면과 같은 모양으로 줄여 그린 그림이고, 부스명 · 값은 예시로 고정입니다.
        미리보기 안에는 실제 화면에 없는 글을 넣지 않습니다 — 설명이 필요하면 미리보기 바깥의 안내 문장으로 둡니다.
        두 단추는 실제 운영 화면을 엽니다 — 관람객 화면(/) · 부스 운영자 화면(/booth-ctrl).
-       두 카드의 보조 링크는 협의용 예시 화면(/?demo=1 · /booth-ctrl?demo, 예시 부스 · 서버 읽기 쓰기 없음)을 엽니다.
        PIN 안내에는 번호와 날짜를 적지 않습니다. 정적 페이지라 시각이 지나도 글이 바뀌지 않고, 쓸 수 있는 PIN 은 서버가 정하기 때문입니다.
        PIN · QR 열쇠 같은 접속 정보는 이 페이지에 적지 않습니다.
        운영 포털 · 관리자 화면으로 가는 링크나 주소는 두지 않습니다
@@ -42,7 +41,7 @@
             <p class="card__guide">현장예약 부스는 대기시간 대신 ‘현장예약’으로 표시됩니다. 예약은 부스에서 직접 접수합니다.</p>
           </div>
 
-          <div class="card__pv vp" role="img" aria-label="관람객 화면 미리보기. 위에 지금 여유로운 부스 수(1곳, 전체 7곳)와 상태별 부스 수가 있고, 아래 목록에 부스마다 번호, 이름, 운영기관, 대기시간과 상태(여유, 보통, 혼잡, 잠시 중단, 마감)를 한 줄씩 보여 줍니다. 잠시 중단, 오늘 마감, 현장예약, 예약 마감 부스는 대기시간 대신 한 줄 상태 표시(잠시 중단, 오늘 마감, 현장예약, 예약 마감)로 보입니다. 그 아래 한눈에 보기에는 같은 일곱 부스를 칸으로 보여 주고, 맨 아래에는 부스 앞 QR로 들어올 때 뜨는 지금 계신 부스 카드(E-02, 현장예약, 현장에서 예약을 진행하는 부스예요)가 있습니다.">
+          <div class="card__pv vp" role="img" aria-label="관람객 화면 미리보기. 위에 지금 여유로운 부스 수(1곳, 전체 7곳)와 상태별 부스 수가 있고, 아래 목록에 부스마다 번호, 이름, 운영기관, 대기시간과 상태(여유, 보통, 혼잡, 잠시 중단, 마감)를 한 줄씩 보여 줍니다. 잠시 중단, 오늘 마감, 현장예약, 예약 마감 부스는 대기시간 대신 한 줄 상태 표시(잠시 중단, 오늘 마감, 현장예약, 예약 마감)로 보입니다. 맨 아래 한눈에 보기에는 같은 일곱 부스를 칸으로 보여 줍니다.">
             <div class="vp__band">
               <div class="vp__bandrow">
                 <p class="vp__title">부스 대기 현황</p>
@@ -116,24 +115,10 @@
               <li class="tile is-resv"><span class="tile__no">E-02</span><span class="tile__v">현장</span><span class="tile__w">예약</span></li>
               <li class="tile is-resv-closed"><span class="tile__no">E-03</span><span class="tile__v">예약</span><span class="tile__w">마감</span></li>
             </ul>
-            <!-- 부스 앞 QR 로 들어오면 목록 위에 뜨는 '지금 계신 부스' 카드(관람객 화면 .here 를 줄인 것) -->
-            <p class="vp__sub">부스 앞 QR로 들어오면</p>
-            <div class="vq">
-              <p class="vq__label"><i class="vq__sq"></i>지금 계신 부스</p>
-              <div class="vq__main">
-                <div><span class="vq__code">E-02</span><p class="vq__name">VR 우주 탐험</p></div>
-                <span class="stag stag--resv stag--big" aria-hidden="true">현장예약</span>
-              </div>
-              <p class="vq__age">현장에서 예약을 진행하는 부스예요.</p>
-              <p class="vq__foot"><span class="vq__link">전체 부스 보기</span></p>
-            </div>
           </div>
 
           <div class="card__foot">
             <a class="cta" href="/" target="_blank" rel="noopener noreferrer">관람객 실제 화면 보기<span aria-hidden="true">&#x2197;&#xFE0E;</span><span class="sr-only"> (실제 운영 화면, 새 탭에서 열림)</span></a>
-            <!-- 협의용 예시 화면(/?demo=1): 이 브라우저 안의 예시 부스만 그리고 서버를 읽거나 쓰지 않습니다. 실제 화면과 같은 목록 · 한눈에 보기로
-                 여유 · 보통 · 혼잡 · 잠시 중단 · 마감 · 현장예약 · 예약 마감을 견줘 볼 수 있고, '실제 화면으로 돌아가기' 로 나옵니다. -->
-            <a class="sublink" href="/?demo=1" target="_blank" rel="noopener noreferrer">예시 화면에서 목록 · 한눈에 직접 보기<span class="sr-only"> (협의용 예시, 새 탭에서 열림)</span></a>
             <dl class="facts">
               <div class="facts__row"><dt>여는 화면</dt><dd>실제 관람객 화면 · 실제 대기 현황</dd></div>
               <div class="facts__row"><dt>실제 주소</dt><dd>incheon-live.vercel.app</dd></div>
@@ -150,7 +135,7 @@
             <p class="card__guide">아래는 같은 부스를 현장대기와 현장예약 두 운영 방식으로 견준 것입니다.</p>
           </div>
 
-          <div class="card__pv cp" role="img" aria-label="부스 운영자 화면 미리보기. 위에 부스 번호(A-01)와 부스 이름, 운영기관, 구역이 있는 부스 정보 카드가 있고, 아래에 같은 부스를 두 운영 방식으로 나란히 보여 줍니다. 현장대기는 현재 대기(5분, 여유)와 대기시간 단추(바로, 5분부터 60분 이상까지)가 있고, 지금 저장된 값(5분)이 보라색으로 표시됩니다. 현장예약은 대기시간을 입력하지 않고 현재 상태(현장예약 운영 중)와 예약 상태 단추(현장예약 운영 중, 예약 마감)가 있습니다. 두 방식 모두 운영 상태 단추(잠시 중단, 오늘 운영 마감)가 있고, 맨 아래에 관람객 목록과 QR 화면의 상태 칸이 있습니다. 현장대기는 5분 여유, 현장예약은 현장예약 표시입니다.">
+          <div class="card__pv cp" role="img" aria-label="부스 운영자 화면 미리보기. 위에 부스 번호(A-01)와 부스 이름, 운영기관, 구역이 있는 부스 정보 카드가 있고, 아래에 같은 부스를 두 운영 방식으로 위아래에 보여 줍니다. 현장대기는 현재 대기(5분, 여유)와 대기시간 단추(바로, 5분부터 60분 이상까지)가 있고, 지금 저장된 값(5분)이 보라색으로 표시됩니다. 현장예약은 대기시간을 입력하지 않고 현재 상태(현장예약 운영 중)와 예약 상태 단추(현장예약 운영 중, 예약 마감)가 있습니다. 현재 상태 옆에는 관람객 목록과 QR 화면의 상태 칸(5분 여유, 현장예약)이 있고, 맨 아래에 두 방식 공통 단추(변동 없음 · 지금 확인, 잠시 중단, 오늘 운영 마감)가 있습니다.">
             <div class="cp__head">
               <p class="cp__code">A-01</p>
               <div class="cp__id">
@@ -162,14 +147,14 @@
               </div>
             </div>
 
-            <!-- 같은 부스를 두 운영 방식으로. 칸의 순서 · 높이가 같아 어느 줄이 어떻게 다른지 옆으로 견줘 볼 수 있습니다.
+            <!-- 같은 부스를 두 운영 방식으로. 현장대기 아래에 현장예약을 두고, 두 칸은 같은 순서 · 같은 높이입니다.
                  각 칸 위 머리만 이 안내 페이지의 설명이고, 그 아래는 실제 운영자 화면(booth-ctrl.html)을 줄인 그림입니다. -->
             <div class="cp__duo">
               <div class="cpx">
                 <div class="cpx__top">
                   <p class="cpx__k">운영 방식</p>
                   <p class="cpx__t">현장대기</p>
-                  <p class="cpx__d">대기시간을 입력해 관람객에게 안내</p>
+                  <p class="cpx__d">대기시간을 입력해 안내</p>
                 </div>
                 <p class="cp__modes"><span class="cp__mode is-on">현장대기</span><span class="cp__mode">현장예약</span></p>
                 <div class="cp__now">
@@ -180,7 +165,10 @@
                   </div>
                   <p class="cp__nowwhen">마지막 입력 · 2분 전</p>
                 </div>
-                <span class="cp__still"><span class="cp__stillt">변동 없음 · 지금 확인</span><span class="cp__stills">값은 그대로 두고 확인한 시각만 새로 저장해요</span></span>
+                <div class="cpx__seen">
+                  <p class="cpx__seenk">관람객 목록 · QR 화면</p>
+                  <span class="seen__cell"><span class="v"><b class="v__n">5</b><span class="v__u">분</span></span><span class="st st--free">여유</span></span>
+                </div>
                 <div class="cp__pad">
                   <div class="cp__padhead">
                     <p class="cp__padtitle">대기시간</p>
@@ -197,20 +185,6 @@
                     <span class="w w--busy"><span class="w__v">60분<span class="w__more">이상</span></span><span class="w__hint"><i class="sq"></i>혼잡</span></span>
                   </div>
                 </div>
-                <div class="cp__offs">
-                  <p class="cp__offstitle">운영 상태</p>
-                  <div class="offs">
-                    <span class="off"><span class="off__t">잠시 중단</span><span class="off__s">점심·재료 준비·회차 사이</span></span>
-                    <span class="off off--closed"><span class="off__t">오늘 운영 마감</span><span class="off__s">재료 소진·운영 끝</span></span>
-                  </div>
-                </div>
-                <div class="cpx__seen">
-                  <p class="cpx__seenk">관람객 목록 · QR 화면</p>
-                  <div class="seen">
-                    <p class="seen__t">입력한 대기시간과 혼잡도가 그대로 보여요</p>
-                    <span class="seen__cell"><span class="v"><b class="v__n">5</b><span class="v__u">분</span></span><span class="st st--free">여유</span></span>
-                  </div>
-                </div>
               </div>
 
               <div class="cpx cpx--resv">
@@ -225,7 +199,10 @@
                   <div class="cp__nowmain"><span class="cp__nowtext">현장예약 운영 중</span></div>
                   <p class="cp__nowwhen">마지막 입력 · 2분 전</p>
                 </div>
-                <span class="cp__still"><span class="cp__stillt">변동 없음 · 지금 확인</span><span class="cp__stills">값은 그대로 두고 확인한 시각만 새로 저장해요</span></span>
+                <div class="cpx__seen">
+                  <p class="cpx__seenk">관람객 목록 · QR 화면</p>
+                  <span class="seen__cell"><span class="stag stag--resv" aria-hidden="true">현장예약</span></span>
+                </div>
                 <div class="cp__pad">
                   <div class="cp__padhead">
                     <p class="cp__padtitle">예약 상태</p>
@@ -236,33 +213,21 @@
                     <span class="rv"><span class="rv__t">예약 마감</span><span class="rv__s">오늘 받을 예약이 끝났어요</span></span>
                   </div>
                 </div>
-                <div class="cp__offs">
-                  <p class="cp__offstitle">운영 상태</p>
-                  <div class="offs">
-                    <span class="off"><span class="off__t">잠시 중단</span><span class="off__s">점심·재료 준비·회차 사이</span></span>
-                    <span class="off off--closed"><span class="off__t">오늘 운영 마감</span><span class="off__s">재료 소진·운영 끝</span></span>
-                  </div>
-                </div>
-                <div class="cpx__seen">
-                  <p class="cpx__seenk">관람객 목록 · QR 화면</p>
-                  <div class="seen">
-                    <p class="seen__t">대기시간 대신 ‘현장예약’으로 보여요</p>
-                    <span class="seen__cell"><span class="stag stag--resv" aria-hidden="true">현장예약</span></span>
-                  </div>
+              </div>
+
+              <div class="cpx cpx--both">
+                <p class="cp__offstitle">두 방식 공통</p>
+                <div class="offs">
+                  <span class="off"><span class="off__t">변동 없음 · 지금 확인</span><span class="off__s">확인한 시각만 새로 저장</span></span>
+                  <span class="off"><span class="off__t">잠시 중단</span><span class="off__s">점심·재료 준비·회차 사이</span></span>
+                  <span class="off off--closed"><span class="off__t">오늘 운영 마감</span><span class="off__s">재료 소진·운영 끝</span></span>
                 </div>
               </div>
             </div>
           </div>
 
-          <!-- PIN 안내. 번호 · 날짜를 적지 않아 리허설이 끝나도 틀린 말이 되지 않습니다(쓸 수 있는 PIN 은 서버가 정함). -->
-          <dl class="card__note pins">
-            <div class="pins__row"><dt>예시 화면</dt><dd>화면에 표시되는 4자리 예시 PIN으로 열립니다. 서버에 저장되지 않고 실제 운영과 연결되지 않습니다.</dd></div>
-            <div class="pins__row"><dt>실제 화면</dt><dd>운영자 QR 또는 운영본부가 안내한 PIN으로 접속합니다. 예시 PIN은 실제 화면에서 쓸 수 없습니다.</dd></div>
-          </dl>
-
           <div class="card__foot">
             <a class="cta" href="/booth-ctrl" target="_blank" rel="noopener noreferrer">부스 운영자 실제 화면 열기<span aria-hidden="true">&#x2197;&#xFE0E;</span><span class="sr-only"> (실제 운영 화면, 새 탭에서 열림)</span></a>
-            <a class="sublink" href="/booth-ctrl?demo" target="_blank" rel="noopener noreferrer">예시 화면에서 두 운영 방식 직접 보기<span class="sr-only"> (협의용 예시, 새 탭에서 열림)</span></a>
             <dl class="facts">
               <div class="facts__row"><dt>여는 화면</dt><dd>실제 부스 운영자 화면 · 대기시간 · 예약 상태 입력</dd></div>
               <div class="facts__row"><dt>실제 주소</dt><dd>incheon-live.vercel.app/booth-ctrl</dd></div>
@@ -271,6 +236,12 @@
           </div>
         </section>
       </div>
+
+      <!-- PIN 안내. 번호 · 날짜를 적지 않아 리허설이 끝나도 틀린 말이 되지 않습니다(쓸 수 있는 PIN 은 서버가 정함). -->
+      <dl class="pins">
+        <div class="pins__row"><dt>예시 화면</dt><dd>화면에 표시되는 4자리 예시 PIN으로 열립니다. 서버에 저장되지 않고 실제 운영과 연결되지 않습니다.</dd></div>
+        <div class="pins__row"><dt>실제 화면</dt><dd>운영자 QR 또는 운영본부가 안내한 PIN으로 접속합니다. 예시 PIN은 실제 화면에서 쓸 수 없습니다.</dd></div>
+      </dl>
 
       <section class="flow" aria-labelledby="flow-title">
         <div>

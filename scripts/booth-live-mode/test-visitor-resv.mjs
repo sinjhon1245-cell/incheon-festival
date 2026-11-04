@@ -12,7 +12,7 @@
      X  예시 화면 일곱 상태(5분 여유 · 20분 보통 · 30분 혼잡 · 현장예약 · 예약 마감 · 잠시 중단 · 오늘 마감)가
                   목록 · 한눈에 모두에 · 지금 계신 부스(QR) 표시 · 칩 · 서버 요청 없음 · '실제 화면으로 돌아가기' 로 예시 표시가 사라짐
      E  화면 안내 /example 의 목록 · 한눈에 미리보기가 관람객 화면과 같은 칸 · 표시 · 색(상태 표시 CSS 는 글자 그대로) ·
-                  운영자 예시 두 칸(현장대기 · 현장예약: 같은 폭 · 높이 · 줄, 휴대폰은 위아래) · 미리보기 = 실제 화면 · PIN 안내 · 빈칸 없음
+                  운영자 예시 두 칸(현장대기 아래 현장예약: 같은 폭 · 높이 · 구성) · 미리보기 = 실제 화면 · PIN 안내 · 빈칸 없음
    폭: 360 · 390 · 768 · 1024 · 1440
 
    쓰는 법: node scripts/booth-live-mode/test-visitor-resv.mjs --deps <puppeteer-core 가 설치된 폴더>
@@ -151,7 +151,7 @@ const ringOk = (p, k) => !!p && !!p.ring && p.ring.r.every((x) => x === 4) && (k
 const WIDTHS = [360, 390, 768, 1024, 1440];
 const STATES = { 'A-02': ['is-free', '5분', '여유'], 'B-01': ['is-normal', '20분', '보통'], 'A-04': ['is-busy', '30분', '혼잡'],
   'C-05': ['is-resv', '현장', '예약'], 'C-06': ['is-resv-closed', '예약', '마감'], 'B-03': ['is-pause', '잠시', '중단'], 'C-01': ['is-closed', '오늘', '마감'] };
-let tagBg = null, realRow = null, realAge = null;
+let tagBg = null, realRow = null;
 for (const W of WIDTHS) {
   const { ctx, page } = await openPage(W, '/visitor.html?demo=1');
   await until(() => page.$$eval('#list .row', (r) => r.length === 14));
@@ -266,10 +266,8 @@ for (const [id, text, k] of [['ex-c05', '현장예약', 'resv'], ['ex-c06', '예
       fs: parseFloat(cs.fontSize), bg: cs.backgroundColor, ink: cs.color, edge: cs.borderTopColor, text: x.textContent, shadow: cs.boxShadow,
       ring: { w: ['Top', 'Right', 'Bottom', 'Left'].map((s) => parseFloat(cs[`border${s}Width`])), c: ['Top', 'Right', 'Bottom', 'Left'].map((s) => cs[`border${s}Color`]),
         r: ['TopLeft', 'TopRight', 'BottomRight', 'BottomLeft'].map((s) => parseFloat(cs[`border${s}Radius`])) } }; });
-    const age = document.querySelector('#here .here__age');
-    return { c: (vr.left + vr.right) / 2, kids, age: age ? age.textContent : '' };
+    return { c: (vr.left + vr.right) / 2, kids };
   });
-  if (id === 'ex-c05') realAge = h.age;
   if (text) {
     const b = h.kids[0];
     t(`X2 지금 계신 부스(QR) ${id}: 같은 한 줄 표시 '${text}'(목록보다 조금 크게 · 88×64 보다 작게) · 같은 색`, !!b && /stag--big/.test(b.cls) && b.text === text
@@ -314,7 +312,7 @@ for (const W of WIDTHS) {
     });
     const tile = (cls) => { const el = document.querySelector('.vp__tiles .tile.' + cls); if (!el) return null; const cs = getComputedStyle(el); return { v: el.querySelector('.tile__v').textContent, w: el.querySelector('.tile__w').textContent, bg: cs.backgroundColor, ink: cs.color }; };
     return { rows, tiles: document.querySelectorAll('.vp__tiles .tile').length, tPause: tile('is-pause'), tClosed: tile('is-closed'), tResv: tile('is-resv'), tResvClosed: tile('is-resv-closed'),
-      demo: !!document.querySelector('a[href="/?demo=1"]'), ovf: document.documentElement.scrollWidth - document.documentElement.clientWidth };
+      demo: document.querySelectorAll('a[href*="demo"]').length, ovf: document.documentElement.scrollWidth - document.documentElement.clientWidth };
   });
   const er = Object.fromEntries(ex.rows.map((r) => [r.code, r]));
   const want = { 'D-03': ['잠시 중단', 'pause'], 'E-01': ['오늘 마감', 'off'], 'E-02': ['현장예약', 'resv'], 'E-03': ['예약 마감', 'resv-off'] };
@@ -326,13 +324,13 @@ for (const W of WIDTHS) {
   t(`E3 ${W}px 화면 안내 한눈에: 일곱 칸 · 두 줄 낱말 · 색 = 관람객 화면`, ex.tiles === 7 && !!ex.tPause && ex.tPause.v + '/' + ex.tPause.w === '잠시/중단' && ex.tClosed.v + '/' + ex.tClosed.w === '오늘/마감'
     && ex.tResv.v + '/' + ex.tResv.w === '현장/예약' && ex.tResvClosed.v + '/' + ex.tResvClosed.w === '예약/마감' && !!tagBg
     && ex.tResv.bg === tagBg.resv && ex.tResvClosed.bg === tagBg['resv-off'] && ex.tClosed.bg === tagBg.off && ex.tPause.bg === tagBg.pause, JSON.stringify([ex.tPause, ex.tClosed, ex.tResv, ex.tResvClosed]));
-  t(`E4 ${W}px 화면 안내: 예시 화면(/?demo=1) 링크 · 가로 넘침 없음`, ex.demo && ex.ovf <= 0, JSON.stringify({ demo: ex.demo, ovf: ex.ovf }));
+  t(`E4 ${W}px 화면 안내: 예시 화면 링크 없음 · 가로 넘침 없음`, ex.demo === 0 && ex.ovf <= 0, JSON.stringify({ demo: ex.demo, ovf: ex.ovf }));
   const op = await page.evaluate(() => {
     const R = (el) => { const r = el.getBoundingClientRect(); return { l: r.left, r: r.right, t: r.top, b: r.bottom, w: r.width, h: r.height }; };
-    const panels = [...document.querySelectorAll('.cpx')].map((x) => ({ box: R(x), name: x.querySelector('.cpx__t').textContent, what: x.querySelector('.cpx__d').textContent,
-      rows: ['.cp__modes', '.cp__now', '.cp__still', '.cp__pad', '.cp__offs', '.cpx__seen'].map((s) => R(x.querySelector(s)).t) }));
+    const panels = [...document.querySelectorAll('.cpx:not(.cpx--both)')].map((x) => ({ box: R(x), name: x.querySelector('.cpx__t').textContent, what: x.querySelector('.cpx__d').textContent,
+      rows: ['.cp__modes', '.cp__now', '.cpx__seen', '.cp__pad'].map((s) => Math.round(R(x.querySelector(s)).t - R(x).t)) }));
     const top = getComputedStyle(document.querySelector('.cpx--resv .cpx__top'));
-    const inside = [...document.querySelectorAll('.cp .w, .cp .rv, .cp .off, .cp .seen, .cp .cp__mode, .vq')].filter((x) => x.scrollWidth > x.clientWidth + 0.5).map((x) => x.className);
+    const inside = [...document.querySelectorAll('.cp .w, .cp .rv, .cp .off, .cp .seen__cell, .cp .cp__mode')].filter((x) => x.scrollWidth > x.clientWidth + 0.5).map((x) => x.className);
     const css = (el, ...k) => { const cs = getComputedStyle(el); return k.map((x) => cs[x]).join(' '); };
     const vr = [...document.querySelectorAll('.vr')].find((r) => r.querySelector('.vr__code').textContent === 'E-02');
     const pv = { code: css(vr.querySelector('.vr__code'), 'fontSize', 'fontWeight', 'color'), name: css(vr.querySelector('.vr__name'), 'fontSize', 'fontWeight', 'lineHeight'), org: css(vr.querySelector('.vr__org'), 'fontSize', 'fontWeight', 'color'),
@@ -340,28 +338,26 @@ for (const W of WIDTHS) {
     const pageText = document.body.innerText;
     const pins = [...document.querySelectorAll('.pins dt')].map((x) => x.textContent);
     const rvs = [...document.querySelectorAll('.cpx--resv .rv__t')].map((x) => x.textContent);
-    const pinBox = R(document.querySelector('.card__note')), cp = R(document.querySelector('.card__pv.cp')), cta = R(document.querySelectorAll('.card__foot .cta')[1]);
+    const cp = R(document.querySelector('.card__pv.cp')), cta = R(document.querySelectorAll('.card__foot .cta')[1]);
     const vp = R(document.querySelector('.card__pv.vp')), cta0 = R(document.querySelectorAll('.card__foot .cta')[0]);
     return { panels, ring: [top.borderTopWidth, top.borderRightWidth, top.borderBottomWidth, top.borderLeftWidth, top.borderTopColor], head: R(document.querySelector('.cp__head')), inside,
-      gapAbovePin: pinBox.t - cp.b, gapBelowPin: cta.t - pinBox.b, gapUnderVisitor: cta0.t - vp.b, ctaSame: Math.abs(cta.t - cta0.t), pv, pins, rvs, extra: document.querySelectorAll('.resv-how').length, oldPin: /123456|11월 4일/.test(pageText), guide: /현장예약 부스는 대기시간 대신/.test(document.querySelector('.card__guide').textContent),
-      qrAge: (document.querySelector('.vq__age') || {}).textContent, demoLink: !!document.querySelector('a[href="/booth-ctrl?demo"]'), seenTag: !!document.querySelector('.seen .stag--resv'), qrTag: !!document.querySelector('.vq .stag--resv') };
+      gapUnderOperator: cta.t - cp.b, gapUnderVisitor: cta0.t - vp.b, ctaSame: Math.abs(cta.t - cta0.t), previewBottom: Math.abs(vp.b - cp.b), cards: [...document.querySelectorAll('.card')].map((c) => R(c).w),
+      pv, pins, rvs, extra: document.querySelectorAll('.resv-how').length, oldPin: /123456|11월 4일/.test(pageText), guide: /현장예약 부스는 대기시간 대신/.test(document.querySelector('.card__guide').textContent),
+      noQr: !document.querySelector('.vq') && !/부스 앞 QR/.test(pageText), both: [...document.querySelectorAll('.cpx--both .off__t')].map((x) => x.textContent), seenTag: !!document.querySelector('.seen__cell .stag--resv') };
   });
   const [pw, pr] = op.panels;
-  const side = W >= 768;
-  t(`E5 ${W}px 운영자 예시: 부스 정보 카드 아래 두 칸(왼쪽 · 위 현장대기, 오른쪽 · 아래 현장예약) · 같은 폭 · ${side ? '좌우로 같은 높이' : '위아래로 쌓임'}`,
-    op.panels.length === 2 && pw.name === '현장대기' && pr.name === '현장예약' && pw.box.t >= op.head.b && near(pw.box.w, pr.box.w)
-    && (side ? pr.box.l >= pw.box.r && near(pw.box.t, pr.box.t) && near(pw.box.h, pr.box.h) : near(pw.box.l, pr.box.l) && pr.box.t >= pw.box.b), JSON.stringify(op.panels.map((p) => [p.name, p.box])));
-  t(`E6 ${W}px 운영자 예시: ${side ? '두 칸의 줄(선택 줄 · 현재 상태 · 확인 · 단추판 · 운영 상태 · 관람객 모습)이 같은 높이에 옴' : '칸 안 글자 넘침 없음'}`,
-    (!side || pw.rows.every((y, i) => near(y, pr.rows[i], 1))) && op.inside.length === 0, JSON.stringify([pw.rows, pr.rows, op.inside]));
-  t(`E7 ${W}px 현장예약 구분: 칸 머리 네 면 3px #5B45E0 · '대기시간 입력 없이 예약으로 운영' · '현장예약 운영 중' · '예약 마감' 단추 · 상태 칸 · QR 미리보기에 같은 표시`,
-    op.ring.slice(0, 4).every((x) => x === '3px') && op.ring[4] === RESV_RING && pr.what === '대기시간 입력 없이 예약으로 운영' && op.seenTag && op.qrTag
+  t(`E5 ${W}px 운영자 예시: 부스 정보 카드 아래 현장대기 · 그 밑에 현장예약 · 같은 폭 · 같은 높이(±1px)`,
+    op.panels.length === 2 && pw.name === '현장대기' && pr.name === '현장예약' && pw.box.t >= op.head.b && near(pw.box.l, pr.box.l) && pr.box.t >= pw.box.b && near(pw.box.w, pr.box.w) && near(pw.box.h, pr.box.h, 1), JSON.stringify(op.panels.map((p) => [p.name, p.box])));
+  t(`E6 ${W}px 운영자 예시: 두 칸의 구성 자리가 같음(선택 줄 · 현재 상태 · 상태 칸 · 단추판, ±1px) · 칸 안 글자 넘침 없음 · 공통 단추는 맨 아래 한 번`,
+    pw.rows.every((y, i) => near(y, pr.rows[i], 1)) && op.inside.length === 0 && JSON.stringify(op.both) === JSON.stringify(['변동 없음 · 지금 확인', '잠시 중단', '오늘 운영 마감']), JSON.stringify([pw.rows, pr.rows, op.inside, op.both]));
+  t(`E7 ${W}px 현장예약 구분: 칸 머리 네 면 3px #5B45E0 · '대기시간 입력 없이 예약으로 운영' · '현장예약 운영 중' · '예약 마감' 단추 · 상태 칸에 같은 표시`,
+    op.ring.slice(0, 4).every((x) => x === '3px') && op.ring[4] === RESV_RING && pr.what === '대기시간 입력 없이 예약으로 운영' && op.seenTag
     && JSON.stringify(op.rvs) === JSON.stringify(['현장예약 운영 중', '예약 마감']), JSON.stringify([op.ring, op.rvs]));
-  t(`E9 ${W}px 미리보기: 실제 화면에 없는 설명을 넣지 않음 · 설명은 바깥 안내 문장 · QR 미리보기 글 = 실제 QR 카드 글`, op.extra === 0 && op.guide && !!realAge && op.qrAge === realAge, JSON.stringify([op.extra, op.guide, op.qrAge, realAge]));
+  t(`E9 ${W}px 미리보기: 실제 화면에 없는 설명을 넣지 않음 · 설명은 바깥 안내 문장 · QR 미리보기 없음`, op.extra === 0 && op.guide && op.noQr, JSON.stringify([op.extra, op.guide, op.noQr]));
   if (W === 390) t('E9 390px 목록 미리보기 = 실제 목록: 번호 띠 · 번호 · 이름 · 학교 글자 · 줄 높이(±1px)', ['code', 'name', 'org', 'strip'].every((k) => op.pv[k] === realRow[k]) && near(op.pv.h, realRow.h, 1), JSON.stringify([op.pv, realRow]));
-  t(`E10 ${W}px PIN 안내: 예시 화면 · 실제 화면을 나눠 적고 번호 · 날짜가 없음(리허설이 끝나도 틀리지 않음) · 운영자 예시 화면 링크`,
-    JSON.stringify(op.pins) === JSON.stringify(['예시 화면', '실제 화면']) && !op.oldPin && op.demoLink, JSON.stringify([op.pins, op.oldPin, op.demoLink]));
-  if (W >= 1024) t(`E8 ${W}px 두 카드 나란히: 두 단추 같은 높이 · 빈칸 없음(미리보기 아래 남는 높이 — 왼쪽 ${Math.round(op.gapUnderVisitor)}px, PIN 위 ${Math.round(op.gapAbovePin)} · 아래 ${Math.round(op.gapBelowPin)}px, 모두 60px 이하)`,
-    op.ctaSame <= 0.5 && op.gapUnderVisitor <= 60 && op.gapAbovePin <= 60 && op.gapBelowPin <= 60, JSON.stringify(op));
+  t(`E10 ${W}px PIN 안내: 예시 화면 · 실제 화면을 나눠 적고 번호 · 날짜가 없음(리허설이 끝나도 틀리지 않음)`, JSON.stringify(op.pins) === JSON.stringify(['예시 화면', '실제 화면']) && !op.oldPin, JSON.stringify([op.pins, op.oldPin]));
+  if (W >= 1024) t(`E8 ${W}px 두 카드 나란히: 같은 폭 · 두 미리보기 아래 끝과 두 단추가 같은 줄 · 빈칸 없음(미리보기 아래 ${Math.round(op.gapUnderVisitor)} · ${Math.round(op.gapUnderOperator)}px)`,
+    near(op.cards[0], op.cards[1], 1) && op.ctaSame <= 0.5 && op.previewBottom <= 0.5 && op.gapUnderVisitor <= 40 && op.gapUnderOperator <= 40, JSON.stringify([op.cards, op.ctaSame, op.previewBottom, op.gapUnderVisitor, op.gapUnderOperator]));
   if (SHOTS) {
     const cards = await page.$$('.card');
     await cards[0].screenshot({ path: join(SHOTS, `example-visitor-card-${W}.png`) });
