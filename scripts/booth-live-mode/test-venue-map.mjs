@@ -1,16 +1,17 @@
 /* ===================================================================
    행사장 배치도 시험 — 실제 Chrome 에서 버튼 · 지도 창 · 확대 · 이동을 봅니다
    ───────────────────────────────────────────────────────────────────
-   서버 · Production 에 닿지 않습니다. 이 파일의 작은 웹 서버가 저장소 파일과 예시 스냅샷(105곳)을 주고,
-   배치도 자리에는 시험 중에 만든 격자 그림을 줍니다(저장소에 넣지 않으며 실제 배치도가 아닙니다).
+   서버 · Production 에 닿지 않습니다. 이 파일의 작은 웹 서버가 저장소 파일(실제 공식 배치도)과
+   예시 스냅샷(105곳)을 줍니다.
    터치는 Chrome 의 터치 입력 시뮬레이션(CDP)입니다. 실제 기기 시험이 아닙니다.
 
-     B  단추    폭마다 보임 · 글자 잘림 없음 · 44px 이상 · 탭 줄 한 줄 · 가로 스크롤 없음 · 그림을 미리 받지 않음
+     B  단추    폭마다 보임 · 글자 잘림 없음 · 44px 이상 · 탭 줄 한 줄 · 가로 스크롤 없음 · 그림을 미리 받지 않음 · 대비
      O  창      열기 · 제목 · 포커스 · 비율 · 전체 보기 · 안내 문구 · 닫기 단추 · Esc · 포커스 복원 · 다시 열기
      Z  확대    휠(커서 기준) · + · − · 범위 제한 · 초기화 · 자판
      P  이동    끌기 · 가장자리 제한 · 작은 쪽 가운데
      T  터치    두 손가락 확대(가운데 기준) · 한 손가락 이동 · 뒤 화면이 움직이지 않음
      R  크기    창 크기 변경 뒤 다시 맞춤
+     Y  구역    폭마다 구역 단추 · 누르면 그 구역이 화면 안 · 읽을 배율 · 직접 움직이면 표시 해제 · 터치
      E  오류    그림을 못 받을 때 안내 · 다시 불러오기
      K  유지    닫은 뒤 검색어 · 고른 탭 · 스크롤 · 뒤로 가기로 닫기 · 줄을 눌러도 창이 열리지 않음
 
@@ -20,7 +21,6 @@ import { readFileSync, mkdirSync, existsSync } from 'node:fs';
 import { resolve, dirname, join, extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
-import { deflateSync, crc32 } from 'node:zlib';
 import http from 'node:http';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -36,19 +36,12 @@ function t(name, ok, note = '') { results.push({ ok: !!ok }); console.log(`${ok 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const near = (a, b, d = 1) => Math.abs(a - b) <= d;
 
-/* ── 시험용 격자 그림(PNG). 가로로 긴 3:2 ─────────────────────────── */
-const IW = 2400, IH = 1600;
-function png() {
-  const row = Buffer.alloc(1 + IW * 3), raw = Buffer.alloc((1 + IW * 3) * IH);
-  for (let y = 0; y < IH; y++) {
-    for (let x = 0; x < IW; x++) { const g = x % 200 < 4 || y % 200 < 4, v = g ? 120 : 245; row[1 + x * 3] = v; row[2 + x * 3] = v; row[3 + x * 3] = g ? 200 : 250; }
-    row.copy(raw, y * row.length);
-  }
-  const chunk = (type, data) => { const n = Buffer.alloc(4); n.writeUInt32BE(data.length); const td = Buffer.concat([Buffer.from(type), data]); const c = Buffer.alloc(4); c.writeUInt32BE(crc32(td) >>> 0); return Buffer.concat([n, td, c]); };
-  const ihdr = Buffer.alloc(13); ihdr.writeUInt32BE(IW, 0); ihdr.writeUInt32BE(IH, 4); ihdr[8] = 8; ihdr[9] = 2;
-  return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', ihdr), chunk('IDAT', deflateSync(raw)), chunk('IEND', Buffer.alloc(0))]);
-}
-const IMAGE = png();
+/* ── 공식 배치도 그림 ─────────────────────────────────────────────── */
+const MAP_JS = readFileSync(join(REPO, 'assets/venue-map.js'), 'utf8');
+const IMAGE_PATH = /src: '([^']+)'/.exec(MAP_JS)[1];
+const IMAGE = readFileSync(join(REPO, IMAGE_PATH));
+const IW = 1600, IH = 1076;
+const ZONE_RECTS = Object.fromEntries([...MAP_JS.matchAll(/'?([\w-]+)'?: \[(\d+), (\d+), (\d+), (\d+)\]/g)].map((m) => [m[1], m.slice(2).map(Number)]));
 
 /* ── 예시 스냅샷 105곳 ──────────────────────────────────────────── */
 const now = new Date().toISOString();
@@ -68,10 +61,10 @@ const net = { image: 0, fail: false };
 const server = http.createServer((req, res) => {
   const p = decodeURIComponent(new URL(req.url, 'http://x').pathname).replace(/^\/+/, '');
   if (p === 'api/live-snapshot') { res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(data)); return; }
-  if (p === 'assets/map/venue-map.webp') {
+  if (p === IMAGE_PATH) {
     net.image += 1;
     if (net.fail) { res.writeHead(404, { 'Cache-Control': 'no-store' }); res.end(); return; }
-    res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'no-store' }); res.end(IMAGE); return;
+    res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Cache-Control': 'no-store' }); res.end(IMAGE); return;
   }
   if (!FILES.includes(p)) { res.writeHead(404); res.end(); return; }
   let out = readFileSync(join(REPO, p));
@@ -111,6 +104,17 @@ async function openMap(page) {
   await sleep(120);
 }
 const tool = (page, id) => page.click('#' + id).then(() => sleep(60));
+const zone = (page, id) => page.evaluate((k) => document.querySelector('[data-vzone="' + k + '"]').click(), id).then(() => sleep(380));
+const pressed = (page) => page.evaluate(() => [...document.querySelectorAll('[data-vzone][aria-pressed="true"]')].map((b) => b.dataset.vzone));
+// 지금 화면에 보이는 그림 자리(그림 좌표)
+const seen = (v) => ({ l: -v.x / v.s, t: -v.y / v.s, r: (v.vw - v.x) / v.s, b: (v.vh - v.y) / v.s });
+const lum = (c) => { const f = c.map((n) => { n /= 255; return n <= 0.03928 ? n / 12.92 : ((n + 0.055) / 1.055) ** 2.4; }); return 0.2126 * f[0] + 0.7152 * f[1] + 0.0722 * f[2]; };
+const ratio = (p, q) => { const [x, y] = [lum(p), lum(q)].sort((m, n) => n - m); return (x + 0.05) / (y + 0.05); };
+const rgb = (c) => c.match(/[\d.]+/g).map(Number);
+
+/* ── I : 공식 그림 ─────────────────────────────────────────────── */
+t('I1 구역 좌표 일곱 곳이 모두 그림 안', Object.keys(ZONE_RECTS).length === 7 && Object.values(ZONE_RECTS).every(([x, y, w, h]) => x >= 0 && y >= 0 && x + w <= IW && y + h <= IH), JSON.stringify(ZONE_RECTS));
+t('I2 그림 파일 크기 700KB 이하', IMAGE.length <= 700 * 1024, String(IMAGE.length));
 
 /* ── B : 단추, 폭마다 ───────────────────────────────────────────── */
 for (const W of [320, 360, 375, 390, 414, 768, 1024, 1440]) {
@@ -121,8 +125,8 @@ for (const W of [320, 360, 375, 390, 414, 768, 1024, 1440]) {
     const tabs = [...box.querySelectorAll('.tab')].map((x) => Math.round(R(x).top));
     const sync = document.getElementById('sync'), title = document.querySelector('.band__title');
     const hit = (a, c) => !(a.right <= c.left || c.right <= a.left || a.bottom <= c.top || c.bottom <= a.top);
-    const r = R(b);
-    return { w: r.width, h: r.height, left: r.left, right: r.right, top: r.top, text: b.innerText.trim(), cut: sp.scrollWidth > sp.clientWidth + 0.5, icon: ic.width, bg: s.backgroundColor, color: s.color,
+    const r = R(b), band = getComputedStyle(document.querySelector('.band'));
+    return { bandBg: band.backgroundColor, border: s.borderTopColor, w: r.width, h: r.height, left: r.left, right: r.right, top: r.top, text: b.innerText.trim(), cut: sp.scrollWidth > sp.clientWidth + 0.5, icon: ic.width, bg: s.backgroundColor, color: s.color,
       tabRows: new Set(tabs).size, tabs: tabs.length, tabScroll: box.scrollWidth - box.clientWidth, ovf: document.documentElement.scrollWidth - document.documentElement.clientWidth, vw: document.documentElement.clientWidth,
       overSync: !sync.hidden && hit(r, R(sync)), overTitle: hit(r, R(title)), titleRight: R(title).right };
   });
@@ -130,6 +134,10 @@ for (const W of [320, 360, 375, 390, 414, 768, 1024, 1440]) {
   t(`B2 ${W}px 높이 약 48px · 터치 영역 44px 이상`, m.h >= 44 && m.h <= 52 && m.w >= 44, JSON.stringify([m.w, m.h]));
   t(`B3 ${W}px 탭 5칸 한 줄 · 가로 스크롤 없음 · 제목 · 갱신 표시와 겹치지 않음`, m.tabs === 5 && m.tabRows === 1 && m.tabScroll <= 0 && m.ovf <= 0 && !m.overSync && !m.overTitle, JSON.stringify(m));
   if (W >= 768) t(`B4 ${W}px 단추는 제목 오른쪽`, m.left > m.titleRight, JSON.stringify([m.left, m.titleRight]));
+  if (W === 390) {
+    const band = rgb(m.bandBg), [br, bg, bb, ba] = rgb(m.border), edge = [br, bg, bb].map((n, i) => n * ba + band[i] * (1 - ba));
+    t('B4b 글자 대비 4.5:1 이상 · 테두리가 띠와 3:1 이상', ratio(rgb(m.color), rgb(m.bg)) >= 4.5 && ratio(edge, band) >= 3, JSON.stringify([ratio(rgb(m.color), rgb(m.bg)), ratio(edge, band)]));
+  }
   t(`B5 ${W}px 화면 오류 없음`, errs.length === 0, errs.join(' | '));
   if (SHOTS && [320, 390, 1440].includes(W)) await page.screenshot({ path: join(SHOTS, `main-${W}.png`) });
   await ctx.close();
@@ -303,14 +311,83 @@ for (const W of [320, 360, 375, 390, 414, 768, 1024, 1440]) {
   await ctx.close();
 }
 
+/* ── Y : 구역 이동 ─────────────────────────────────────────────── */
+for (const [W, H] of [[320, 568], [360, 740], [390, 844], [414, 896], [568, 320], [844, 390], [768, 1024], [1024, 768], [1440, 900]]) {
+  const { ctx, page, errs } = await openPage(W, H);
+  await openMap(page);
+  const c = await page.evaluate(() => {
+    const box = document.getElementById('vmap-zones'), R = (e) => e.getBoundingClientRect();
+    const list = [...box.querySelectorAll('[data-vzone]')].map((b) => ({ id: b.dataset.vzone, h: R(b).height, cut: b.scrollWidth > b.clientWidth + 0.5, off: b.disabled, out: R(b).right > innerWidth + 0.5 || R(b).left < 0, top: Math.round(R(b).top) }));
+    const tools = R(document.querySelector('.vmap__tools')), st = R(document.getElementById('vmap-stage'));
+    return { list, toolsIn: tools.top >= st.top - 0.5, ovf: document.documentElement.scrollWidth - document.documentElement.clientWidth, boxB: R(box).bottom, stageT: R(document.getElementById('vmap-stage')).top };
+  });
+  t(`Y1 ${W}×${H} 구역 단추 일곱 개 · 44px 이상 · 글자 잘림 없음 · 쓸 수 있음 · 그림 칸과 겹치지 않음`, c.list.length === 7 && c.list.every((b) => b.h >= 44 && !b.cut && !b.off) && c.ovf <= 0 && c.boxB <= c.stageT + 0.5, JSON.stringify(c));
+  if (H > 420) t(`Y1b ${W}×${H} 구역 단추 일곱 개가 밀지 않아도 모두 보임 · 두 줄 이하`, c.list.every((b) => !b.out) && new Set(c.list.map((b) => b.top)).size <= 2, JSON.stringify(c.list));
+  t(`Y1c ${W}×${H} 조작 단추가 그림 칸 안`, c.toolsIn, JSON.stringify(c.toolsIn));
+  const v0 = await state(page);
+  const bad = [];
+  for (const id of Object.keys(ZONE_RECTS)) {
+    await zone(page, id);
+    const v = await state(page), [zx, zy, zw, zh] = ZONE_RECTS[id], w = seen(v);
+    const inX = zw * v.s <= v.vw + 1 ? w.l <= zx + 1 && w.r >= zx + zw - 1 : near(w.l, Math.min(zx, IW - v.vw / v.s), 2);
+    const inY = zh * v.s <= v.vh + 1 ? w.t <= zy + 1 && w.b >= zy + zh - 1 : near(w.t, Math.min(zy, IH - v.vh / v.s), 2);
+    const read = v.s >= Math.min(0.8, v0.s * 6) - 1e-6 && v.s <= 2 + 1e-6;
+    const p = await pressed(page);
+    if (!(inX && inY && read && inBounds(v) && p.length === 1 && p[0] === id)) bad.push([id, v.s, w, p]);
+    if (SHOTS && [390, 1440].includes(W)) await page.screenshot({ path: join(SHOTS, `zone-${id}-${W}.png`) });
+  }
+  t(`Y2 ${W}×${H} 구역 일곱 곳: 그 자리가 화면 안 · 읽을 배율 · 범위 안 · 고른 단추 표시`, bad.length === 0, JSON.stringify(bad));
+  await page.evaluate(() => document.getElementById('vmap-fit').click());
+  await sleep(80);
+  const f = await state(page);
+  t(`Y3 ${W}×${H} 전체 보기로 돌아오고 고른 표시가 풀림`, near(f.s, v0.s, 1e-4) && (await pressed(page)).length === 0, JSON.stringify(f));
+  t(`Y4 ${W}×${H} 화면 오류 없음`, errs.length === 0, errs.join(' | '));
+  await ctx.close();
+}
+{
+  const { ctx, page, errs } = await openPage(1440, 900);
+  await openMap(page);
+  await zone(page, 'school-b');
+  const a = await state(page);
+  await page.mouse.move(a.left + 200, a.top + 200); await page.mouse.down(); await page.mouse.move(a.left + 140, a.top + 170, { steps: 4 }); await page.mouse.up();
+  await sleep(80);
+  const b = await state(page);
+  t('Y5 끌면 구역 표시가 풀리고 그만큼 움직임 · 부드러운 움직임 꺼짐', (await pressed(page)).length === 0 && near(b.x, a.x - 60, 2) && !(await page.$eval('#vmap-img', (i) => i.classList.contains('is-glide'))), JSON.stringify([a.x, b.x]));
+  await zone(page, 'list');
+  await page.mouse.move(a.left + 300, a.top + 300); await page.mouse.wheel({ deltaY: -120 }); await sleep(100);
+  t('Y6 휠로 움직여도 구역 표시가 풀림', (await pressed(page)).length === 0);
+  await zone(page, 'future');
+  await page.keyboard.press('Escape'); await sleep(120);
+  await openMap(page);
+  const c = await state(page);
+  t('Y7 닫았다 열면 전체 보기 · 구역 표시 없음', (await pressed(page)).length === 0 && inBounds(c) && near(c.s, Math.min(c.vw / IW, c.vh / IH), 1e-3), JSON.stringify(c));
+  const k = await page.evaluate(() => { const n = document.querySelector('[data-vzone="future"]'); n.focus(); return document.activeElement === n; });
+  await page.keyboard.press('Enter'); await sleep(380);
+  t('Y8 자판 Enter 로 구역 이동', k && (await pressed(page))[0] === 'future');
+  t('Y9 화면 오류 없음', errs.length === 0, errs.join(' | '));
+  await ctx.close();
+}
+{
+  const { ctx, page, errs } = await openPage(390);
+  await openMap(page);
+  await page.tap('[data-vzone="school-a"]'); await sleep(380);
+  t('Y11 휴대폰: 구역 단추 터치', (await pressed(page))[0] === 'school-a');
+  const v = await state(page);
+  t('Y12 휴대폰: 스쿨 01~44 는 글자를 읽을 배율(원본 이상)로 열림', v.s >= 1, String(v.s));
+  const [ax, , aw] = ZONE_RECTS['school-a'], toolL = await page.$eval('.vmap__tools', (e) => e.getBoundingClientRect().left);
+  t('Y12b 휴대폰: 스쿨 01~44 가 조작 단추에 가리지 않음', v.left + v.x + (ax + aw) * v.s <= toolL + 1, JSON.stringify([v.left + v.x + (ax + aw) * v.s, toolL]));
+  t('Y13 화면 오류 없음', errs.length === 0, errs.join(' | '));
+  await ctx.close();
+}
+
 /* ── E : 그림을 받지 못할 때 ────────────────────────────────────── */
 {
   net.fail = true;
   const { ctx, page, errs } = await openPage(390);
   await page.click('#map-open');
   await page.waitForFunction(() => !document.getElementById('vmap-retry').hidden, { timeout: 8000 });
-  const e = await page.evaluate(() => ({ t: document.getElementById('vmap-note-t').textContent, close: !!document.getElementById('vmap-close'), img: document.getElementById('vmap-img').hidden, zoom: document.getElementById('vmap-in').disabled }));
-  t('E1 그림을 못 받으면 안내 · 다시 불러오기 · 깨진 그림 없음 · 조작 단추 꺼짐', e.t === '배치도를 불러오지 못했어요' && e.img && e.zoom, JSON.stringify(e));
+  const e = await page.evaluate(() => ({ t: document.getElementById('vmap-note-t').textContent, close: !!document.getElementById('vmap-close'), img: document.getElementById('vmap-img').hidden, zoom: document.getElementById('vmap-in').disabled, zones: [...document.querySelectorAll('[data-vzone]')].every((b) => b.disabled) }));
+  t('E1 그림을 못 받으면 안내 · 다시 불러오기 · 깨진 그림 없음 · 조작 단추 꺼짐', e.t === '배치도를 불러오지 못했어요' && e.img && e.zoom && e.zones, JSON.stringify(e));
   if (SHOTS) await page.screenshot({ path: join(SHOTS, 'error-390.png') });
   net.fail = false;
   await page.click('#vmap-retry');

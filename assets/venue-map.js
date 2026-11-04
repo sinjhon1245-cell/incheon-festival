@@ -3,6 +3,8 @@
    ───────────────────────────────────────────────────────────────────
    읽기 전용입니다. DB · 스냅샷 · 부스 목록을 건드리지 않고, 그림 한 장을 확대 · 이동해 보여 줍니다.
    그림은 창을 처음 열 때 받습니다(그 전에는 내려받지 않음).
+   그림은 주최 측 공식 배치도(map_popview.jpg)를 고치지 않고 그대로 씁니다. /assets 는 1년 캐시라
+   그림이 바뀌면 파일 이름의 판 번호를 올리고, 아래 ZONES 좌표도 새 그림에서 다시 잽니다.
 
    움직임: 전체 보기는 그림이 화면 안에 들고 가운데에 놓입니다. 확대해 화면보다 커지면 가장자리가
    화면 밖으로 넘어가지 않게 묶습니다. 확대의 기준은 커서 · 두 손가락의 가운데입니다.
@@ -15,9 +17,22 @@
   'use strict';
 
   var MAP = {
-    src: 'assets/map/venue-map.webp',
-    alt: '2026 인천 AI미래채움 교육페스티벌 행사장 배치도'
+    src: 'assets/map/venue-map-v1.jpg',
+    alt: '2026 인천 AI미래채움 교육페스티벌 행사장 배치도와 부스 이름 목록'
   };
+  // 구역 이동: 공식 배치도(1600×1076)에서 잰 자리입니다. [왼쪽, 위, 폭, 높이]
+  var ZONES = {
+    'school-a': [1214, 150, 250, 313],   // 스쿨 01~44
+    'school-b': [355, 117, 600, 226],    // 스쿨 45~84
+    future: [305, 229, 224, 157],        // 미래 01~09
+    experience: [130, 318, 630, 172],    // 체험 01 · 02 와 체험 03 · 04 가 열리는 3층 안내
+    bigtech: [110, 115, 225, 90],        // Apple · Google
+    promo: [1098, 340, 98, 80],          // 홍보존 01~03
+    list: [20, 636, 1548, 430]           // 부스 번호 · 이름 목록
+  };
+  var ZONE_MAX = 2;       // 구역으로 옮길 때 원본의 몇 배까지(작은 구역이 흐려지지 않게)
+  var ZONE_READ = 0.8;    // 구역으로 옮길 때 글자를 읽을 수 있는 가장 작은 배율
+  var TOOLS_W = 72;       // 오른쪽 조작 단추 자리. 구역이 단추에 가리지 않게 비워 둡니다
   var MAX_ZOOM = 6;       // 전체 보기의 몇 배까지
   var STEP = 1.6;         // + · − 한 번
   var KEY_PAN = 80;       // 방향키 한 번(px)
@@ -35,6 +50,7 @@
   var btnIn = document.getElementById('vmap-in');
   var btnOut = document.getElementById('vmap-out');
   var btnFit = document.getElementById('vmap-fit');
+  var zoneBtns = [].slice.call(dlg.querySelectorAll('[data-vzone]'));
 
   var v = { W: 0, H: 0, vw: 0, vh: 0, fit: 1, s: 1, x: 0, y: 0 };
   var loaded = false, loading = false, open_ = false, raf = 0, hintTimer = 0, hintDone = false;
@@ -48,6 +64,7 @@
     btnIn.disabled = !loaded || v.s >= top - 1e-6;
     btnOut.disabled = !loaded || v.s <= v.fit + 1e-6;
     btnFit.disabled = !loaded;
+    zoneBtns.forEach(function (b) { b.disabled = !loaded; });
   }
   function schedule() { if (!raf) raf = requestAnimationFrame(paint); }
   function measure() {
@@ -70,6 +87,22 @@
     setView(s, cx - (cx - v.x) * k, cy - (cy - v.y) * k);
   }
   function fitView() { measure(); setView(v.fit, 0, 0); }
+  function markZone(id) {
+    zoneBtns.forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.vzone === id)); });
+  }
+  // 구역이 화면에 다 들면 가운데에 놓고, 읽을 배율에서 넘치면 구역의 왼쪽 위부터 보여 줍니다.
+  function goZone(id) {
+    var z = ZONES[id];
+    if (!z || !loaded) return;
+    touched();
+    measure();
+    var room = v.vw - TOOLS_W;
+    var s = limit(Math.max(ZONE_READ, Math.min(room / z[2], v.vh / z[3], ZONE_MAX)));
+    var w = z[2] * s, h = z[3] * s;
+    img.classList.add('is-glide');
+    setView(s, (w <= room ? (room - w) / 2 : 0) - z[0] * s, (h <= v.vh ? (v.vh - h) / 2 : 0) - z[1] * s);
+    markZone(id);
+  }
 
   /* ── 그림 받기 ─────────────────────────────────────────────── */
   function showNote(text, canRetry) {
@@ -112,6 +145,12 @@
     hint.hidden = true;
     hintDone = true;
   }
+  // 사용자가 직접 움직이면 안내 · 구역 표시를 거두고, 구역 이동의 부드러운 움직임도 끕니다.
+  function touched() {
+    hideHint();
+    markZone('');
+    img.classList.remove('is-glide');
+  }
   function showHint() {
     if (hintDone) return;
     var touch = window.matchMedia && window.matchMedia('(hover: none), (pointer: coarse)').matches;
@@ -145,7 +184,7 @@
     pts[e.pointerId] = at(e);
     anchor();
     stage.classList.add('is-grab');
-    hideHint();
+    touched();
   });
   stage.addEventListener('pointermove', function (e) {
     if (!pts[e.pointerId]) return;
@@ -175,7 +214,7 @@
     var d = e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? v.vh : 1);
     if (e.ctrlKey) d *= 4;   // 트랙패드 오므리기는 값이 작습니다
     var p = at(e);
-    hideHint();
+    touched();
     zoomAt(Math.exp(-Math.max(-160, Math.min(160, d)) * 0.0022), p.x, p.y);
   }, { passive: false });
   // iOS Safari 는 touch-action 과 함께 이 동작도 막아야 화면 전체가 확대되지 않습니다.
@@ -184,10 +223,11 @@
   });
 
   /* ── 단추 · 자판 ───────────────────────────────────────────── */
-  function zoomCentre(factor) { hideHint(); zoomAt(factor, v.vw / 2, v.vh / 2); }
+  function zoomCentre(factor) { touched(); zoomAt(factor, v.vw / 2, v.vh / 2); }
   btnIn.addEventListener('click', function () { zoomCentre(STEP); });
   btnOut.addEventListener('click', function () { zoomCentre(1 / STEP); });
-  btnFit.addEventListener('click', function () { hideHint(); fitView(); });
+  btnFit.addEventListener('click', function () { touched(); fitView(); });
+  zoneBtns.forEach(function (b) { b.addEventListener('click', function () { goZone(b.dataset.vzone); }); });
   document.getElementById('vmap-close').addEventListener('click', function () { close(); });
   opener.addEventListener('click', function () { open(); });
   dlg.addEventListener('cancel', function (e) { e.preventDefault(); close(); });
@@ -197,10 +237,10 @@
     if (e.key === 'Escape' || e.key === 'Esc') { e.preventDefault(); close(); return; }
     if (!loaded) return;
     var pan = { ArrowLeft: [KEY_PAN, 0], ArrowRight: [-KEY_PAN, 0], ArrowUp: [0, KEY_PAN], ArrowDown: [0, -KEY_PAN] }[e.key];
-    if (pan) { e.preventDefault(); hideHint(); setView(v.s, v.x + pan[0], v.y + pan[1]); return; }
+    if (pan) { e.preventDefault(); touched(); setView(v.s, v.x + pan[0], v.y + pan[1]); return; }
     if (e.key === '+' || e.key === '=') { e.preventDefault(); zoomCentre(STEP); return; }
     if (e.key === '-' || e.key === '_') { e.preventDefault(); zoomCentre(1 / STEP); return; }
-    if (e.key === '0') { e.preventDefault(); hideHint(); fitView(); }
+    if (e.key === '0') { e.preventDefault(); touched(); fitView(); }
   });
   // 화면 크기가 바뀌면 보던 자리를 가운데에 둔 채 다시 잽니다(전체 보기였으면 다시 전체 보기).
   function onResize() {
@@ -233,7 +273,7 @@
     pts = {};
     last = null;
     stage.classList.remove('is-grab');
-    hideHint();
+    touched();
     if (dlg.close) dlg.close(); else dlg.removeAttribute('open');
     document.documentElement.classList.remove('vmap-on');
     opener.focus({ preventScroll: true });
