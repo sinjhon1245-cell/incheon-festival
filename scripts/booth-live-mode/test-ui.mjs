@@ -168,9 +168,10 @@ const tagOf = (el) => { const b = el && el.querySelector('.stag'); return b ? { 
   t('V1 잠시 중단 = 한 줄 "잠시 중단"(흰 바탕) · 마감 = 한 줄 "오늘 마감"(옅은 회색) · 화면 읽기는 "잠시 중단" · "오늘 마감"',
     !!bp && bp.text === '잠시 중단' && /stag--pause/.test(bp.cls) && bp.hidden === 'true' && bp.sr === '잠시 중단'
     && !!bc && bc.text === '오늘 마감' && /stag--off/.test(bc.cls) && bc.sr === '오늘 마감', JSON.stringify([bp, bc]));
-  const hero = (d) => [txt(d.getElementById('h-free')), txt(d.getElementById('h-total')), txt(d.getElementById('h-sub')),
-    [...d.querySelectorAll('[data-count] [data-n]')].map(txt).join(',')].join('|');
-  t('V1 현장대기만 있을 때: 큰 숫자 · 전체 · 아래 줄 · 상태 칩 = 예전 화면', hero(a.window.document) === hero(b.window.document), hero(b.window.document));
+  const hero = (d) => [txt(d.getElementById('h-free')), txt(d.getElementById('h-total')), (txt(d.getElementById('h-sub')).match(/(\d+)곳 기준/) || [])[1],
+    ['여유', '보통', '혼잡', 'off'].map((k) => txt(d.querySelector(`[data-count="${k}"] [data-n]`))).join(',')].join('|');
+  t('V1 현장대기만 있을 때: 큰 숫자 · 전체 · 집계 기준 곳 수 · 네 상태 숫자 = 예전 화면', hero(a.window.document) === hero(b.window.document), hero(b.window.document));
+  t('V1 현장대기만 있을 때: 현장예약 칸은 0', txt(bd.querySelector('[data-count="resv"] [data-n]')) === '0' && !!bd.querySelector('[data-count="resv"].is-zero'));
   a.window.close(); b.window.close();
 
   const live2 = [...liveWait.slice(0, 5),
@@ -190,14 +191,27 @@ const tagOf = (el) => { const b = el && el.querySelector('.stag'); return b ? { 
   t('V2 목록: 화면 읽기 — 상자는 감추고 뜻 한 줄("현장예약 운영 중" · "현장예약 마감")', b5 && b5.hidden === 'true' && b5.sr === '현장예약 운영 중' && b6.hidden === 'true' && b6.sr === '현장예약 마감', JSON.stringify([b5, b6]));
   t('V2 목록: 현장예약 부스의 잠시 중단 = 잠시 중단', /잠시 중단/.test(r[3].right));
   t('V2 큰 숫자: 여유 1곳(현장예약 제외) · 전체 7곳', txt(d.getElementById('h-free')) === '1' && txt(d.getElementById('h-total')) === '7');
-  t('V2 아래 줄: "· 현장예약 1곳 · 예약 마감 1곳" 따로 셈(입력 없음 · 0분 대기로 세지 않음)',
-    /현장예약 1곳 · 예약 마감 1곳/.test(txt(d.getElementById('h-sub'))) && /입력된 5곳/.test(txt(d.getElementById('h-sub'))), txt(d.getElementById('h-sub')));
+  t('V2 아래 줄: 집계 기준만 "현재 운영 상태가 입력된 7곳 기준"(현장예약 · 예약 마감 곳 수는 위 숫자에 있음)', txt(d.getElementById('h-sub')) === '현재 운영 상태가 입력된 7곳 기준', txt(d.getElementById('h-sub')));
   const chips = [...d.querySelectorAll('[data-count]')].map((x) => x.getAttribute('data-count') + ':' + txt(x.querySelector('[data-n]'))).join(',');
-  t('V2 상태 칩: 여유 1 · 보통 1 · 혼잡 1 · 중단·마감 2(칩 수 그대로 네 개)', chips === '여유:1,보통:1,혼잡:1,off:2', chips);
+  t('V2 상태 칩: 여유 1 · 보통 1 · 혼잡 1 · 현장예약 1 · 중단·마감 3(잠시 중단 · 오늘 마감 · 예약 마감)', chips === '여유:1,보통:1,혼잡:1,resv:1,off:3', chips);
+  t('V2 막대: 현장예약 구간이 혼잡과 중단·마감 사이 · 폭은 곳 수(1 · 3)', [...d.querySelectorAll('#h-dist [data-seg]')].filter((x) => !x.hidden).map((x) => x.getAttribute('data-seg') + ':' + x.style.flexGrow).join(',') === 'free:1,normal:1,busy:1,resv:1,off:3',
+    [...d.querySelectorAll('#h-dist [data-seg]')].map((x) => x.getAttribute('data-seg') + ':' + x.style.flexGrow).join(','));
+  t('V2 화면 읽기 요약: 다섯 상태를 범례 순서로', txt(d.getElementById('sr-summary')) === '여유 1곳, 보통 1곳, 혼잡 1곳, 현장예약 1곳, 중단·마감 3곳.', txt(d.getElementById('sr-summary')));
   d.querySelector('[data-count="여유"]').click();
   await sleep(50);
   t('V2 여유로 거르면 현장예약 부스는 빠짐', rowsOf(d).every((x) => !/예약/.test(x.right)) && rowsOf(d).length === 1);
   d.querySelector('[data-count="여유"]').click();
+  await sleep(50);
+  d.querySelector('[data-count="resv"]').click();
+  await sleep(50);
+  t('V2 현장예약으로 거르면 운영 중 부스만(예약 마감 제외)', rowsOf(d).map((x) => x.code).join(',') === 'S06', rowsOf(d).map((x) => x.code).join(','));
+  d.querySelector('[data-count="resv"]').click();
+  await sleep(50);
+  d.querySelector('[data-count="off"]').click();
+  await sleep(50);
+  t('V2 중단·마감으로 거르면 잠시 중단 · 오늘 마감 · 예약 마감', rowsOf(d).map((x) => x.code).join(',') === 'S04,S05,S07', rowsOf(d).map((x) => x.code).join(','));
+  t('V2 예약 마감은 중단·마감에 묶여도 줄 표시는 그대로 "예약 마감"', /stag--resv-off/.test(rowsOf(d)[2].right), rowsOf(d)[2].right);
+  d.querySelector('[data-count="off"]').click();
   await sleep(50);
   const sortBtn = d.querySelector('[data-sort="wait"]') || [...d.querySelectorAll('button')].find((x) => /대기 짧은 순/.test(x.textContent));
   if (sortBtn) sortBtn.click();
@@ -234,6 +248,19 @@ const tagOf = (el) => { const b = el && el.querySelector('.stag'); return b ? { 
   const bh2 = tagOf(dh2.querySelector('#here .here__val'));
   t('V4 QR 직접 진입: 예약 마감 = 한 줄 "예약 마감" + 바로 갈 수 있는 부스 안내', !!bh2 && bh2.text === '예약 마감' && /stag--resv-off/.test(bh2.cls) && /바로 갈 수 있는/.test(txt(dh2.getElementById('here'))), txt(dh2.getElementById('here')));
   vh2.window.close();
+
+  // 현장예약 방식이어도 오늘 상태가 없으면(23:00 초기화 뒤 값 없음 · 어제 값) 현장예약으로 세지 않고 정보 없음입니다
+  const snapN = await snapFor([...liveWait.slice(0, 5), { booth_id: ids[5], congestion: '예약중', wait_minutes: 0, updated_at: '2026-11-01T03:00:00Z' }],
+    [{ booth_id: ids[5], mode: 'reserve' }, { booth_id: ids[6], mode: 'reserve' }]);
+  const vn = visitorPage('new', snapN);
+  const dn = vn.window.document;
+  await until(() => dn.querySelectorAll('#list .row').length === 7 && txt(dn.getElementById('h-sub')));
+  const chipsN = [...dn.querySelectorAll('[data-count]')].map((x) => x.getAttribute('data-count') + ':' + txt(x.querySelector('[data-n]'))).join(',');
+  const segN = [...dn.querySelectorAll('#h-dist [data-seg]')].filter((x) => !x.hidden).map((x) => x.getAttribute('data-seg') + ':' + x.style.flexGrow).join(',');
+  t('V2 현장예약 방식이지만 오늘 상태가 없으면(값 없음 · 어제 값) 현장예약으로 세지 않음 → 정보 없음 2곳 · 입력 5곳 · 전체 7곳',
+    chipsN === '여유:1,보통:1,혼잡:1,resv:0,off:2' && segN === 'free:1,normal:1,busy:1,off:2,unknown:2' && txt(dn.getElementById('h-sub')) === '현재 운영 상태가 입력된 5곳 기준' && txt(dn.getElementById('h-total')) === '7'
+    && rowsOf(dn).slice(5).every((x) => /정보 없음/.test(x.right)), JSON.stringify([chipsN, segN, txt(dn.getElementById('h-sub'))]));
+  vn.window.close();
 
   const vo = visitorPage('old', snapR);
   const dov = vo.window.document;

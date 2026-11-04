@@ -210,9 +210,9 @@
     var WAKE_GRACE_MS = 8000;        // 화면이 다시 켜진 직후에는 새로 받는 중이라 늦었다고 하지 않습니다
     var TICK_MS = 15000;             // 운영 시간 · 연결 지연을 다시 따지는 간격
 
-    var COUNT_KEYS = ['여유', '보통', '혼잡', 'off'];
-    var COUNT_CLS = { '여유': 'free', '보통': 'normal', '혼잡': 'busy', 'off': 'off', 'unknown': 'unknown' };
-    var COUNT_WORD = { '여유': '여유', '보통': '보통', '혼잡': '혼잡', 'off': '중단·마감' };
+    var COUNT_KEYS = ['여유', '보통', '혼잡', 'resv', 'off'];
+    var COUNT_CLS = { '여유': 'free', '보통': 'normal', '혼잡': 'busy', 'resv': 'resv', 'off': 'off', 'unknown': 'unknown' };
+    var COUNT_WORD = { '여유': '여유', '보통': '보통', '혼잡': '혼잡', 'resv': '현장예약', 'off': '중단·마감' };
 
     var reduceMotion = false;
     try { reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { reduceMotion = false; }
@@ -300,24 +300,20 @@
 
     // 화면의 숫자 · 막대 · 거르기가 모두 쓰는 칸. BoothCore.bucket() 과 같되 '오래됨' 을 따지지 않습니다
     // (입력이 오래됐다고 관람객 화면에서 '정보 없음' 으로 돌리지 않음 — 그 관리는 운영자 · 관리 화면이 합니다).
-    // 현장예약 부스의 예약 운영 중 · 예약 마감은 'resv' — 여유 · 보통 · 혼잡 숫자와 거르기에 넣지 않고 따로 셉니다.
-    // 현장예약 부스도 잠시 중단 · 오늘 마감이면 다른 부스와 같은 'off'(중단·마감)입니다.
+    // 현장예약 운영 중은 'resv'(보라) — 여유 · 보통 · 혼잡과 나란히 따로 셉니다.
+    // 예약 마감은 지금 예약을 받지 않는 상태라 잠시 중단 · 오늘 마감과 같은 'off'(중단·마감)입니다.
     function bucketOf(b) {
       var c = b && b.congestion;
       if (c === '여유' || c === '보통' || c === '혼잡') return c;
-      if (c === '중단' || c === '마감') return 'off';
-      if (c === '예약중' || c === '예약마감') return 'resv';
+      if (c === '중단' || c === '마감' || c === '예약마감') return 'off';
+      if (c === '예약중') return 'resv';
       return 'unknown';
     }
     function isResv(b) { return !!b && (b.congestion === '예약중' || b.congestion === '예약마감'); }
 
     function counts() {
-      var c = { '여유': 0, '보통': 0, '혼잡': 0, 'off': 0, 'resv': 0, 'unknown': 0, resvOpen: 0, resvClosed: 0 };
-      S.booths.forEach(function (b) {
-        c[bucketOf(b)]++;
-        if (b.congestion === '예약중') c.resvOpen++;
-        else if (b.congestion === '예약마감') c.resvClosed++;
-      });
+      var c = { '여유': 0, '보통': 0, '혼잡': 0, 'resv': 0, 'off': 0, 'unknown': 0 };
+      S.booths.forEach(function (b) { c[bucketOf(b)]++; });
       return c;
     }
 
@@ -749,7 +745,7 @@
 
       var k = bucketOf(b);
       // 예약 마감이면(오늘 새 예약을 받지 않음) 바로 갈 수 있는 부스도 함께 보여 줍니다. 예약 운영 중에는 두지 않습니다.
-      if (mode === 'live' && (k === '보통' || k === '혼잡' || k === 'off' || b.congestion === '예약마감')) {
+      if (mode === 'live' && (k === '보통' || k === '혼잡' || k === 'off')) {
         var alt = alternatives(b);
         html += '<div class="here__alts">';
         if (alt.scope === 'none') {
@@ -859,7 +855,7 @@
         '</div>' +
         '<p class="hero__sub" id="h-sub"></p>' +
         '<div class="dist" id="h-dist" aria-hidden="true">' +
-          ['free', 'normal', 'busy', 'off', 'unknown'].map(function (k) {
+          ['free', 'normal', 'busy', 'resv', 'off', 'unknown'].map(function (k) {
             return '<i class="dist__s dist__s--' + k + '" data-seg="' + k + '"></i>';
           }).join('') +
         '</div>' +
@@ -887,20 +883,18 @@
         hero.innerHTML = heroLiveHtml();
         restoreFocus(hero, restore);
       }
-      var fresh = c['여유'] + c['보통'] + c['혼잡'] + c.off;
+      var fresh = c['여유'] + c['보통'] + c['혼잡'] + c.resv + c.off;
       $('h-free').textContent = c['여유'];
       // 전체는 아래 목록의 곳 수와 같게(배치 준비 중 포함) 셉니다. 대기 값은 배치 · 공개된 부스에만 있습니다.
       var pend = S.unplaced.length;
       $('h-total').textContent = S.booths.length + pend;
-      // 현장예약(운영 중 · 예약 마감) 부스는 여유 · 보통 · 혼잡에 넣지 않고 이 줄에만 따로 셉니다(위 숫자 · 막대 · 칩은 그대로).
-      $('h-sub').textContent = (fresh ? '현재 대기 정보가 입력된 ' + fresh + '곳 기준' : '아직 대기 시간을 입력한 부스가 없어요') +
-        (c.resvOpen ? ' · 현장예약 ' + c.resvOpen + '곳' : '') +
-        (c.resvClosed ? ' · 예약 마감 ' + c.resvClosed + '곳' : '') +
+      // 이 줄은 집계 기준만 알립니다. 상태별 곳 수는 아래 막대와 숫자에 있습니다.
+      $('h-sub').textContent = (fresh ? '현재 운영 상태가 입력된 ' + fresh + '곳 기준' : '아직 운영 상태를 입력한 부스가 없어요') +
         (pend ? ' · 배치 준비 중 ' + pend + '곳' : '');
       $('h-dist').hidden = !fresh;
       each($('h-dist').children, function (seg) {
         var k = seg.getAttribute('data-seg');
-        var n = k === 'unknown' ? c.unknown : c[{ free: '여유', normal: '보통', busy: '혼잡', off: 'off' }[k]];
+        var n = k === 'unknown' ? c.unknown : c[{ free: '여유', normal: '보통', busy: '혼잡', resv: 'resv', off: 'off' }[k]];
         seg.style.flexGrow = n;
         seg.hidden = !n;
       });
@@ -1363,12 +1357,11 @@
 
     function renderSummary(c) {
       if (heroMode() !== 'live') return;
-      var key = [c['여유'], c['보통'], c['혼잡'], c.off, c.resvOpen, c.resvClosed].join('|');
+      var key = [c['여유'], c['보통'], c['혼잡'], c.resv, c.off].join('|');
       if (key === S.keys.sum) return;
       S.keys.sum = key;
       $('sr-summary').textContent = '여유 ' + c['여유'] + '곳, 보통 ' + c['보통'] + '곳, 혼잡 ' + c['혼잡'] +
-        '곳, 중단·마감 ' + c.off + '곳' + (c.resvOpen ? ', 현장예약 ' + c.resvOpen + '곳' : '') +
-        (c.resvClosed ? ', 예약 마감 ' + c.resvClosed + '곳' : '') + '.';
+        '곳, 현장예약 ' + c.resv + '곳, 중단·마감 ' + c.off + '곳.';
     }
 
     /* ── 한꺼번에 ─────────────────────────────────────────────── */

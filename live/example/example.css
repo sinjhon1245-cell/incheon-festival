@@ -251,14 +251,15 @@ ul, ol { padding: 0; list-style: none; }
 .vp__unit { font-size: 15px; font-weight: 700; }
 .vp__total { margin-bottom: 1px; font-size: 12.5px; font-weight: 600; color: var(--muted); white-space: nowrap; }
 .vp__total b { color: var(--ink); font-weight: 700; }
-/* 분포 막대: 칸 너비는 부스 수에 비례(이 그림은 여유 1 · 보통 1 · 혼잡 1 · 중단마감 2 로 고정) */
+/* 분포 막대: 칸 너비는 부스 수에 비례(이 그림은 여유 1 · 보통 1 · 혼잡 1 · 현장예약 1 · 중단마감 3 으로 고정) */
 .vp__dist { display: flex; gap: 2px; height: 6px; margin-top: 12px; }
 .dist { flex: 1 1 0; min-width: 4px; }
 .dist--free   { background: var(--v-free); }
 .dist--normal { background: var(--v-normal); }
 .dist--busy   { background: var(--v-busy); }
-.dist--off    { flex-grow: 2; background: var(--off-mark); }
-.vp__counts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); column-gap: 8px; margin-top: 12px; }
+.dist--resv   { background: var(--accent); }
+.dist--off    { flex-grow: 3; background: var(--off-mark); }
+.vp__counts { display: grid; grid-template-columns: repeat(5, minmax(max-content, 1fr)); column-gap: 6px; margin-top: 12px; }
 .cnt { display: flex; flex-direction: column; gap: 4px; min-width: 0; padding-top: 7px; border-top: 2px solid var(--line); }
 .cnt__w { display: flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 600; line-height: 1.2; white-space: nowrap; }
 .cnt__n { font-size: 18px; font-weight: 800; line-height: 1; letter-spacing: -0.02em; }
@@ -267,6 +268,7 @@ ul, ol { padding: 0; list-style: none; }
 .sq--free   { background: var(--v-free); }
 .sq--normal { background: var(--v-normal); box-shadow: inset 0 0 0 1px rgba(22, 32, 60, .28); }
 .sq--busy   { background: var(--v-busy); }
+.sq--resv   { background: var(--accent); }
 .sq--off    { background: var(--off-mark); }
 /* 구역 탭 — 실제 화면은 옆으로 밀어 보는 줄이라 그림에서도 넘치는 탭은 잘라 둡니다 */
 .vp__tabs {

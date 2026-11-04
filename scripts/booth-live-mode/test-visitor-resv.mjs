@@ -8,6 +8,7 @@
                   상태 표시 76×34 14px 700 한 줄('현장예약' · '예약 마감' · '잠시 중단' · '오늘 마감') · 단추처럼 보이지 않음 · 색 · 대비 ·
                   현장예약만 네 면 같은 진보라 3px 테두리(나머지 1px) · 현장예약 글자 둘레 여백 ·
                   세로 가운데 · 줄 높이 같음(73.4px 이하) · 이름이 칸을 넘지 않음 · 두 줄 이름
+     H  상단 요약  다섯 상태(여유 · 보통 · 혼잡 · 현장예약 · 중단·마감) · 막대 · 네모 색 · 집계 기준 줄 · 칸 안에 들어감
      G  한눈에    두 줄 낱말 · 목록과 같은 색 갈래 · 칸 안에 다 들어감(65px 칸) · 글자 크기 · 번호 자리 같음
      X  예시 화면 일곱 상태(5분 여유 · 20분 보통 · 30분 혼잡 · 현장예약 · 예약 마감 · 잠시 중단 · 오늘 마감)가
                   목록 · 한눈에 모두에 · 지금 계신 부스(QR) 표시 · 칩 · 서버 요청 없음 · '실제 화면으로 돌아가기' 로 예시 표시가 사라짐
@@ -206,6 +207,15 @@ for (const W of WIDTHS) {
   const listStates = Object.fromEntries(rows.map((r) => [r.code, r.parts.map((p) => (isTag(p) ? p.text : p.text.replace(/\s+/g, ''))).join('')]));
   const wantList = { 'A-02': '5분여유', 'B-01': '20분보통', 'A-04': '30분혼잡', 'C-05': '현장예약', 'C-06': '예약 마감', 'B-03': '잠시 중단', 'C-01': '오늘 마감' };
   t(`X1 ${W}px 예시 목록: 일곱 상태가 모두 보임`, Object.entries(wantList).every(([k, v]) => listStates[k] === v), JSON.stringify(listStates));
+  const hero = await page.evaluate(() => {
+    const chips = [...document.querySelectorAll('[data-count]')].map((b) => { const w = b.querySelector('.count__w'); return { w: w.textContent, n: Number(b.querySelector('[data-n]').textContent), fit: w.getBoundingClientRect().right <= b.getBoundingClientRect().right + 0.5, sq: getComputedStyle(b.querySelector('.sq')).backgroundColor }; });
+    const seg = [...document.querySelectorAll('#h-dist .dist__s')].filter((x) => !x.hidden).map((x) => ({ k: x.getAttribute('data-seg'), bg: getComputedStyle(x).backgroundColor }));
+    const c = document.querySelector('.counts');
+    return { chips, seg, sub: document.getElementById('h-sub').textContent, over: c.scrollWidth - c.clientWidth };
+  });
+  t(`H1 ${W}px 상단 요약: 다섯 상태 순서 · 예시 3 · 4 · 2 · 1 · 3 · 낱말이 칸 안에 들어감`, JSON.stringify(hero.chips.map((x) => [x.w, x.n])) === JSON.stringify([['여유', 3], ['보통', 4], ['혼잡', 2], ['현장예약', 1], ['중단·마감', 3]]) && hero.chips.every((x) => x.fit) && hero.over <= 0, JSON.stringify(hero.chips));
+  t(`H2 ${W}px 막대: 혼잡 다음 현장예약(보라) · 그다음 중단·마감(회색) · 범례 네모와 같은 색`, JSON.stringify(hero.seg.map((x) => x.k)) === JSON.stringify(['free', 'normal', 'busy', 'resv', 'off', 'unknown']) && hero.seg[3].bg === RESV_RING && hero.seg[3].bg === hero.chips[3].sq && hero.seg[4].bg === 'rgb(138, 147, 171)' && hero.seg[4].bg === hero.chips[4].sq, JSON.stringify(hero.seg));
+  t(`H3 ${W}px 아래 줄: 집계 기준만 — 13곳(현장예약 · 예약 마감 곳 수는 위 숫자에)`, hero.sub === '현재 운영 상태가 입력된 13곳 기준', hero.sub);
   tagBg = tagBg || Object.fromEntries(Object.entries(TAGS).map(([c, [, k]]) => [k, by[c].parts[0].bg]));
   if (SHOTS && [360, 390, 768, 1024, 1440].includes(W)) {
     const groups = await page.$$('#list .group');
@@ -311,7 +321,9 @@ for (const W of WIDTHS) {
           r: ['TopLeft', 'TopRight', 'BottomRight', 'BottomLeft'].map((s) => parseFloat(cs[`border${s}Radius`])) } }; }) };
     });
     const tile = (cls) => { const el = document.querySelector('.vp__tiles .tile.' + cls); if (!el) return null; const cs = getComputedStyle(el); return { v: el.querySelector('.tile__v').textContent, w: el.querySelector('.tile__w').textContent, bg: cs.backgroundColor, ink: cs.color }; };
-    return { rows, tiles: document.querySelectorAll('.vp__tiles .tile').length, tPause: tile('is-pause'), tClosed: tile('is-closed'), tResv: tile('is-resv'), tResvClosed: tile('is-resv-closed'),
+    const cnt = [...document.querySelectorAll('.vp__counts .cnt')].map((x) => [x.querySelector('.cnt__w').textContent, Number(x.querySelector('.cnt__n').textContent), x.querySelector('.cnt__w').getBoundingClientRect().right <= x.getBoundingClientRect().right + 0.5]);
+    const dist = [...document.querySelectorAll('.vp__dist .dist')].map((x) => x.className.replace('dist dist--', ''));
+    return { rows, cnt, dist, tiles: document.querySelectorAll('.vp__tiles .tile').length, tPause: tile('is-pause'), tClosed: tile('is-closed'), tResv: tile('is-resv'), tResvClosed: tile('is-resv-closed'),
       demo: document.querySelectorAll('a[href*="demo"]').length, ovf: document.documentElement.scrollWidth - document.documentElement.clientWidth };
   });
   const er = Object.fromEntries(ex.rows.map((r) => [r.code, r]));
@@ -325,6 +337,7 @@ for (const W of WIDTHS) {
     && ex.tResv.v + '/' + ex.tResv.w === '현장/예약' && ex.tResvClosed.v + '/' + ex.tResvClosed.w === '예약/마감' && !!tagBg
     && ex.tResv.bg === tagBg.resv && ex.tResvClosed.bg === tagBg['resv-off'] && ex.tClosed.bg === tagBg.off && ex.tPause.bg === tagBg.pause, JSON.stringify([ex.tPause, ex.tClosed, ex.tResv, ex.tResvClosed]));
   t(`E4 ${W}px 화면 안내: 예시 화면 링크 없음 · 가로 넘침 없음`, ex.demo === 0 && ex.ovf <= 0, JSON.stringify({ demo: ex.demo, ovf: ex.ovf }));
+  t(`E11 ${W}px 화면 안내 상단 요약: 실제 화면과 같은 다섯 상태 · 일곱 부스 합 · 막대에 현장예약 구간`, JSON.stringify(ex.cnt.map((x) => [x[0], x[1]])) === JSON.stringify([['여유', 1], ['보통', 1], ['혼잡', 1], ['현장예약', 1], ['중단·마감', 3]]) && ex.cnt.every((x) => x[2]) && JSON.stringify(ex.dist) === JSON.stringify(['free', 'normal', 'busy', 'resv', 'off']), JSON.stringify([ex.cnt, ex.dist]));
   const op = await page.evaluate(() => {
     const R = (el) => { const r = el.getBoundingClientRect(); return { l: r.left, r: r.right, t: r.top, b: r.bottom, w: r.width, h: r.height }; };
     const panels = [...document.querySelectorAll('.cpx:not(.cpx--both)')].map((x) => ({ box: R(x), name: x.querySelector('.cpx__t').textContent, what: x.querySelector('.cpx__d').textContent,
