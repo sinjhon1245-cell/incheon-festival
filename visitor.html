@@ -74,8 +74,8 @@
       </section>
       <div id="here" hidden></div>
       <section class="hero" id="hero" aria-label="지금 상황 요약"></section>
-      <!-- 부스가 많을 때(SEARCH_FIELD_MIN 곳 이상) 검색을 아이콘에만 두지 않고 검색칸 모양으로도 보여 줍니다.
-           누르면 붙박이 줄의 검색칸이 열립니다(붙박이 줄 높이는 그대로). -->
+      <!-- 검색칸 모양의 단추. 누르면 붙박이 줄의 검색칸이 열립니다(붙박이 줄 높이는 그대로). 검색은 이 단추 하나로 엽니다 —
+           탭 줄에 돋보기를 두면 휴대폰에서 탭 자리가 모자랍니다. -->
       <button type="button" class="qopen" id="search-field" data-act="search-open" hidden>
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" aria-hidden="true" focusable="false"><circle cx="10.5" cy="10.5" r="6.5" /><path d="M15.5 15.5 20.5 20.5" /></svg>
         <span>부스 이름 · 번호 · 학교명으로 찾기</span>
@@ -86,9 +86,6 @@
       <div class="col bar__in">
         <div class="bar__tabs" id="bar-tabs">
           <div class="tabs" id="tabs" role="group" aria-label="구역"></div>
-          <button type="button" class="bar__icon" id="search-open" aria-label="부스 검색">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" aria-hidden="true" focusable="false"><circle cx="10.5" cy="10.5" r="6.5" /><path d="M15.5 15.5 20.5 20.5" /></svg>
-          </button>
         </div>
         <form class="bar__search" id="search" role="search" hidden>
           <label class="sr-only" for="q">부스 검색</label>
@@ -317,6 +314,17 @@
       return c;
     }
 
+    // 학교급 탭: 특수는 한 곳뿐이라 탭 줄에서는 중등과 함께 고릅니다. 구역 자체는 합치지 않습니다 —
+    // 부스의 구역 · 구역 제목은 그대로이고, 목록 · 한눈에서 특수는 늘 중등 바로 아래입니다.
+    var TAB_MAIN = '중등', TAB_JOIN = '특수';
+    // 탭 이름: 휴대폰에서 다섯 칸이 한 줄에 들게 줄인 말(화면 읽기 · title 은 늘 전체 이름). 구역 제목은 표의 이름 그대로입니다.
+    var TAB_SHORT = { '초등': '초', '중등': '중', '고등': '고', '체험': '체험' };
+    // 체험존 유형 배지. 제목 글자가 아니라 booth_type 칸에서 옵니다. 이 표에 없는 값은 배지를 그리지 않습니다.
+    var KIND_CLS = { '게임': 'kind--game', '교육': 'kind--edu' };
+    function zoneInTab(zoneKey, tabKey) {
+      return zoneKey === tabKey || (tabKey === TAB_MAIN && zoneKey === TAB_JOIN);
+    }
+
     // 실제로 부스가 있는 구역만, zones 순서대로. zones 에 없는 구역은 뒤에 붙입니다.
     function zoneList() {
       var out = [], seen = {}, n = {};
@@ -327,7 +335,21 @@
       S.booths.forEach(function (b) {
         if (!seen[b.zone_key]) { seen[b.zone_key] = true; out.push({ key: b.zone_key, label: b.zone_name || '기타', n: n[b.zone_key] }); }
       });
+      var keys = out.map(function (z) { return z.key; });
+      var main = keys.indexOf(TAB_MAIN), join = keys.indexOf(TAB_JOIN);
+      if (main >= 0 && join >= 0) out.splice(main + (join > main ? 1 : 0), 0, out.splice(join, 1)[0]);
       return out;
+    }
+
+    // 탭 줄에 놓는 칸. zoneList() 와 같되 중등 · 특수를 한 칸으로 묶습니다(칸의 key 는 중등).
+    function zoneTabs() {
+      var zs = zoneList();
+      var main = zs.filter(function (z) { return z.key === TAB_MAIN; })[0];
+      var join = zs.filter(function (z) { return z.key === TAB_JOIN; })[0];
+      if (!main || !join) return zs;
+      return zs.filter(function (z) { return z !== join; }).map(function (z) {
+        return z === main ? { key: main.key, label: main.label + '·' + join.label, short: '중·특', n: main.n + join.n } : z;
+      });
     }
 
     function searching() { return !!searchTest(); }
@@ -336,7 +358,7 @@
     // 이 기기에 남아 있던 예전 값에도 표시가 보이지 않게 한 번 더 거릅니다.
     function orgText(b) { return core.displayOrganization(b.org); }
     function hay(b) {
-      return norm([b.code, String(b.code || '').replace(/-/g, ''), looseCode(b), looseCode(b, '-'), b.name, orgText(b), b.program, b.zone_name].join(' '));
+      return norm([b.code, String(b.code || '').replace(/-/g, ''), looseCode(b), looseCode(b, '-'), b.name, orgText(b), b.program, b.zone_name, b.booth_type].join(' '));
     }
     // 앞의 0 을 뺀 부스 번호: 'B-03' → 'b3'(sep 이 '-' 이면 'b-3'). 'b3' · 'B-3' 으로 쳐도 B-03 이 찾아집니다.
     function looseCode(b, sep) {
@@ -474,7 +496,7 @@
         // 어느 구역에 묶여 있는지 알 수 없기 때문입니다. 검색어가 비었거나 'ㄹ' 처럼
         // 낱자모뿐일 때도 같아야 합니다. 그렇지 않으면 'ㄹ' → '로' → 'ㄹ' 로 칠 때마다
         // 목록이 고른 구역 하나와 전체 구역 사이를 오갑니다. 검색칸을 닫으면 고른 구역으로 돌아갑니다.
-        if (!searchOpen() && u.zone && b.zone_key !== u.zone) return false;
+        if (!searchOpen() && u.zone && !zoneInTab(b.zone_key, u.zone)) return false;
         // 상태 고름과 검색은 함께 걸리지 않습니다(bind() 의 숫자 단추 · 검색칸 처리 참고).
         if (u.count && bucketOf(b) !== u.count) return false;
         if (q && !q(hay(b))) return false;
@@ -515,8 +537,11 @@
 
     // 검색칸이 열려 있으면 검색어가 비었거나 낱자모뿐이어도 묶지 않습니다. 치는 동안
     // 묶음 ↔ 한 줄 목록이 글자마다 바뀌며 화면이 튀지 않게 visible() 과 같은 조건을 씁니다.
+    // 중등·특수 탭은 대기 짧은 순 · 상태 고름에서도 구역 제목으로 나눕니다(특수가 중등 아래, 각 구역 안의 순서는 그 정렬대로).
     function isGrouped() {
-      return effSort() === 'code' && !searching() && !searchOpen() && !S.ui.count && zoneList().length >= 2;
+      if (searching() || searchOpen() || zoneList().length < 2) return false;
+      if (zoneTabs().length < zoneList().length && S.ui.zone === TAB_MAIN) return true;
+      return effSort() === 'code' && !S.ui.count;
     }
 
     function zoneGroups(items) {
@@ -598,6 +623,7 @@
 
     // 줄 앞의 부스 번호는 늘 전체 번호(A-07)입니다. 구역 제목이 화면 위로 지나간 뒤에도
     // 07 이 A-07 인지 B-07 인지 바로 알 수 있게 합니다(부스가 수십 곳일 때).
+    var WORD_CODE = /[가-힣]/;   // 낱말이 든 번호(체험1)
     function codeLabel(b) {
       if (b.code) return b.code;
       if (b.zone_key && b.no !== null && b.no !== undefined && b.no !== '') return b.zone_key + '-' + pad2(b.no);
@@ -732,7 +758,7 @@
       var html = '<section class="here" aria-labelledby="here-label">' +
         '<p class="here__label" id="here-label"><i class="sq" aria-hidden="true"></i>지금 계신 부스</p>' +
         '<div class="here__main">' +
-          '<div><span class="here__code">' + esc(b.code) + '</span><p class="here__name">' + esc(b.name) + '</p></div>' +
+          '<div><span class="here__code">' + esc(b.code) + '</span><p class="here__name' + (KIND_CLS[b.booth_type] ? ' here__name--full' : '') + '">' + esc(b.name) + '</p></div>' +
           '<div class="here__val">' + bigHtml(b) + '</div>' +
         '</div>';
       if (mode === 'live') {
@@ -756,8 +782,8 @@
           html += '<p class="here__alts-h">' + (alt.scope === 'zone' ? '바로 갈 수 있는 같은 구역 부스' : '바로 갈 수 있는 다른 구역 부스') + '</p>' +
             '<ul class="alts">' + alt.list.map(function (x) {
               return '<li><button type="button" class="alt" data-go="' + esc(x.id) + '">' +
-                '<span class="alt__code">' + esc(x.code) + '</span>' +
-                '<span class="alt__name">' + esc(x.name) +
+                '<span class="alt__code' + (WORD_CODE.test(x.code) ? ' alt__code--word' : '') + '">' + esc(x.code) + '</span>' +
+                '<span class="alt__name' + (KIND_CLS[x.booth_type] ? ' alt__name--full' : '') + '">' + esc(x.name) +
                   (alt.scope === 'any' ? '<span class="alt__zone">' + esc(x.zone_name) + '</span>' : '') + '</span>' +
                 '<span class="alt__v"><i class="sq" aria-hidden="true"></i>' + (isNow(x) ? '바로' : waitNum(x) + '분') + '</span>' +
               '</button></li>';
@@ -924,15 +950,16 @@
       if (multi && S.ui.q) S.ui.search = true;
       $('bar-tabs').hidden = searchMode;
       $('search').hidden = !searchMode;
-      // 부스가 많으면 요약 아래에 검색칸 모양의 단추를 하나 더 둡니다(검색칸이 열려 있으면 숨김).
-      $('search-field').hidden = searchMode || S.booths.length + S.unplaced.length < SEARCH_FIELD_MIN;
+      // 요약 아래의 검색칸 모양 단추(검색칸이 열려 있으면 숨김).
+      $('search-field').hidden = searchMode;
       S.multi = multi;
       var cancel = $('search-cancel');
       if (multi) { cancel.textContent = '취소'; cancel.hidden = false; }
       else { cancel.textContent = '지우기'; cancel.hidden = !S.ui.q; }
       if (!multi) return;
 
-      var key = zs.map(function (z) { return z.key + ':' + z.label + ':' + z.n; }).join(',') + '|' + S.ui.zone + '|' + S.booths.length;
+      var ts = zoneTabs();
+      var key = ts.map(function (z) { return z.key + ':' + z.label + ':' + z.n; }).join(',') + '|' + S.ui.zone + '|' + S.booths.length;
       if (key === S.keys.tabs) {
         // 15초 · 20초마다 도는 그리기에서는 탭 줄을 건드리지 않습니다. 손으로 옆으로 밀어 둔
         // 자리를 되돌리지 않으려는 것입니다. 검색을 닫아 탭 줄이 다시 보일 때만 맞춥니다.
@@ -944,21 +971,27 @@
       var restore = focusKey(tabs);
       // 탭에는 짧은 이름(A 스쿨존)만 둡니다. 전체 이름은 목록의 구역 제목 · 탭의 title 에 있습니다.
       // 구역이 ZONE_SELECT_MIN 곳 이상이면 탭을 늘어놓지 않고 [전체] · [고른 구역] · [구역 선택 ▾](아래 패널 — renderPick)으로 줄입니다.
+      function tabNameHtml(z) {
+        var wide = z.key ? shortZone(z) : z.label;
+        var short = z.short || TAB_SHORT[z.key] || wide;
+        if (short === wide) return '<span class="tab__t">' + esc(wide) + '</span>';
+        return '<span class="tab__t"><span class="tab__wide">' + esc(wide) + '</span><span class="tab__short">' + esc(short) + '</span></span>';
+      }
       function tabHtml(z) {
         var on = S.ui.zone === z.key;
         var full = z.key ? z.label + ' · 부스 ' + z.n + '곳' : '전체 부스 ' + z.n + '곳';
         return '<button type="button" class="tab" data-zone="' + esc(z.key) + '" aria-pressed="' + on + '"' +
           ' title="' + esc(full) + '" aria-label="' + esc(full) + '">' +
-          '<span class="tab__t">' + esc(z.key ? shortZone(z) : z.label) + '</span><span class="tab__n">' + z.n + '</span></button>';
+          tabNameHtml(z) + '<span class="tab__n">' + z.n + '</span></button>';
       }
       var all = { key: '', label: '전체', n: S.booths.length };
-      if (zs.length >= ZONE_SELECT_MIN) {
-        var cur = zs.filter(function (z) { return z.key === S.ui.zone; })[0];
+      if (ts.length >= ZONE_SELECT_MIN) {
+        var cur = ts.filter(function (z) { return z.key === S.ui.zone; })[0];
         tabs.innerHTML = tabHtml(all) + (cur ? tabHtml(cur) : '') +
           '<button type="button" class="tab tab--sel" id="zone-pick" data-act="zone-pick" aria-expanded="' + S.zpick + '" aria-controls="zone-panel">' +
             '<span class="tab__t">구역 선택</span><span class="tab__caret" aria-hidden="true">▾</span></button>';
       } else {
-        tabs.innerHTML = [all].concat(zs).map(tabHtml).join('');
+        tabs.innerHTML = [all].concat(ts).map(tabHtml).join('');
       }
       restoreFocus(tabs, restore);
       // 탭을 새로 만들어도 줄의 scrollLeft 는 그대로 남습니다. 여유 수 · 다른 구역 대안 ·
@@ -980,7 +1013,7 @@
     }
     function renderPick() {
       var panel = $('zone-panel');
-      var zs = zoneList();
+      var zs = zoneTabs();
       var can = !$('bar').hidden && !$('bar-tabs').hidden && zs.length >= ZONE_SELECT_MIN;
       if (!can) S.zpick = false;
       var btn = $('zone-pick');
@@ -1039,7 +1072,6 @@
     // 구역 코드와 이름의 끝말만 둡니다(A 메이커존). 이름이 이미 짧거나('로봇존' → 'A 로봇존')
     // 구역 코드가 들어 있으면('A구역') 그대로 씁니다. 표에 칸을 새로 두지 않고 이름에서 만듭니다.
     var ZONE_SELECT_MIN = 7;
-    var SEARCH_FIELD_MIN = 20;
     function shortZone(z) {
       var key = String(z.key || ''), label = String(z.label || '').trim();
       if (!label) return key;
@@ -1090,7 +1122,7 @@
       if (S.ui.count && liveOn()) {
         // 위의 숫자는 행사 전체 수라, 구역 안에서 거르는 중이면 구역과 실제 곳 수를 함께 알립니다.
         // '× 필터 해제' 는 이 상태 고름만 풉니다(구역 · 보기 · 정렬은 그대로).
-        var zz = (!searchOpen() && S.ui.zone) ? zoneList().filter(function (z) { return z.key === S.ui.zone; })[0] : null;
+        var zz = (!searchOpen() && S.ui.zone) ? zoneTabs().filter(function (z) { return z.key === S.ui.zone; })[0] : null;
         var word = COUNT_WORD[S.ui.count];
         html = '<span class="result__t">' + (zz ? esc(shortZone(zz)) + ' · ' : '') + esc(word) + ' 부스만 보는 중 <b>' + items.length + '곳</b></span>' +
           '<button type="button" class="link result__clear" data-act="clear-count" aria-label="' + esc(word) + ' 필터 해제">' +
@@ -1128,12 +1160,18 @@
     // 줄: 번호 | 부스 이름 + 운영 학교 | 대기 분 + 상태 칩. 읽기 전용 정보 줄이라 단추가 아닙니다(누름 · 펼침 · 초점 없음).
     // 이름 · 학교는 줄여 감추지 않고 필요한 만큼 줄을 바꿔 끝까지 보입니다(누르지 않고 읽음).
     // 학교 이름은 '운영기관:' 같은 꼬리표 없이 이름만(예시 부스의 내부 표시는 orgText 가 뗍니다).
+    // 체험존은 이름 앞에 유형 배지를 둡니다. 프로그램명은 줄여 감추지 않고 필요한 만큼 줄을 바꿉니다.
+    function rowNameHtml(b) {
+      var name = esc(b.name || '이름 미정'), cls = KIND_CLS[b.booth_type];
+      if (!cls) return '<span class="row__name">' + name + '</span>';
+      return '<span class="row__name row__name--typed"><span class="kind ' + cls + '">' + esc(b.booth_type) + '</span>' + name + '</span>';
+    }
     function rowHtml(b) {
       var org = orgText(b);
       return '<li class="' + rowCls(b) + '" data-id="' + esc(b.id) + '">' +
         '<div class="row__main">' +
           '<span class="row__code' + (codeLabel(b).length > 2 ? ' row__code--long' : '') + '">' + esc(codeLabel(b)) + '</span>' +
-          '<span class="row__body"><span class="row__name">' + esc(b.name || '이름 미정') + '</span>' +
+          '<span class="row__body">' + rowNameHtml(b) +
             (org ? '<span class="row__org">' + esc(org) + '</span>' : '') + '</span>' +
           '<span class="row__right">' + rightHtml(b) + '</span>' +
         '</div>' +
@@ -1160,9 +1198,14 @@
     function tileInner(b) {
       var p = tileParts(b);
       return '<span class="sr-only">' + esc(tileLabel(b)) + '</span>' +
-        '<span class="tile__no" aria-hidden="true">' + esc(codeLabel(b)) + '</span>' +
+        '<span class="tile__no' + tileNoCls(codeLabel(b)) + '" aria-hidden="true">' + esc(codeLabel(b)) + '</span>' +
         '<span class="tile__v" aria-hidden="true">' + p.v + '</span>' +
         '<span class="tile__w" aria-hidden="true">' + esc(p.w) + '</span>';
+    }
+
+    function tileNoCls(code) {
+      if (!WORD_CODE.test(code)) return '';
+      return code.length > 3 ? ' tile__no--word tile__no--word2' : ' tile__no--word';
     }
 
     function tileLabel(b) {
@@ -1660,7 +1703,7 @@
       S.ui.q = '';
       $('q').value = '';
       render(had);
-      if (refocus) { var b = $('search-open'); if (b && !b.closest('[hidden]')) b.focus(); }
+      if (refocus) { var b = $('search-field'); if (b && !b.hidden) b.focus(); }
     }
 
     // 지금 계신 부스의 대안을 누르면, 전체 목록에서 그 부스 줄로 옮겨 잠깐 표시합니다(펼침 없음).
@@ -1827,6 +1870,8 @@
       });
       $('tabs').addEventListener('scroll', tabsFade, { passive: true });
       window.addEventListener('resize', tabsFade);
+      // 글꼴은 글자가 그려질 때 조각으로 내려받습니다. 대체 글꼴은 폭이 달라, 조각이 온 뒤 끝 흐림을 다시 잽니다(탭이 다 들어가는데 끝이 흐려지지 않게).
+      if (document.fonts && document.fonts.addEventListener) document.fonts.addEventListener('loadingdone', tabsFade);
       window.addEventListener('resize', function () { if (S.zpick) fitPick(); });
 
       document.addEventListener('keydown', function (e) {

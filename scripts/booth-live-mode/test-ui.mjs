@@ -44,7 +44,8 @@ async function snapshotOf(file, tables) {
   globalThis.fetch = async (url) => {
     const u = String(url);
     const name = u.split('/rest/v1/')[1].split('?')[0];
-    const v = tables[name];
+    const v = typeof tables[name] === 'function' ? tables[name](u) : tables[name];
+    if (v === 400) return new Response('{"code":"42703","message":"column booths.booth_type does not exist"}', { status: 400 });
     if (v === undefined || v === 404) return new Response('{"code":"PGRST205","message":"missing"}', { status: 404 });
     if (v === 500) return new Response('{"message":"boom"}', { status: 500 });
     return new Response(JSON.stringify(v), { status: 200 });
@@ -105,6 +106,21 @@ const liveWait = [
   t('S4 지난 날의 예약 상태는 보내지 않음(때 규칙 그대로)', old.body.booths[5].reserve === null && old.body.booths[5].status === null);
   const fail = await snapshotOf(SNAP_NEW, { ...base, booth_live: liveWait, booth_live_mode: 500 });
   t('S5 방식 읽기 실패(5xx)는 대기 읽기 실패와 같이 다룸(정상본 없으면 503 — 방식을 모른 채 내보내지 않음)', fail.status === 503);
+}
+
+{
+  // 체험존 유형 칸(booth_type)
+  const typed = booths.map((b, i) => ({ ...b, booth_type: i === 0 ? '게임' : i === 1 ? '교육' : null }));
+  const asked = [];
+  const n = await snapshotOf(SNAP_NEW, { ...base, booths: (u) => { asked.push(u); return typed; }, booth_live: liveWait, booth_live_mode: [] });
+  t('S6 유형이 있는 부스에만 type 을 실음', n.body.booths[0].type === '게임' && n.body.booths[1].type === '교육' && !('type' in n.body.booths[2]) && /booth_type/.test(asked[0]), JSON.stringify(n.body.booths.slice(0, 3).map((b) => b.type)));
+  const o = await snapshotOf(SNAP_OLD, { ...base, booth_live: liveWait });
+  const reads = [];
+  const noCol = await snapshotOf(SNAP_NEW, { ...base, booths: (u) => { reads.push(u); return /booth_type/.test(u) ? 400 : booths; }, booth_live: liveWait, booth_live_mode: [] });
+  const strip = (b) => b.booths.map(({ opMode, reserve, ...x }) => x);
+  t('S7 DB 에 유형 칸이 없으면(400) 예전 칸으로 다시 읽어 응답이 예전과 같음', noCol.status === 200 && reads.length === 2 && !/booth_type/.test(reads[1]) && JSON.stringify(strip(noCol.body)) === JSON.stringify(o.body.booths), JSON.stringify(reads));
+  const down = await snapshotOf(SNAP_NEW, { ...base, booths: 500, booth_live: liveWait, booth_live_mode: [] });
+  t('S8 400 이 아닌 실패는 다시 읽지 않고 기존처럼 503', down.status === 503, String(down.status));
 }
 
 /* ── 화면 조립 ───────────────────────────────────────────────────── */

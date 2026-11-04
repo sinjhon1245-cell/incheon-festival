@@ -1,0 +1,97 @@
+-- ===================================================================
+-- 되돌리기: 체험존 12곳(supabase/migration-booth-experience-zone.sql · publish-booth-experience-zone.sql)
+--
+-- 문제가 생기면 1번만 돌립니다. 관람객 · 운영자 화면에서 바로 사라지고 전체가 84곳으로 돌아가며,
+-- 부스 · QR · PIN 은 그대로 남아 고친 뒤 다시 공개할 수 있습니다.
+-- 2번은 등록 자체를 없앨 때만 씁니다(행사 전 취소). 기존 84곳은 어느 쪽에서도 건드리지 않습니다.
+--
+-- 사용법: 필요한 번호의 구간만 골라 SQL Editor 에서 Run.
+-- ===================================================================
+
+-- ── 1. 공개 거두기(권장) ─────────────────────────────────────────
+-- 운영자 세션은 이 뒤로 '지금은 이 부스를 운영할 수 없습니다' 로 멈춥니다. 다시 공개하면 이어서 씁니다.
+begin;
+update public.booths set is_published = false where zone_key = '체험' and is_published;
+update public.zones set is_published = false where key = '체험' and is_published;
+commit;
+
+
+-- ── 2. 등록 없애기(행사 전 취소할 때만) ──────────────────────────
+-- 아래 주석을 풀어 실행합니다. 12곳의 QR · PIN · 세션 · 상태 · 기록이 함께 지워집니다.
+-- 공개 중이거나 입력 기록이 있으면 멈춥니다. 그때는 1번으로 거두기만 합니다.
+--
+-- begin;
+-- do $check$
+-- declare
+--   v_pub integer;
+--   v_log integer;
+-- begin
+--   select count(*) into v_pub from public.booths where zone_key = '체험' and is_published;
+--   if v_pub <> 0 then
+--     raise exception '공개 중인 체험존 부스가 %곳 있습니다. 1번을 먼저 돌려 주세요.', v_pub;
+--   end if;
+--   select count(*) into v_log from public.booth_live_log g join public.booths b on b.id = g.booth_id where b.zone_key = '체험';
+--   if v_log <> 0 then
+--     raise exception '입력 기록이 %줄 있습니다. 기록을 지우지 않게 멈춥니다.', v_log;
+--   end if;
+-- end
+-- $check$;
+--
+-- -- 인쇄용 PIN 사본을 무효로 돌립니다(Vault 항목 이름은 남고 값은 못 쓰게 됩니다).
+-- select private.booth_pin_vault_revoke(b.id) from public.booths b where b.zone_key = '체험';
+--
+-- delete from public.booths where zone_key = '체험';
+-- delete from public.zones where key = '체험';
+-- alter table public.booths drop column if exists booth_type;
+--
+-- -- 함수를 2026-11-04 정의로 돌립니다.
+-- create or replace function public.booths_before_write()
+--  returns trigger
+--  language plpgsql
+--  set search_path to ''
+-- as $function$
+--     DECLARE v_opening boolean;
+--     BEGIN
+--       new.code := CASE
+--         WHEN new.zone_key IN ('초등','중등','고등','특수') AND new.no IS NOT NULL
+--           THEN new.no::text
+--         WHEN new.zone_key IS NOT NULL AND new.no IS NOT NULL
+--           THEN new.zone_key || '-' || lpad(new.no::text, greatest(2,length(new.no::text)), '0')
+--         ELSE ''
+--       END;
+--       IF tg_op='INSERT' THEN
+--         v_opening := coalesce(new.is_published,false);
+--       ELSE
+--         v_opening := coalesce(new.is_published,false) AND NOT coalesce(old.is_published,false);
+--       END IF;
+--       IF new.zone_key IS NULL OR new.no IS NULL THEN
+--         IF v_opening THEN
+--           RAISE EXCEPTION '구역과 부스 번호를 먼저 지정해 주세요.'
+--             USING errcode='23514', hint='booth_publish_needs_slot';
+--         END IF;
+--         new.is_published := false;
+--       ELSIF v_opening AND NOT EXISTS (
+--         SELECT 1 FROM public.zones z WHERE z.key=new.zone_key AND z.is_published
+--       ) THEN
+--         RAISE EXCEPTION '현재 구역이 비공개 상태입니다. 구역을 먼저 공개해 주세요.'
+--           USING errcode='23514', hint='booth_publish_zone_hidden';
+--       END IF;
+--       RETURN new;
+--     END;
+--     $function$;
+--
+-- create or replace function private.rehearsal_live_reset()
+--  returns integer
+--  language plpgsql
+--  set search_path to ''
+-- as $function$
+-- declare
+--   n integer;
+-- begin
+--   delete from public.booth_live as l where l.booth_id = any (private.rehearsal_booth_ids());
+--   get diagnostics n = row_count;
+--   return n;
+-- end;
+-- $function$;
+-- revoke all on function private.rehearsal_live_reset() from public;
+-- commit;
