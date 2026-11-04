@@ -986,6 +986,12 @@
         pin.zones = (r[0] || []).filter(function (z) {
           return booths.some(function (b) { return b.zone_key === z.key; });
         });
+        // 미래채움존과 체험존은 서로 다른 운영 구역. 행사 안내와 같은 순서로 표시합니다.
+        var futureAt = pin.zones.findIndex(function (z) { return z.key === '미래'; });
+        var experienceAt = pin.zones.findIndex(function (z) { return z.key === '체험'; });
+        if (futureAt >= 0 && experienceAt >= 0 && futureAt > experienceAt) {
+          pin.zones.splice(experienceAt, 0, pin.zones.splice(futureAt, 1)[0]);
+        }
         if (!pin.zones.length) {
           // 고를 부스가 없음(아직 공개 전). 단추는 [뒤로] 하나만 둡니다.
           $('pin-s0-title').textContent = '현재 PIN으로 시작할 수 있는 부스가 없습니다.';
