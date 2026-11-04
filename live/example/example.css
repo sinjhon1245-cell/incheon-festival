@@ -179,6 +179,19 @@ ul, ol { padding: 0; list-style: none; }
   text-decoration: none;
 }
 .cta:hover { background: var(--accent-d); border-color: var(--accent-d); }
+/* 협의용 예시 화면으로 가는 보조 링크(단추 아래 한 줄) */
+.sublink {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  margin-top: 4px;
+  color: var(--accent-d);
+  font-size: 14.5px;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
 .facts {
   display: grid;
   gap: 2px;

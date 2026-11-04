@@ -324,7 +324,7 @@ for (const W of WIDTHS) {
     const cnt = [...document.querySelectorAll('.vp__counts .cnt')].map((x) => [x.querySelector('.cnt__w').textContent, Number(x.querySelector('.cnt__n').textContent), x.querySelector('.cnt__w').getBoundingClientRect().right <= x.getBoundingClientRect().right + 0.5]);
     const dist = [...document.querySelectorAll('.vp__dist .dist')].map((x) => x.className.replace('dist dist--', ''));
     return { rows, cnt, dist, tiles: document.querySelectorAll('.vp__tiles .tile').length, tPause: tile('is-pause'), tClosed: tile('is-closed'), tResv: tile('is-resv'), tResvClosed: tile('is-resv-closed'),
-      demo: document.querySelectorAll('a[href*="demo"]').length, ovf: document.documentElement.scrollWidth - document.documentElement.clientWidth };
+      demo: [...document.querySelectorAll('a.sublink')].map((a) => a.getAttribute('href') + ' ' + a.firstChild.textContent), ovf: document.documentElement.scrollWidth - document.documentElement.clientWidth };
   });
   const er = Object.fromEntries(ex.rows.map((r) => [r.code, r]));
   const want = { 'D-03': ['잠시 중단', 'pause'], 'E-01': ['오늘 마감', 'off'], 'E-02': ['현장예약', 'resv'], 'E-03': ['예약 마감', 'resv-off'] };
@@ -336,7 +336,7 @@ for (const W of WIDTHS) {
   t(`E3 ${W}px 화면 안내 한눈에: 일곱 칸 · 두 줄 낱말 · 색 = 관람객 화면`, ex.tiles === 7 && !!ex.tPause && ex.tPause.v + '/' + ex.tPause.w === '잠시/중단' && ex.tClosed.v + '/' + ex.tClosed.w === '오늘/마감'
     && ex.tResv.v + '/' + ex.tResv.w === '현장/예약' && ex.tResvClosed.v + '/' + ex.tResvClosed.w === '예약/마감' && !!tagBg
     && ex.tResv.bg === tagBg.resv && ex.tResvClosed.bg === tagBg['resv-off'] && ex.tClosed.bg === tagBg.off && ex.tPause.bg === tagBg.pause, JSON.stringify([ex.tPause, ex.tClosed, ex.tResv, ex.tResvClosed]));
-  t(`E4 ${W}px 화면 안내: 예시 화면 링크 없음 · 가로 넘침 없음`, ex.demo === 0 && ex.ovf <= 0, JSON.stringify({ demo: ex.demo, ovf: ex.ovf }));
+  t(`E4 ${W}px 화면 안내: 두 카드에 예시 화면 살펴보기 링크 · 가로 넘침 없음`, JSON.stringify(ex.demo) === JSON.stringify(['/?demo=1 관람객 예시 화면 살펴보기', '/booth-ctrl?demo 부스 운영자 예시 화면 살펴보기']) && ex.ovf <= 0, JSON.stringify({ demo: ex.demo, ovf: ex.ovf }));
   t(`E11 ${W}px 화면 안내 상단 요약: 실제 화면과 같은 다섯 상태 · 일곱 부스 합 · 막대에 현장예약 구간`, JSON.stringify(ex.cnt.map((x) => [x[0], x[1]])) === JSON.stringify([['여유', 1], ['보통', 1], ['혼잡', 1], ['현장예약', 1], ['중단·마감', 3]]) && ex.cnt.every((x) => x[2]) && JSON.stringify(ex.dist) === JSON.stringify(['free', 'normal', 'busy', 'resv', 'off']), JSON.stringify([ex.cnt, ex.dist]));
   const op = await page.evaluate(() => {
     const R = (el) => { const r = el.getBoundingClientRect(); return { l: r.left, r: r.right, t: r.top, b: r.bottom, w: r.width, h: r.height }; };
