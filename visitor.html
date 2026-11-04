@@ -49,18 +49,18 @@
 
   <header class="band">
     <div class="col band__in">
-      <div class="band__main">
-        <div class="band__row">
-          <h1 class="band__title">부스 대기 현황</h1>
-          <p class="sync" id="sync" hidden><i class="sync__sq" aria-hidden="true"></i><span id="sync-text"></span></p>
-          <button type="button" class="sync-btn" id="refresh" hidden>새로고침</button>
-        </div>
-        <p class="band__event" id="band-event"></p>
+      <div class="band__top">
+        <h1 class="band__title">부스 대기 현황</h1>
+        <button type="button" class="mapbtn" id="map-open" aria-haspopup="dialog" aria-label="배치도 보기">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M18 8c0 3.613-3.869 7.429-5.393 8.795a1 1 0 0 1-1.214 0C9.87 15.429 6 11.613 6 8a6 6 0 0 1 12 0"/><circle cx="12" cy="8" r="2"/><path d="M8.714 14h-3.71a1 1 0 0 0-.948.683l-2.004 6A1 1 0 0 0 3 22h18a1 1 0 0 0 .948-1.316l-2-6a1 1 0 0 0-.949-.684h-3.712"/></svg>
+          <span>배치도<span class="mapbtn__more"> 보기</span></span>
+        </button>
       </div>
-      <button type="button" class="mapbtn" id="map-open" aria-haspopup="dialog">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M18 8c0 3.613-3.869 7.429-5.393 8.795a1 1 0 0 1-1.214 0C9.87 15.429 6 11.613 6 8a6 6 0 0 1 12 0"/><circle cx="12" cy="8" r="2"/><path d="M8.714 14h-3.71a1 1 0 0 0-.948.683l-2.004 6A1 1 0 0 0 3 22h18a1 1 0 0 0 .948-1.316l-2-6a1 1 0 0 0-.949-.684h-3.712"/></svg>
-        <span>배치도 보기</span>
-      </button>
+      <div class="band__sub">
+        <p class="band__event" id="band-event"></p>
+        <p class="sync" id="sync" hidden><i class="sync__sq" aria-hidden="true"></i><span id="sync-text"></span></p>
+        <button type="button" class="sync-btn" id="refresh" hidden>새로고침</button>
+      </div>
     </div>
   </header>
 
@@ -151,8 +151,9 @@
       </button>
     </div>
     <div class="vmap__zones" id="vmap-zones" role="group" aria-label="구역으로 이동">
-      <button type="button" class="vmap__zone" data-vzone="school-a" aria-pressed="false" disabled>스쿨 01~44</button>
-      <button type="button" class="vmap__zone" data-vzone="school-b" aria-pressed="false" disabled>스쿨 45~84</button>
+      <button type="button" class="vmap__zone" id="vmap-fit" aria-pressed="false" disabled>전체 보기</button>
+      <button type="button" class="vmap__zone" data-vzone="school-a" aria-pressed="false" disabled>스쿨존 01~44</button>
+      <button type="button" class="vmap__zone" data-vzone="school-b" aria-pressed="false" disabled>스쿨존 45~84</button>
       <button type="button" class="vmap__zone" data-vzone="future" aria-pressed="false" disabled>미래채움존</button>
       <button type="button" class="vmap__zone" data-vzone="experience" aria-pressed="false" disabled>체험존</button>
       <button type="button" class="vmap__zone" data-vzone="bigtech" aria-pressed="false" disabled>빅테크존</button>
@@ -161,11 +162,16 @@
     </div>
     <div class="vmap__stage" id="vmap-stage" tabindex="0" role="group" aria-label="행사장 배치도. 방향키로 이동하고 더하기 · 빼기로 확대 · 축소, 0 으로 전체 보기입니다.">
       <img class="vmap__img" id="vmap-img" draggable="false" decoding="async" hidden />
+      <div class="vmap__hl" id="vmap-hl" aria-hidden="true" hidden><span class="vmap__hl-t" id="vmap-hl-t"></span></div>
       <div class="vmap__note" id="vmap-note" hidden>
         <p id="vmap-note-t"></p>
         <button type="button" class="line-btn" id="vmap-retry" hidden>다시 불러오기</button>
       </div>
       <p class="vmap__hint" id="vmap-hint" role="status" hidden></p>
+      <div class="vmap__tip" id="vmap-tip" role="status" hidden>
+        <p class="vmap__tip-t">체험 프로그램 번호와 배치도 장소 번호는 다를 수 있어요.</p>
+        <p class="vmap__tip-d"><span>앱 체험1~2 → 체험 01</span> · <span>체험3~4 → 체험 02</span> · <span>체험5~12 → 3층</span></p>
+      </div>
       <div class="vmap__tools" role="group" aria-label="배치도 조작">
         <button type="button" class="vmap__tool" id="vmap-in" aria-label="확대">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="M12 5v14M5 12h14"/></svg>
@@ -173,10 +179,10 @@
         <button type="button" class="vmap__tool" id="vmap-out" aria-label="축소">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="M5 12h14"/></svg>
         </button>
-        <button type="button" class="vmap__tool" id="vmap-fit" aria-label="전체 보기">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
-        </button>
       </div>
+      <button type="button" class="vmap__mini" id="vmap-mini" tabindex="-1" aria-hidden="true" hidden>
+        <span class="vmap__mini-map" id="vmap-mini-map"><i class="vmap__mini-view" id="vmap-mini-view"></i><span class="vmap__mini-off">부스 목록 보는 중</span></span>
+      </button>
     </div>
   </dialog>
 

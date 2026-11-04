@@ -11,7 +11,11 @@
      P  이동    끌기 · 가장자리 제한 · 작은 쪽 가운데
      T  터치    두 손가락 확대(가운데 기준) · 한 손가락 이동 · 뒤 화면이 움직이지 않음
      R  크기    창 크기 변경 뒤 다시 맞춤
-     Y  구역    폭마다 구역 단추 · 누르면 그 구역이 화면 안 · 읽을 배율 · 직접 움직이면 표시 해제 · 터치
+     Y  구역    크기마다 구역 단추 · 전체 지도에서 강조 → 확대 · 테두리가 그림 좌표와 일치 · 자동 배율 · 미니맵 겹침
+     H  강조    주황 색 · 두께 · 흰 외곽선 · 자기 부스를 덮고 이웃 구역 부스를 덮지 않음 · 사이트 보라 유지
+     M  미니맵  배치도만 잘라 씀 · 끌기 · 확대 · 축소에 따라 사각형 일치 · 눌러서 이동 · 전체 보기 숨김 · 범례 처리
+     Q  순서    프레임마다 배율을 기록해 튀는 횟수를 셈 · 연속 선택 · 취소 · 닫기 · 화면 돌리기 · 움직임 줄이기
+     C  체험존  번호 안내 · 앱 번호와 지도 장소 대응 · 겹침 · 사라지는 때
      E  오류    그림을 못 받을 때 안내 · 다시 불러오기
      K  유지    닫은 뒤 검색어 · 고른 탭 · 스크롤 · 뒤로 가기로 닫기 · 줄을 눌러도 창이 열리지 않음
 
@@ -41,6 +45,9 @@ const MAP_JS = readFileSync(join(REPO, 'assets/venue-map.js'), 'utf8');
 const IMAGE_PATH = /src: '([^']+)'/.exec(MAP_JS)[1];
 const IMAGE = readFileSync(join(REPO, IMAGE_PATH));
 const IW = 1600, IH = 1076;
+const objOf = (name) => new Function('return ' + new RegExp('var ' + name + ' = (\\{[\\s\\S]*?\\});').exec(MAP_JS)[1])();
+const ZONE_PARTS = objOf('ZONE_PARTS'), MINI = objOf('MINI');
+const partsOf = (id) => ZONE_PARTS[id] || [ZONE_RECTS[id]];
 const ZONE_RECTS = Object.fromEntries([...MAP_JS.matchAll(/'?([\w-]+)'?: \[(\d+), (\d+), (\d+), (\d+)\]/g)].map((m) => [m[1], m.slice(2).map(Number)]));
 
 /* ── 예시 스냅샷 105곳 ──────────────────────────────────────────── */
@@ -48,7 +55,7 @@ const now = new Date().toISOString();
 const schools = JSON.parse(readFileSync(join(HERE, 'fixture-public-96.json'), 'utf8'));
 const booth = (b, i) => ({ ...b, code: b.code || String(b.no), program: '', opMode: 'wait', status: ['여유', '보통', '혼잡'][i % 3], reserve: null, waitMinutes: 5 + (i % 3) * 10, updatedAt: now });
 const data = { version: 1, generatedAt: now, mode: 'normal', liveReady: true,
-  event: { title: '시험 행사', venue: '시험 장소', dateLabel: '시험 날짜', timeLabel: '10:00 ~ 17:00', start: new Date(Date.now() + 2 * 864e5).toISOString(), end: new Date(Date.now() + 3 * 864e5).toISOString(), mapUrl: '' },
+  event: { title: '2026 인천 AI미래채움 교육페스티벌', venue: '인천 상상플랫폼', dateLabel: '시험 날짜', timeLabel: '10:00 ~ 17:00', start: new Date(Date.now() + 2 * 864e5).toISOString(), end: new Date(Date.now() + 3 * 864e5).toISOString(), mapUrl: '' },
   zones: [{ key: '초등', label: '초등', order: 1 }, { key: '중등', label: '중등', order: 2 }, { key: '고등', label: '고등', order: 3 }, { key: '특수', label: '특수', order: 4 }, { key: '체험', label: '체험존', order: 5 }, { key: '미래', label: '미래채움존', order: 6 }],
   booths: [...schools.map(booth),
     ...Array.from({ length: 12 }, (_, i) => booth({ id: `x${i + 1}`, no: i + 1, code: `체험${i + 1}`, zone: '체험', name: `시험 체험 ${i + 1}`, org: '', type: i < 4 ? '게임' : '교육' }, i)),
@@ -103,9 +110,55 @@ async function openMap(page) {
   await page.waitForFunction(() => { const n = document.getElementById('vmap-img'); return document.getElementById('vmap').open && n.complete && n.naturalWidth > 0 && !n.hidden; }, { timeout: 8000 });
   await sleep(120);
 }
-const tool = (page, id) => page.click('#' + id).then(() => sleep(60));
-const zone = (page, id) => page.evaluate((k) => document.querySelector('[data-vzone="' + k + '"]').click(), id).then(() => sleep(380));
+const idle = (page) => page.waitForFunction(() => !document.getElementById('vmap-stage').dataset.phase, { timeout: 5000, polling: 'raf' });
+const phaseIs = (page, p) => page.waitForFunction((x) => document.getElementById('vmap-stage').dataset.phase === x, { timeout: 5000, polling: 'raf' }, p);
+const tool = (page, id) => page.click('#' + id).then(() => idle(page)).then(() => sleep(60));
+const pick = (page, id) => page.evaluate((k) => document.querySelector('[data-vzone="' + k + '"]').click(), id);
+const zone = (page, id) => pick(page, id).then(() => page.waitForFunction(() => document.getElementById('vmap-hl').classList.contains('is-soft'), { timeout: 5000, polling: 'raf' })).then(() => sleep(60));
 const pressed = (page) => page.evaluate(() => [...document.querySelectorAll('[data-vzone][aria-pressed="true"]')].map((b) => b.dataset.vzone));
+// 테두리 안쪽 자리(그림 칸 기준 px)
+const hlBoxes = (page) => page.evaluate(() => {
+  const st = document.getElementById('vmap-stage').getBoundingClientRect();
+  return [...document.querySelectorAll('.vmap__hl-box')].map((b) => { const r = b.getBoundingClientRect(), w = parseFloat(getComputedStyle(b).borderTopWidth); return { l: r.left - st.left + w, t: r.top - st.top + w, w: r.width - 2 * w, h: r.height - 2 * w }; });
+});
+const hlName = (page) => page.evaluate(() => {
+  const st = document.getElementById('vmap-stage').getBoundingClientRect(), n = document.getElementById('vmap-hl-t'), r = n.getBoundingClientRect();
+  return { text: n.textContent, l: r.left - st.left, t: r.top - st.top, r: r.right - st.left, b: r.bottom - st.top, soft: document.getElementById('vmap-hl').classList.contains('is-soft') };
+});
+function aligned(v, id, got) {
+  const parts = partsOf(id);
+  return got.length === parts.length && parts.every((p, i) => {
+    let w = p[2] * v.s, h = p[3] * v.s, l = v.x + p[0] * v.s, t = v.y + p[1] * v.s;
+    if (parts.length === 1) { const gw = Math.max(0, 22 - w), gh = Math.max(0, 22 - h); l -= gw / 2; t -= gh / 2; w += gw; h += gh; }
+    return near(got[i].l, l) && near(got[i].t, t) && near(got[i].w, w) && near(got[i].h, h);
+  });
+}
+const miniState = (page) => page.evaluate(() => {
+  const m = document.getElementById('vmap-mini'), R = (e) => { const r = e.getBoundingClientRect(); return { l: r.left, t: r.top, w: r.width, h: r.height }; }, n = document.getElementById('vmap-mini-view');
+  return { hidden: m.hidden, off: m.classList.contains('is-off'), map: R(document.getElementById('vmap-mini-map')), view: R(n), viewShown: getComputedStyle(n).display !== 'none' };
+});
+function miniOk(v, m) {
+  const l = Math.max(MINI.x, -v.x / v.s), t = Math.max(MINI.y, -v.y / v.s), r = Math.min(MINI.x + MINI.w, (v.vw - v.x) / v.s), b = Math.min(MINI.y + MINI.h, (v.vh - v.y) / v.s);
+  if (r - l < 24 || b - t < 24) return m.off && !m.viewShown;
+  const k = m.map.w / MINI.w;
+  return !m.off && m.viewShown && near(m.view.l, m.map.l + (l - MINI.x) * k) && near(m.view.t, m.map.t + (t - MINI.y) * k) && near(m.view.w, (r - l) * k) && near(m.view.h, (b - t) * k);
+}
+// 프레임마다 배율 · 단계를 기록합니다. 단추를 차례로 누른 뒤 ms 만큼 더 봅니다.
+const trace = (page, clicks, ms) => page.evaluate(async (list, wait) => {
+  const img = document.getElementById('vmap-img'), st = document.getElementById('vmap-stage'), out = [], t0 = performance.now();
+  let on = true;
+  (function f() { out.push({ t: performance.now() - t0, s: +/scale\(([-\d.e]+)\)/.exec(img.style.transform)[1], p: st.dataset.phase || '' }); if (on) requestAnimationFrame(f); })();
+  for (const [sel, gap] of list) { document.querySelector(sel).click(); if (gap) await new Promise((r) => setTimeout(r, gap)); }
+  await new Promise((r) => setTimeout(r, wait));
+  on = false;
+  return out;
+}, clicks, ms);
+// 배율이 늘다 줄거나 줄다 늘어난 횟수
+function turns(tr) {
+  let n = 0, dir = 0;
+  for (let i = 1; i < tr.length; i++) { const d = tr[i].s - tr[i - 1].s; if (Math.abs(d) < 1e-5) continue; const g = Math.sign(d); if (dir && g !== dir) n += 1; dir = g; }
+  return n;
+}
 // 지금 화면에 보이는 그림 자리(그림 좌표)
 const seen = (v) => ({ l: -v.x / v.s, t: -v.y / v.s, r: (v.vw - v.x) / v.s, b: (v.vh - v.y) / v.s });
 const lum = (c) => { const f = c.map((n) => { n /= 255; return n <= 0.03928 ? n / 12.92 : ((n + 0.055) / 1.055) ** 2.4; }); return 0.2126 * f[0] + 0.7152 * f[1] + 0.0722 * f[2]; };
@@ -126,18 +179,20 @@ for (const W of [320, 360, 375, 390, 414, 768, 1024, 1440]) {
     const sync = document.getElementById('sync'), title = document.querySelector('.band__title');
     const hit = (a, c) => !(a.right <= c.left || c.right <= a.left || a.bottom <= c.top || c.bottom <= a.top);
     const r = R(b), band = getComputedStyle(document.querySelector('.band'));
-    return { bandBg: band.backgroundColor, border: s.borderTopColor, w: r.width, h: r.height, left: r.left, right: r.right, top: r.top, text: b.innerText.trim(), cut: sp.scrollWidth > sp.clientWidth + 0.5, icon: ic.width, bg: s.backgroundColor, color: s.color,
+    return { bandBg: band.backgroundColor, border: s.borderTopColor, w: r.width, h: r.height, left: r.left, right: r.right, top: r.top, text: b.innerText.trim(), aria: b.getAttribute('aria-label'), syncR: JSON.parse(JSON.stringify(R(sync))), syncOn: !sync.hidden, titleB: R(title).bottom, titleT: R(title).top, cut: sp.scrollWidth > sp.clientWidth + 0.5, icon: ic.width, bg: s.backgroundColor, color: s.color,
       tabRows: new Set(tabs).size, tabs: tabs.length, tabScroll: box.scrollWidth - box.clientWidth, ovf: document.documentElement.scrollWidth - document.documentElement.clientWidth, vw: document.documentElement.clientWidth,
       overSync: !sync.hidden && hit(r, R(sync)), overTitle: hit(r, R(title)), titleRight: R(title).right };
   });
-  t(`B1 ${W}px 아이콘과 문구가 함께 보임 · 잘림 없음`, m.text === '배치도 보기' && !m.cut && m.icon >= 22 && m.icon <= 24 && m.right <= m.vw + 0.5 && m.left >= 0, JSON.stringify(m));
+  t(`B1 ${W}px 아이콘과 문구가 함께 보임 · 잘림 없음`, m.text === (W < 600 ? '배치도' : '배치도 보기') && m.aria === '배치도 보기' && !m.cut && m.icon >= 22 && m.icon <= 24 && m.right <= m.vw + 0.5 && m.left >= 0, JSON.stringify(m));
   t(`B2 ${W}px 높이 약 48px · 터치 영역 44px 이상`, m.h >= 44 && m.h <= 52 && m.w >= 44, JSON.stringify([m.w, m.h]));
   t(`B3 ${W}px 탭 5칸 한 줄 · 가로 스크롤 없음 · 제목 · 갱신 표시와 겹치지 않음`, m.tabs === 5 && m.tabRows === 1 && m.tabScroll <= 0 && m.ovf <= 0 && !m.overSync && !m.overTitle, JSON.stringify(m));
-  if (W >= 768) t(`B4 ${W}px 단추는 제목 오른쪽`, m.left > m.titleRight, JSON.stringify([m.left, m.titleRight]));
+  t(`B4 ${W}px 단추는 제목과 같은 줄 오른쪽`, m.left > m.titleRight && m.top < m.titleB && m.top + m.h > m.titleT, JSON.stringify([m.left, m.titleRight]));
+  t(`B4a ${W}px 자동 갱신은 둘째 줄 오른쪽(제목보다 덜 강조)`, !m.syncOn || (m.syncR.top >= m.titleB - 1 && near(m.syncR.right, m.right, 1)), JSON.stringify(m.syncR));
   if (W === 390) {
-    const band = rgb(m.bandBg), [br, bg, bb, ba] = rgb(m.border), edge = [br, bg, bb].map((n, i) => n * ba + band[i] * (1 - ba));
-    t('B4b 글자 대비 4.5:1 이상 · 테두리가 띠와 3:1 이상', ratio(rgb(m.color), rgb(m.bg)) >= 4.5 && ratio(edge, band) >= 3, JSON.stringify([ratio(rgb(m.color), rgb(m.bg)), ratio(edge, band)]));
+    t('B4b 흰 바탕 · 보라 글자 대비 4.5:1 이상 · 단추가 띠와 3:1 이상', m.bg === 'rgb(255, 255, 255)' && m.color === m.bandBg && ratio(rgb(m.color), rgb(m.bg)) >= 4.5 && ratio(rgb(m.bg), rgb(m.bandBg)) >= 3, JSON.stringify([m.bg, m.color, ratio(rgb(m.color), rgb(m.bg))]));
   }
+  const ev = await page.evaluate(() => { const e = document.getElementById('band-event'), r = document.createRange(); r.selectNodeContents(e); const c = r.getBoundingClientRect(), b = e.getBoundingClientRect(), y = document.getElementById('sync').getBoundingClientRect(); return { text: e.textContent, right: c.right, boxRight: b.right, h: b.height, syncLeft: y.left, cutX: e.scrollWidth > e.clientWidth + 0.5, cutY: e.scrollHeight > e.clientHeight + 0.5 }; });
+  t(`B4c ${W}px 실제 행사명 · 장소가 잘리지 않고 자동 갱신과 겹치지 않음 · 두 줄 이하`, ev.text === '2026 인천 AI미래채움 교육페스티벌 · 인천 상상플랫폼' && !ev.cutX && !ev.cutY && ev.right <= ev.syncLeft && ev.h <= 41, JSON.stringify(ev));
   t(`B5 ${W}px 화면 오류 없음`, errs.length === 0, errs.join(' | '));
   if (SHOTS && [320, 390, 1440].includes(W)) await page.screenshot({ path: join(SHOTS, `main-${W}.png`) });
   await ctx.close();
@@ -215,7 +270,7 @@ for (const W of [320, 360, 375, 390, 414, 768, 1024, 1440]) {
   const k2 = await state(page);
   await page.keyboard.press('-'); await sleep(60);
   const k3 = await state(page);
-  await page.keyboard.press('+'); await sleep(40); await page.keyboard.press('0'); await sleep(60);
+  await page.keyboard.press('+'); await sleep(40); await page.keyboard.press('0'); await idle(page); await sleep(60);
   const k4 = await state(page);
   t('Z7 자판: + · 방향키 · − · 0', k1.s > v0.s && k2.x > k1.x - 1 && k2.x !== k1.x && k3.s < k1.s && near(k4.s, v0.s, 1e-4), JSON.stringify([k1.s, k1.x, k2.x, k3.s, k4.s]));
 
@@ -287,6 +342,8 @@ for (const W of [320, 360, 375, 390, 414, 768, 1024, 1440]) {
   await sleep(120);
   const v1 = await state(page);
   t('T1 두 손가락 벌리면 2배 · 두 손가락 가운데 자리 고정', near(v1.s / v0.s, 2, 0.05) && near(v1.x + px * v1.s, cx - v0.left, 2) && near(v1.y + py * v1.s, cy - v0.top, 2), JSON.stringify([v1.s / v0.s, v1.x + px * v1.s, cx - v0.left]));
+  const pm = await miniState(page);
+  t('T1b 두 손가락으로 확대하면 미니맵이 나오고 사각형이 일치', !pm.hidden && miniOk(v1, pm), JSON.stringify(pm));
   if (SHOTS) await page.screenshot({ path: join(SHOTS, 'zoom-390.png') });
   await touch('touchStart', [{ x: cx, y: cy, id: 1 }]);
   for (const d of [20, 40, 60, 80]) { await touch('touchMove', [{ x: cx - d, y: cy, id: 1 }]); await sleep(20); }
@@ -303,7 +360,7 @@ for (const W of [320, 360, 375, 390, 414, 768, 1024, 1440]) {
   await page.tap('#vmap-in'); await sleep(80);
   const v4 = await state(page);
   t('T4 + 단추 터치', near(v4.s / v0.s, 1.6, 0.02), String(v4.s / v0.s));
-  await page.tap('#vmap-fit'); await sleep(80);
+  await page.tap('#vmap-fit'); await sleep(40); await idle(page); await sleep(60);
   t('T5 전체 보기 단추 터치', near((await state(page)).s, v0.s, 1e-4));
   const yNow = await page.evaluate(() => window.scrollY);
   t('T6 지도를 움직여도 뒤 화면이 스크롤되지 않음', yNow === 0, String(yNow));
@@ -311,72 +368,335 @@ for (const W of [320, 360, 375, 390, 414, 768, 1024, 1440]) {
   await ctx.close();
 }
 
-/* ── Y : 구역 이동 ─────────────────────────────────────────────── */
-for (const [W, H] of [[320, 568], [360, 740], [390, 844], [414, 896], [568, 320], [844, 390], [768, 1024], [1024, 768], [1440, 900]]) {
+/* ── Y : 구역 이동 · 위치 강조 · 자동 배율 · 미니맵, 크기마다 ──────── */
+const hit = (a, c) => !(a.right <= c.left || c.right <= a.left || a.bottom <= c.top || c.bottom <= a.top);
+for (const [W, H] of [[320, 568], [360, 740], [375, 812], [390, 844], [414, 896], [568, 320], [844, 390], [768, 1024], [1024, 768], [1440, 900]]) {
   const { ctx, page, errs } = await openPage(W, H);
   await openMap(page);
+  const shot = (name) => (SHOTS && [320, 390, 1440].includes(W) ? page.screenshot({ path: join(SHOTS, `${name}-${W}.png`) }) : null);
+  await page.evaluate(() => document.getElementById('vmap-hint').setAttribute('hidden', ''));
+  await shot('full');
   const c = await page.evaluate(() => {
     const box = document.getElementById('vmap-zones'), R = (e) => e.getBoundingClientRect();
-    const list = [...box.querySelectorAll('[data-vzone]')].map((b) => ({ id: b.dataset.vzone, h: R(b).height, cut: b.scrollWidth > b.clientWidth + 0.5, off: b.disabled, out: R(b).right > innerWidth + 0.5 || R(b).left < 0, top: Math.round(R(b).top) }));
+    const list = [...box.querySelectorAll('button')].map((b) => ({ id: b.dataset.vzone || b.id, h: R(b).height, cut: b.scrollWidth > b.clientWidth + 0.5, off: b.disabled, out: R(b).right > innerWidth + 0.5 || R(b).left < 0, top: Math.round(R(b).top) }));
     const tools = R(document.querySelector('.vmap__tools')), st = R(document.getElementById('vmap-stage'));
-    return { list, toolsIn: tools.top >= st.top - 0.5, ovf: document.documentElement.scrollWidth - document.documentElement.clientWidth, boxB: R(box).bottom, stageT: R(document.getElementById('vmap-stage')).top };
+    return { list, toolsIn: tools.top >= st.top - 0.5, stageH: st.height, ovf: document.documentElement.scrollWidth - document.documentElement.clientWidth, boxB: R(box).bottom, stageT: st.top };
   });
-  t(`Y1 ${W}×${H} 구역 단추 일곱 개 · 44px 이상 · 글자 잘림 없음 · 쓸 수 있음 · 그림 칸과 겹치지 않음`, c.list.length === 7 && c.list.every((b) => b.h >= 44 && !b.cut && !b.off) && c.ovf <= 0 && c.boxB <= c.stageT + 0.5, JSON.stringify(c));
-  if (H > 420) t(`Y1b ${W}×${H} 구역 단추 일곱 개가 밀지 않아도 모두 보임 · 두 줄 이하`, c.list.every((b) => !b.out) && new Set(c.list.map((b) => b.top)).size <= 2, JSON.stringify(c.list));
-  t(`Y1c ${W}×${H} 조작 단추가 그림 칸 안`, c.toolsIn, JSON.stringify(c.toolsIn));
+  t(`Y1 ${W}×${H} 구역 단추 일곱 개 + 전체 보기 · 44px 이상 · 글자 잘림 없음 · 쓸 수 있음 · 그림 칸과 겹치지 않음`, c.list.length === 8 && c.list.every((b) => b.h >= 44 && !b.cut && !b.off) && c.ovf <= 0 && c.boxB <= c.stageT + 0.5, JSON.stringify(c));
+  if (H > 420) t(`Y1b ${W}×${H} 단추가 밀지 않아도 모두 보임 · 두 줄 이하`, c.list.every((b) => !b.out) && new Set(c.list.map((b) => b.top)).size <= 2, JSON.stringify(c.list));
+  t(`Y1c ${W}×${H} 조작 단추가 그림 칸 안`, c.toolsIn, String(c.stageH));
+  t(`Y1d ${W}×${H} 처음 전체 보기: 미니맵 숨김 · 전체 보기 단추가 눌린 상태`, (await miniState(page)).hidden && await page.$eval('#vmap-fit', (b) => b.getAttribute('aria-pressed') === 'true'));
   const v0 = await state(page);
-  const bad = [];
+  const cap = Math.max(1.25, v0.s * 1.8), badHold = [], badZone = [], badMini = [];
   for (const id of Object.keys(ZONE_RECTS)) {
-    await zone(page, id);
-    const v = await state(page), [zx, zy, zw, zh] = ZONE_RECTS[id], w = seen(v);
-    const inX = zw * v.s <= v.vw + 1 ? w.l <= zx + 1 && w.r >= zx + zw - 1 : near(w.l, Math.min(zx, IW - v.vw / v.s), 2);
-    const inY = zh * v.s <= v.vh + 1 ? w.t <= zy + 1 && w.b >= zy + zh - 1 : near(w.t, Math.min(zy, IH - v.vh / v.s), 2);
-    const read = v.s >= Math.min(0.8, v0.s * 6) - 1e-6 && v.s <= 2 + 1e-6;
-    const p = await pressed(page);
-    if (!(inX && inY && read && inBounds(v) && p.length === 1 && p[0] === id)) bad.push([id, v.s, w, p]);
-    if (SHOTS && [390, 1440].includes(W)) await page.screenshot({ path: join(SHOTS, `zone-${id}-${W}.png`) });
+    await pick(page, id);
+    await phaseIs(page, 'hold');
+    await sleep(40);
+    const h = await state(page), hm = await miniState(page), hb = await hlBoxes(page), name = await hlName(page);
+    const inStage = name.l >= 0 && name.t >= 0 && name.r <= h.vw + 0.5 && name.b <= h.vh + 0.5;
+    if (!(near(h.s, v0.s, 1e-3) && hm.hidden && aligned(h, id, hb) && !name.soft && inStage)) badHold.push([id, h.s, hm.hidden, name]);
+    await shot(`hl-${id}`);
+    await page.waitForFunction(() => document.getElementById('vmap-hl').classList.contains('is-soft'), { timeout: 5000 });
+    await sleep(240);
+    const v = await state(page), [zx, zy, zw, zh] = ZONE_RECTS[id], w = seen(v), p = await pressed(page), m = await miniState(page), b = await hlBoxes(page);
+    const whole = w.l <= zx + 1 && w.t <= zy + 1 && w.r >= zx + zw - 1 && w.b >= zy + zh - 1;
+    const around = w.l <= Math.max(0, zx - 20) + 1 && w.r >= Math.min(IW, zx + zw + 20) - 1 && w.t <= Math.max(0, zy - 20) + 1 && w.b >= Math.min(IH, zy + zh + 20) - 1;
+    const scale = id === 'list' ? v.s >= Math.min(0.8, v0.s * 6) - 1e-6 && w.t <= zy + 1 && w.l <= zx + 1 : whole && around && v.s <= cap + 1e-6;
+    if (!(scale && inBounds(v) && p.length === 1 && p[0] === id && aligned(v, id, b))) badZone.push([id, v.s, w, p]);
+    if (!(v.s > v0.s && !m.hidden && miniOk(v, m))) badMini.push([id, v.s, m]);
+    await shot(`zone-${id}`);
   }
-  t(`Y2 ${W}×${H} 구역 일곱 곳: 그 자리가 화면 안 · 읽을 배율 · 범위 안 · 고른 단추 표시`, bad.length === 0, JSON.stringify(bad));
-  await page.evaluate(() => document.getElementById('vmap-fit').click());
-  await sleep(80);
+  t(`Y2 ${W}×${H} 일곱 곳: 전체 지도에서 강조 · 테두리가 그림 좌표와 일치 · 이름표가 화면 안 · 미니맵 숨김`, badHold.length === 0, JSON.stringify(badHold));
+  t(`Y3 ${W}×${H} 일곱 곳: 구역 전체 + 둘레가 보임 · 배율 상한 ${cap.toFixed(2)} · 범위 안 · 고른 단추 표시 · 확대 뒤에도 테두리 일치`, badZone.length === 0, JSON.stringify(badZone));
+  t(`Y4 ${W}×${H} 일곱 곳: 미니맵 표시 · 주황 사각형이 실제 보이는 자리와 1px 안에서 일치`, badMini.length === 0, JSON.stringify(badMini));
+  // 미니맵 겹침
+  await zone(page, 'future');
+  const g = await page.evaluate(() => {
+    const R = (e) => JSON.parse(JSON.stringify(e.getBoundingClientRect())), q = (s) => document.querySelector(s);
+    return { mini: R(q('#vmap-mini')), tools: R(q('.vmap__tools')), close: R(q('#vmap-close')), zones: R(q('#vmap-zones')), stage: R(q('#vmap-stage')) };
+  });
+  const lo = W < 600 ? [100, 120] : [140, 160];
+  t(`Y5 ${W}×${H} 미니맵 폭 ${lo[0]}~${lo[1]}px · 터치 44px 이상 · 닫기 · 조작 단추 · 구역 메뉴와 겹치지 않음 · 그림 칸 안`, g.mini.width >= lo[0] && g.mini.width <= lo[1] && g.mini.height >= 44 && g.mini.height <= 62 && !hit(g.mini, g.tools) && !hit(g.mini, g.close) && !hit(g.mini, g.zones) && g.mini.top >= g.stage.top && g.mini.right <= g.stage.right + 0.5, JSON.stringify(g));
+  await tool(page, 'vmap-fit');
   const f = await state(page);
-  t(`Y3 ${W}×${H} 전체 보기로 돌아오고 고른 표시가 풀림`, near(f.s, v0.s, 1e-4) && (await pressed(page)).length === 0, JSON.stringify(f));
-  t(`Y4 ${W}×${H} 화면 오류 없음`, errs.length === 0, errs.join(' | '));
+  t(`Y6 ${W}×${H} 전체 보기로 돌아오고 고른 표시 · 미니맵이 사라짐`, near(f.s, v0.s, 1e-4) && (await pressed(page)).length === 0 && (await miniState(page)).hidden && await page.$eval('#vmap-hl', (e) => e.hidden), JSON.stringify(f));
+  t(`Y7 ${W}×${H} 화면 오류 없음`, errs.length === 0, errs.join(' | '));
+  await ctx.close();
+}
+
+/* ── H : 주황 강조 ──────────────────────────────────────────────── */
+{
+  // 공식 그림의 색 경계로 잰 부스 덩어리(대조용). 고른 구역의 테두리는 자기 부스를 모두 덮고 이웃 구역 부스를 덮지 않아야 합니다.
+  const C = {
+    'school-a': [[1224, 160, 68, 58], [1317, 160, 137, 58], [1224, 237, 68, 59], [1317, 238, 103, 58], [1224, 316, 68, 58], [1317, 316, 103, 59], [1224, 395, 68, 59], [1317, 395, 137, 59]],
+    'school-b': [[394, 124, 103, 29], [531, 124, 414, 29], [365, 198, 138, 29], [602, 198, 310, 29], [602, 236, 310, 29], [661, 306, 103, 29]],
+    future: [[312, 236, 208, 29], [363, 350, 104, 29]],
+    experience: [[215, 329, 49, 49], [289, 329, 49, 49]],
+    bigtech: [[122, 126, 92, 67], [229, 126, 92, 67]],
+    promo: [[1113, 350, 32, 28], [1148, 350, 33, 58]]
+  };
+  // 전체 지도에서 이름표가 어느 구역의 부스도 덮지 않습니다.
+  for (const W of [390, 1440]) {
+    const { ctx, page } = await openPage(W, W < 768 ? 844 : 900);
+    await openMap(page);
+    const bad = [];
+    for (const id of Object.keys(ZONE_RECTS)) {
+      await pick(page, id);
+      await phaseIs(page, 'hold');
+      const v = await state(page), n = await hlName(page);
+      const box = [(n.l - v.x) / v.s, (n.t - v.y) / v.s, (n.r - n.l) / v.s, (n.b - n.t) / v.s];
+      const under = Object.values(C).flat().filter((a) => a[0] < box[0] + box[2] && box[0] < a[0] + a[2] && a[1] < box[1] + box[3] && box[1] < a[1] + a[3]);
+      if (under.length) bad.push([id, box.map(Math.round), under]);
+      await tool(page, 'vmap-fit');
+    }
+    t(`H0 ${W}px 전체 지도의 구역 이름표가 부스를 덮지 않음`, bad.length === 0, JSON.stringify(bad));
+    await ctx.close();
+  }
+  const inside = (a, p) => a[0] >= p[0] && a[1] >= p[1] && a[0] + a[2] <= p[0] + p[2] && a[1] + a[3] <= p[1] + p[3];
+  const touch = (a, p) => a[0] < p[0] + p[2] && p[0] < a[0] + a[2] && a[1] < p[1] + p[3] && p[1] < a[1] + a[3];
+  for (const id of Object.keys(C)) {
+    const parts = partsOf(id), others = Object.entries(C).filter(([k]) => k !== id).flatMap(([, b]) => b);
+    t(`H1 ${id} 테두리가 자기 부스를 모두 덮음`, C[id].every((a) => parts.some((p) => inside(a, p))), JSON.stringify(parts));
+    t(`H2 ${id} 테두리가 이웃 구역 부스에 닿지 않음`, !others.some((a) => parts.some((p) => touch(a, p))), JSON.stringify(parts));
+  }
+  const { ctx, page, errs } = await openPage(1440, 900);
+  await openMap(page);
+  await pick(page, 'future');
+  await phaseIs(page, 'hold');
+  await sleep(260);
+  const s1 = await page.evaluate(() => {
+    const b = getComputedStyle(document.querySelector('.vmap__hl-box')), n = getComputedStyle(document.getElementById('vmap-hl-t'));
+    return { bc: b.borderTopColor, bw: b.borderTopWidth, bg: b.backgroundColor, sh: b.boxShadow, nb: n.backgroundColor, nc: n.color, band: getComputedStyle(document.querySelector('.band')).backgroundColor, top: getComputedStyle(document.querySelector('.vmap__top') || document.getElementById('vmap')).backgroundColor };
+  });
+  const alpha = rgb(s1.bg)[3];
+  t('H3 강조: #FF7900 테두리 3px · 흰 외곽선 2px · 안쪽 투명 10~12%', s1.bc === 'rgb(255, 121, 0)' && s1.bw === '3px' && /rgb\(255, 255, 255\) 0px 0px 0px 2px/.test(s1.sh) && alpha >= 0.1 && alpha <= 0.12, JSON.stringify(s1));
+  t('H4 구역 이름표 글자 대비 4.5:1 이상', ratio(rgb(s1.nc), rgb(s1.nb)) >= 4.5, String(ratio(rgb(s1.nc), rgb(s1.nb))));
+  t('H5 사이트 강조색은 보라 그대로', s1.band === 'rgb(91, 69, 224)', s1.band);
+  await page.waitForFunction(() => document.getElementById('vmap-hl').classList.contains('is-soft'), { timeout: 5000 });
+  await sleep(260);
+  const s2 = await page.evaluate(() => { const b = getComputedStyle(document.querySelector('.vmap__hl-box')); return { bg: b.backgroundColor, sh: b.boxShadow, op: getComputedStyle(document.getElementById('vmap-hl-t')).opacity, mv: getComputedStyle(document.getElementById('vmap-mini-view')).borderTopColor }; });
+  t('H6 확대 뒤에는 강조가 옅어짐(안쪽 비움 · 이름표 숨김)', rgb(s2.bg)[3] === 0 && s2.sh === 'none' && s2.op === '0', JSON.stringify(s2));
+  t('H7 미니맵 사각형은 주황', s2.mv === 'rgb(255, 121, 0)', s2.mv);
+  const text = await page.$eval('#vmap', (d) => d.textContent);
+  t('H8 GPS 로 오해할 말을 쓰지 않음', !/내 위치|현재 위치/.test(text));
+  t('H9 화면 오류 없음', errs.length === 0, errs.join(' | '));
+  await ctx.close();
+}
+
+/* ── M : 미니맵 ─────────────────────────────────────────────────── */
+for (const W of [390, 1440]) {
+  const mobile = W < 768;
+  const { ctx, page, errs } = await openPage(W, mobile ? 844 : 900);
+  await openMap(page);
+  await zone(page, 'school-b');
+  const crop = await page.evaluate(() => { const m = document.getElementById('vmap-mini-map'), c = getComputedStyle(m), r = m.getBoundingClientRect(); return { img: c.backgroundImage, pos: c.backgroundPositionY, size: c.backgroundSize, ratio: r.width / r.height }; });
+  t(`M1 ${W}px 미니맵은 같은 그림의 배치도 부분만 씀(아래 범례 제외)`, crop.img.includes(IMAGE_PATH) && near(parseFloat(crop.pos), MINI.y / (IH - MINI.h) * 100, 0.05) && near(crop.ratio, MINI.w / MINI.h, 0.05), JSON.stringify(crop));
+  // 끌기
+  const a = await state(page), ma = await miniState(page);
+  const sx = a.left + a.vw * 0.45, sy = a.top + a.vh * 0.45;
+  if (mobile) {
+    const cdp = await page.createCDPSession();
+    const touch = (type, pts) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: pts });
+    await touch('touchStart', [{ x: sx, y: sy, id: 1 }]);
+    for (const d of [20, 40, 60, 80]) { await touch('touchMove', [{ x: sx - d, y: sy, id: 1 }]); await sleep(20); }
+    await touch('touchEnd', []);
+  } else {
+    await page.mouse.move(sx, sy); await page.mouse.down(); await page.mouse.move(sx - 80, sy, { steps: 5 }); await page.mouse.up();
+  }
+  await sleep(120);
+  const b = await state(page), mb = await miniState(page);
+  t(`M2 ${W}px 끌면 사각형이 그만큼 움직이고 실제 보이는 자리와 일치`, b.x < a.x - 40 && mb.view.l > ma.view.l && miniOk(b, mb), JSON.stringify([a.x, b.x, ma.view.l, mb.view.l]));
+  t(`M3 ${W}px 직접 움직이면 고른 구역 표시가 풀리고 사각형은 남음`, (await pressed(page)).length === 0 && await page.$eval('#vmap-hl', (e) => e.hidden) && !mb.hidden);
+  // 확대 · 축소
+  await tool(page, 'vmap-in');
+  const c1 = await state(page), m1 = await miniState(page);
+  await tool(page, 'vmap-out'); await tool(page, 'vmap-out');
+  const c2 = await state(page), m2 = await miniState(page);
+  t(`M4 ${W}px 확대하면 사각형이 작아지고 축소하면 커짐 · 언제나 일치`, m1.view.w < mb.view.w && m2.view.w > m1.view.w && miniOk(c1, m1) && miniOk(c2, m2), JSON.stringify([mb.view.w, m1.view.w, m2.view.w]));
+  await tool(page, 'vmap-in');
+  // 미니맵 누르기
+  const pre = await miniState(page);
+  const tx = pre.map.l + pre.map.w * 0.35, ty = pre.map.t + pre.map.h * 0.5;
+  if (mobile) {
+    const cdp = await page.createCDPSession();
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: tx, y: ty, id: 1 }] });
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  } else await page.mouse.click(tx, ty);
+  await sleep(40);
+  await idle(page);
+  await sleep(80);
+  const d = await state(page), md = await miniState(page), w = seen(d);
+  const wantX = MINI.x + MINI.w * 0.35, wantY = MINI.y + MINI.h * 0.5;
+  const tol = MINI.w / pre.map.w + 1;   // 터치 자리는 정수 px 로 오므로 미니맵 1px 만큼 어긋날 수 있습니다
+  const okX = near((w.l + w.r) / 2, wantX, tol) || near(w.l, 0, 1), okY = near((w.t + w.b) / 2, wantY, tol) || near(w.t, 0, 1) || d.H * d.s <= d.vh;
+  t(`M5 ${W}px 미니맵을 누르면 그 자리가 가운데로 옴`, okX && okY && miniOk(d, md), JSON.stringify([(w.l + w.r) / 2, wantX, (w.t + w.b) / 2, wantY]));
+  await tool(page, 'vmap-fit');
+  t(`M6 ${W}px 전체 보기에서 미니맵 숨김`, (await miniState(page)).hidden);
+  await tool(page, 'vmap-in');
+  const re = await state(page), mr = await miniState(page);
+  t(`M7 ${W}px 다시 확대하면 미니맵 자동 표시`, !mr.hidden && miniOk(re, mr), JSON.stringify(mr));
+  // 아래 범례만 볼 때
+  for (let i = 0; i < 4; i++) await tool(page, 'vmap-in');
+  await page.focus('#vmap-stage');
+  for (let i = 0; i < 30; i++) await page.keyboard.press('ArrowDown');
+  await sleep(120);
+  const l = await state(page), ml = await miniState(page);
+  const off = await page.$eval('.vmap__mini-off', (e) => ({ d: getComputedStyle(e).display, t: e.textContent }));
+  t(`M8 ${W}px 아래 부스 목록만 보면 자리를 그리지 않고 '부스 목록 보는 중'`, seen(l).t >= MINI.y + MINI.h - 24 && ml.off && !ml.viewShown && off.d === 'flex' && off.t === '부스 목록 보는 중', JSON.stringify([seen(l).t, ml.off, off]));
+  if (SHOTS) await page.screenshot({ path: join(SHOTS, `legend-${W}.png`) });
+  t(`M9 ${W}px 화면 오류 없음`, errs.length === 0, errs.join(' | '));
+  await ctx.close();
+}
+
+/* ── Q : 전체 → 강조 → 확대 순서 · 취소 ─────────────────────────── */
+{
+  const { ctx, page, errs } = await openPage(390);
+  await openMap(page);
+  const v0 = await state(page);
+  const a = await trace(page, [['[data-vzone="future"]', 0]], 1000);
+  const hold = a.filter((f) => f.p === 'hold'), inn = a.filter((f) => f.p === 'in');
+  t('Q1 전체 지도에서 먼저 강조(0.3초 이상)한 뒤 한 번에 확대', hold.length > 0 && hold.every((f) => near(f.s, v0.s, 1e-4)) && hold.at(-1).t - hold[0].t >= 300 && inn.length > 3 && turns(a) === 0, JSON.stringify([hold.length, turns(a)]));
+  const inMs = inn.at(-1).t - inn[0].t;
+  t('Q2 확대 움직임 200~350ms', inMs >= 200 && inMs <= 350, String(inMs));
+  t('Q3 처음 고른 뒤 끝까지 1초 안', a.find((f) => f.p === 'in') && inn.at(-1).t <= 1000, String(inn.at(-1).t));
+  // 확대한 상태에서 다른 구역
+  const b = await trace(page, [['[data-vzone="school-a"]', 0]], 1300);
+  const out = b.filter((f) => f.p === 'out'), low = Math.min(...b.map((f) => f.s));
+  t('Q4 확대 상태에서 고르면 전체 지도로 물러났다 한 번만 다시 확대', out.length > 3 && near(low, v0.s, 1e-3) && turns(b) === 1, JSON.stringify([out.length, low, turns(b)]));
+  t('Q5 끝난 뒤 고른 구역 표시 · 옅은 강조', (await pressed(page))[0] === 'school-a' && await page.$eval('#vmap-hl', (e) => e.classList.contains('is-soft')));
+  // 연속으로 고르기(확대 상태)
+  const c = await trace(page, [['[data-vzone="promo"]', 70], ['[data-vzone="bigtech"]', 70], ['[data-vzone="future"]', 70], ['[data-vzone="list"]', 0]], 1400);
+  t('Q6 확대 상태에서 연달아 네 번 골라도 한 번만 물러났다 확대 · 마지막 구역으로', turns(c) === 1 && (await pressed(page))[0] === 'list' && (await hlName(page)).text === '부스 목록', JSON.stringify([turns(c), await pressed(page)]));
+  await tool(page, 'vmap-fit');
+  // 연속으로 고르기(전체 보기)
+  const d = await trace(page, [['[data-vzone="promo"]', 110], ['[data-vzone="bigtech"]', 110], ['[data-vzone="experience"]', 0]], 1100);
+  t('Q7 전체 보기에서 연달아 골라도 그림이 튀지 않고 마지막 구역으로 한 번만 확대', turns(d) === 0 && (await pressed(page))[0] === 'experience', JSON.stringify([turns(d), await pressed(page)]));
+  // 같은 구역을 또 눌러도 다시 움직이지 않음
+  const e = await trace(page, [['[data-vzone="experience"]', 0]], 500);
+  t('Q8 같은 구역을 또 눌러도 움직이지 않음', new Set(e.map((f) => f.s)).size === 1, String(new Set(e.map((f) => f.s)).size));
+  await tool(page, 'vmap-fit');
+  // 강조 중 직접 조작하면 취소
+  await pick(page, 'future');
+  await phaseIs(page, 'hold');
+  const cdp = await page.createCDPSession();
+  const touch = (type, pts) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: pts });
+  const f0 = await state(page);
+  await touch('touchStart', [{ x: f0.left + 60, y: f0.top + 200, id: 1 }]);
+  await touch('touchEnd', []);
+  await sleep(900);
+  const f1 = await state(page);
+  t('Q9 강조 중 지도를 만지면 지연 동작이 취소되고 그대로 있음', near(f1.s, f0.s, 1e-4) && near(f1.x, f0.x) && (await pressed(page)).length === 0 && await page.$eval('#vmap-hl', (x) => x.hidden), JSON.stringify([f0.s, f1.s]));
+  // 확대 중 + 단추
+  await pick(page, 'promo');
+  await phaseIs(page, 'in');
+  await sleep(90);
+  await page.evaluate(() => document.getElementById('vmap-in').click());
+  await sleep(60);
+  const g0 = await state(page);
+  await sleep(500);
+  const g1 = await state(page);
+  t('Q10 확대 중 + 단추를 누르면 자동 이동이 끊기고 튀지 않음', near(g1.s, g0.s, 1e-4) && near(g1.x, g0.x) && !(await page.$eval('#vmap-stage', (x) => x.dataset.phase)), JSON.stringify([g0.s, g1.s]));
+  await tool(page, 'vmap-fit');
+  // 강조 중 닫기 → 다시 열기
+  await pick(page, 'bigtech');
+  await phaseIs(page, 'hold');
+  await page.click('#vmap-close');
+  await sleep(800);
+  await openMap(page);
+  await sleep(500);
+  const h = await state(page);
+  t('Q11 강조 중 닫고 다시 열면 전체 보기 · 남은 동작 없음', near(h.s, v0.s, 1e-4) && (await pressed(page)).length === 0 && await page.$eval('#vmap-hl', (x) => x.hidden) && (await miniState(page)).hidden, JSON.stringify(h));
+  // 강조 중 전체 보기
+  await pick(page, 'bigtech');
+  await phaseIs(page, 'hold');
+  await page.evaluate(() => document.getElementById('vmap-fit').click());
+  await sleep(800);
+  t('Q12 강조 중 전체 보기를 누르면 확대하지 않음', near((await state(page)).s, v0.s, 1e-4) && (await pressed(page)).length === 0);
+  // 화면 돌리기
+  await zone(page, 'future');
+  await page.setViewport({ width: 844, height: 390, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  await sleep(350);
+  const r = await state(page), [zx, zy, zw, zh] = ZONE_RECTS.future, w = seen(r), mr = await miniState(page);
+  t('Q13 화면을 돌려도 고른 구역이 화면 안 · 테두리 · 미니맵 일치', w.l <= zx + 1 && w.r >= zx + zw - 1 && w.t <= zy + 1 && w.b >= zy + zh - 1 && aligned(r, 'future', await hlBoxes(page)) && miniOk(r, mr), JSON.stringify(r));
+  if (SHOTS) await page.screenshot({ path: join(SHOTS, 'landscape-844.png') });
+  await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  await sleep(350);
+  const r2 = await state(page), w2 = seen(r2);
+  t('Q14 다시 세로로 돌려도 일치', w2.l <= zx + 1 && w2.r >= zx + zw - 1 && miniOk(r2, await miniState(page)), JSON.stringify(r2));
+  t('Q15 화면 오류 없음', errs.length === 0, errs.join(' | '));
   await ctx.close();
 }
 {
+  const { ctx, page, errs } = await openPage(390);
+  await page.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'reduce' }]);
+  await openMap(page);
+  const a = await trace(page, [['[data-vzone="future"]', 0]], 800);
+  t('Q16 움직임 줄이기: 강조는 보여 주고 확대는 한 번에 바뀜(중간 프레임 없음)', new Set(a.map((f) => f.s.toFixed(5))).size === 2 && a.some((f) => f.p === 'hold'), String(new Set(a.map((f) => f.s.toFixed(5))).size));
+  const b = await trace(page, [['[data-vzone="promo"]', 0]], 800);
+  t('Q17 움직임 줄이기: 다른 구역도 중간 프레임 없음', new Set(b.map((f) => f.s.toFixed(5))).size <= 3 && (await pressed(page))[0] === 'promo', String(new Set(b.map((f) => f.s.toFixed(5))).size));
+  t('Q18 화면 오류 없음', errs.length === 0, errs.join(' | '));
+  await ctx.close();
+}
+
+/* ── C : 체험존 안내 ────────────────────────────────────────────── */
+for (const [W, H] of [[320, 568], [390, 844], [844, 390], [1440, 900]]) {
+  const { ctx, page, errs } = await openPage(W, H);
+  await openMap(page);
+  t(`C0 ${W}×${H} 처음에는 안내 없음`, await page.$eval('#vmap-tip', (e) => e.hidden));
+  await zone(page, 'experience');
+  const a = await page.evaluate(() => {
+    const e = document.getElementById('vmap-tip'), R = (x) => JSON.parse(JSON.stringify(x.getBoundingClientRect()));
+    return { on: !e.hidden, t: e.querySelector('.vmap__tip-t').textContent, d: e.querySelector('.vmap__tip-d').textContent, box: R(e), tools: R(document.querySelector('.vmap__tools')), mini: R(document.getElementById('vmap-mini')), stage: R(document.getElementById('vmap-stage')) };
+  });
+  t(`C1 ${W}×${H} 체험존을 고르면 번호 안내 · 앱 번호와 지도 장소 대응`, a.on && a.t === '체험 프로그램 번호와 배치도 장소 번호는 다를 수 있어요.' && a.d === '앱 체험1~2 → 체험 01 · 체험3~4 → 체험 02 · 체험5~12 → 3층', JSON.stringify(a));
+  t(`C2 ${W}×${H} 안내가 그림 칸 안 · 조작 단추 · 미니맵과 겹치지 않음`, a.box.left >= a.stage.left && a.box.right <= a.stage.right && a.box.bottom <= a.stage.bottom + 0.5 && !hit(a.box, a.tools) && !hit(a.box, a.mini), JSON.stringify(a.box));
+  const v = await state(page), [px, py, pw, ph] = partsOf('experience')[0];
+  const boxTop = a.box.top - a.stage.top;
+  t(`C3 ${W}×${H} 안내가 체험 01 · 02 를 가리지 않음`, v.y + (py + ph) * v.s <= boxTop + 1, JSON.stringify([v.y + (py + ph) * v.s, boxTop]));
+  if (SHOTS && [320, 390, 1440].includes(W)) await page.screenshot({ path: join(SHOTS, `tip-${W}.png`) });
+  await zone(page, 'future');
+  t(`C4 ${W}×${H} 다른 구역을 고르면 안내가 사라짐`, await page.$eval('#vmap-tip', (e) => e.hidden));
+  await zone(page, 'experience');
+  await tool(page, 'vmap-fit');
+  t(`C5 ${W}×${H} 전체 보기에서 안내가 사라짐`, await page.$eval('#vmap-tip', (e) => e.hidden));
+  await zone(page, 'experience');
+  await page.keyboard.press('Escape'); await sleep(120);
+  await openMap(page);
+  t(`C6 ${W}×${H} 닫았다 열면 안내 없음 · 화면 오류 없음`, await page.$eval('#vmap-tip', (e) => e.hidden) && errs.length === 0, errs.join(' | '));
+  await ctx.close();
+}
+
+/* ── Y : 조작 ───────────────────────────────────────────────────── */
+{
   const { ctx, page, errs } = await openPage(1440, 900);
   await openMap(page);
-  await zone(page, 'school-b');
-  const a = await state(page);
-  await page.mouse.move(a.left + 200, a.top + 200); await page.mouse.down(); await page.mouse.move(a.left + 140, a.top + 170, { steps: 4 }); await page.mouse.up();
-  await sleep(80);
-  const b = await state(page);
-  t('Y5 끌면 구역 표시가 풀리고 그만큼 움직임 · 부드러운 움직임 꺼짐', (await pressed(page)).length === 0 && near(b.x, a.x - 60, 2) && !(await page.$eval('#vmap-img', (i) => i.classList.contains('is-glide'))), JSON.stringify([a.x, b.x]));
   await zone(page, 'list');
+  const a = await state(page);
   await page.mouse.move(a.left + 300, a.top + 300); await page.mouse.wheel({ deltaY: -120 }); await sleep(100);
-  t('Y6 휠로 움직여도 구역 표시가 풀림', (await pressed(page)).length === 0);
+  t('Y8 휠로 움직여도 구역 표시가 풀림', (await pressed(page)).length === 0);
   await zone(page, 'future');
   await page.keyboard.press('Escape'); await sleep(120);
   await openMap(page);
   const c = await state(page);
-  t('Y7 닫았다 열면 전체 보기 · 구역 표시 없음', (await pressed(page)).length === 0 && inBounds(c) && near(c.s, Math.min(c.vw / IW, c.vh / IH), 1e-3), JSON.stringify(c));
+  t('Y9 닫았다 열면 전체 보기 · 구역 표시 없음', (await pressed(page)).length === 0 && inBounds(c) && near(c.s, Math.min(c.vw / IW, c.vh / IH), 1e-3), JSON.stringify(c));
   const k = await page.evaluate(() => { const n = document.querySelector('[data-vzone="future"]'); n.focus(); return document.activeElement === n; });
-  await page.keyboard.press('Enter'); await sleep(380);
-  t('Y8 자판 Enter 로 구역 이동', k && (await pressed(page))[0] === 'future');
-  t('Y9 화면 오류 없음', errs.length === 0, errs.join(' | '));
+  await page.keyboard.press('Enter');
+  await page.waitForFunction(() => document.getElementById('vmap-hl').classList.contains('is-soft'), { timeout: 5000 });
+  t('Y10 자판 Enter 로 구역 이동', k && (await pressed(page))[0] === 'future');
+  t('Y11 화면 오류 없음', errs.length === 0, errs.join(' | '));
   await ctx.close();
 }
 {
   const { ctx, page, errs } = await openPage(390);
   await openMap(page);
-  await page.tap('[data-vzone="school-a"]'); await sleep(380);
-  t('Y11 휴대폰: 구역 단추 터치', (await pressed(page))[0] === 'school-a');
+  await page.tap('[data-vzone="school-a"]');
+  await page.waitForFunction(() => document.getElementById('vmap-hl').classList.contains('is-soft'), { timeout: 5000 });
+  t('Y12 휴대폰: 구역 단추 터치', (await pressed(page))[0] === 'school-a');
   const v = await state(page);
-  t('Y12 휴대폰: 스쿨 01~44 는 글자를 읽을 배율(원본 이상)로 열림', v.s >= 1, String(v.s));
+  t('Y13 휴대폰: 스쿨존 01~44 는 글자를 읽을 배율(원본 이상)로 열림', v.s >= 1, String(v.s));
   const [ax, , aw] = ZONE_RECTS['school-a'], toolL = await page.$eval('.vmap__tools', (e) => e.getBoundingClientRect().left);
-  t('Y12b 휴대폰: 스쿨 01~44 가 조작 단추에 가리지 않음', v.left + v.x + (ax + aw) * v.s <= toolL + 1, JSON.stringify([v.left + v.x + (ax + aw) * v.s, toolL]));
-  t('Y13 화면 오류 없음', errs.length === 0, errs.join(' | '));
+  t('Y14 휴대폰: 스쿨존 01~44 가 조작 단추에 가리지 않음', v.left + v.x + (ax + aw) * v.s <= toolL + 1, JSON.stringify([v.left + v.x + (ax + aw) * v.s, toolL]));
+  t('Y15 화면 오류 없음', errs.length === 0, errs.join(' | '));
   await ctx.close();
 }
 

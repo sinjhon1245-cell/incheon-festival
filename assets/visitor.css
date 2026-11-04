@@ -139,49 +139,52 @@ img { display: block; max-width: 100%; height: auto; }
 /* ── 1. 보라 띠 ─────────────────────────────────────────────── */
 .band { background: var(--accent); color: #fff; }
 .band__in {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  row-gap: 12px;
   padding-top: calc(14px + env(safe-area-inset-top));
-  padding-bottom: 16px;
+  padding-bottom: 14px;
 }
-.band__main { min-width: 0; }
-/* 배치도 보기: 띠가 보라라 한 단계 진한 보라 + 얇은 밝은 테두리로 띠 위에서도 또렷하게 둡니다.
-   휴대폰은 탭 줄과 상관없는 띠 안의 별도 줄(폭 전체), 넓은 화면은 제목 오른쪽입니다. */
+/* 첫 줄은 제목과 배치도 단추, 둘째 줄은 행사명 · 장소와 작은 자동 갱신입니다. */
+.band__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.band__sub {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 6px;
+}
+/* 배치도: 보라 띠 위에서 눈에 띄도록 흰 바탕에 보라 아이콘 · 글자입니다. */
 .mapbtn {
+  flex: none;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  width: 100%;
-  min-height: 48px;
-  padding: 0 18px;
-  border: 1px solid rgba(255, 255, 255, .6);
+  gap: 6px;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 0;
   border-radius: 8px;
-  background: #3B2DAE;
-  color: #fff;
+  background: #fff;
+  color: var(--accent);
   font: inherit;
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 800;
   line-height: 1;
   letter-spacing: -0.02em;
   white-space: nowrap;
   cursor: pointer;
 }
-.mapbtn svg { flex: none; width: 23px; height: 23px; }
-.mapbtn:hover { background: #32269A; }
-.mapbtn:active { background: #291F80; }
+.mapbtn svg { flex: none; width: 22px; height: 22px; }
+.mapbtn__more { display: none; }
+.mapbtn:hover { background: var(--num-bg); }
+.mapbtn:active { background: #E2DEFA; }
 .mapbtn:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 @media (min-width: 600px) {
-  .band__in { grid-template-columns: minmax(0, 1fr) auto; column-gap: 20px; align-items: center; }
-  .mapbtn { width: auto; }
-}
-.band__row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  min-height: 32px;
+  .mapbtn { gap: 8px; padding: 0 16px; font-size: 16px; }
+  .mapbtn__more { display: inline; }
 }
 .band__title {
   font-size: 24px;
@@ -191,6 +194,8 @@ img { display: block; max-width: 100%; height: auto; }
   white-space: nowrap;
 }
 .sync {
+  flex: none;
+  margin-left: auto;
   display: inline-flex;
   align-items: center;
   gap: 7px;
@@ -216,16 +221,16 @@ img { display: block; max-width: 100%; height: auto; }
   cursor: pointer;
 }
 .sync-btn:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+/* 좁은 화면에서는 장소가 잘리지 않게 두 줄로 내립니다. */
 .band__event {
-  margin-top: 2px;
+  flex: 1 1 auto;
+  min-width: 0;
   min-height: 20px;
   font-size: 14px;
   font-weight: 500;
   line-height: 20px;
   color: rgba(255, 255, 255, .85);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  word-break: keep-all;
 }
 .band :focus-visible { outline-color: #fff; }
 
@@ -1187,32 +1192,29 @@ html.vmap-on { overflow: hidden; }
 .vmap__close svg { width: 26px; height: 26px; }
 .vmap__close:hover { background: rgba(255, 255, 255, .16); }
 .vmap__close:focus-visible { outline: 2px solid #fff; outline-offset: -2px; }
-/* 구역 이동: 일곱 개가 다 보이게 줄을 바꿉니다(휴대폰 두 줄). 높이가 낮은 가로 화면만 그림 칸을 지키려고 한 줄로 밉니다. */
+/* 구역 이동: 휴대폰은 네 칸 두 줄로 모두 보이고, 넓은 화면은 한 줄입니다.
+   높이가 낮은 가로 화면만 그림 칸을 지키려고 한 줄로 밉니다. */
 .vmap__zones {
   flex: none;
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 6px;
   padding: 2px calc(12px + env(safe-area-inset-right)) 10px calc(12px + env(safe-area-inset-left));
 }
-@media (max-height: 420px) {
-  .vmap__zones { flex-wrap: nowrap; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; }
-  .vmap__zones::-webkit-scrollbar { display: none; }
-}
 .vmap__zone {
-  flex: none;
+  min-width: 0;
   min-height: 44px;
-  padding: 0 14px;
+  padding: 2px 4px;
   border: 1px solid rgba(255, 255, 255, .6);
   border-radius: 8px;
   background: transparent;
   color: #fff;
   font: inherit;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 700;
-  line-height: 1;
+  line-height: 1.2;
   letter-spacing: -0.02em;
-  white-space: nowrap;
+  word-break: keep-all;
   cursor: pointer;
 }
 .vmap__zone:hover:not(:disabled) { background: rgba(255, 255, 255, .16); }
@@ -1220,7 +1222,15 @@ html.vmap-on { overflow: hidden; }
 .vmap__zone:disabled { opacity: .6; cursor: default; }
 .vmap__zone:focus-visible { outline: 2px solid #fff; outline-offset: -5px; }
 .vmap__zone[aria-pressed="true"]:focus-visible { outline-color: var(--accent); }
-@media (max-width: 599px) { .vmap__zone { padding: 0 10px; font-size: 13px; } }
+@media (min-width: 600px) {
+  .vmap__zones { display: flex; flex-wrap: wrap; }
+  .vmap__zone { flex: none; padding: 0 14px; font-size: 14px; white-space: nowrap; }
+}
+@media (max-height: 420px) {
+  .vmap__zones { display: flex; flex-wrap: nowrap; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; }
+  .vmap__zones::-webkit-scrollbar { display: none; }
+  .vmap__zone { flex: none; padding: 0 12px; white-space: nowrap; }
+}
 .vmap__stage {
   position: relative;
   flex: 1 1 auto;
@@ -1246,8 +1256,85 @@ html.vmap-on { overflow: hidden; }
   -webkit-user-drag: none;
   pointer-events: none;
 }
-.vmap__img.is-glide { transition: transform .28s ease; }
-@media (prefers-reduced-motion: reduce) { .vmap__img.is-glide { transition: none; } }
+/* 지도 안의 위치 표시만 주황입니다(사이트 강조색은 보라 그대로). 원본 그림은 고치지 않고 위에 얹습니다.
+   테두리는 구역 바깥으로 빼서(top · left −3px) 부스 번호를 가리지 않고, 흰 외곽선으로 연두 · 노랑 · 흰 바탕과 구별합니다. */
+.vmap__hl { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+.vmap__hl-box {
+  position: absolute;
+  top: -3px;
+  left: -3px;
+  box-sizing: content-box;
+  border: 3px solid #FF7900;
+  border-radius: 6px;
+  background: rgba(255, 121, 0, .11);
+  box-shadow: 0 0 0 2px #fff;
+  transition: background-color .2s, border-color .2s, box-shadow .2s;
+}
+.vmap__hl-t {
+  position: absolute;
+  top: 0;
+  left: 0;
+  padding: 2px 6px;
+  border-radius: 5px;
+  background: #FF7900;
+  color: #1C1204;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.2;
+  white-space: nowrap;
+  box-shadow: 0 0 0 2px #fff;
+  transition: opacity .2s;
+}
+.vmap__hl.is-soft .vmap__hl-box { background: transparent; border-color: rgba(255, 121, 0, .55); box-shadow: none; }
+.vmap__hl.is-soft .vmap__hl-t { opacity: 0; }
+@media (prefers-reduced-motion: reduce) {
+  .vmap__hl-box, .vmap__hl-t { transition: none; }
+}
+/* 미니맵: 확대했을 때만 보이는 조용한 안내입니다. 주황 사각형이 실제로 보이는 자리입니다. */
+.vmap__mini {
+  position: absolute;
+  top: 10px;
+  right: calc(10px + env(safe-area-inset-right));
+  display: block;
+  width: 120px;
+  padding: 4px;
+  border: 1px solid #C9CEDC;
+  border-radius: 6px;
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(22, 32, 60, .22);
+  font: inherit;
+  cursor: pointer;
+}
+.vmap__mini-map {
+  position: relative;
+  display: block;
+  aspect-ratio: 1600 / 508;
+  overflow: hidden;
+  background-repeat: no-repeat;
+  background-size: 100% auto;
+}
+.vmap__mini-view {
+  position: absolute;
+  box-sizing: border-box;
+  border: 2px solid #FF7900;
+  background: rgba(255, 121, 0, .16);
+  box-shadow: 0 0 0 1px #fff;
+}
+.vmap__mini-off {
+  position: absolute;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, .84);
+  color: var(--ink);
+  font-size: 11.5px;
+  font-weight: 700;
+  line-height: 1;
+}
+.vmap__mini.is-off .vmap__mini-off { display: flex; }
+.vmap__mini.is-off .vmap__mini-view { display: none; }
+@media (min-width: 600px) { .vmap__mini { width: 156px; } }
 .vmap__note {
   position: absolute;
   inset: 0;
@@ -1278,6 +1365,24 @@ html.vmap-on { overflow: hidden; }
   line-height: 1.4;
   pointer-events: none;
 }
+.vmap__tip {
+  position: absolute;
+  left: 12px;
+  right: 72px;
+  bottom: calc(12px + env(safe-area-inset-bottom));
+  width: fit-content;
+  padding: 7px 10px;
+  border-radius: 6px;
+  background: rgba(22, 32, 60, .9);
+  color: #fff;
+  font-size: 12.5px;
+  line-height: 1.4;
+  word-break: keep-all;
+  pointer-events: none;
+}
+.vmap__tip-t { font-weight: 700; }
+.vmap__tip-d { margin-top: 2px; color: rgba(255, 255, 255, .88); }
+.vmap__tip-d span { white-space: nowrap; }
 .vmap__tools {
   position: absolute;
   right: calc(12px + env(safe-area-inset-right));
