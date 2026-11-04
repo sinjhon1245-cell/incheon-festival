@@ -20,6 +20,7 @@
        아래 미리보기는 실제 화면과 같은 모양으로 줄여 그린 그림이고, 부스명 · 값은 예시로 고정입니다.
        미리보기 안에는 실제 화면에 없는 글을 넣지 않습니다 — 설명이 필요하면 미리보기 바깥의 안내 문장으로 둡니다.
        두 단추는 실제 운영 화면을 엽니다 — 관람객 화면(/) · 부스 운영자 화면(/booth-ctrl).
+       단추 아래 보조 링크는 협의용 예시 화면(/?demo=1 · /booth-ctrl?demo, 예시 부스 · 서버 읽기 쓰기 없음)을 엽니다.
        PIN 안내에는 번호와 날짜를 적지 않습니다. 정적 페이지라 시각이 지나도 글이 바뀌지 않고, 쓸 수 있는 PIN 은 서버가 정하기 때문입니다.
        PIN · QR 열쇠 같은 접속 정보는 이 페이지에 적지 않습니다.
        운영 포털 · 관리자 화면으로 가는 링크나 주소는 두지 않습니다
@@ -120,6 +121,8 @@
 
           <div class="card__foot">
             <a class="cta" href="/" target="_blank" rel="noopener noreferrer">관람객 실제 화면 보기<span aria-hidden="true">&#x2197;&#xFE0E;</span><span class="sr-only"> (실제 운영 화면, 새 탭에서 열림)</span></a>
+            <!-- 협의용 예시 화면: 이 브라우저 안의 예시 부스만 그리고 서버를 읽거나 쓰지 않습니다. 운영자 예시는 '예시 부스 바로 열기' 로 PIN 없이 열립니다. -->
+            <a class="sublink" href="/?demo=1" target="_blank" rel="noopener noreferrer">관람객 예시 화면 살펴보기<span class="sr-only"> (협의용 예시, 새 탭에서 열림)</span></a>
             <dl class="facts">
               <div class="facts__row"><dt>여는 화면</dt><dd>실제 관람객 화면 · 실제 대기 현황</dd></div>
               <div class="facts__row"><dt>실제 주소</dt><dd>incheon-live.vercel.app</dd></div>
@@ -229,6 +232,7 @@
 
           <div class="card__foot">
             <a class="cta" href="/booth-ctrl" target="_blank" rel="noopener noreferrer">부스 운영자 실제 화면 열기<span aria-hidden="true">&#x2197;&#xFE0E;</span><span class="sr-only"> (실제 운영 화면, 새 탭에서 열림)</span></a>
+            <a class="sublink" href="/booth-ctrl?demo" target="_blank" rel="noopener noreferrer">부스 운영자 예시 화면 살펴보기<span class="sr-only"> (협의용 예시, 새 탭에서 열림)</span></a>
             <dl class="facts">
               <div class="facts__row"><dt>여는 화면</dt><dd>실제 부스 운영자 화면 · 대기시간 · 예약 상태 입력</dd></div>
               <div class="facts__row"><dt>실제 주소</dt><dd>incheon-live.vercel.app/booth-ctrl</dd></div>
@@ -240,7 +244,7 @@
 
       <!-- PIN 안내. 번호 · 날짜를 적지 않아 리허설이 끝나도 틀린 말이 되지 않습니다(쓸 수 있는 PIN 은 서버가 정함). -->
       <dl class="pins">
-        <div class="pins__row"><dt>예시 화면</dt><dd>화면에 표시되는 4자리 예시 PIN으로 열립니다. 서버에 저장되지 않고 실제 운영과 연결되지 않습니다.</dd></div>
+        <div class="pins__row"><dt>예시 화면</dt><dd>운영자 예시는 ‘예시 부스 바로 열기’를 누르면 PIN 없이 열립니다. 서버에 저장되지 않고 실제 운영과 연결되지 않습니다.</dd></div>
         <div class="pins__row"><dt>실제 화면</dt><dd>운영자 QR 또는 운영본부가 안내한 PIN으로 접속합니다. 예시 PIN은 실제 화면에서 쓸 수 없습니다.</dd></div>
       </dl>
 
