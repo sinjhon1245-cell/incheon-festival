@@ -85,7 +85,7 @@ begin
   return query select private.rehearsal_bulk_target_ids(), private.rehearsal_closed(), private.rehearsal_cutoff(),
                       (pg_catalog.now() at time zone 'Asia/Seoul')::date, v_state, v_sched, v_at, v_st;
 end;
-$function$
+$function$;
 
 CREATE OR REPLACE FUNCTION public.admin_rehearsal_set_live(p_booth_id uuid, p_mode text, p_wait_minutes integer)
  RETURNS TABLE(booth_id uuid, congestion text, wait_minutes integer, updated_at timestamp with time zone)
@@ -111,7 +111,7 @@ begin
   end if;
   return query select * from public.admin_set_booth_live(p_booth_id, p_mode, p_wait_minutes);
 end;
-$function$
+$function$;
 
 do $verify$
 declare n integer;
