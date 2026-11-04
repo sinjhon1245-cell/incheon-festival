@@ -92,7 +92,7 @@ const nZone = (k) => data.booths.filter((b) => b.zone === k).length;
 const counts = () => ({ all: data.booths.length, e: nZone('초등'), m: nZone('중등'), h: nZone('고등'), s: nZone('특수'), f: nZone('체험'), u: nZone('미래') });
 
 /* ── 파일 · 서버 ─────────────────────────────────────────────────── */
-const MAP = { 'visitor.html': 'visitor.html', 'assets/visitor.css': 'assets/visitor.css', 'assets/booth-core.js': 'assets/booth-core.js', 'assets/mock-data.js': 'assets/mock-data.js', 'assets/config.js': 'assets/config.js' };
+const MAP = { 'visitor.html': 'visitor.html', 'assets/visitor.css': 'assets/visitor.css', 'assets/booth-core.js': 'assets/booth-core.js', 'assets/venue-map.js': 'assets/venue-map.js', 'assets/mock-data.js': 'assets/mock-data.js', 'assets/config.js': 'assets/config.js' };
 let ROOT = REPO, TMP = null;
 if (BASE) {
   TMP = mkdtempSync(join(tmpdir(), 'tabs-base-'));

@@ -273,7 +273,9 @@ cp ../booth-ctrl.html dist/booth-ctrl.html
 # 운영자 화면 시스템 알림 Service Worker. 등록 주소가 늘 같아야 해서 지문을 붙이지 않고 사이트 뿌리에 둡니다
 # (범위 /booth-ctrl · fetch 를 가로채지 않음 · live/vercel.json 에서 no-cache).
 cp ../booth-ctrl-sw.js dist/booth-ctrl-sw.js
-cp ../assets/booth-core.js ../assets/mock-data.js ../assets/visitor.css ../assets/booth-ctrl.css dist/assets/
+cp ../assets/booth-core.js ../assets/mock-data.js ../assets/venue-map.js ../assets/visitor.css ../assets/booth-ctrl.css dist/assets/
+# 행사장 배치도 그림(있을 때만). 이름에 지문을 붙이지 않으므로 그림을 바꾸면 파일 이름도 바꿉니다.
+if [ -d ../assets/map ]; then mkdir -p dist/assets/map && cp ../assets/map/* dist/assets/map/; fi
 
 # 화면 안내(/example): 두 화면을 소개하고 각 화면으로 보내는 정적 페이지.
 # 스크립트 · 데이터 요청이 없고, 이 폴더(live/example) 안의 두 파일만 씁니다.

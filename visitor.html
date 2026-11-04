@@ -49,12 +49,18 @@
 
   <header class="band">
     <div class="col band__in">
-      <div class="band__row">
-        <h1 class="band__title">부스 대기 현황</h1>
-        <p class="sync" id="sync" hidden><i class="sync__sq" aria-hidden="true"></i><span id="sync-text"></span></p>
-        <button type="button" class="sync-btn" id="refresh" hidden>새로고침</button>
+      <div class="band__main">
+        <div class="band__row">
+          <h1 class="band__title">부스 대기 현황</h1>
+          <p class="sync" id="sync" hidden><i class="sync__sq" aria-hidden="true"></i><span id="sync-text"></span></p>
+          <button type="button" class="sync-btn" id="refresh" hidden>새로고침</button>
+        </div>
+        <p class="band__event" id="band-event"></p>
       </div>
-      <p class="band__event" id="band-event"></p>
+      <button type="button" class="mapbtn" id="map-open" aria-haspopup="dialog">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M18 8c0 3.613-3.869 7.429-5.393 8.795a1 1 0 0 1-1.214 0C9.87 15.429 6 11.613 6 8a6 6 0 0 1 12 0"/><circle cx="12" cy="8" r="2"/><path d="M8.714 14h-3.71a1 1 0 0 0-.948.683l-2.004 6A1 1 0 0 0 3 22h18a1 1 0 0 0 .948-1.316l-2-6a1 1 0 0 0-.949-.684h-3.712"/></svg>
+        <span>배치도 보기</span>
+      </button>
     </div>
   </header>
 
@@ -136,9 +142,39 @@
     <div class="col"><p class="empty__d">이 화면은 자바스크립트를 켜야 볼 수 있어요.</p></div>
   </noscript>
 
+  <!-- 행사장 배치도 창(assets/venue-map.js). 그림은 창을 처음 열 때 받습니다. -->
+  <dialog class="vmap" id="vmap" aria-labelledby="vmap-t">
+    <div class="vmap__top">
+      <h2 class="vmap__t" id="vmap-t">행사장 배치도</h2>
+      <button type="button" class="vmap__close" id="vmap-close" aria-label="배치도 닫기">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+    <div class="vmap__stage" id="vmap-stage" tabindex="0" role="group" aria-label="행사장 배치도. 방향키로 이동하고 더하기 · 빼기로 확대 · 축소, 0 으로 전체 보기입니다.">
+      <img class="vmap__img" id="vmap-img" draggable="false" decoding="async" hidden />
+      <div class="vmap__note" id="vmap-note" hidden>
+        <p id="vmap-note-t"></p>
+        <button type="button" class="line-btn" id="vmap-retry" hidden>다시 불러오기</button>
+      </div>
+      <p class="vmap__hint" id="vmap-hint" role="status" hidden></p>
+      <div class="vmap__tools" role="group" aria-label="배치도 조작">
+        <button type="button" class="vmap__tool" id="vmap-in" aria-label="확대">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="M12 5v14M5 12h14"/></svg>
+        </button>
+        <button type="button" class="vmap__tool" id="vmap-out" aria-label="축소">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="M5 12h14"/></svg>
+        </button>
+        <button type="button" class="vmap__tool" id="vmap-fit" aria-label="전체 보기">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
+        </button>
+      </div>
+    </div>
+  </dialog>
+
   <script src="assets/config.js"></script>
   <script src="assets/mock-data.js"></script>
   <script src="assets/booth-core.js"></script>
+  <script src="assets/venue-map.js"></script>
 
   <script>
   /* ===================================================================
@@ -1573,11 +1609,11 @@
     }
     function navAtGuard() { return NAV.i === 0 && !!NAV.list[0] && !!NAV.list[0].g; }
     function navNow() {
-      return { v: NAV_V, n: NAV.i, zone: S.ui.zone || '', count: S.ui.count || '', here: !!(S.hereParam && !S.hereGone) };
+      return { v: NAV_V, n: NAV.i, zone: S.ui.zone || '', count: S.ui.count || '', here: !!(S.hereParam && !S.hereGone), map: !!S.ui.map };
     }
     // 예전 화면이 남긴 기록 칸의 d(연 상세)는 이제 뜻이 없어 보지 않습니다.
-    function navDepth(st) { return (st.zone ? 1 : 0) + (st.count ? 1 : 0) + (st.here ? 1 : 0); }
-    function navSame(a, b) { return !!a && !!b && !a.g && !b.g && a.zone === b.zone && a.count === b.count && a.here === b.here; }
+    function navDepth(st) { return (st.zone ? 1 : 0) + (st.count ? 1 : 0) + (st.here ? 1 : 0) + (st.map ? 1 : 0); }
+    function navSame(a, b) { return !!a && !!b && !a.g && !b.g && a.zone === b.zone && a.count === b.count && a.here === b.here && !!a.map === !!b.map; }
     function navUrl(st) { return st.here ? NAV.here : NAV.base; }
     // 화면의 고름을 바꾼 뒤 부릅니다. up: 사용자가 직접 한 단계 위로 나간 경우(아래 칸을 거둘 수 있음).
     function navCommit(up) {
@@ -1616,6 +1652,11 @@
         S.ui.q = ''; S.ui.search = false; $('q').value = '';
       }
       if (S.hereParam) S.hereGone = !st.here;
+      // 배치도 창: 휴대폰 뒤로 가기가 페이지를 떠나지 않고 창을 닫습니다.
+      S.ui.map = !!st.map;
+      if (window.VenueMap && VenueMap.isOpen() !== S.ui.map) {
+        if (S.ui.map) VenueMap.open({ silent: true }); else VenueMap.close({ silent: true });
+      }
       if (!draw) return;
       render(true);
       if (moved) showResults(true, true);
@@ -1740,6 +1781,7 @@
     }
 
     function bind() {
+      if (window.VenueMap) VenueMap.onChange = function (open) { S.ui.map = open; navCommit(!open); };
       // '구역 선택' 패널 밖을 누르면 닫습니다(패널을 여는 단추는 아래 click 에서 열고 닫음).
       document.addEventListener('click', function (e) {
         if (!S.zpick) return;

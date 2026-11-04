@@ -46,7 +46,7 @@ async function until(fn, ms = 4000) { const end = Date.now() + ms; while (Date.n
 // 주소 → 저장소 파일. /example 은 Live 배포본(live/build.sh)처럼 사이트 뿌리의 /example/ 에 둡니다.
 const MAP = {
   'visitor.html': 'visitor.html', 'assets/visitor.css': 'assets/visitor.css', 'assets/booth-core.js': 'assets/booth-core.js',
-  'assets/mock-data.js': 'assets/mock-data.js', 'assets/config.js': 'assets/config.js',
+  'assets/mock-data.js': 'assets/mock-data.js', 'assets/config.js': 'assets/config.js', 'assets/venue-map.js': 'assets/venue-map.js',
   'example/index.html': 'live/example/index.html', 'example/example.css': 'live/example/example.css'
 };
 let ROOT = REPO, TMP = null;
