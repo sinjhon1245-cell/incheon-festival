@@ -146,7 +146,7 @@ async function tabsAt(W, N) {
     const R = (el) => el.getBoundingClientRect();
     const box = document.getElementById('tabs');
     const tabs = [...box.querySelectorAll('.tab')].map((b) => { const r = R(b), s = getComputedStyle(b), n = b.querySelector('.tab__n'); return { t: b.innerText.replace(/\s+/g, ''), aria: b.getAttribute('aria-label'), cut: [...b.querySelectorAll('.tab__t')].some((x) => x.scrollWidth > x.clientWidth + 0.5), l: r.left, r: r.right, fs: parseFloat(s.fontSize), nfs: parseFloat(getComputedStyle(n).fontSize), h: r.height, top: Math.round(R(b.querySelector('.tab__t')).top), ntop: Math.round(R(n).top) }; });
-    return { tabs, icon: !!document.getElementById('search-open'), field: !document.getElementById('search-field').hidden, scroll: box.scrollWidth - box.clientWidth, more: box.classList.contains('is-more'), vw: document.documentElement.clientWidth, ovf: document.documentElement.scrollWidth - document.documentElement.clientWidth };
+    return { tabs, icon: !!document.getElementById('search-open'), field: !document.getElementById('search').hidden, scroll: box.scrollWidth - box.clientWidth, more: box.classList.contains('is-more'), vw: document.documentElement.clientWidth, ovf: document.documentElement.scrollWidth - document.documentElement.clientWidth };
   });
   const mobile = W < 768;
   const name = (wide, short) => (mobile ? short : wide);
@@ -159,7 +159,7 @@ async function tabsAt(W, N) {
   const gaps = m.tabs.slice(1).map((x, i) => x.l - m.tabs[i].r);
   t(`T2 ${tag} 옆으로 밀지 않고 모두 한 화면 · 끝 흐림 없음 · 잘림 · 겹침 없음`, m.tabs.length === 5 && m.scroll <= 0 && !m.more && m.tabs.every((x) => x.l >= 0 && x.r <= m.vw + 0.5 && !x.cut) && gaps.every((g) => g >= 0) && m.ovf <= 0, JSON.stringify({ scroll: m.scroll, more: m.more, gaps, vw: m.vw }));
   t(`T3 ${tag} 글자 15px · 숫자 13px 그대로`, m.tabs.every((x) => x.fs === 15 && x.nfs === 13), JSON.stringify(m.tabs.map((x) => [x.fs, x.nfs])));
-  t(`T4 ${tag} 탭 줄 돋보기 없음 · 위쪽 검색칸은 있음`, !m.icon && m.field, JSON.stringify({ icon: m.icon, field: m.field }));
+  t(`T4 ${tag} 탭 줄 돋보기 없음 · 위쪽 검색칸이 늘 보임`, !m.icon && m.field, JSON.stringify({ icon: m.icon, field: m.field }));
   const wantAria = joined ? `미래채움존·체험존 · 부스 ${N.u + N.f}곳` : `체험존 · 부스 ${N.f}곳`;
   t(`T5 ${tag} 화면 읽기에는 전체 이름과 곳 수`, m.tabs[0].aria === `전체 부스 ${N.all}곳` && m.tabs[2].aria === `중등·특수 · 부스 ${N.m + N.s}곳` && m.tabs[4].aria === wantAria, JSON.stringify(m.tabs.map((x) => x.aria)));
   if (SHOTS && N.f) {
@@ -265,9 +265,8 @@ for (const W of [320, 360, 375, 390, 414, 768, 1024, 1440]) await tabsAt(W, N);
 
   // 검색(위쪽 검색칸)
   await click(page, tabSel('')); await sleep(60);
-  await click(page, '#search-field'); await sleep(100);
-  const opened = await page.evaluate(() => !document.getElementById('search').hidden && document.getElementById('bar-tabs').hidden);
-  t('Q1 위쪽 검색칸을 누르면 검색이 열림', opened);
+  const opened = await page.evaluate(() => !document.getElementById('search').hidden && !document.getElementById('bar-tabs').hidden);
+  t('Q1 검색칸과 구역 탭이 함께 보임', opened);
   const type = async (v) => { await page.evaluate((x) => { const i = document.getElementById('q'); i.value = x; i.dispatchEvent(new Event('input', { bubbles: true })); }, v); await sleep(260); };
   await type('체험3');
   t('Q2 번호로 찾기: 체험3', JSON.stringify(await listNos(page)) === JSON.stringify(['체험3']) && (await heads(page)).length === 0, JSON.stringify(await listNos(page)));
@@ -287,8 +286,8 @@ for (const W of [320, 360, 375, 390, 414, 768, 1024, 1440]) await tabsAt(W, N);
     await type('시험 부스 1');
     t('Q5 구역을 가리지 않고 찾음', (await rowCount(page)) > 1 && (await heads(page)).length === 0, String(await rowCount(page)));
   }
-  await click(page, '#search-cancel'); await sleep(120);
-  t('Q6 검색 닫으면 전체로 · 탭 줄 돌아옴', (await rowCount(page)) === N.all && await page.evaluate(() => !document.getElementById('bar-tabs').hidden), String(await rowCount(page)));
+  await click(page, '#search-reset'); await sleep(120);
+  t('Q6 초기화하면 전체로 · 탭 줄 그대로', (await rowCount(page)) === N.all && await page.evaluate(() => !document.getElementById('bar-tabs').hidden), String(await rowCount(page)));
 
   // 한눈에
   await click(page, '[data-view="grid"]'); await sleep(120);

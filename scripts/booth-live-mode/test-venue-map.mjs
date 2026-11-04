@@ -17,6 +17,7 @@
      Q  순서    프레임마다 배율을 기록해 튀는 횟수를 셈 · 연속 선택 · 취소 · 닫기 · 화면 돌리기 · 움직임 줄이기
      U  속도    폭마다 300 · 1000 · 650ms · 천천히 시작 · 튀지 않음 · 느린 기기 프레임 · 외곽선 유지와 해제
      C  체험존  번호 안내 · 앱 번호와 지도 장소 대응 · 겹침 · 사라지는 때
+     N  검색칸  검색 · 초기화 단추 · Enter · 빈 검색 · 재검색 · 폭마다 겹침 · 번호 오탐 없음 · 구역 탭과 함께 쓰기
      S  검색    검색 결과의 지도에서 보기 · zone_key · code 로 구역 판별 · 그림 받기 전 · 뒤로 가기 · 결과 없음 · 폭마다 겹침
      E  오류    그림을 못 받을 때 안내 · 다시 불러오기
      K  유지    닫은 뒤 검색어 · 고른 탭 · 스크롤 · 뒤로 가기로 닫기 · 줄을 눌러도 창이 열리지 않음
@@ -315,7 +316,7 @@ for (const W of [320, 360, 375, 390, 414, 768, 1024, 1440]) {
   await tool(page, 'vmap-in');
   const b1 = await state(page);
   t('O8 여섯 번 열고 닫아도 한 번 누르면 한 번만 확대(이벤트 중복 없음)', near(b1.s / b0.s, 1.6, 0.01), String(b1.s / b0.s));
-  const trap = await page.evaluate(() => { const out = document.getElementById('search-field'); return document.getElementById('vmap').contains(document.elementFromPoint(5, 5)) || !out; });
+  const trap = await page.evaluate(() => { const out = document.getElementById('search'); return document.getElementById('vmap').contains(document.elementFromPoint(5, 5)) || !out; });
   t('O9 창이 열린 동안 뒤 화면은 눌리지 않음', trap);
   t('O10 화면 오류 없음', errs.length === 0, errs.join(' | '));
   await ctx.close();
@@ -558,7 +559,7 @@ for (const W of [390, 1440]) {
   await sleep(120);
   const l = await state(page), ml = await miniState(page);
   const off = await page.$eval('.vmap__mini-off', (e) => ({ d: getComputedStyle(e).display, t: e.textContent }));
-  t(`M8 ${W}px 아래 인쇄 목록만 보면 자리를 그리지 않고 '원본 목록 보는 중'`, seen(l).t >= MINI.y + MINI.h - 24 && ml.off && !ml.viewShown && off.d === 'flex' && off.t === '원본 목록 보는 중', JSON.stringify([seen(l).t, ml.off, off]));
+  t(`M8 ${W}px 아래 인쇄 목록만 보면 자리를 그리지 않고 '부스 명단 보는 중'`, seen(l).t >= MINI.y + MINI.h - 24 && ml.off && !ml.viewShown && off.d === 'flex' && off.t === '부스 명단 보는 중', JSON.stringify([seen(l).t, ml.off, off]));
   if (SHOTS) await page.screenshot({ path: join(SHOTS, `legend-${W}.png`) });
   t(`M9 ${W}px 화면 오류 없음`, errs.length === 0, errs.join(' | '));
   await ctx.close();
@@ -579,7 +580,7 @@ for (const W of [390, 1440]) {
   t('Q5 끝난 뒤 고른 구역 표시 · 옅은 강조', (await pressed(page))[0] === 'school-a' && await page.$eval('#vmap-hl', (e) => e.classList.contains('is-soft')));
   // 연속으로 고르기(확대 상태)
   const c = await trace(page, [['[data-vzone="promo"]', 70], ['[data-vzone="bigtech"]', 70], ['[data-vzone="future"]', 70], ['[data-vzone="list"]', 0]], 2300);
-  t('Q6 확대 상태에서 연달아 네 번 골라도 한 번만 물러났다 확대 · 마지막 구역으로', turns(c) === 1 && (await pressed(page))[0] === 'list' && (await hlName(page)).text === '배치도 원본 목록', JSON.stringify([turns(c), await pressed(page)]));
+  t('Q6 확대 상태에서 연달아 네 번 골라도 한 번만 물러났다 확대 · 마지막 구역으로', turns(c) === 1 && (await pressed(page))[0] === 'list' && (await hlName(page)).text === '부스 명단', JSON.stringify([turns(c), await pressed(page)]));
   await tool(page, 'vmap-fit');
   // 연속으로 고르기(전체 보기)
   const d = await trace(page, [['[data-vzone="promo"]', 110], ['[data-vzone="bigtech"]', 110], ['[data-vzone="experience"]', 0]], 2000);
@@ -829,12 +830,158 @@ for (const [W, H] of [[320, 568], [390, 844], [844, 390], [1440, 900]]) {
   await ctx.close();
 }
 
+/* ── N : 검색칸 ─────────────────────────────────────────────────── */
+const codes = (page) => page.$$eval('#list .row__code', (e) => e.map((x) => x.textContent));
+const rows = (page) => page.$$eval('#list .row', (e) => e.length);
+const typeQ = async (page, v) => { await page.click('#q', { clickCount: 3 }); await page.keyboard.press('Backspace'); await page.keyboard.type(v); await sleep(160); };
+const formLook = (page) => page.evaluate(() => {
+  const R = (e) => { const r = e.getBoundingClientRect(); return { l: r.left, t: r.top, r: r.right, b: r.bottom, w: r.width, h: r.height }; };
+  const f = document.getElementById('search'), go = document.getElementById('search-go'), re = document.getElementById('search-reset'), box = f.querySelector('.qform__box'), i = document.getElementById('q');
+  const c = document.createElement('canvas').getContext('2d'), ps = getComputedStyle(i, '::placeholder');
+  c.font = `${ps.fontWeight} ${ps.fontSize} ${ps.fontFamily}`;
+  c.letterSpacing = ps.letterSpacing === 'normal' ? '0px' : ps.letterSpacing;
+  return { hidden: f.hidden, form: R(f), box: R(box), go: R(go), re: R(re), input: R(i), icon: R(box.querySelector('svg')), goT: go.textContent, reT: re.textContent, ph: i.placeholder, phW: c.measureText(i.placeholder).width, phSize: parseFloat(ps.fontSize), goSize: parseFloat(getComputedStyle(go).fontSize), goCut: go.scrollWidth > go.clientWidth + 0.5, reCut: re.scrollWidth > re.clientWidth + 0.5, text: f.textContent, ovf: document.documentElement.scrollWidth - document.documentElement.clientWidth, vw: innerWidth, tabs: !document.getElementById('bar-tabs').hidden && !document.getElementById('bar').hidden, ifont: parseFloat(getComputedStyle(i).fontSize) };
+});
+for (const [W, H] of [[320, 568], [360, 740], [390, 844], [768, 1024], [1440, 900]]) {
+  const { ctx, page, errs } = await openPage(W, H);
+  const a = await formLook(page);
+  const sideBySide = near(a.box.t, a.go.t, 1) && near(a.go.t, a.re.t, 1) && a.box.r <= a.go.l + 0.5 && a.go.r <= a.re.l + 0.5;
+  t(`N1 ${W}px 처음부터 [돋보기 칸][검색][초기화] 나란히 · 취소 · 닫기 없음`, !a.hidden && sideBySide && a.goT === '검색' && a.reT === '초기화' && a.icon.w >= 16 && a.ph === '부스번호 · 학교명 검색' && !/취소|닫기|지우기/.test(a.text), JSON.stringify(a));
+  t(`N2 ${W}px 높이 44px · 화면 안 · 버튼 글자 잘림 없음 · 가로 스크롤 없음`, a.box.h >= 44 && a.go.h >= 44 && a.re.h >= 44 && a.go.w >= 44 && a.re.w >= 44 && a.re.r <= a.vw + 0.5 && a.box.l >= 0 && !a.goCut && !a.reCut && a.ovf <= 0, JSON.stringify([a.box, a.go, a.re, a.ovf]));
+  t(`N3 ${W}px 안내 글이 칸 안에 다 들어감 · 글자 13px 이상 · 입력 글자 16px(iOS 확대 방지)`, a.phW <= a.input.w + 0.5 && a.phSize >= 13 && a.goSize >= 14 && a.ifont >= 16, JSON.stringify([a.phW, a.input.w, a.phSize]));
+  t(`N4 ${W}px 구역 탭도 함께 보임`, a.tabs);
+  if (SHOTS) await page.screenshot({ path: join(SHOTS, `qform-idle-${W}.png`) });
+  // 빈 검색
+  const y0 = await page.evaluate(() => window.scrollY), n0 = await rows(page);
+  await page.click('#q');
+  await page.click('#search-go');
+  await sleep(120);
+  const e0 = await page.evaluate(() => ({ y: window.scrollY, q: document.getElementById('q').value, url: location.href }));
+  t(`N5 ${W}px 검색어 없이 검색을 눌러도 아무 일 없음`, (await rows(page)) === n0 && e0.q === '' && near(e0.y, y0, 2), JSON.stringify(e0));
+  // 입력 즉시 + 검색 단추
+  await typeQ(page, '47');
+  t(`N6 ${W}px 치는 대로 결과가 바뀜 · 47 은 47번만(74번 오탐 없음)`, JSON.stringify(await codes(page)) === '["47"]', JSON.stringify(await codes(page)));
+  const b = await formLook(page);
+  t(`N7 ${W}px 검색어가 있어도 버튼 이름 그대로 · 칸 모양 그대로`, b.goT === '검색' && b.reT === '초기화' && near(b.form.h, a.form.h, 1) && near(b.input.w, a.input.w, 1), JSON.stringify([b.goT, b.reT]));
+  await page.focus('#q');
+  await page.click('#search-go');
+  await sleep(450);
+  const c = await page.evaluate(() => { const r = document.querySelector('#list .row').getBoundingClientRect(); return { focus: document.activeElement.id, q: document.getElementById('q').value, top: r.top, bottom: r.bottom, h: innerHeight }; });
+  t(`N8 ${W}px 검색을 누르면 입력에서 빠지고(자판 내림) 검색어 유지 · 결과가 화면 안`, c.focus !== 'q' && c.q === '47' && c.top >= 0 && c.top < c.h, JSON.stringify(c));
+  if (SHOTS) await page.screenshot({ path: join(SHOTS, `qform-47-${W}.png`) });
+  // Enter
+  await typeQ(page, '미래3');
+  await page.keyboard.press('Enter');
+  await sleep(300);
+  const d = await page.evaluate(() => ({ focus: document.activeElement.id, q: document.getElementById('q').value }));
+  t(`N9 ${W}px Enter 도 검색과 같음`, d.focus !== 'q' && d.q === '미래3' && JSON.stringify(await codes(page)) === '["미래3"]', JSON.stringify([d, await codes(page)]));
+  // 초기화
+  await page.click('#search-reset');
+  await sleep(200);
+  const e = await formLook(page), url1 = await page.evaluate(() => location.href);
+  t(`N10 ${W}px 초기화: 검색어 삭제 · 전체 105곳 · 검색칸과 버튼 그대로 · 다른 화면으로 가지 않음`, (await rows(page)) === 105 && (await page.$eval('#q', (x) => x.value)) === '' && !e.hidden && e.goT === '검색' && e.reT === '초기화' && e.tabs && url1 === e0.url, JSON.stringify([await rows(page), url1, e0.url]));
+  // 재검색
+  await typeQ(page, '체험6');
+  t(`N11 ${W}px 초기화 뒤 다시 검색`, JSON.stringify(await codes(page)) === '["체험6"]', JSON.stringify(await codes(page)));
+  await page.click('#search-reset');
+  await sleep(150);
+  t(`N12 ${W}px 화면 오류 없음`, errs.length === 0, errs.join(' | '));
+  await ctx.close();
+}
+{
+  const { ctx, page, errs } = await openPage(390);
+  const hits = async (q) => { await typeQ(page, q); return codes(page); };
+  // 1~84 전부: 찾은 번호가 맨 위, 오탐 없음(결과마다 번호 · 이름 · 학교명 어딘가에 실제로 그 숫자가 있음)
+  const sweep = await page.evaluate(() => {
+    const i = document.getElementById('q'), bad = [];
+    for (let n = 1; n <= 84; n++) {
+      i.value = String(n);
+      i.dispatchEvent(new Event('input', { bubbles: true }));
+      const r = [...document.querySelectorAll('#list .row')];
+      if (!r.length || r[0].querySelector('.row__code').textContent !== String(n)) bad.push([n, 'first']);
+      r.forEach((x) => { const s = x.textContent.replace(/\s+/g, ''); const code = x.querySelector('.row__code').textContent; if (!code.includes(String(n)) && !x.querySelector('.row__body').textContent.replace(/\s+/g, '').includes(String(n))) bad.push([n, code, s.slice(0, 20)]); });
+    }
+    i.value = '';
+    i.dispatchEvent(new Event('input', { bubbles: true }));
+    return bad;
+  });
+  t('N13 번호 1~84 전부: 그 번호가 맨 위 · 숫자가 없는 부스는 나오지 않음', sweep.length === 0, JSON.stringify(sweep.slice(0, 6)));
+  t('N14 45 → 54번 오탐 없음', !(await hits('45')).includes('54'));
+  t('N15 12 → 21번 오탐 없음', !(await hits('12')).includes('21'));
+  const h60 = await hits('60');
+  t('N16 이름에 든 숫자는 그대로 찾음: 60 → 60번 먼저, 9번(60초 완성!)도 나옴', h60[0] === '60' && h60.includes('9'), JSON.stringify(h60));
+  t('N17 미래3', JSON.stringify(await hits('미래3')) === '["미래3"]');
+  t('N18 체험6', JSON.stringify(await hits('체험6')) === '["체험6"]');
+  t('N19 학교명: 석정 → 66번', (await hits('석정')).includes('66'), JSON.stringify(await codes(page)));
+  t('N20 한글 부분 입력: 석저 → 66번(받침 치는 중)', (await hits('석저')).includes('66'), JSON.stringify(await codes(page)));
+  t('N21 낱자모: 석ㅈ → 석으로 찾음', (await hits('석ㅈ')).includes('66'), JSON.stringify(await codes(page)));
+  // 구역 탭과 함께
+  await page.click('#search-reset');
+  await sleep(150);
+  await page.evaluate(() => document.querySelector('#tabs [data-zone="미래"]').click());
+  await sleep(150);
+  const zoneRows = await rows(page);
+  await typeQ(page, '47');
+  const tab = () => page.$eval('#tabs [aria-pressed="true"]', (x) => x.dataset.zone);
+  t('N22 구역을 고른 채 검색해도 전체에서 찾고 탭은 전체로', JSON.stringify(await codes(page)) === '["47"]' && (await tab()) === '', JSON.stringify([await codes(page), await tab()]));
+  await page.evaluate(() => document.querySelector('#tabs [data-zone="미래"]').click());
+  await sleep(200);
+  t('N23 검색 중 탭을 고르면 검색이 풀리고 그 구역으로(탭으로 돌아갈 길이 늘 있음)', (await page.$eval('#q', (x) => x.value)) === '' && (await rows(page)) === zoneRows && (await tab()) === '미래', JSON.stringify([await rows(page), zoneRows]));
+  await page.evaluate(() => document.querySelector('#tabs [data-zone=""]').click());
+  await sleep(150);
+  // 보기 · 정렬 유지
+  await page.click('[data-sort="wait"]');
+  await sleep(120);
+  await typeQ(page, '47');
+  await page.click('#search-reset');
+  await sleep(200);
+  t('N24 초기화해도 대기 짧은 순 유지', await page.$eval('[data-sort="wait"]', (x) => x.getAttribute('aria-pressed') === 'true'));
+  await page.click('[data-sort="code"]');
+  await sleep(120);
+  await page.click('[data-view="grid"]');
+  await sleep(150);
+  await typeQ(page, '47');
+  await page.click('#search-reset');
+  await sleep(200);
+  t('N25 초기화해도 한눈에 보기 유지', await page.$eval('[data-view="grid"]', (x) => x.getAttribute('aria-pressed') === 'true'));
+  await page.click('[data-view="list"]');
+  await sleep(150);
+  // 지도 다녀오기
+  await typeQ(page, '47');
+  await page.click('#search-go');
+  await sleep(300);
+  await (await page.evaluateHandle(() => document.querySelector('#list .row__map'))).click();
+  await page.waitForFunction(() => document.getElementById('vmap-hl').classList.contains('is-soft'), { timeout: 5000 });
+  await page.click('#vmap-close');
+  await sleep(200);
+  t('N26 지도를 닫으면 검색어 · 결과 그대로', (await page.$eval('#q', (x) => x.value)) === '47' && JSON.stringify(await codes(page)) === '["47"]');
+  // 초기화는 검색 조건만
+  await page.click('#search-reset');
+  await sleep(150);
+  const st = await page.evaluate(() => [...document.querySelectorAll('[data-count]')].map((b) => b.textContent.replace(/\s+/g, '')).join('|'));
+  t('N27 초기화 뒤 상태 숫자는 그대로(대기 값을 건드리지 않음)', /35/.test(st), st);
+  // Esc
+  await typeQ(page, '47');
+  await page.keyboard.press('Escape');
+  await sleep(150);
+  t('N28 Esc 는 검색어만 지우고 칸은 그대로', (await rows(page)) === 105 && !(await page.$eval('#search', (x) => x.hidden)));
+  // 부스 명단
+  await page.evaluate(() => document.getElementById('map-open').click());
+  await page.waitForFunction(() => { const n = document.getElementById('vmap-img'); return n.naturalWidth > 0 && !n.hidden; }, { timeout: 8000 });
+  await sleep(120);
+  const chip = await page.$eval('[data-vzone="list"]', (b) => ({ t: b.textContent, a: b.getAttribute('aria-label') }));
+  t('N29 부스 명단 단추 · 접근성 이름', chip.t === '부스 명단' && chip.a === '배치도에 표시된 부스 명단 보기', JSON.stringify(chip));
+  await zone(page, 'list');
+  const lv = await state(page), [lx, ly] = ZONE_RECTS.list, lw = seen(lv);
+  t('N30 부스 명단은 인쇄된 목록으로 이동', (await pressed(page))[0] === 'list' && lw.t <= ly + 1 && lw.l <= lx + 1 && (await hlName(page)).text === '부스 명단', JSON.stringify(lw));
+  t('N31 화면 오류 없음', errs.length === 0, errs.join(' | '));
+  await ctx.close();
+}
+
 /* ── S : 검색 결과 → 배치도 ─────────────────────────────────────── */
 const SOFT = () => document.getElementById('vmap-hl').classList.contains('is-soft');
 const find = async (page, q) => {
   await page.evaluate((v) => {
-    const f = document.getElementById('search-field');
-    if (f && !f.hidden) f.click();
     const i = document.getElementById('q');
     i.value = v;
     i.dispatchEvent(new Event('input', { bubbles: true }));
@@ -948,7 +1095,7 @@ const hl3f = /parts: (\[\[.*?\]\])/.exec(MAP_JS)[1], EXP_3F = JSON.parse(hl3f);
   await find(page, '47');
   const n47 = await page.$$eval('.row__map', (e) => e.length);
   await find(page, '');
-  await page.evaluate(() => document.getElementById('search-cancel').click());
+  await page.evaluate(() => document.getElementById('search-reset').click());
   await sleep(250);
   t('S18 검색을 끝내면 단추가 사라지고 줄은 원래대로', n47 >= 1 && (await page.$$eval('.row__map', (e) => e.length)) === 0, String(n47));
   await page.evaluate(() => document.querySelector('#list .row').click());
@@ -1093,8 +1240,6 @@ for (const [W, H] of [[320, 568], [390, 844], [768, 1024], [1440, 900]]) {
   await sleep(250);
   const back = await page.evaluate(() => ({ open: document.getElementById('vmap').open, rows: document.querySelectorAll('#list .row').length, pressed: document.querySelector('#tabs [aria-pressed="true"]').dataset.zone, lock: document.documentElement.classList.contains('vmap-on') }));
   t('K2 뒤로 가기는 창만 닫고 화면은 그대로', !back.open && back.rows === before.rows && back.pressed === '미래' && !back.lock, JSON.stringify(back));
-  await page.evaluate(() => { const i = document.getElementById('search-field'); i.click(); });
-  await sleep(100);
   await page.evaluate(() => { const i = document.getElementById('q'); i.value = '체험3'; i.dispatchEvent(new Event('input', { bubbles: true })); });
   await sleep(300);
   await page.evaluate(() => document.getElementById('map-open').click());
@@ -1103,7 +1248,7 @@ for (const [W, H] of [[320, 568], [390, 844], [768, 1024], [1440, 900]]) {
   await page.keyboard.press('Escape'); await sleep(200);
   const q = await page.evaluate(() => ({ v: document.getElementById('q').value, rows: [...document.querySelectorAll('#list .row__code')].map((x) => x.textContent) }));
   t('K3 닫은 뒤 검색어 · 결과 그대로(Esc 가 검색을 닫지 않음)', q.v === '체험3' && JSON.stringify(q.rows) === JSON.stringify(['체험3']), JSON.stringify(q));
-  await page.evaluate(() => document.getElementById('search-cancel').click());
+  await page.evaluate(() => document.getElementById('search-reset').click());
   await sleep(150);
   await page.evaluate(() => document.querySelector('#list .row').click());
   await sleep(120);
