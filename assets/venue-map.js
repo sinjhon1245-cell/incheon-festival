@@ -16,7 +16,11 @@
    사용자가 직접 조작하면 자동 이동만 끊습니다. 고른 구역과 외곽선은 다른 구역 · 전체 보기 · 닫기까지 남습니다.
    미니맵 사각형은 고른 구역과 상관없이 언제나 실제로 보이는 자리입니다.
 
+   검색 연결: 관람객 화면의 검색 결과가 showBooth() 를 부르면 창을 열고 그 부스가 속한 구역으로 위와 같이 옮깁니다.
+   개별 부스 좌표는 없으므로 구역 단위로만 안내합니다. 그림이 아직 없으면 받은 뒤에 옮깁니다.
+
    window.VenueMap: open(옵션) · close(옵션) · isOpen() · onChange(열림 여부) — 옵션 silent 는 onChange 를 부르지 않습니다.
+                    zoneOf(부스) — 지도 구역 이름, 모르면 '' · showBooth(부스, 기관 이름, 닫은 뒤 초점을 돌려줄 요소)
    =================================================================== */
 (function () {
   'use strict';
@@ -45,6 +49,10 @@
   };
   // 이름표는 구역 위에 둡니다. 그러면 부스를 덮는 구역만 가까운 빈 통로에 둡니다. [왼쪽, 세로 가운데]
   var ZONE_TAG = { future: [365, 307.5], experience: [130, 288], promo: [1035, 302] };
+  // 앱의 체험5~12 는 공식 범례로 '3층' 까지만 확인됩니다(체험 03 · 04). 1층의 체험 01 · 02 를 가리키지 않도록
+  // 배치도에 인쇄된 3층 안내 자리를 대신 표시합니다. 층 안내일 뿐, 개별 장소가 아닙니다.
+  var EXP_3F = { parts: [[138, 402, 616, 84]], tag: [138, 530], name: '체험존 3층' };
+  var SCHOOL_KEYS = ['초등', '중등', '고등', '특수'];
   var ZONE_MIN = { list: 0.8 };  // 목록은 자리가 아니라 읽을거리라 글자를 읽을 배율부터 보여 줍니다
   var ZONE_PAD = 60;      // 구역 둘레로 함께 보여 줄 통로 · 이웃 부스(원본 px)
   var ZONE_MAX = 1.25;    // 구역으로 옮길 때 원본의 몇 배까지
@@ -72,6 +80,8 @@
   var retry = document.getElementById('vmap-retry');
   var hint = document.getElementById('vmap-hint');
   var tip = document.getElementById('vmap-tip');
+  var tipBooth = document.getElementById('vmap-tip-b');
+  var tipNote = document.getElementById('vmap-tip-n');
   var btnIn = document.getElementById('vmap-in');
   var btnOut = document.getElementById('vmap-out');
   var btnFit = document.getElementById('vmap-fit');
@@ -85,7 +95,8 @@
   var v = { W: 0, H: 0, vw: 0, vh: 0, fit: 1, s: 1, x: 0, y: 0 };
   var loaded = false, loading = false, open_ = false, raf = 0, hintTimer = 0, hintDone = false;
   var pts = {}, last = null;
-  var zone = '', moved = false, phase = '', tween = 0, holdTimer = 0, hlBoxes = [], nameW = 0, nameH = 0;
+  var zone = '', moved = false, phase = '', tween = 0, holdTimer = 0, hlBoxes = [], hlParts = [], hlTag = null, nameW = 0, nameH = 0;
+  var want = null, back = null;   // 그림을 받은 뒤 옮길 구역 · 닫은 뒤 초점을 돌려줄 요소
 
   /* ── 보기 계산 ─────────────────────────────────────────────── */
   function atFit() { return Math.abs(v.s - v.fit) < v.fit * 1e-3; }
@@ -190,16 +201,18 @@
   function markZone(id) {
     zoneBtns.forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.vzone === id)); });
   }
-  function showHl(id) {
-    var parts = ZONE_PARTS[id] || [ZONES[id]];
-    while (hlBoxes.length > parts.length) hl.removeChild(hlBoxes.pop());
-    while (hlBoxes.length < parts.length) {
+  function zoneName(id) { return dlg.querySelector('[data-vzone="' + id + '"]').textContent; }
+  function showHl(id, alt) {
+    hlParts = (alt && alt.parts) || ZONE_PARTS[id] || [ZONES[id]];
+    hlTag = (alt && alt.tag) || ZONE_TAG[id];
+    while (hlBoxes.length > hlParts.length) hl.removeChild(hlBoxes.pop());
+    while (hlBoxes.length < hlParts.length) {
       var box = document.createElement('i');
       box.className = 'vmap__hl-box';
       hl.insertBefore(box, hlName);
       hlBoxes.push(box);
     }
-    hlName.textContent = dlg.querySelector('[data-vzone="' + id + '"]').textContent;
+    hlName.textContent = (alt && alt.name) || zoneName(id);
     hl.classList.remove('is-soft');
     hl.hidden = false;
     nameW = hlName.offsetWidth;   // 프레임마다 재면 그때마다 레이아웃을 강제하므로 여기서 한 번만 잽니다
@@ -208,7 +221,7 @@
   // 테두리는 구역 바깥에 그려 부스 번호를 가리지 않습니다(CSS: 테두리 두께만큼 왼쪽 위로 뺌).
   function paintHl() {
     if (!zone) return;
-    var parts = ZONE_PARTS[zone] || [ZONES[zone]], L = Infinity, T = Infinity, R = -Infinity, B = -Infinity;
+    var parts = hlParts, L = Infinity, T = Infinity, R = -Infinity, B = -Infinity;
     parts.forEach(function (p, i) {
       var w = p[2] * v.s, h = p[3] * v.s, l = v.x + p[0] * v.s, t = v.y + p[1] * v.s;
       if (parts.length === 1) {
@@ -221,8 +234,7 @@
       st.height = h + 'px';
       L = Math.min(L, l); T = Math.min(T, t); R = Math.max(R, l + w); B = Math.max(B, t + h);
     });
-    var tag = ZONE_TAG[zone];
-    var nx = tag ? v.x + tag[0] * v.s : L, ny = tag ? v.y + tag[1] * v.s - nameH / 2 : T - nameH - 10;
+    var nx = hlTag ? v.x + hlTag[0] * v.s : L, ny = hlTag ? v.y + hlTag[1] * v.s - nameH / 2 : T - nameH - 10;
     if (ny < 4) ny = B + 10;
     hlName.style.transform = 'translate(' + Math.max(6, Math.min(v.vw - nameW - 6, nx)) + 'px,' + ny + 'px)';
   }
@@ -251,28 +263,59 @@
     holdTimer = setTimeout(zoomIn, HOLD_MS);
   }
   // 흐름 중에 다른 구역을 고르면 앞선 움직임을 끊고 목표를 바꿉니다. 직접 옮긴 뒤 같은 구역을 다시 누르면 다시 찾아갑니다.
-  function goZone(id) {
+  function goZone(id, alt) {
     if (!ZONES[id] || !loaded || (id === zone && !moved)) return;
     hideHint();
     measure();
     zone = id;
     moved = false;
     markZone(id);
-    showHl(id);
-    tip.hidden = id !== 'experience';
+    showHl(id, alt);
+    setTip(id, alt && alt.text);
     paint();
     if (phase === 'out') return;
     if (phase === 'hold' || atFit()) { holdThenZoom(); return; }
     setPhase('out');
     glide(v.fit, 0, 0, OUT_MS, holdThenZoom);
   }
+  function setTip(id, booth) {
+    tipNote.hidden = id !== 'experience';
+    tipBooth.hidden = !booth;
+    tipBooth.textContent = booth || '';
+    tip.hidden = tipNote.hidden && tipBooth.hidden;
+  }
   function goFit() {
     touched();
     clearZone();
-    tip.hidden = true;
+    setTip('');
     measure();
     setPhase('pan');
     glide(v.fit, 0, 0, OUT_MS, settle);
+  }
+
+  /* ── 검색 결과에서 부스 찾기 ───────────────────────────────── */
+  // 부스 자료의 zone_key · code 만 봅니다. 이름이나 프로그램명에 든 숫자는 번호가 아닙니다.
+  function boothNo(b, prefix) {
+    var m = new RegExp('^' + prefix + '(\\d+)$').exec(String(b.code || ''));
+    return m ? +m[1] : 0;
+  }
+  function boothZone(b) {
+    if (!b) return '';
+    var n;
+    if (b.zone_key === '미래') { n = boothNo(b, '미래'); return n >= 1 && n <= 9 ? 'future' : ''; }
+    if (b.zone_key === '체험') { n = boothNo(b, '체험'); return n >= 1 && n <= 12 ? 'experience' : ''; }
+    if (SCHOOL_KEYS.indexOf(b.zone_key) < 0) return '';
+    n = boothNo(b, '');
+    return n >= 1 && n <= 44 ? 'school-a' : n >= 45 && n <= 84 ? 'school-b' : '';
+  }
+  function showBooth(b, org, from) {
+    var id = boothZone(b);
+    if (!id) return;
+    var school = SCHOOL_KEYS.indexOf(b.zone_key) >= 0;
+    var alt = id === 'experience' && boothNo(b, '체험') >= 5 ? { parts: EXP_3F.parts, tag: EXP_3F.tag, name: EXP_3F.name } : {};
+    alt.text = (school ? b.code + '번' : b.code) + ' · ' + (school ? org || b.name : b.name) + ' / ' + (alt.name || zoneName(id));
+    open({ from: from });
+    if (loaded) goZone(id, alt); else want = { id: id, alt: alt };
   }
 
   /* ── 미니맵 ────────────────────────────────────────────────── */
@@ -326,7 +369,11 @@
     miniMap.style.backgroundPosition = '0 ' + MINI.y / (v.H - MINI.h) * 100 + '%';
     showNote('', false);
     // 다음 프레임을 기다리지 않고 바로 그립니다. 프레임이 늦어도 단추가 꺼진 채로 첫 탭을 놓치지 않습니다.
-    if (open_) { fitView(); paint(); showHint(); }
+    if (open_) {
+      fitView();
+      paint();
+      if (want) { goZone(want.id, want.alt); want = null; } else showHint();
+    }
   });
   img.addEventListener('error', function () {
     if (!img.getAttribute('src')) return;
@@ -469,6 +516,7 @@
   function open(opt) {
     if (open_) return;
     open_ = true;
+    back = (opt && opt.from) || opener;
     pts = {};
     last = null;
     document.documentElement.classList.add('vmap-on');
@@ -483,16 +531,17 @@
     pts = {};
     last = null;
     stage.classList.remove('is-grab');
+    want = null;
     touched();
     clearZone();
-    tip.hidden = true;
+    setTip('');
     if (dlg.close) dlg.close(); else dlg.removeAttribute('open');
     document.documentElement.classList.remove('vmap-on');
-    opener.focus({ preventScroll: true });
+    (back && back.isConnected ? back : opener).focus({ preventScroll: true });
     if (!(opt && opt.silent) && api.onChange) api.onChange(false);
   }
 
   img.alt = MAP.alt;
-  var api = { open: open, close: close, isOpen: function () { return open_; }, onChange: null };
+  var api = { open: open, close: close, isOpen: function () { return open_; }, onChange: null, zoneOf: boothZone, showBooth: showBooth };
   window.VenueMap = api;
 })();

@@ -17,6 +17,7 @@
      Q  순서    프레임마다 배율을 기록해 튀는 횟수를 셈 · 연속 선택 · 취소 · 닫기 · 화면 돌리기 · 움직임 줄이기
      U  속도    폭마다 300 · 1000 · 650ms · 천천히 시작 · 튀지 않음 · 느린 기기 프레임 · 외곽선 유지와 해제
      C  체험존  번호 안내 · 앱 번호와 지도 장소 대응 · 겹침 · 사라지는 때
+     S  검색    검색 결과의 지도에서 보기 · zone_key · code 로 구역 판별 · 그림 받기 전 · 뒤로 가기 · 결과 없음 · 폭마다 겹침
      E  오류    그림을 못 받을 때 안내 · 다시 불러오기
      K  유지    닫은 뒤 검색어 · 고른 탭 · 스크롤 · 뒤로 가기로 닫기 · 줄을 눌러도 창이 열리지 않음
 
@@ -65,14 +66,15 @@ const data = { version: 1, generatedAt: now, mode: 'normal', liveReady: true,
 /* ── 서버 ───────────────────────────────────────────────────────── */
 const FILES = ['visitor.html', 'assets/visitor.css', 'assets/booth-core.js', 'assets/mock-data.js', 'assets/config.js', 'assets/venue-map.js'];
 const TYPES = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8' };
-const net = { image: 0, fail: false };
+const net = { image: 0, fail: false, delay: 0 };
 const server = http.createServer((req, res) => {
   const p = decodeURIComponent(new URL(req.url, 'http://x').pathname).replace(/^\/+/, '');
   if (p === 'api/live-snapshot') { res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(data)); return; }
   if (p === IMAGE_PATH) {
     net.image += 1;
     if (net.fail) { res.writeHead(404, { 'Cache-Control': 'no-store' }); res.end(); return; }
-    res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Cache-Control': 'no-store' }); res.end(IMAGE); return;
+    setTimeout(() => { res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Cache-Control': 'no-store' }); res.end(IMAGE); }, net.delay);
+    return;
   }
   if (!FILES.includes(p)) { res.writeHead(404); res.end(); return; }
   let out = readFileSync(join(REPO, p));
@@ -556,7 +558,7 @@ for (const W of [390, 1440]) {
   await sleep(120);
   const l = await state(page), ml = await miniState(page);
   const off = await page.$eval('.vmap__mini-off', (e) => ({ d: getComputedStyle(e).display, t: e.textContent }));
-  t(`M8 ${W}px 아래 부스 목록만 보면 자리를 그리지 않고 '부스 목록 보는 중'`, seen(l).t >= MINI.y + MINI.h - 24 && ml.off && !ml.viewShown && off.d === 'flex' && off.t === '부스 목록 보는 중', JSON.stringify([seen(l).t, ml.off, off]));
+  t(`M8 ${W}px 아래 인쇄 목록만 보면 자리를 그리지 않고 '원본 목록 보는 중'`, seen(l).t >= MINI.y + MINI.h - 24 && ml.off && !ml.viewShown && off.d === 'flex' && off.t === '원본 목록 보는 중', JSON.stringify([seen(l).t, ml.off, off]));
   if (SHOTS) await page.screenshot({ path: join(SHOTS, `legend-${W}.png`) });
   t(`M9 ${W}px 화면 오류 없음`, errs.length === 0, errs.join(' | '));
   await ctx.close();
@@ -577,7 +579,7 @@ for (const W of [390, 1440]) {
   t('Q5 끝난 뒤 고른 구역 표시 · 옅은 강조', (await pressed(page))[0] === 'school-a' && await page.$eval('#vmap-hl', (e) => e.classList.contains('is-soft')));
   // 연속으로 고르기(확대 상태)
   const c = await trace(page, [['[data-vzone="promo"]', 70], ['[data-vzone="bigtech"]', 70], ['[data-vzone="future"]', 70], ['[data-vzone="list"]', 0]], 2300);
-  t('Q6 확대 상태에서 연달아 네 번 골라도 한 번만 물러났다 확대 · 마지막 구역으로', turns(c) === 1 && (await pressed(page))[0] === 'list' && (await hlName(page)).text === '부스 목록', JSON.stringify([turns(c), await pressed(page)]));
+  t('Q6 확대 상태에서 연달아 네 번 골라도 한 번만 물러났다 확대 · 마지막 구역으로', turns(c) === 1 && (await pressed(page))[0] === 'list' && (await hlName(page)).text === '배치도 원본 목록', JSON.stringify([turns(c), await pressed(page)]));
   await tool(page, 'vmap-fit');
   // 연속으로 고르기(전체 보기)
   const d = await trace(page, [['[data-vzone="promo"]', 110], ['[data-vzone="bigtech"]', 110], ['[data-vzone="experience"]', 0]], 2000);
@@ -824,6 +826,230 @@ for (const [W, H] of [[320, 568], [390, 844], [844, 390], [1440, 900]]) {
   const [ax, , aw] = ZONE_RECTS['school-a'], toolL = await page.$eval('.vmap__tools', (e) => e.getBoundingClientRect().left);
   t('Y14 휴대폰: 스쿨존 01~44 가 조작 단추에 가리지 않음', v.left + v.x + (ax + aw) * v.s <= toolL + 1, JSON.stringify([v.left + v.x + (ax + aw) * v.s, toolL]));
   t('Y15 화면 오류 없음', errs.length === 0, errs.join(' | '));
+  await ctx.close();
+}
+
+/* ── S : 검색 결과 → 배치도 ─────────────────────────────────────── */
+const SOFT = () => document.getElementById('vmap-hl').classList.contains('is-soft');
+const find = async (page, q) => {
+  await page.evaluate((v) => {
+    const f = document.getElementById('search-field');
+    if (f && !f.hidden) f.click();
+    const i = document.getElementById('q');
+    i.value = v;
+    i.dispatchEvent(new Event('input', { bubbles: true }));
+  }, q);
+  await sleep(320);
+};
+const rowMap = (page, code) => page.evaluateHandle((c) => { const r = [...document.querySelectorAll('#list .row')].find((x) => x.querySelector('.row__code').textContent === c); return r ? r.querySelector('.row__map') : null; }, code);
+const tipBooth = (page) => page.evaluate(() => { const e = document.getElementById('vmap-tip-b'); return e.hidden ? '' : e.textContent; });
+const hl3f = /parts: (\[\[.*?\]\])/.exec(MAP_JS)[1], EXP_3F = JSON.parse(hl3f);
+{
+  // 105곳 전부: zone_key · code 로만 구역을 고름
+  const { ctx, page, errs } = await openPage(390);
+  const list = data.booths.map((b) => ({ zone_key: b.zone, code: b.code, name: b.name, no: b.no }));
+  const got = await page.evaluate((a) => a.map((b) => window.VenueMap.zoneOf(b)), list);
+  const wantOf = (b) => b.zone_key === '미래' ? 'future' : b.zone_key === '체험' ? 'experience' : b.no <= 44 ? 'school-a' : 'school-b';
+  const wrong = list.filter((b, i) => got[i] !== wantOf(b));
+  const count = (k) => got.filter((x) => x === k).length;
+  t('S1 105곳 전부 맞는 구역(학교 1~44 · 45~84 · 미래 9 · 체험 12)', list.length === 105 && !wrong.length && count('school-a') === 44 && count('school-b') === 40 && count('future') === 9 && count('experience') === 12, JSON.stringify(wrong.slice(0, 5)));
+  const nos = data.booths.filter((b) => !['체험', '미래'].includes(b.zone)).map((b) => b.no).sort((a, b) => a - b);
+  t('S2 학교 번호 1~84 가 빠짐없이 한 번씩(공식 배치도 스쿨 01~84 와 같은 번호)', nos.length === 84 && nos.every((n, i) => n === i + 1));
+  const bad = [{ zone_key: '고등', code: '85' }, { zone_key: '고등', code: '0' }, { zone_key: '고등', code: '' }, { zone_key: '고등', code: '체험6' }, { zone_key: '고등' }, { zone_key: '미래', code: '미래10' }, { zone_key: '미래', code: '3' }, { zone_key: '체험', code: '체험13' }, { zone_key: '체험', code: '체험0' }, { zone_key: 'A', code: '47' }, { code: '47' }, { zone_key: '고등', code: '47', name: '' , x: 0 }];
+  const b2 = await page.evaluate((a) => a.map((b) => window.VenueMap.zoneOf(b)).concat(window.VenueMap.zoneOf(null)), bad);
+  t('S3 잘못된 번호 · 구역을 모르는 자료는 지도 구역 없음', b2.slice(0, 11).every((x) => x === '') && b2[11] === 'school-b' && b2[12] === '', JSON.stringify(b2));
+  const n1 = await page.$$eval('.row__map', (e) => e.length);
+  t('S4 검색 전 목록에는 단추가 없음(줄은 그대로)', n1 === 0, String(n1));
+  await find(page, '60초');
+  const hit = await page.$$eval('#list .row__code', (e) => e.map((x) => x.textContent));
+  t('S5 이름에 든 숫자는 번호가 아님: 60초 → 9번(구역 01~44)', hit[0] === '9', JSON.stringify(hit));
+  t('S6 화면 오류 없음', errs.length === 0, errs.join(' | '));
+  await ctx.close();
+}
+{
+  const { ctx, page, errs } = await openPage(390);
+  const org = (no) => data.booths.find((b) => !['체험', '미래'].includes(b.zone) && b.no === no).org;
+  const CASES = [
+    ['1', '1', 'school-a', `1번 · ${org(1)} / 스쿨존 01~44`],
+    ['44', '44', 'school-a', `44번 · ${org(44)} / 스쿨존 01~44`],
+    ['45', '45', 'school-b', `45번 · ${org(45)} / 스쿨존 45~84`],
+    ['84', '84', 'school-b', `84번 · ${org(84)} / 스쿨존 45~84`],
+    ['47', '47', 'school-b', `47번 · ${org(47)} / 스쿨존 45~84`],
+    ['미래3', '미래3', 'future', '미래3 · 시험 미래 3 / 미래채움존'],
+    ['체험2', '체험2', 'experience', '체험2 · 시험 체험 2 / 체험존'],
+    ['체험6', '체험6', 'experience', '체험6 · 시험 체험 6 / 체험존 3층'],
+    ['인천신석초', '45', 'school-b', `45번 · ${org(45)} / 스쿨존 45~84`],
+    ['인천고잔', '1', 'school-a', `1번 · ${org(1)} / 스쿨존 01~44`]
+  ];
+  for (const [q, code, want, text] of CASES) {
+    await find(page, q);
+    const btn = await rowMap(page, code);
+    const ok = !!(await btn.evaluate((e) => !!e));
+    if (!ok) { t(`S7 '${q}' → ${code} 결과의 단추`, false, 'no button'); continue; }
+    await btn.click();
+    await phaseIs(page, 'hold');
+    const h = await state(page);
+    const third = text.endsWith('체험존 3층');
+    const parts = third ? EXP_3F : partsOf(want);
+    const boxes = await hlBoxes(page);
+    const fit = near(h.s, Math.min(h.vw / IW, h.vh / IH), 1e-3);
+    const inBox = parts.length === boxes.length && parts.every((p, i) => { const w = p[2] * h.s, hh = p[3] * h.s, gw = parts.length === 1 ? Math.max(0, 22 - w) : 0, gh = parts.length === 1 ? Math.max(0, 22 - hh) : 0; return near(boxes[i].l, h.x + p[0] * h.s - gw / 2) && near(boxes[i].t, h.y + p[1] * h.s - gh / 2) && near(boxes[i].w, w + gw) && near(boxes[i].h, hh + gh); });
+    t(`S7 '${q}' → ${code}: 창이 열리고 전체 지도에서 그 구역을 주황으로 강조`, fit && inBox && (await pressed(page))[0] === want, JSON.stringify([fit, inBox, await pressed(page)]));
+    await page.waitForFunction(SOFT, { timeout: 5000 });
+    await sleep(80);
+    const v = await state(page), m = await miniState(page), [zx, zy, zw, zh] = ZONE_RECTS[want], w = seen(v);
+    t(`S8 '${q}' → ${code}: 확대 후 구역이 화면 안 · 외곽선 유지 · 미니맵 일치 · 부스 안내 표시`, w.l <= zx + 1 && w.r >= zx + zw - 1 && w.t <= zy + 1 && w.b >= zy + zh - 1 && !(await page.$eval('#vmap-hl', (e) => e.hidden)) && miniOk(v, m) && (await tipBooth(page)) === text, JSON.stringify([await tipBooth(page), text]));
+    if (third || code === '체험2') t(`S9 '${q}': 체험존 층별 안내 유지 · ${third ? '3층 안내 자리만 표시(1층 체험 01 · 02 를 가리키지 않음)' : '체험 01 · 02 표시'}`, await page.$eval('.vmap__tip-t', (e) => e.offsetParent !== null) && (await hlName(page)).text === (third ? '체험존 3층' : '체험존'), JSON.stringify(await hlName(page)));
+    await page.click('#vmap-close');
+    await sleep(120);
+    const after = await page.evaluate(() => ({ q: document.getElementById('q').value, focus: document.activeElement.className, open: document.getElementById('vmap').open, lock: document.documentElement.classList.contains('vmap-on') }));
+    t(`S10 '${q}': 닫으면 검색어 그대로 · 단추로 초점 복귀 · 뒤 화면 잠금 풀림`, after.q === q && after.focus === 'row__map' && !after.open && !after.lock, JSON.stringify(after));
+  }
+  // 창 안의 기능은 그대로
+  await find(page, '47');
+  await (await rowMap(page, '47')).click();
+  await page.waitForFunction(SOFT, { timeout: 5000 });
+  await zone(page, 'promo');
+  t('S11 지도 안에서 다른 구역을 고르면 부스 안내가 사라짐', (await tipBooth(page)) === '' && (await pressed(page))[0] === 'promo');
+  await page.click('#vmap-close');
+  await sleep(120);
+  await find(page, '47');
+  await (await rowMap(page, '47')).click();
+  await page.waitForFunction(SOFT, { timeout: 5000 });
+  await tool(page, 'vmap-fit');
+  t('S12 전체 보기로 강조 · 부스 안내가 풀림', (await tipBooth(page)) === '' && (await pressed(page)).length === 0 && (await miniState(page)).hidden);
+  await page.click('#vmap-close');
+  await sleep(120);
+  // 뒤로 가기: 강조 중 · 확대 뒤
+  for (const when of ['hold', 'soft']) {
+    await find(page, '45');
+    const rows0 = await page.$$eval('#list .row', (e) => e.length);
+    await (await rowMap(page, '45')).click();
+    if (when === 'hold') await phaseIs(page, 'hold'); else await page.waitForFunction(SOFT, { timeout: 5000 });
+    await page.goBack({ waitUntil: 'domcontentloaded' }).catch(() => {});
+    await sleep(300);
+    const a = await page.evaluate(() => ({ open: document.getElementById('vmap').open, q: document.getElementById('q').value, rows: document.querySelectorAll('#list .row').length, lock: document.documentElement.classList.contains('vmap-on'), url: location.pathname }));
+    t(`S13 뒤로 가기(${when}): 창만 닫히고 검색어 · 결과 · 주소 그대로`, !a.open && a.q === '45' && a.rows === rows0 && !a.lock, JSON.stringify(a));
+    await sleep(1300);
+    t(`S14 뒤로 간 뒤(${when}) 남은 자동 이동 없음`, !(await page.$eval('#vmap-stage', (e) => e.dataset.phase)));
+  }
+  // 다시 열면 일반 전체 보기
+  await page.evaluate(() => document.getElementById('map-open').click());
+  await sleep(200);
+  t('S15 배치도 단추로 열면 부스 안내 없이 전체 보기', (await tipBooth(page)) === '' && (await pressed(page)).length === 0 && (await miniState(page)).hidden);
+  await page.keyboard.press('Escape');
+  await sleep(120);
+  // 결과 없음 · 지운 뒤 · 한눈에
+  await find(page, '999');
+  const none = await page.evaluate(() => ({ rows: document.querySelectorAll('#list .row').length, btn: document.querySelectorAll('.row__map').length, text: document.getElementById('list').textContent }));
+  t('S16 없는 번호: 기존 안내 그대로 · 단추 없음', none.rows === 0 && none.btn === 0 && none.text.includes('찾는 부스가 없어요'), JSON.stringify(none));
+  await find(page, '없는학교이름');
+  t('S17 없는 이름: 단추 없음', (await page.$$eval('.row__map', (e) => e.length)) === 0);
+  await find(page, '47');
+  const n47 = await page.$$eval('.row__map', (e) => e.length);
+  await find(page, '');
+  await page.evaluate(() => document.getElementById('search-cancel').click());
+  await sleep(250);
+  t('S18 검색을 끝내면 단추가 사라지고 줄은 원래대로', n47 >= 1 && (await page.$$eval('.row__map', (e) => e.length)) === 0, String(n47));
+  await page.evaluate(() => document.querySelector('#list .row').click());
+  await sleep(120);
+  t('S19 줄을 눌러도 창이 열리지 않음(단추만 염)', !(await isOpen(page)));
+  t('S20 화면 오류 없음', errs.length === 0, errs.join(' | '));
+  await ctx.close();
+}
+{
+  // 그림을 받기 전에 고른 경우
+  const { ctx, page, errs } = await openPage(390);
+  net.delay = 1500;
+  net.image = 0;
+  await find(page, '47');
+  await (await rowMap(page, '47')).click();
+  await sleep(250);
+  const a = await page.evaluate(() => ({ open: document.getElementById('vmap').open, note: document.getElementById('vmap-note-t').textContent, hl: document.getElementById('vmap-hl').hidden, btn: document.querySelector('[data-vzone="school-b"]').disabled, img: document.getElementById('vmap-img').hidden }));
+  t('S21 그림 받기 전: 창이 열리고 불러오는 안내 · 강조 아직 없음', a.open && a.note === '배치도를 불러오는 중이에요' && a.hl && a.img, JSON.stringify(a));
+  await phaseIs(page, 'hold');
+  const h = await state(page);
+  t('S22 그림을 받은 뒤 전체 지도에서 강조부터 시작', near(h.s, Math.min(h.vw / IW, h.vh / IH), 1e-3) && aligned(h, 'school-b', await hlBoxes(page)) && (await pressed(page))[0] === 'school-b', JSON.stringify(h));
+  await page.waitForFunction(SOFT, { timeout: 5000 });
+  await sleep(80);
+  const v = await state(page), w = seen(v), [zx, zy, zw, zh] = ZONE_RECTS['school-b'];
+  t('S23 그림을 받은 뒤 고른 구역으로 정확히 이동 · 그림은 한 번만 받음', w.l <= zx + 1 && w.r >= zx + zw - 1 && w.t <= zy + 1 && w.b >= zy + zh - 1 && aligned(v, 'school-b', await hlBoxes(page)) && net.image === 1, JSON.stringify([v.s, net.image]));
+  t('S24 화면 오류 없음', errs.length === 0, errs.join(' | '));
+  net.delay = 0;
+  await ctx.close();
+}
+{
+  // 받는 중에 닫기 · 받기 실패 뒤 다시 불러오기
+  const { ctx, page, errs } = await openPage(390);
+  net.delay = 700;
+  await find(page, '84');
+  await (await rowMap(page, '84')).click();
+  await sleep(150);
+  await page.click('#vmap-close');
+  await sleep(1400);
+  net.delay = 0;
+  t('S25 그림을 받는 중 닫으면 받은 뒤에도 창이 열리지 않고 움직이지 않음', !(await isOpen(page)) && !(await page.$eval('#vmap-stage', (e) => e.dataset.phase)));
+  await page.evaluate(() => document.getElementById('map-open').click());
+  await sleep(300);
+  t('S26 다시 열면 고른 구역 없이 전체 보기', (await pressed(page)).length === 0 && (await tipBooth(page)) === '' && (await page.$eval('#vmap-hl', (e) => e.hidden)));
+  await page.keyboard.press('Escape');
+  await sleep(120);
+  await ctx.close();
+  const b = await openPage(390);
+  net.fail = true;
+  await find(b.page, '미래3');
+  await (await rowMap(b.page, '미래3')).click();
+  await b.page.waitForFunction(() => !document.getElementById('vmap-retry').hidden, { timeout: 8000 });
+  net.fail = false;
+  await b.page.click('#vmap-retry');
+  await b.page.waitForFunction(SOFT, { timeout: 8000 });
+  t('S27 그림을 못 받았다가 다시 불러오면 고른 구역으로 이동', (await pressed(b.page))[0] === 'future' && (await tipBooth(b.page)).startsWith('미래3 · '));
+  t('S28 화면 오류 없음', errs.length === 0 && b.errs.length === 0, errs.concat(b.errs).join(' | '));
+  await b.ctx.close();
+}
+for (const [W, H] of [[320, 568], [390, 844], [768, 1024], [1440, 900]]) {
+  const { ctx, page, errs } = await openPage(W, H);
+  const shot = (n) => (SHOTS ? page.screenshot({ path: join(SHOTS, `${n}-${W}.png`) }) : null);
+  // 가장 긴 학교 이름
+  await find(page, '인하대학교사범대학부속고등학교');
+  const g = await page.evaluate(() => {
+    const R = (e) => JSON.parse(JSON.stringify(e.getBoundingClientRect()));
+    const rows = [...document.querySelectorAll('#list .row')].map((r) => ({ b: R(r.querySelector('.row__map')), body: R(r.querySelector('.row__body')), right: R(r.querySelector('.row__right')), name: R(r.querySelector('.row__name')), org: R(r.querySelector('.row__org')), row: R(r) }));
+    return { rows, ovf: document.documentElement.scrollWidth - document.documentElement.clientWidth, vw: innerWidth };
+  });
+  const hitR = (a, c) => !(a.right <= c.left || c.right <= a.left || a.bottom <= c.top || c.bottom <= a.top);
+  t(`S29 ${W}px 단추 44px 이상 · 줄 안 · 번호 칸 · 상태 칸 · 이름과 겹치지 않음 · 가로 스크롤 없음`, g.rows.length === 1 && g.ovf <= 0 && g.rows.every((r) => r.b.height >= 44 && r.b.width >= 44 && r.b.right <= r.right.left + 0.5 && r.b.bottom <= r.row.bottom + 0.5 && !hitR(r.b, r.right) && !hitR(r.b, r.name) && r.b.right <= g.vw), JSON.stringify(g.rows[0]));
+  await shot('search');
+  const btn = await rowMap(page, '30');
+  await btn.click();
+  await phaseIs(page, 'hold');
+  await sleep(200);
+  await shot('search-hold');
+  await page.waitForFunction(SOFT, { timeout: 5000 });
+  await sleep(420);
+  const m = await page.evaluate(() => {
+    const R = (e) => JSON.parse(JSON.stringify(e.getBoundingClientRect())), q = (s) => document.querySelector(s);
+    const tEl = document.getElementById('vmap-tip-b');
+    return { tip: R(q('#vmap-tip')), tools: R(q('.vmap__tools')), mini: R(q('#vmap-mini')), stage: R(q('#vmap-stage')), cut: tEl.scrollWidth > tEl.clientWidth + 0.5, close: R(q('#vmap-close')) };
+  });
+  t(`S30 ${W}px 부스 안내가 그림 칸 안 · 잘림 없음 · 조작 단추 · 미니맵 · 닫기와 겹치지 않음`, m.tip.left >= m.stage.left && m.tip.right <= m.stage.right && m.tip.bottom <= m.stage.bottom + 0.5 && !m.cut && !hitR(m.tip, m.tools) && !hitR(m.tip, m.mini) && !hitR(m.tip, m.close), JSON.stringify(m.tip));
+  await shot('search-end');
+  await page.click('#vmap-close');
+  await sleep(120);
+  // 체험존 3층 안내 + 번호 안내가 함께 있을 때
+  await find(page, '체험6');
+  await (await rowMap(page, '체험6')).click();
+  await phaseIs(page, 'hold');
+  await sleep(200);
+  await shot('search-exp-hold');
+  await page.waitForFunction(SOFT, { timeout: 5000 });
+  await sleep(420);
+  const c = await page.evaluate(() => { const R = (e) => JSON.parse(JSON.stringify(e.getBoundingClientRect())), q = (s) => document.querySelector(s); return { tip: R(q('#vmap-tip')), tools: R(q('.vmap__tools')), mini: R(q('#vmap-mini')), stage: R(q('#vmap-stage')) }; });
+  const v = await state(page), [px, py, pw, ph] = EXP_3F[0], top = c.tip.top - c.stage.top;
+  t(`S31 ${W}px 체험존 안내가 조작 단추 · 미니맵과 겹치지 않고 그림 칸 절반 아래만 차지`, !hitR(c.tip, c.tools) && !hitR(c.tip, c.mini) && c.tip.height <= c.stage.height * 0.5, JSON.stringify([c.tip.height, c.stage.height]));
+  t(`S32 ${W}px 체험존 안내가 3층 안내 자리를 가리지 않음`, v.y + (py + ph) * v.s <= top + 1, JSON.stringify([v.y + (py + ph) * v.s, top]));
+  await shot('search-exp-end');
+  t(`S33 ${W}px 화면 오류 없음`, errs.length === 0, errs.join(' | '));
   await ctx.close();
 }
 
