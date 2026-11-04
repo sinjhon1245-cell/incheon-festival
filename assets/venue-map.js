@@ -11,9 +11,10 @@
    (경량 라이브러리 @panzoom/panzoom 의 contain 은 'inside' · 'outside' 뿐이라 이 동작을 만들 수 없어
     포인터 이벤트로 직접 씁니다. 의존성은 없습니다.)
 
-   구역 이동: 전체 지도로 물러나(out) → 고른 구역을 주황으로 짧게 보여 주고(hold) → 그 구역으로 확대합니다(in).
+   구역 이동: 전체 지도로 물러나(out) → 고른 구역을 주황으로 보여 주고(hold) → 그 구역으로 천천히 확대합니다(in).
    그림 · 강조 · 미니맵을 같은 프레임에 그리려고 CSS 전환 대신 requestAnimationFrame 으로 움직입니다.
-   사용자가 직접 조작하면 이 흐름을 바로 끊습니다.
+   사용자가 직접 조작하면 자동 이동만 끊습니다. 고른 구역과 외곽선은 다른 구역 · 전체 보기 · 닫기까지 남습니다.
+   미니맵 사각형은 고른 구역과 상관없이 언제나 실제로 보이는 자리입니다.
 
    window.VenueMap: open(옵션) · close(옵션) · isOpen() · onChange(열림 여부) — 옵션 silent 는 onChange 를 부르지 않습니다.
    =================================================================== */
@@ -52,10 +53,10 @@
   // 미니맵은 그림 위쪽의 배치도만 잘라 씁니다(아래 범례 제외). 좌표는 그림과 같습니다.
   var MINI = { x: 0, y: 64, w: 1600, h: 508 };
   var MINI_SEEN = 24;     // 배치도가 이만큼(원본 px)도 안 보이면 자리 대신 '부스 목록 보는 중' 으로 둡니다
-  var HOLD_MS = 480;      // 전체 지도에서 구역을 보여 주는 시간
-  var OUT_MS = 240;       // 전체 지도로 물러나기
-  var IN_MS = 300;        // 구역으로 확대
-  var PAN_MS = 220;       // 미니맵 · 전체 보기로 옮기기
+  var OUT_MS = 300;       // 전체 지도로 물러나기
+  var HOLD_MS = 1000;     // 전체 지도에서 구역을 보여 주는 시간
+  var IN_MS = 650;        // 구역으로 확대
+  var PAN_MS = 300;       // 미니맵으로 옮기기
   var MAX_ZOOM = 6;       // 전체 보기의 몇 배까지
   var STEP = 1.6;         // + · − 한 번
   var KEY_PAN = 80;       // 방향키 한 번(px)
@@ -84,21 +85,28 @@
   var v = { W: 0, H: 0, vw: 0, vh: 0, fit: 1, s: 1, x: 0, y: 0 };
   var loaded = false, loading = false, open_ = false, raf = 0, hintTimer = 0, hintDone = false;
   var pts = {}, last = null;
-  var zone = '', phase = '', tween = 0, holdTimer = 0, hlBoxes = [];
+  var zone = '', moved = false, phase = '', tween = 0, holdTimer = 0, hlBoxes = [], nameW = 0, nameH = 0;
 
   /* ── 보기 계산 ─────────────────────────────────────────────── */
   function atFit() { return Math.abs(v.s - v.fit) < v.fit * 1e-3; }
-  function paint() {
-    raf = 0;
+  // 움직이는 동안 프레임마다 그리는 것은 이것뿐입니다(단추 상태는 끝날 때 한 번).
+  function paintView() {
     img.style.transform = 'translate3d(' + v.x + 'px,' + v.y + 'px,0) scale(' + v.s + ')';
+    paintHl();
+    paintMini();
+  }
+  function paintControls() {
     var top = v.fit * MAX_ZOOM;
     btnIn.disabled = !loaded || v.s >= top - 1e-6;
     btnOut.disabled = !loaded || v.s <= v.fit + 1e-6;
     btnFit.disabled = !loaded;
     btnFit.setAttribute('aria-pressed', String(loaded && atFit() && !zone));
     zoneBtns.forEach(function (b) { b.disabled = !loaded; });
-    paintHl();
-    paintMini();
+  }
+  function paint() {
+    raf = 0;
+    paintView();
+    paintControls();
   }
   function schedule() { if (!raf) raf = requestAnimationFrame(paint); }
   function measure() {
@@ -160,10 +168,11 @@
         if (done) done();
         return;
       }
-      var e = t < 0.5 ? 2 * t * t : 1 - 2 * (1 - t) * (1 - t);
+      // 천천히 시작해 천천히 멈춥니다(ease-in-out cubic).
+      var e = t < 0.5 ? 4 * t * t * t : 1 - 4 * (1 - t) * (1 - t) * (1 - t);
       if (scaled) { var k = Math.pow(r, e); place(s0 * k, fx + (x0 - fx) * k, fy + (y0 - fy) * k); }
       else place(s0, x0 + (to.x - x0) * e, y0 + (to.y - y0) * e);
-      paint();
+      paintView();
       tween = requestAnimationFrame(tick);
     }
     tween = requestAnimationFrame(tick);
@@ -193,6 +202,8 @@
     hlName.textContent = dlg.querySelector('[data-vzone="' + id + '"]').textContent;
     hl.classList.remove('is-soft');
     hl.hidden = false;
+    nameW = hlName.offsetWidth;   // 프레임마다 재면 그때마다 레이아웃을 강제하므로 여기서 한 번만 잽니다
+    nameH = hlName.offsetHeight;
   }
   // 테두리는 구역 바깥에 그려 부스 번호를 가리지 않습니다(CSS: 테두리 두께만큼 왼쪽 위로 뺌).
   function paintHl() {
@@ -210,13 +221,14 @@
       st.height = h + 'px';
       L = Math.min(L, l); T = Math.min(T, t); R = Math.max(R, l + w); B = Math.max(B, t + h);
     });
-    var nw = hlName.offsetWidth, nh = hlName.offsetHeight, tag = ZONE_TAG[zone];
-    var nx = tag ? v.x + tag[0] * v.s : L, ny = tag ? v.y + tag[1] * v.s - nh / 2 : T - nh - 10;
+    var tag = ZONE_TAG[zone];
+    var nx = tag ? v.x + tag[0] * v.s : L, ny = tag ? v.y + tag[1] * v.s - nameH / 2 : T - nameH - 10;
     if (ny < 4) ny = B + 10;
-    hlName.style.transform = 'translate(' + Math.max(6, Math.min(v.vw - nw - 6, nx)) + 'px,' + ny + 'px)';
+    hlName.style.transform = 'translate(' + Math.max(6, Math.min(v.vw - nameW - 6, nx)) + 'px,' + ny + 'px)';
   }
   function clearZone() {
     zone = '';
+    moved = false;
     markZone('');
     hl.hidden = true;
     hl.classList.remove('is-soft');
@@ -238,12 +250,13 @@
     setPhase('hold');
     holdTimer = setTimeout(zoomIn, HOLD_MS);
   }
-  // 흐름 중에 다른 구역을 고르면 움직임을 더하지 않고 목표만 바꿉니다.
+  // 흐름 중에 다른 구역을 고르면 앞선 움직임을 끊고 목표를 바꿉니다. 직접 옮긴 뒤 같은 구역을 다시 누르면 다시 찾아갑니다.
   function goZone(id) {
-    if (!ZONES[id] || !loaded || id === zone) return;
+    if (!ZONES[id] || !loaded || (id === zone && !moved)) return;
     hideHint();
     measure();
     zone = id;
+    moved = false;
     markZone(id);
     showHl(id);
     tip.hidden = id !== 'experience';
@@ -255,6 +268,7 @@
   }
   function goFit() {
     touched();
+    clearZone();
     tip.hidden = true;
     measure();
     setPhase('pan');
@@ -311,7 +325,8 @@
     miniMap.style.backgroundImage = 'url("' + MAP.src + '")';
     miniMap.style.backgroundPosition = '0 ' + MINI.y / (v.H - MINI.h) * 100 + '%';
     showNote('', false);
-    if (open_) { fitView(); showHint(); }
+    // 다음 프레임을 기다리지 않고 바로 그립니다. 프레임이 늦어도 단추가 꺼진 채로 첫 탭을 놓치지 않습니다.
+    if (open_) { fitView(); paint(); showHint(); }
   });
   img.addEventListener('error', function () {
     if (!img.getAttribute('src')) return;
@@ -331,11 +346,12 @@
     hint.hidden = true;
     hintDone = true;
   }
-  // 사용자가 직접 움직이면 자동 이동을 끊고, 고른 구역 표시를 거둡니다. 미니맵은 실제로 보이는 자리를 계속 보여 줍니다.
+  // 사용자가 직접 움직이면 자동 이동만 끊습니다. 고른 구역은 남기고, 외곽선만 옅게 둡니다.
   function touched() {
     stopAuto();
     hideHint();
-    clearZone();
+    moved = true;
+    if (zone) hl.classList.add('is-soft');
     schedule();
   }
   function showHint() {
@@ -429,10 +445,10 @@
     if (e.key === '-' || e.key === '_') { e.preventDefault(); zoomCentre(1 / STEP); return; }
     if (e.key === '0') { e.preventDefault(); goFit(); }
   });
-  // 화면 크기가 바뀌면 고른 구역은 다시 맞추고, 아니면 보던 자리를 가운데에 둔 채 다시 잽니다(전체 보기였으면 다시 전체 보기).
+  // 화면 크기가 바뀌면 고른 구역을 다시 맞춥니다. 직접 옮긴 뒤라면 보던 자리를 가운데에 둔 채 다시 잽니다(전체 보기였으면 다시 전체 보기).
   function onResize() {
     if (!open_ || !loaded) return;
-    var wasFit = atFit(), id = zone;
+    var wasFit = atFit(), id = moved ? '' : zone;
     var cx = (v.vw / 2 - v.x) / v.s, cy = (v.vh / 2 - v.y) / v.s;
     stopAuto();
     measure();
@@ -468,6 +484,7 @@
     last = null;
     stage.classList.remove('is-grab');
     touched();
+    clearZone();
     tip.hidden = true;
     if (dlg.close) dlg.close(); else dlg.removeAttribute('open');
     document.documentElement.classList.remove('vmap-on');

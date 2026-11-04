@@ -15,6 +15,7 @@
      H  강조    주황 색 · 두께 · 흰 외곽선 · 자기 부스를 덮고 이웃 구역 부스를 덮지 않음 · 사이트 보라 유지
      M  미니맵  배치도만 잘라 씀 · 끌기 · 확대 · 축소에 따라 사각형 일치 · 눌러서 이동 · 전체 보기 숨김 · 범례 처리
      Q  순서    프레임마다 배율을 기록해 튀는 횟수를 셈 · 연속 선택 · 취소 · 닫기 · 화면 돌리기 · 움직임 줄이기
+     U  속도    폭마다 300 · 1000 · 650ms · 천천히 시작 · 튀지 않음 · 느린 기기 프레임 · 외곽선 유지와 해제
      C  체험존  번호 안내 · 앱 번호와 지도 장소 대응 · 겹침 · 사라지는 때
      E  오류    그림을 못 받을 때 안내 · 다시 불러오기
      K  유지    닫은 뒤 검색어 · 고른 탭 · 스크롤 · 뒤로 가기로 닫기 · 줄을 눌러도 창이 열리지 않음
@@ -195,6 +196,17 @@ for (const W of [320, 360, 375, 390, 414, 768, 1024, 1440]) {
   t(`B4c ${W}px 실제 행사명 · 장소가 잘리지 않고 자동 갱신과 겹치지 않음 · 두 줄 이하`, ev.text === '2026 인천 AI미래채움 교육페스티벌 · 인천 상상플랫폼' && !ev.cutX && !ev.cutY && ev.right <= ev.syncLeft && ev.h <= 41, JSON.stringify(ev));
   t(`B5 ${W}px 화면 오류 없음`, errs.length === 0, errs.join(' | '));
   if (SHOTS && [320, 390, 1440].includes(W)) await page.screenshot({ path: join(SHOTS, `main-${W}.png`) });
+  await ctx.close();
+}
+
+/* ── L : 그림을 받은 순간 ───────────────────────────────────────── */
+{
+  const { ctx, page, errs } = await openPage(390);
+  // 그림의 load 처리 바로 뒤(같은 작업 안)에서 단추 상태를 읽습니다. 다음 프레임을 기다리면 첫 탭을 놓칩니다.
+  await page.evaluate(() => { const i = document.getElementById('vmap-img'); i.addEventListener('load', () => queueMicrotask(() => { window.__ready = [...document.querySelectorAll('.vmap__zone')].every((b) => !b.disabled); })); });
+  await openMap(page);
+  t('L1 그림을 받은 바로 그 순간 구역 단추가 켜짐', await page.evaluate(() => window.__ready === true), String(await page.evaluate(() => window.__ready)));
+  t('L2 화면 오류 없음', errs.length === 0, errs.join(' | '));
   await ctx.close();
 }
 
@@ -463,7 +475,7 @@ for (const [W, H] of [[320, 568], [360, 740], [375, 812], [390, 844], [414, 896]
   await openMap(page);
   await pick(page, 'future');
   await phaseIs(page, 'hold');
-  await sleep(260);
+  await sleep(420);
   const s1 = await page.evaluate(() => {
     const b = getComputedStyle(document.querySelector('.vmap__hl-box')), n = getComputedStyle(document.getElementById('vmap-hl-t'));
     return { bc: b.borderTopColor, bw: b.borderTopWidth, bg: b.backgroundColor, sh: b.boxShadow, nb: n.backgroundColor, nc: n.color, band: getComputedStyle(document.querySelector('.band')).backgroundColor, top: getComputedStyle(document.querySelector('.vmap__top') || document.getElementById('vmap')).backgroundColor };
@@ -473,9 +485,11 @@ for (const [W, H] of [[320, 568], [360, 740], [375, 812], [390, 844], [414, 896]
   t('H4 구역 이름표 글자 대비 4.5:1 이상', ratio(rgb(s1.nc), rgb(s1.nb)) >= 4.5, String(ratio(rgb(s1.nc), rgb(s1.nb))));
   t('H5 사이트 강조색은 보라 그대로', s1.band === 'rgb(91, 69, 224)', s1.band);
   await page.waitForFunction(() => document.getElementById('vmap-hl').classList.contains('is-soft'), { timeout: 5000 });
-  await sleep(260);
-  const s2 = await page.evaluate(() => { const b = getComputedStyle(document.querySelector('.vmap__hl-box')); return { bg: b.backgroundColor, sh: b.boxShadow, op: getComputedStyle(document.getElementById('vmap-hl-t')).opacity, mv: getComputedStyle(document.getElementById('vmap-mini-view')).borderTopColor }; });
+  await sleep(420);
+  const s2 = await page.evaluate(() => { const b = getComputedStyle(document.querySelector('.vmap__hl-box')); return { bc: b.borderTopColor, bw: b.borderTopWidth, bg: b.backgroundColor, sh: b.boxShadow, op: getComputedStyle(document.getElementById('vmap-hl-t')).opacity, mv: getComputedStyle(document.getElementById('vmap-mini-view')).borderTopColor }; });
   t('H6 확대 뒤에는 강조가 옅어짐(안쪽 비움 · 이름표 숨김)', rgb(s2.bg)[3] === 0 && s2.sh === 'none' && s2.op === '0', JSON.stringify(s2));
+  const edge = rgb(s2.bc);
+  t('H6b 확대 뒤에도 주황 외곽선 유지(3px · 투명도 0.4~0.7)', edge[0] === 255 && edge[1] === 121 && edge[2] === 0 && edge[3] >= 0.4 && edge[3] <= 0.7 && s2.bw === '3px', JSON.stringify(s2));
   t('H7 미니맵 사각형은 주황', s2.mv === 'rgb(255, 121, 0)', s2.mv);
   const text = await page.$eval('#vmap', (d) => d.textContent);
   t('H8 GPS 로 오해할 말을 쓰지 않음', !/내 위치|현재 위치/.test(text));
@@ -506,7 +520,7 @@ for (const W of [390, 1440]) {
   await sleep(120);
   const b = await state(page), mb = await miniState(page);
   t(`M2 ${W}px 끌면 사각형이 그만큼 움직이고 실제 보이는 자리와 일치`, b.x < a.x - 40 && mb.view.l > ma.view.l && miniOk(b, mb), JSON.stringify([a.x, b.x, ma.view.l, mb.view.l]));
-  t(`M3 ${W}px 직접 움직이면 고른 구역 표시가 풀리고 사각형은 남음`, (await pressed(page)).length === 0 && await page.$eval('#vmap-hl', (e) => e.hidden) && !mb.hidden);
+  t(`M3 ${W}px 직접 움직여도 고른 구역 · 외곽선이 남고 그림과 일치 · 사각형은 실제 자리`, (await pressed(page))[0] === 'school-b' && !(await page.$eval('#vmap-hl', (e) => e.hidden)) && aligned(b, 'school-b', await hlBoxes(page)) && !mb.hidden);
   // 확대 · 축소
   await tool(page, 'vmap-in');
   const c1 = await state(page), m1 = await miniState(page);
@@ -553,23 +567,20 @@ for (const W of [390, 1440]) {
   const { ctx, page, errs } = await openPage(390);
   await openMap(page);
   const v0 = await state(page);
-  const a = await trace(page, [['[data-vzone="future"]', 0]], 1000);
+  const a = await trace(page, [['[data-vzone="future"]', 0]], 1900);
   const hold = a.filter((f) => f.p === 'hold'), inn = a.filter((f) => f.p === 'in');
-  t('Q1 전체 지도에서 먼저 강조(0.3초 이상)한 뒤 한 번에 확대', hold.length > 0 && hold.every((f) => near(f.s, v0.s, 1e-4)) && hold.at(-1).t - hold[0].t >= 300 && inn.length > 3 && turns(a) === 0, JSON.stringify([hold.length, turns(a)]));
-  const inMs = inn.at(-1).t - inn[0].t;
-  t('Q2 확대 움직임 200~350ms', inMs >= 200 && inMs <= 350, String(inMs));
-  t('Q3 처음 고른 뒤 끝까지 1초 안', a.find((f) => f.p === 'in') && inn.at(-1).t <= 1000, String(inn.at(-1).t));
+  t('Q1 전체 지도에서 먼저 강조한 뒤 한 번에 확대', hold.length > 0 && hold.every((f) => near(f.s, v0.s, 1e-4)) && inn.length > 3 && turns(a) === 0, JSON.stringify([hold.length, turns(a)]));
   // 확대한 상태에서 다른 구역
-  const b = await trace(page, [['[data-vzone="school-a"]', 0]], 1300);
+  const b = await trace(page, [['[data-vzone="school-a"]', 0]], 2200);
   const out = b.filter((f) => f.p === 'out'), low = Math.min(...b.map((f) => f.s));
   t('Q4 확대 상태에서 고르면 전체 지도로 물러났다 한 번만 다시 확대', out.length > 3 && near(low, v0.s, 1e-3) && turns(b) === 1, JSON.stringify([out.length, low, turns(b)]));
   t('Q5 끝난 뒤 고른 구역 표시 · 옅은 강조', (await pressed(page))[0] === 'school-a' && await page.$eval('#vmap-hl', (e) => e.classList.contains('is-soft')));
   // 연속으로 고르기(확대 상태)
-  const c = await trace(page, [['[data-vzone="promo"]', 70], ['[data-vzone="bigtech"]', 70], ['[data-vzone="future"]', 70], ['[data-vzone="list"]', 0]], 1400);
+  const c = await trace(page, [['[data-vzone="promo"]', 70], ['[data-vzone="bigtech"]', 70], ['[data-vzone="future"]', 70], ['[data-vzone="list"]', 0]], 2300);
   t('Q6 확대 상태에서 연달아 네 번 골라도 한 번만 물러났다 확대 · 마지막 구역으로', turns(c) === 1 && (await pressed(page))[0] === 'list' && (await hlName(page)).text === '부스 목록', JSON.stringify([turns(c), await pressed(page)]));
   await tool(page, 'vmap-fit');
   // 연속으로 고르기(전체 보기)
-  const d = await trace(page, [['[data-vzone="promo"]', 110], ['[data-vzone="bigtech"]', 110], ['[data-vzone="experience"]', 0]], 1100);
+  const d = await trace(page, [['[data-vzone="promo"]', 110], ['[data-vzone="bigtech"]', 110], ['[data-vzone="experience"]', 0]], 2000);
   t('Q7 전체 보기에서 연달아 골라도 그림이 튀지 않고 마지막 구역으로 한 번만 확대', turns(d) === 0 && (await pressed(page))[0] === 'experience', JSON.stringify([turns(d), await pressed(page)]));
   // 같은 구역을 또 눌러도 다시 움직이지 않음
   const e = await trace(page, [['[data-vzone="experience"]', 0]], 500);
@@ -583,9 +594,9 @@ for (const W of [390, 1440]) {
   const f0 = await state(page);
   await touch('touchStart', [{ x: f0.left + 60, y: f0.top + 200, id: 1 }]);
   await touch('touchEnd', []);
-  await sleep(900);
+  await sleep(1400);
   const f1 = await state(page);
-  t('Q9 강조 중 지도를 만지면 지연 동작이 취소되고 그대로 있음', near(f1.s, f0.s, 1e-4) && near(f1.x, f0.x) && (await pressed(page)).length === 0 && await page.$eval('#vmap-hl', (x) => x.hidden), JSON.stringify([f0.s, f1.s]));
+  t('Q9 강조 중 지도를 만지면 자동 이동만 멈추고 고른 구역 · 외곽선은 남음', near(f1.s, f0.s, 1e-4) && near(f1.x, f0.x) && (await pressed(page))[0] === 'future' && !(await page.$eval('#vmap-hl', (x) => x.hidden)) && !(await page.$eval('#vmap-stage', (x) => x.dataset.phase)), JSON.stringify([f0.s, f1.s]));
   // 확대 중 + 단추
   await pick(page, 'promo');
   await phaseIs(page, 'in');
@@ -593,7 +604,7 @@ for (const W of [390, 1440]) {
   await page.evaluate(() => document.getElementById('vmap-in').click());
   await sleep(60);
   const g0 = await state(page);
-  await sleep(500);
+  await sleep(800);
   const g1 = await state(page);
   t('Q10 확대 중 + 단추를 누르면 자동 이동이 끊기고 튀지 않음', near(g1.s, g0.s, 1e-4) && near(g1.x, g0.x) && !(await page.$eval('#vmap-stage', (x) => x.dataset.phase)), JSON.stringify([g0.s, g1.s]));
   await tool(page, 'vmap-fit');
@@ -601,7 +612,7 @@ for (const W of [390, 1440]) {
   await pick(page, 'bigtech');
   await phaseIs(page, 'hold');
   await page.click('#vmap-close');
-  await sleep(800);
+  await sleep(1300);
   await openMap(page);
   await sleep(500);
   const h = await state(page);
@@ -610,8 +621,8 @@ for (const W of [390, 1440]) {
   await pick(page, 'bigtech');
   await phaseIs(page, 'hold');
   await page.evaluate(() => document.getElementById('vmap-fit').click());
-  await sleep(800);
-  t('Q12 강조 중 전체 보기를 누르면 확대하지 않음', near((await state(page)).s, v0.s, 1e-4) && (await pressed(page)).length === 0);
+  await sleep(1300);
+  t('Q12 강조 중 전체 보기를 누르면 확대하지 않고 강조 해제', near((await state(page)).s, v0.s, 1e-4) && (await pressed(page)).length === 0 && await page.$eval('#vmap-hl', (x) => x.hidden));
   // 화면 돌리기
   await zone(page, 'future');
   await page.setViewport({ width: 844, height: 390, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
@@ -630,11 +641,127 @@ for (const W of [390, 1440]) {
   const { ctx, page, errs } = await openPage(390);
   await page.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'reduce' }]);
   await openMap(page);
-  const a = await trace(page, [['[data-vzone="future"]', 0]], 800);
+  const a = await trace(page, [['[data-vzone="future"]', 0]], 1400);
   t('Q16 움직임 줄이기: 강조는 보여 주고 확대는 한 번에 바뀜(중간 프레임 없음)', new Set(a.map((f) => f.s.toFixed(5))).size === 2 && a.some((f) => f.p === 'hold'), String(new Set(a.map((f) => f.s.toFixed(5))).size));
-  const b = await trace(page, [['[data-vzone="promo"]', 0]], 800);
+  const b = await trace(page, [['[data-vzone="promo"]', 0]], 1400);
   t('Q17 움직임 줄이기: 다른 구역도 중간 프레임 없음', new Set(b.map((f) => f.s.toFixed(5))).size <= 3 && (await pressed(page))[0] === 'promo', String(new Set(b.map((f) => f.s.toFixed(5))).size));
   t('Q18 화면 오류 없음', errs.length === 0, errs.join(' | '));
+  await ctx.close();
+}
+
+/* ── U : 이동 속도 · 외곽선 유지 ────────────────────────────────── */
+const span = (tr, p) => { const f = tr.filter((x) => x.p === p); return f.length ? f.at(-1).t - f[0].t : 0; };
+for (const [W, H] of [[320, 568], [390, 844], [1440, 900]]) {
+  const { ctx, page, errs } = await openPage(W, H);
+  await openMap(page);
+  // 시험 기계가 잠깐 멈춘 프레임(120ms 넘게)이 기록되면 그 판만 다시 잽니다. 세 번 모두 그러면 그대로 실패합니다.
+  let a = [];
+  for (let i = 0; i < 3; i++) {
+    a = await trace(page, [['[data-vzone="future"]', 0]], 1950);
+    const g = a.filter((x) => x.p === 'in'), worst = Math.max(...g.slice(1).map((x, n) => x.t - g[n].t));
+    if (worst <= 120) break;
+    console.log(`참고  ${W}px 확대 중 ${worst.toFixed(0)}ms 프레임 지연 기록 — ${i < 2 ? '다시 잼' : '세 번째도 지연'}`);
+    if (i < 2) await tool(page, 'vmap-fit');
+  }
+  const hold = span(a, 'hold'), inn = span(a, 'in');
+  t(`U1 ${W}px 전체 지도에서 약 1000ms 강조 · 약 650ms 확대`, hold >= 930 && hold <= 1100 && inn >= 590 && inn <= 720, JSON.stringify([hold, inn]));
+  const b = await trace(page, [['[data-vzone="school-a"]', 0]], 2250);
+  const out = span(b, 'out');
+  t(`U2 ${W}px 확대 상태에서 고르면 약 300ms 물러남`, out >= 250 && out <= 370, String(out));
+  // 천천히 시작해 천천히 멈춤 · 프레임 사이가 튀지 않음
+  const f = a.filter((x) => x.p === 'in'), lo = f[0].s, hi = f.at(-1).s, part = (x) => Math.log(x.s / lo) / Math.log(hi / lo);
+  const at = (r) => f.find((x) => x.t >= f[0].t + inn * r);
+  t(`U3 ${W}px 시작 15% 동안 움직임 5% 미만 · 절반에서 절반쯤 · 끝 15% 동안 움직임 5% 미만`, part(at(0.15)) < 0.05 && part(at(0.5)) > 0.35 && part(at(0.5)) < 0.65 && 1 - part(at(0.85)) < 0.05, JSON.stringify([part(at(0.15)), part(at(0.5)), part(at(0.85))]));
+  const jump = Math.max(...f.slice(1).map((x, i) => x.s / f[i].s));
+  t(`U4 ${W}px 프레임 사이 배율 변화가 작음(갑작스러운 이동 없음)`, jump < 1.3, String(jump));
+  if (SHOTS) {
+    await tool(page, 'vmap-fit');
+    await pick(page, 'experience');
+    await phaseIs(page, 'hold');
+    await page.screenshot({ path: join(SHOTS, `flow1-hold-${W}.png`) });
+    await phaseIs(page, 'in');
+    await sleep(325);
+    await page.screenshot({ path: join(SHOTS, `flow2-mid-${W}.png`) });
+    await page.waitForFunction(() => document.getElementById('vmap-hl').classList.contains('is-soft'), { timeout: 5000 });
+    await sleep(420);
+    await page.screenshot({ path: join(SHOTS, `flow3-end-${W}.png`) });
+  }
+  t(`U5 ${W}px 화면 오류 없음`, errs.length === 0, errs.join(' | '));
+  await ctx.close();
+}
+{
+  // 느린 기기: CPU 4배 느리게 해도 프레임이 이어지고 시간이 늘어나지 않음
+  const { ctx, page, errs } = await openPage(390);
+  await openMap(page);
+  await page.emulateCPUThrottling(4);
+  const a = await trace(page, [['[data-vzone="school-b"]', 0]], 1950);
+  await page.emulateCPUThrottling(null);
+  const f = a.filter((x) => x.p === 'in'), gaps = f.slice(1).map((x, i) => x.t - f[i].t).sort((p, q) => p - q);
+  const mid = gaps[gaps.length >> 1], worst = gaps.at(-1), inn = span(a, 'in');
+  console.log(`참고  CPU 4배 느림: 프레임 ${f.length}개 · 가운데 간격 ${mid.toFixed(1)}ms · 가장 긴 간격 ${worst.toFixed(1)}ms · 확대 ${inn.toFixed(0)}ms`);
+  t('U6 느린 기기에서도 프레임이 이어지고(가운데 간격 34ms 이하) 확대 시간은 그대로', mid <= 34 && inn >= 590 && inn <= 760, JSON.stringify([mid, worst, inn]));
+  t('U7 화면 오류 없음', errs.length === 0, errs.join(' | '));
+  await ctx.close();
+}
+{
+  // 외곽선 유지 · 해제
+  const { ctx, page, errs } = await openPage(390);
+  await openMap(page);
+  const edge = () => page.evaluate(() => { const h = document.getElementById('vmap-hl'), b = document.querySelector('.vmap__hl-box'); return { on: !h.hidden, soft: h.classList.contains('is-soft'), color: b ? getComputedStyle(b).borderTopColor : '' }; });
+  await pick(page, 'future');
+  await phaseIs(page, 'hold');
+  await sleep(420);
+  const e1 = await edge();
+  t('U8 위치를 보여 줄 때는 선명(불투명 주황)', e1.on && !e1.soft && e1.color === 'rgb(255, 121, 0)', JSON.stringify(e1));
+  await page.waitForFunction(() => document.getElementById('vmap-hl').classList.contains('is-soft'), { timeout: 5000 });
+  await sleep(420);
+  const e2 = await edge(), a = await state(page), keep = await hlBoxes(page);
+  t('U9 확대가 끝나도 외곽선 유지 · 옅어짐 · 그림과 일치', e2.on && e2.soft && rgb(e2.color)[3] >= 0.4 && rgb(e2.color)[3] <= 0.7 && aligned(a, 'future', keep), JSON.stringify(e2));
+  await sleep(1500);
+  const e3 = await edge();
+  t('U10 시간이 지나도 외곽선이 사라지지 않음', e3.on && e3.soft, JSON.stringify(e3));
+  // 끌기 · 두 손가락 · 단추로 움직여도 유지되고 그림을 따라감
+  const cdp = await page.createCDPSession();
+  const touch = (type, pts) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: pts });
+  const sx = a.left + 190, sy = a.top + 300;
+  await touch('touchStart', [{ x: sx, y: sy, id: 1 }]);
+  for (const d of [20, 40, 60]) { await touch('touchMove', [{ x: sx - d, y: sy, id: 1 }]); await sleep(20); }
+  await touch('touchEnd', []);
+  await sleep(120);
+  const b1 = await state(page);
+  t('U11 끌어도 고른 구역 유지 · 외곽선이 그림을 따라감 · 미니맵은 실제 자리', (await pressed(page))[0] === 'future' && aligned(b1, 'future', await hlBoxes(page)) && miniOk(b1, await miniState(page)) && !near(b1.x, a.x, 5), JSON.stringify([a.x, b1.x]));
+  await tool(page, 'vmap-in');
+  const b2 = await state(page);
+  t('U12 확대 단추를 눌러도 외곽선이 그림과 일치 · 미니맵은 실제 자리', (await pressed(page))[0] === 'future' && aligned(b2, 'future', await hlBoxes(page)) && miniOk(b2, await miniState(page)), JSON.stringify(b2.s));
+  // 미니맵이 외곽선 위에 있어 가려지지 않음
+  const order = await page.evaluate(() => { const st = document.getElementById('vmap-stage'), k = [...st.children]; return { hl: k.indexOf(document.getElementById('vmap-hl')), mini: k.indexOf(document.getElementById('vmap-mini')), tools: k.indexOf(document.querySelector('.vmap__tools')) }; });
+  t('U13 외곽선은 미니맵 · 조작 단추 아래에 그려짐', order.hl < order.mini && order.hl < order.tools, JSON.stringify(order));
+  // 직접 옮긴 뒤 같은 구역을 다시 누르면 다시 찾아감
+  await zone(page, 'future');
+  const z = await state(page), zb = await hlBoxes(page);
+  t('U14 직접 옮긴 뒤 같은 구역을 다시 누르면 그 구역으로 돌아감', near(z.s, a.s, 1e-3) && near(z.x, a.x) && aligned(z, 'future', zb), JSON.stringify([z.s, a.s]));
+  // 다른 구역 · 전체 보기 · 닫기에서 해제
+  await zone(page, 'promo');
+  t('U15 다른 구역을 고르면 앞 구역 강조가 풀리고 새 구역만 표시', (await pressed(page))[0] === 'promo' && (await pressed(page)).length === 1 && (await hlBoxes(page)).length === 1, JSON.stringify(await hlBoxes(page)));
+  await tool(page, 'vmap-fit');
+  t('U16 전체 보기에서 강조 해제', !(await edge()).on && (await pressed(page)).length === 0);
+  await zone(page, 'bigtech');
+  await page.click('#vmap-close');
+  await sleep(120);
+  await openMap(page);
+  t('U17 닫았다 열면 강조 해제', !(await edge()).on && (await pressed(page)).length === 0);
+  // 직접 옮긴 뒤 화면을 돌려도 고른 구역으로 튀지 않음
+  await zone(page, 'future');
+  await tool(page, 'vmap-in');
+  await page.focus('#vmap-stage');
+  for (let i = 0; i < 5; i++) await page.keyboard.press('ArrowLeft');
+  await sleep(120);
+  const r0 = seen(await state(page)), rc = (r0.l + r0.r) / 2;
+  await page.setViewport({ width: 844, height: 390, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  await sleep(350);
+  const r1 = await state(page), w1 = seen(r1);
+  t('U18 직접 옮긴 뒤 화면을 돌리면 보던 자리를 지킴(가장자리 제한 안에서) · 고른 구역은 유지', near((w1.l + w1.r) / 2, Math.max(rc, (w1.r - w1.l) / 2), 3) && (await pressed(page))[0] === 'future' && aligned(r1, 'future', await hlBoxes(page)), JSON.stringify([rc, (w1.l + w1.r) / 2]));
+  t('U19 화면 오류 없음', errs.length === 0, errs.join(' | '));
   await ctx.close();
 }
 
@@ -673,7 +800,7 @@ for (const [W, H] of [[320, 568], [390, 844], [844, 390], [1440, 900]]) {
   await zone(page, 'list');
   const a = await state(page);
   await page.mouse.move(a.left + 300, a.top + 300); await page.mouse.wheel({ deltaY: -120 }); await sleep(100);
-  t('Y8 휠로 움직여도 구역 표시가 풀림', (await pressed(page)).length === 0);
+  t('Y8 휠로 움직여도 고른 구역과 외곽선이 남음', (await pressed(page))[0] === 'list' && !(await page.$eval('#vmap-hl', (x) => x.hidden)));
   await zone(page, 'future');
   await page.keyboard.press('Escape'); await sleep(120);
   await openMap(page);

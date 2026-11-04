@@ -1258,7 +1258,7 @@ html.vmap-on { overflow: hidden; }
 }
 /* 지도 안의 위치 표시만 주황입니다(사이트 강조색은 보라 그대로). 원본 그림은 고치지 않고 위에 얹습니다.
    테두리는 구역 바깥으로 빼서(top · left −3px) 부스 번호를 가리지 않고, 흰 외곽선으로 연두 · 노랑 · 흰 바탕과 구별합니다. */
-.vmap__hl { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+.vmap__hl { position: absolute; inset: 0; overflow: hidden; pointer-events: none; contain: layout paint; }
 .vmap__hl-box {
   position: absolute;
   top: -3px;
@@ -1268,7 +1268,7 @@ html.vmap-on { overflow: hidden; }
   border-radius: 6px;
   background: rgba(255, 121, 0, .11);
   box-shadow: 0 0 0 2px #fff;
-  transition: background-color .2s, border-color .2s, box-shadow .2s;
+  transition: background-color .35s, border-color .35s, box-shadow .35s;
 }
 .vmap__hl-t {
   position: absolute;
@@ -1283,14 +1283,16 @@ html.vmap-on { overflow: hidden; }
   line-height: 1.2;
   white-space: nowrap;
   box-shadow: 0 0 0 2px #fff;
-  transition: opacity .2s;
+  transition: opacity .35s;
 }
 .vmap__hl.is-soft .vmap__hl-box { background: transparent; border-color: rgba(255, 121, 0, .55); box-shadow: none; }
 .vmap__hl.is-soft .vmap__hl-t { opacity: 0; }
 @media (prefers-reduced-motion: reduce) {
   .vmap__hl-box, .vmap__hl-t { transition: none; }
+  .vmap__mini { animation: none; }
 }
 /* 미니맵: 확대했을 때만 보이는 조용한 안내입니다. 주황 사각형이 실제로 보이는 자리입니다. */
+@keyframes vmap-fade { from { opacity: 0; } }
 .vmap__mini {
   position: absolute;
   top: 10px;
@@ -1304,12 +1306,14 @@ html.vmap-on { overflow: hidden; }
   box-shadow: 0 1px 4px rgba(22, 32, 60, .22);
   font: inherit;
   cursor: pointer;
+  animation: vmap-fade .25s ease-out;
 }
 .vmap__mini-map {
   position: relative;
   display: block;
   aspect-ratio: 1600 / 508;
   overflow: hidden;
+  contain: layout paint;
   background-repeat: no-repeat;
   background-size: 100% auto;
 }
