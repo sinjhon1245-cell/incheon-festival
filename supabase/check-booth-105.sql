@@ -52,7 +52,24 @@ with school as (
  '등록 후 84+체험+미래','보기'
  union all
  select 14,'23시 초기화 예약',coalesce((select jobname||' '||schedule||' active='||active from cron.job where jobname='booth-rehearsal-reset' limit 1),'없음'),
- 'booth-rehearsal-reset 0 14 * * * active=true','보기'
+ 'booth-rehearsal-reset 0 14 * * * active=true',
+ case when (select count(*) from cron.job)=1 and exists(select 1 from cron.job where jobname='booth-rehearsal-reset' and schedule='0 14 * * *' and active) then 'OK' else 'STOP' end
+ union all
+ select 15,'학교 QR 지문',md5(string_agg(md5(a.token)||coalesce(a.rotated_at::text,''),E'\n' order by a.booth_id)),'311d94b4d8169d98798dd1b25b452725',
+  case when md5(string_agg(md5(a.token)||coalesce(a.rotated_at::text,''),E'\n' order by a.booth_id))='311d94b4d8169d98798dd1b25b452725' then 'OK' else 'STOP' end
+  from public.booth_access a join school s on s.id=a.booth_id
+ union all
+ select 16,'학교 PIN 상태 지문',md5(string_agg(p.booth_id::text||coalesce(p.reissued_at::text,'')||coalesce(p.disabled_at::text,''),E'\n' order by p.booth_id)),'99524eb9b9b2166a44904707b6aa1d2c',
+  case when md5(string_agg(p.booth_id::text||coalesce(p.reissued_at::text,'')||coalesce(p.disabled_at::text,''),E'\n' order by p.booth_id))='99524eb9b9b2166a44904707b6aa1d2c' then 'OK' else 'STOP' end
+  from public.booth_pin p join school s on s.id=p.booth_id
+ union all
+ select 17,'체험 QR 지문',md5(string_agg(md5(a.token),E'\n' order by a.booth_id)),'b02bbd2635ff52f555f654423fabd829',
+  case when md5(string_agg(md5(a.token),E'\n' order by a.booth_id))='b02bbd2635ff52f555f654423fabd829' then 'OK' else 'STOP' end
+  from public.booth_access a join exp e on e.id=a.booth_id
+ union all
+ select 18,'체험 PIN 상태 지문',md5(string_agg(p.booth_id::text||coalesce(p.reissued_at::text,p.issued_at::text)||coalesce(p.disabled_at::text,''),E'\n' order by p.booth_id)),'9c08e63c8f942dc5923d5c2d84aefe80',
+  case when md5(string_agg(p.booth_id::text||coalesce(p.reissued_at::text,p.issued_at::text)||coalesce(p.disabled_at::text,''),E'\n' order by p.booth_id))='9c08e63c8f942dc5923d5c2d84aefe80' then 'OK' else 'STOP' end
+  from public.booth_pin p join exp e on e.id=p.booth_id
 )
 select n as "번호",item as "항목",actual as "현재",expected as "기대",verdict as "판정" from v order by n;
 

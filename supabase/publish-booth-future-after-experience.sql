@@ -40,4 +40,4 @@ begin
 end
 $verify$;
 commit;
--- 성공 후 check-booth-105.sql과 Production 105곳·6개 탭 재확인.
+-- 성공 후 check-booth-105.sql과 Production 105곳·5개 탭(미래·체험 묶음) 재확인.

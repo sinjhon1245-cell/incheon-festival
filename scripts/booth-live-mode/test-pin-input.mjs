@@ -89,19 +89,20 @@ const BOOTH2 = { id: '00000000-0000-4000-8000-000000000008', no: 8, code: '8', z
 // 체험존 12곳과 번호가 같은 학교 부스(고등 1 ~ 12). 구역이 10곳 이상이면 찾기 칸이 나옵니다. 체험존은 운영기관을 비워 둡니다.
 const FUT = Array.from({ length: 12 }, (_, i) => ({ id: `00000000-0000-4000-8000-0000000001${i + 10}`, no: i + 1, code: `체험${i + 1}`, zone_key: '체험', name: i === 0 ? '스마트 모빌리티의 기초 : 엠봇으로 배우는 로봇제어' : `시험 체험 ${i + 1}`, org: '', program: '' }));
 const HIGH = Array.from({ length: 12 }, (_, i) => ({ id: `00000000-0000-4000-8000-0000000002${i + 10}`, no: i + 1, code: String(i + 1), zone_key: '고등', name: `시험 고등 부스 ${i + 1}`, org: '시험 고등학교', program: '' }));
-const ZONE_NAME = { A: 'A구역', 고등: '고등', 체험: '체험존' };
+const MIRAE = Array.from({ length: 9 }, (_, i) => ({ id: `00000000-0000-4000-8000-0000000003${i + 10}`, no: i + 1, code: `미래${i + 1}`, zone_key: '미래', name: i === 3 ? '재미를 잇다, 상상을 잇다! (잇다풋볼 & 잇다오락실)' : `시험 미래 ${i + 1}`, org: '시험 협동조합', program: '' }));
+const ZONE_NAME = { A: 'A구역', 고등: '고등', 체험: '체험존', 미래: '미래채움존' };
 const fake = { logins: [], limited: 0, outside: [], who: BOOTH, sets: [] };
 const boothRow = (b) => ({ booth_id: b.id, id: b.id, code: b.code, no: b.no, name: b.name, org: b.org, zone_key: b.zone_key, zone_label: ZONE_NAME[b.zone_key],
   congestion: null, wait_minutes: null, updated_at: null, expires_at: new Date(Date.now() + 8 * 3600e3).toISOString() });
 function fakeAnswer(method, path, body) {
   const name = path.split('?')[0];
   if (method === 'GET' && name === 'settings') return [{ booth_pin_enabled: true, booth_sample_common_pin_enabled: false }];
-  if (method === 'GET' && name === 'zones') return [{ key: 'A', label: 'A구역', sort_order: 1 }, { key: '고등', label: '고등', sort_order: 3 }, { key: '체험', label: '체험존', sort_order: 5 }];
-  if (method === 'GET' && name === 'booths') return [BOOTH, BOOTH2, ...HIGH, ...FUT];
+  if (method === 'GET' && name === 'zones') return [{ key: 'A', label: 'A구역', sort_order: 1 }, { key: '고등', label: '고등', sort_order: 3 }, { key: '체험', label: '체험존', sort_order: 5 }, { key: '미래', label: '미래채움존', sort_order: 6 }];
+  if (method === 'GET' && name === 'booths') return [BOOTH, BOOTH2, ...HIGH, ...FUT, ...MIRAE];
   if (method === 'POST' && name === 'rpc/booth_pin_login') {
     fake.logins.push(body);
     if (fake.limited) return [{ ok: false, reason: 'limited', retry_after: fake.limited }];
-    const hit = [BOOTH, ...FUT].find((b) => b.id === (body && body.p_booth_id));
+    const hit = [BOOTH, ...FUT, ...MIRAE].find((b) => b.id === (body && body.p_booth_id));
     if (hit && body.p_pin === PIN_OK) { fake.who = hit; return [{ ok: true, session: 'S'.repeat(43), ...boothRow(hit) }]; }
     return [{ ok: false, reason: 'invalid', retry_after: 0 }];
   }
@@ -429,6 +430,30 @@ for (const W of [390, 320]) {
   await type('체험3');
   const three = await rows();
   t('Z7 고등 구역에서 체험3 을 치면 다른 구역 부스로 찾음', three[0] && three[0][0] === FUT[2].id && three[0][1] === '체험3', JSON.stringify(three));
+  await ctx.close();
+}
+
+/* ── Z : 미래채움존 운영자(체험존과 다른 구역 · 다른 번호) ───────── */
+for (const W of [390, 320]) {
+  const { ctx, page } = await openPage({ mobile: true });
+  if (W !== 390) await page.setViewport({ width: W, height: 800, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  await until(() => page.$eval('#start-pin', (e) => !e.hidden));
+  await page.click('[data-act="pin-start"]');
+  await until(() => page.$eval('#pin-s1', (e) => !e.hidden));
+  const cards = await page.$$eval('#pin-zones .pick', (p) => p.map((x) => x.dataset.zone));
+  t(`Z8 ${W}px 구역 카드는 따로: 미래채움존이 체험존 앞`, cards.indexOf('미래') >= 0 && cards.indexOf('미래') < cards.indexOf('체험'), cards.join(','));
+  await page.click('[data-zone="미래"]');
+  await until(() => page.$eval('#pin-s2', (e) => !e.hidden));
+  const pick = await page.evaluate(() => ({ zone: document.getElementById('pin-zone-name').textContent, no: [...document.querySelectorAll('#pin-booths .pick__k')].map((x) => x.textContent), ovf: document.documentElement.scrollWidth - document.documentElement.clientWidth }));
+  t(`Z9 ${W}px 부스 고르기: 미래1 ~ 미래9 · 구역 안내 · 가로 넘침 없음`, pick.zone === '미래채움존 · 부스 9곳' && JSON.stringify(pick.no) === JSON.stringify(MIRAE.map((b) => b.code)) && pick.ovf <= 0, JSON.stringify(pick));
+  await page.click(`[data-booth="${MIRAE[3].id}"]`);
+  await until(() => page.$eval('#pin-s3', (e) => !e.hidden));
+  fake.logins.length = 0;
+  await until(() => page.evaluate(() => document.activeElement && document.activeElement.id === 'pin-input'));
+  await page.keyboard.type(PIN_OK); await page.keyboard.press('Enter');
+  const opened = await until(() => page.evaluate(() => !document.getElementById('v-main').hidden), 6000);
+  const head = await page.evaluate(() => { const hn = document.getElementById('h-name'); return { code: document.getElementById('h-code').textContent, name: hn.textContent, whole: hn.scrollHeight <= hn.clientHeight + 1 && getComputedStyle(hn).overflowY !== 'hidden', org: document.getElementById('h-org').textContent, zone: document.getElementById('h-zone').textContent }; });
+  t(`Z10 ${W}px PIN 로그인은 그 부스 UUID 로 · 머리글 미래4 · 긴 이름 전체 · 기관 · 구역`, opened && fake.logins[0].p_booth_id === MIRAE[3].id && head.code === '미래4' && head.name === MIRAE[3].name && head.whole && head.org === '시험 협동조합' && head.zone === '미래채움존', JSON.stringify(head));
   await ctx.close();
 }
 
