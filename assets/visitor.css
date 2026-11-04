@@ -186,10 +186,10 @@ img { display: block; max-width: 100%; height: auto; }
   letter-spacing: -0.03em;
   white-space: nowrap;
 }
-/* 자동 갱신: 요약 제목 줄 오른쪽. 켜져 있으면 초록 원이 맥박처럼 뛰고, 꺼지면 회색으로 멈춥니다.
-   움직임은 CSS 뿐이라 요청을 만들지 않습니다. */
+/* 자동 갱신 상태 표시(누르는 곳이 아닙니다): 요약 제목 줄 오른쪽. 정상이면 초록 원이 맥박처럼 뛰고,
+   연결이 나쁘면 멈춥니다. 움직임은 CSS 뿐이라 요청을 만들지 않습니다. */
 .herowrap { position: relative; }
-.herowrap .hero__label { padding-right: 132px; }
+.herowrap .hero__label { padding-right: 104px; }
 .livebar {
   position: absolute;
   top: 15px;
@@ -204,19 +204,12 @@ img { display: block; max-width: 100%; height: auto; }
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  min-height: 44px;
-  padding: 0;
-  border: 0;
-  background: none;
   color: var(--ink-2);
-  font: inherit;
   font-size: 12.5px;
   font-weight: 700;
   line-height: 1;
   white-space: nowrap;
-  cursor: pointer;
 }
-.sync:disabled { cursor: default; }
 .sync__dot {
   flex: none;
   width: 9px;
@@ -224,8 +217,6 @@ img { display: block; max-width: 100%; height: auto; }
   border-radius: 50%;
   background: var(--st-off-mark);
 }
-.sync__every { font-weight: 500; color: var(--muted-2); }
-.sync__every:empty { display: none; }
 .sync.is-on .sync__dot { background: var(--st-free); animation: sync-pulse 2s ease-in-out infinite; }
 .sync.is-lag .sync__dot { background: var(--lag); box-shadow: 0 0 0 1px var(--st-edge); }
 @keyframes sync-pulse {

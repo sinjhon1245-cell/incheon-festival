@@ -18,7 +18,7 @@
      U  속도    폭마다 300 · 1000 · 650ms · 천천히 시작 · 튀지 않음 · 느린 기기 프레임 · 외곽선 유지와 해제
      C  체험존  번호 안내 · 앱 번호와 지도 장소 대응 · 겹침 · 사라지는 때
      N  검색칸  입력값과 적용 검색어 분리 · 단추 상태 전환 · Enter · 0건 · 재검색 · 초기화 · 폭마다 겹침 · 번호 오탐 없음
-     A  갱신    제목 줄 자동 갱신 · 맥박 · 끄고 켜기 · 요청 수 · 자동 갱신 중 검색 상태 유지
+     A  갱신    제목 줄 상태 표시 · 맥박 · 눌리지 않음 · 요청 수 · 연결 오류 · 자동 갱신 중 검색 상태 유지
      S  검색    검색 결과의 지도에서 보기 · zone_key · code 로 구역 판별 · 그림 받기 전 · 뒤로 가기 · 결과 없음 · 폭마다 겹침
      E  오류    그림을 못 받을 때 안내 · 다시 불러오기
      K  유지    닫은 뒤 검색어 · 고른 탭 · 스크롤 · 뒤로 가기로 닫기 · 줄을 눌러도 창이 열리지 않음
@@ -68,10 +68,10 @@ const data = { version: 1, generatedAt: now, mode: 'normal', liveReady: true,
 /* ── 서버 ───────────────────────────────────────────────────────── */
 const FILES = ['visitor.html', 'assets/visitor.css', 'assets/booth-core.js', 'assets/mock-data.js', 'assets/config.js', 'assets/venue-map.js'];
 const TYPES = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8' };
-const net = { image: 0, fail: false, delay: 0, snap: 0, pollMs: 0 };
+const net = { image: 0, fail: false, delay: 0, snap: 0, snapFail: false, pollMs: 0 };
 const server = http.createServer((req, res) => {
   const p = decodeURIComponent(new URL(req.url, 'http://x').pathname).replace(/^\/+/, '');
-  if (p === 'api/live-snapshot') { net.snap += 1; res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(data)); return; }
+  if (p === 'api/live-snapshot') { net.snap += 1; if (net.snapFail) { res.writeHead(500); res.end(); return; } res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(data)); return; }
   if (p === IMAGE_PATH) {
     net.image += 1;
     if (net.fail) { res.writeHead(404, { 'Cache-Control': 'no-store' }); res.end(); return; }
@@ -1050,25 +1050,21 @@ for (const [W, H] of [[320, 568], [360, 740], [390, 844], [768, 1024], [1024, 76
 
 /* ── A : 자동 갱신 ──────────────────────────────────────────────── */
 const syncLook = (page) => page.evaluate(() => {
-  const b = document.getElementById('sync'), d = b.querySelector('.sync__dot'), c = getComputedStyle(d);
-  return { text: document.getElementById('sync-text').textContent, every: document.getElementById('sync-every').textContent, pressed: b.getAttribute('aria-pressed'), anim: c.animationName, bg: c.backgroundColor, h: b.getBoundingClientRect().height, off: b.disabled };
+  const b = document.getElementById('sync'), c = getComputedStyle(b.querySelector('.sync__dot'));
+  return { tag: b.tagName, hidden: b.hidden, text: b.textContent, anim: c.animationName, bg: c.backgroundColor, cursor: getComputedStyle(b).cursor, tab: b.tabIndex, buttons: document.querySelectorAll('.livebar button:not([hidden])').length };
 });
 for (const [W, H] of [[320, 568], [360, 740], [390, 844], [768, 1024], [1024, 768], [1440, 900]]) {
   const { ctx, page, errs } = await openPage(W, H);
   const a = await syncLook(page);
-  t(`A1 ${W}px 켜짐: 초록 원 맥박 · 자동 갱신 · 60초마다 · 44px 터치`, a.text === '자동 갱신' && a.every === '60초마다' && a.anim === 'sync-pulse' && a.bg === 'rgb(8, 119, 63)' && a.pressed === 'true' && a.h >= 44 && !a.off, JSON.stringify(a));
-  const g = await page.evaluate(() => { const lab = document.createRange(); lab.selectNodeContents(document.getElementById('hero-label')); const l = lab.getBoundingClientRect(), y = document.querySelector('.livebar').getBoundingClientRect(), n = document.getElementById('h-free').getBoundingClientRect(); return { lr: l.right, yl: y.left, yr: y.right, vw: document.documentElement.clientWidth, ovf: document.documentElement.scrollWidth - document.documentElement.clientWidth, labelLines: Math.round(l.height / 20) }; });
-  t(`A2 ${W}px 제목과 한 줄 · 겹치지 않음 · 화면 안`, g.lr + 4 <= g.yl && g.yr <= g.vw && g.ovf <= 0 && g.labelLines === 1, JSON.stringify(g));
-  await page.click('#sync');
-  await sleep(120);
+  t(`A1 ${W}px 초록 원 맥박 · 자동 갱신 중`, a.text === '자동 갱신 중' && a.anim === 'sync-pulse' && a.bg === 'rgb(8, 119, 63)' && !a.hidden, JSON.stringify(a));
+  const g = await page.evaluate(() => { const lab = document.createRange(); lab.selectNodeContents(document.getElementById('hero-label')); const l = lab.getBoundingClientRect(), y = document.querySelector('#sync').getBoundingClientRect(); return { lr: l.right, yl: y.left, yr: y.right, mid: Math.abs((l.top + l.height / 2) - (y.top + y.height / 2)), vw: document.documentElement.clientWidth, ovf: document.documentElement.scrollWidth - document.documentElement.clientWidth, lines: Math.round(l.height / 20), edge: y.right - document.querySelector('.hero__total').getBoundingClientRect().right }; });
+  t(`A2 ${W}px 제목과 한 줄 · 겹치지 않음 · 화면 안 · 오른쪽 끝이 '전체' 줄과 맞음`, g.lr + 4 <= g.yl && g.yr <= g.vw && g.ovf <= 0 && g.lines === 1 && g.mid <= 3 && near(g.edge, 0, 1), JSON.stringify(g));
+  const s0 = net.snap, box = await page.$eval('#sync', (e) => { const r = e.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; });
+  await page.mouse.click(box.x, box.y);
+  await sleep(150);
   const b = await syncLook(page);
-  const edge2 = await page.evaluate(() => { const g = document.createRange(); g.selectNodeContents(document.getElementById('sync-text')); return g.getBoundingClientRect().right - document.querySelector('.hero__total').getBoundingClientRect().right; });
-  t(`A3 ${W}px 끄면 회색 원 · 움직임 멈춤 · 꺼짐 문구 · 오른쪽 끝이 아래 '전체' 줄과 맞음`, b.text === '자동 갱신 꺼짐' && b.every === '' && b.anim === 'none' && b.bg === 'rgb(138, 147, 171)' && b.pressed === 'false' && near(edge2, 0, 1), JSON.stringify([b, edge2]));
-  if (SHOTS && [320, 390].includes(W)) await page.screenshot({ path: join(SHOTS, `auto-off-${W}.png`) });
-  await page.click('#sync');
-  await sleep(120);
-  const c = await syncLook(page);
-  t(`A4 ${W}px 다시 켜면 맥박 복귀 · 화면 오류 없음`, c.text === '자동 갱신' && c.anim === 'sync-pulse' && errs.length === 0, JSON.stringify(c));
+  t(`A3 ${W}px 눌리는 요소가 아님(단추 없음 · 탭 이동 없음 · 눌러도 변화 없음)`, a.tag === 'P' && a.buttons === 0 && a.tab === -1 && a.cursor !== 'pointer' && b.text === '자동 갱신 중' && b.anim === 'sync-pulse' && net.snap === s0, JSON.stringify([a, b]));
+  t(`A4 ${W}px 화면 오류 없음`, errs.length === 0, errs.join(' | '));
   await ctx.close();
 }
 {
@@ -1082,10 +1078,22 @@ for (const [W, H] of [[320, 568], [360, 740], [390, 844], [768, 1024], [1024, 76
   await ctx.close();
 }
 {
+  // 처음부터 못 받을 때
+  net.snapFail = true;
+  const ctx = await browser.createBrowserContext(), page = await ctx.newPage();
+  await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  await page.goto(ORIGIN + '/visitor.html', { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => document.getElementById('sync-text').textContent === '연결 안 됨', { timeout: 12000 }).catch(() => {});
+  const a = await syncLook(page);
+  t('A7 처음부터 못 받으면 연결 안 됨 · 맥박 없음 · 초록 아님', a.text === '연결 안 됨' && a.anim === 'none' && a.bg !== 'rgb(8, 119, 63)', JSON.stringify(a));
+  net.snapFail = false;
+  await ctx.close();
+}
+{
   // 실제 자동 갱신: 시험 서버의 간격만 15초(앱 하한)로 줄여 진짜 타이머가 돌게 합니다.
   net.pollMs = 15000;
   const { ctx, page, errs } = await openPage(390);
-  const waitPoll = async (from) => { const end = Date.now() + 24000; while (Date.now() < end && net.snap <= from) await sleep(200); await sleep(350); return net.snap > from; };
+  const waitPoll = async (from, ms = 24000) => { const end = Date.now() + ms; while (Date.now() < end && net.snap <= from) await sleep(200); await sleep(350); return net.snap > from; };
   await typeQ(page, '신석');
   await page.keyboard.press('Enter');
   await sleep(250);
@@ -1095,38 +1103,39 @@ for (const [W, H] of [[320, 568], [360, 740], [390, 844], [768, 1024], [1024, 76
   data.generatedAt = new Date().toISOString();
   let got = await waitPoll(net.snap);
   const right = await page.$eval('#list .row__right', (e) => e.textContent);
-  t('A7 실제 자동 갱신 중 검색어 · 결과 · 초기화 유지 · 새 값 반영', got && (await qVal(page)) === '신석' && JSON.stringify(await codes(page)) === '["45"]' && (await btnText(page)) === '초기화' && right.includes('55'), JSON.stringify([got, right, await codes(page)]));
+  t('A8 실제 자동 갱신 중 검색어 · 결과 · 초기화 유지 · 새 값 반영', got && (await qVal(page)) === '신석' && JSON.stringify(await codes(page)) === '["45"]' && (await btnText(page)) === '초기화' && right.includes('55'), JSON.stringify([got, right, await codes(page)]));
   // 고치는 중에 갱신
   await page.click('#q');
   await page.keyboard.press('End');
   await page.keyboard.type('초');
   await sleep(120);
-  const beforeType = net.snap;
   got = await waitPoll(net.snap);
-  t('A8 고치던 글이 있어도 자동 갱신 뒤 그대로 · 단추는 검색 · 앞선 결과 유지', got && (await qVal(page)) === '신석초' && (await btnText(page)) === '검색' && JSON.stringify(await codes(page)) === '["45"]', JSON.stringify([got, await qVal(page), await btnText(page)]));
+  t('A9 고치던 글이 있어도 자동 갱신 뒤 그대로 · 단추는 검색 · 앞선 결과 유지', got && (await qVal(page)) === '신석초' && (await btnText(page)) === '검색' && JSON.stringify(await codes(page)) === '["45"]', JSON.stringify([got, await qVal(page), await btnText(page)]));
   // 0건에서 갱신
   await page.keyboard.press('Enter');
   await sleep(150);
   await applyQ(page, '없는학교이름');
   got = await waitPoll(net.snap);
-  t('A9 결과 0건도 자동 갱신 뒤 그대로', got && (await rows(page)) === 0 && (await qVal(page)) === '없는학교이름' && (await btnText(page)) === '초기화', JSON.stringify([got, await rows(page)]));
+  t('A10 결과 0건도 자동 갱신 뒤 그대로', got && (await rows(page)) === 0 && (await qVal(page)) === '없는학교이름' && (await btnText(page)) === '초기화', JSON.stringify([got, await rows(page)]));
   await page.click('#search-btn');
   await sleep(200);
-  // 끄기
-  await page.click('#sync');
-  await sleep(150);
-  const off0 = net.snap;
+  // 요청 수: 간격 그대로, 타이머 하나
+  const n0 = net.snap;
   await sleep(21000);
-  t('A10 끄면 요청이 멈춤(21초 동안 0건)', net.snap === off0, String(net.snap - off0));
-  // 켜기를 거듭해도 타이머는 하나
-  for (let i = 0; i < 6; i++) { await page.click('#sync'); await sleep(30); }
-  await page.click('#sync');   // 7번째: 켜짐
-  await sleep(150);
-  const on0 = net.snap;
-  await sleep(21000);
-  const made = net.snap - on0;
-  t('A11 켜고 끄기를 거듭해도 15초 간격 그대로(21초에 1~2건, 타이머 중복 없음)', made >= 1 && made <= 2, String(made));
-  t('A12 화면 오류 없음', errs.length === 0, errs.join(' | '));
+  const made = net.snap - n0;
+  t('A11 간격 그대로(15초 설정에서 21초에 1~2건, 타이머 중복 없음)', made >= 1 && made <= 2, String(made));
+  // 연결 오류
+  net.snapFail = true;
+  got = await waitPoll(net.snap);
+  const e = await syncLook(page);
+  t('A12 한 번만 실패해도 정상처럼 보이지 않음: 연결 지연 · 맥박 멈춤 · 초록 아님', got && e.text === '연결 지연' && e.anim === 'none' && e.bg !== 'rgb(8, 119, 63)', JSON.stringify([got, e]));
+  t('A13 연결 오류 중에도 목록 · 검색칸 유지', (await rows(page)) === 105 && !(await page.$eval('#search', (x) => x.hidden)));
+  if (SHOTS) await page.screenshot({ path: join(SHOTS, 'auto-lag-390.png') });
+  net.snapFail = false;
+  got = await waitPoll(net.snap, 115000);
+  const r = await syncLook(page);
+  t('A14 다시 받으면 자동 갱신 중 · 맥박 복귀', got && r.text === '자동 갱신 중' && r.anim === 'sync-pulse', JSON.stringify([got, r]));
+  t('A15 화면 오류 없음', errs.length === 0, errs.join(' | '));
   Object.assign(b45, keep);
   net.pollMs = 0;
   await ctx.close();
