@@ -7,8 +7,8 @@
    고칠 수 있는 것은 하나뿐입니다 — 관리자 긴급 수정(admin_set_booth_live, 기록에 'admin').
    '확인 필요' 일괄 확인(admin_confirm_booth_live)은 값을 고치지 않고 관리자 확인 기록(booth_live_check)만 남깁니다(아래 batch*).
    준비 기간 '예시 현황 채우기 · 비우기' 도 같은 함수를 [예시] 부스마다 부를 뿐입니다(아래 runExamples).
-   행사 전 '리허설 관리'(실제 부스 84곳 채우기 · 비우기)는 같은 도구를 admin_rehearsal_set_live 로 부릅니다
-   — 84곳 · 행사 전만 통과시키고 안에서 admin_set_booth_live 를 부르는 문지기 함수입니다(아래 runRehearsal).
+   행사 전 '대기시간 일괄 입력'(공개 부스 105곳 중 현장예약 제외 채우기 · 비우기)는 같은 도구를 admin_rehearsal_set_live 로 부릅니다
+   — 관리자 · 공개 부스 105곳 · 행사 전만 통과시키며 현장예약을 제외하는 문지기 함수입니다(아래 runRehearsal).
 
    보안: 관리자 화면과 같은 로그인 · 같은 문지기(staff_profiles.role = 'admin').
    이 파일에는 권한이 없습니다. 읽기는 관리자 RLS, 쓰기는 함수 안의 is_admin() 이 막습니다.
@@ -1649,12 +1649,12 @@
     return Promise.all(pool).then(function () { return { done: done, failed: failed, skipped: skipped }; });
   }
 
-  /* ── 행사 전 리허설: 실제 부스 84곳의 대기시간 채우기 · 비우기 ─────────────────
+  /* ── 행사 전 리허설: 공개 부스 105곳(현장예약은 제외)의 대기시간 채우기 · 비우기 ─────────────────
      위 '예시 현황' 과 같은 도구를 실제 부스에 씁니다 — 같은 비율(EXAMPLE_MIX · examplePlan), 같은 4곳씩 보내기(runPool),
      같은 확인창 · 진행 표시 · '성공 N · 실패 N' 알림. 다른 것은 대상과 문지기입니다.
-       · 대상: DB 가 정한 실제 부스 84곳(admin_rehearsal_status 의 target_ids = 승인된 부스 UUID 목록).
+       · 대상: DB 가 정한 공개 부스 105곳(admin_rehearsal_status 의 target_ids = 학교84+미래9+체험12).
          구역 · 번호 · 기관 이름과 상관없어 최종 배치로 옮겨도 같은 부스이고, 예시 부스는 들어 있지 않습니다.
-       · 쓰기: admin_rehearsal_set_live — 관리자 · 84곳 · 행사 첫날(한국 날짜 11-06) 전만 통과시킨 뒤 안에서
+       · 쓰기: admin_rehearsal_set_live — 관리자 · 공개 105곳 · 행사 첫날(한국 날짜 11-06) 전만 통과시킨 뒤 안에서
          관리자 긴급 수정과 같은 admin_set_booth_live 를 부릅니다(혼잡도는 서버 판정 · 기록 source 'admin').
          비우기는 그 함수의 'clear' — 그 부스의 지금 값만 지우고 대기 기록은 남깁니다.
          모든 부스를 지우는 admin_reset_booth_live 는 쓰지 않습니다.
@@ -1692,7 +1692,7 @@
   }
   // 현장예약 부스는 대기시간 일괄 채우기 · 비우기에서 뺍니다(운영자가 정한 예약 상태를 덮어쓰지 않음 · 서버도 대기 분은 거부).
   function rhTargets(rows) {
-    return rh.st ? rows.filter(function (r) { return rh.st.ids[r.id] && r.opMode !== 'reserve'; }) : [];
+    return rh.st ? rows.filter(function (r) { return r.shown && rh.st.ids[r.id] && r.opMode !== 'reserve'; }) : [];
   }
   // 권한 · 로그인 만료 · 행사 시작 — 다른 부스도 똑같이 거절되므로 남은 부스는 보내지 않습니다.
   function rhStop(e) {
@@ -1731,7 +1731,7 @@
   }
   function rhHtml(all) {
     var head = '<div class="rhpanel__head"><h2 class="rhpanel__title" id="lv-rh-title">대기시간 일괄 입력' +
-        '<span class="rhpanel__n">공식 부스 ' + (rh.st ? rh.st.n : 84) + '곳</span></h2>' +
+        '<span class="rhpanel__n">공개 부스 ' + (rh.st ? rh.st.n : '…') + '곳</span></h2>' +
       '<p class="rhpanel__desc">행사 전 운영 점검을 위해 공식 부스에 예시 대기시간을 한 번에 입력하거나 비웁니다. ' +
         '입력값은 행사 전 관람객 화면에도 표시됩니다. 공개 주소를 아는 사람은 누구나 볼 수 있습니다. QR·PIN·기존 대기 기록은 유지됩니다.</p></div>';
     if (!rh.st) {
@@ -1745,7 +1745,8 @@
     var targets = rhTargets(all);
     var withVal = targets.filter(function (r) { return !!r.congestion; }).length;
     var html = head + '<dl class="rhpanel__facts">' +
-      rhFact('지금 값 있음', withVal + ' / ' + targets.length + '곳', targets.length !== s.n) +
+      rhFact('지금 값 있음', withVal + ' / ' + targets.length + '곳', false) +
+      rhFact('일괄 적용 대상', targets.length + ' / ' + s.n + '곳 · 현장예약 ' + Math.max(0, s.n - targets.length) + '곳 제외', false) +
       rhFact('자동 초기화(23:00)', rhResetText(), s.reset !== 'on' || s.lastSt === 'failed') +
       rhFact('쓸 수 있는 때', s.closed ? '닫힘 · 행사 기간' : (rhLastDay() ? rhLastDay() + '까지' : '행사 전까지'), s.closed) +
       '</dl>';
@@ -1832,12 +1833,12 @@
       var withVal = targets.filter(function (r) { return !!r.congestion; });
       var byOp = withVal.filter(function (r) { return r.by === 'qr' || r.by === 'pin'; }).length;
       var message = fill
-        ? '공식 부스 ' + targets.length + '곳에 운영 점검용 예시 대기시간을 저장합니다.\n' + mixSummary(examplePlan(targets)) + '\n' +
+        ? '공개 부스 중 현장예약을 제외한 ' + targets.length + '곳에 운영 점검용 예시 대기시간을 저장합니다.\n' + mixSummary(examplePlan(targets)) + '\n' +
           '행사 전 관람객 화면에도 표시됩니다(공개 주소). 외부에서 볼 수 있다는 점을 확인해 주세요.' +
           (withVal.length ? '\n\n현재 대기값이 있는 ' + withVal.length + '곳' + (byOp ? '(운영자 입력 ' + byOp + '곳 포함)' : '') +
             '은 예시값으로 덮어씁니다.' : '') +
           '\n매일 23:00에 현재 대기값만 자동 초기화됩니다. 기존 대기 기록·QR·PIN은 유지됩니다.'
-        : '공식 부스 ' + targets.length + '곳의 현재 대기값을 모두 비웁니다(값 있는 곳 ' + withVal.length + '곳).\n' +
+        : '공개 부스 중 현장예약을 제외한 ' + targets.length + '곳의 현재 대기값을 모두 비웁니다(값 있는 곳 ' + withVal.length + '곳).\n' +
           '운영자 입력값도 비워질 수 있습니다. 기존 대기 기록·QR·PIN·부스 정보는 유지됩니다.';
       return UI.confirm({
         title: fill ? '예시 대기시간을 일괄 입력할까요?' : '현재 대기시간을 일괄 비울까요?',
@@ -1882,7 +1883,7 @@
       // 결과를 기다리지 않고 바로 다시 읽어 요약 · 카드 · 이 칸을 새 값으로 그립니다(닫힘 · 자동 초기화 상태도 새로).
       return Promise.all([loadRehearsal().then(null, function () { /* 지난 상태로 그림 */ }), refreshMaster()]).then(function () {
         if (!nBad) {
-          toast(fill ? '공식 부스 ' + res.done.length + '곳에 예시 대기시간을 입력했습니다.' : '공식 부스 ' + res.done.length + '곳의 현재 대기시간을 비웠습니다.');
+          toast(fill ? '공개 부스 ' + res.done.length + '곳에 예시 대기시간을 입력했습니다.' : '공개 부스 ' + res.done.length + '곳의 현재 대기시간을 비웠습니다.');
           return;
         }
         // 권한 · 로그인 만료 · 행사 시작으로 멈췄으면 그 까닭과 '넣지 못함' 으로(보내지 않은 부스는 실패가 아님)
