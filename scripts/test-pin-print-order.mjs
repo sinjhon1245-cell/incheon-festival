@@ -178,9 +178,9 @@ const waitOv = async (name, ms = 60000) => { const end = Date.now() + ms; while 
   t(`P1 배부표 ${dom.length}곳 번호순`, same(dom.map((x) => x.who), wantWho), JSON.stringify(dom.slice(0, 6).map((x) => x.who)));
   t('P2 부스 · 기관 · PIN 짝이 그대로', dom.length === EXPECT.length && dom.every((x, i) => x.org.startsWith(EXPECT[i].org) && x.pin === fakePin(EXPECT[i])), JSON.stringify(dom.find((x, i) => !x.org.startsWith(EXPECT[i].org) || x.pin !== fakePin(EXPECT[i]))));
   t('P3 누락 · 중복 없음', new Set(dom.map((x) => x.who)).size === EXPECT.length);
+  await printShot(page, 'pin-sheet.png');   // PDF 를 만들면 afterprint 로 배부표가 지워지므로 먼저 찍습니다
   const buf = await printPdf(page);
   if (OUT) writeFileSync(join(OUT, 'pin-sheet.pdf'), buf);
-  await printShot(page, 'pin-sheet.png');
   const pages = await readPdf(buf);
   const seq = pages.flatMap((p) => namesInOrder(p).map((x) => x.name));
   t(`P4 PDF ${pages.length}쪽 번호순 · A4`, same(seq, WANT) && pages.every((p) => Math.abs(p.w - 595.3) < 2 && Math.abs(p.h - 841.9) < 2), JSON.stringify(seq.slice(0, 8)));
