@@ -50,7 +50,7 @@
   <header class="band">
     <div class="col band__in">
       <div class="band__text">
-        <h1 class="band__title">부스 대기 현황</h1>
+        <h1 class="band__title"><button type="button" class="band__home" data-act="home" aria-label="부스 대기 현황, 처음 화면으로 돌아가기">부스 대기 현황</button></h1>
         <p class="band__event" id="band-event"></p>
       </div>
       <button type="button" class="mapbtn" id="map-open" aria-haspopup="dialog" aria-label="배치도 보기">
@@ -1702,6 +1702,21 @@
         }
       } catch (e) { /* 기록을 쓸 수 없는 환경: 화면만 바꿉니다 */ }
     }
+    // 제목으로 처음 화면에 돌아갈 때: 이 페이지가 쌓은 칸 가운데 같은 상태인 아래 칸이 있으면 그 칸까지 한 번에 거둡니다.
+    // 뒤로 가기가 방금 푼 고름으로 되돌아가지 않게 하려는 것입니다. 없으면 지금 칸만 고칩니다.
+    function navHome() {
+      if (!NAV.ready) return;
+      var next = navNow();
+      for (var j = 1; j < NAV.i; j += 1) {
+        if (navSame(NAV.list[j], next)) {
+          var steps = j - NAV.i;
+          NAV.i = j;               // popstate 가 오기 전에 다음 고름이 와도 자리가 맞게
+          try { history.go(steps); } catch (e) { /* 기록을 쓸 수 없는 환경: 화면만 바꿉니다 */ }
+          return;
+        }
+      }
+      navCommit(false);
+    }
     // 기록 한 칸의 상태로 화면을 맞춥니다(받기 없음). draw: 바로 다시 그릴지(시작 전에는 false).
     function navApply(st, draw) {
       var moved = S.ui.zone !== (st.zone || '') || S.ui.count !== (st.count || '');
@@ -1845,6 +1860,26 @@
       render(false);
     }
 
+    // 제목: 처음 화면으로 돌아갑니다. 화면의 고름만 기본값으로 되돌리고, 이미 받은 값으로 다시 그립니다
+    // (새로 고침 · 서버 요청 없음). 지금 계신 부스(?b=)는 화면의 고름이 아니라 건드리지 않습니다.
+    function goHome() {
+      if (document.activeElement === $('q')) $('q').blur();
+      S.ui.zone = '';
+      S.ui.count = '';
+      S.ui.view = 'list';
+      S.ui.sort = 'code';
+      S.ui.q = '';
+      $('q').value = '';
+      S.zpick = false;
+      S.mapOpen = false;
+      S.ui.map = false;
+      if (window.VenueMap && VenueMap.isOpen()) VenueMap.close({ silent: true });
+      navHome();
+      render(true);
+      $('tabs').scrollLeft = 0;
+      window.scrollTo({ top: 0, behavior: smooth() });
+    }
+
     // 지금 계신 부스의 대안을 누르면, 전체 목록에서 그 부스 줄로 옮겨 잠깐 표시합니다(펼침 없음).
     // 줄은 Tab 순서에 들지 않지만, 키보드 · 화면 읽기 사용자도 옮겨 간 줄을 읽도록 그 줄에만 초점을 줍니다(tabindex -1).
     function goRow(id) {
@@ -1912,19 +1947,9 @@
           return;
         }
         if (t.hasAttribute('data-view')) {
-          var toGrid = t.getAttribute('data-view') === 'grid';
+          // 목록 · 한눈에는 표시 방식만 바꿉니다. 학교급 · 상태 고름 · 검색 · 정렬은 그대로이고 기록에도 쌓지 않습니다.
           S.ui.view = t.getAttribute('data-view');
-          var narrowed = toGrid && !!(S.ui.count || S.ui.zone || S.ui.q);
-          if (toGrid) {
-            // '한눈에' 는 공식 부스 전체를 한꺼번에 보는 화면입니다 — 상태 고름 · 구역 · 검색을 풀고 시작합니다.
-            // 그 뒤에 고르는 상태 · 구역은 평소처럼 걸립니다. '목록' 으로 돌아갈 때는 지금 고름을 그대로 둡니다.
-            if (document.activeElement === $('q')) $('q').blur();
-            S.ui.count = ''; S.ui.zone = ''; S.ui.q = ''; $('q').value = '';
-            S.zpick = false;
-          }
           render(false);
-          // 보기 바꿈은 칸을 쌓지 않습니다. 고름을 풀었으면 한 단계 위로 — '× 필터 해제' 와 같게.
-          navCommit(narrowed);
           return;
         }
         if (t.hasAttribute('data-sort')) {
@@ -1935,6 +1960,9 @@
         if (t.hasAttribute('data-go')) { goRow(t.getAttribute('data-go')); return; }
 
         switch (t.getAttribute('data-act') || t.id) {
+          case 'home':
+            goHome();
+            break;
           case 'clear-count':
             clearCount();
             break;
