@@ -95,7 +95,7 @@ async function printShot(page, name) {
   await page.setViewport({ width: 794, height: 1123 });
   await page.screenshot({ path: join(OUT, name) });
   await page.setViewport({ width: 1280, height: 900 });
-  await page.emulateMediaType('screen');
+  await page.emulateMediaType(null);
 }
 
 async function open() {
