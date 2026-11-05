@@ -65,6 +65,7 @@
   var HOLD_MS = 1000;     // 전체 지도에서 구역을 보여 주는 시간
   var IN_MS = 650;        // 구역으로 확대
   var PAN_MS = 300;       // 미니맵으로 옮기기
+  var LIST_MS = 260;      // 부스 명단으로 옮기기(물러나기 · 강조 없이 한 번에)
   var MAX_ZOOM = 6;       // 전체 보기의 몇 배까지
   var STEP = 1.6;         // + · − 한 번
   var KEY_PAN = 80;       // 방향키 한 번(px)
@@ -131,7 +132,20 @@
   function bound(pos, size, room) { return size <= room ? (room - size) / 2 : Math.min(0, Math.max(room - size, pos)); }
   function clampView(s, x, y) {
     s = limit(s);
-    return { s: s, x: bound(x, v.W * s, v.vw), y: bound(y, v.H * s, v.vh) };
+    return { s: s, x: bound(x, v.W * s, v.vw), y: bound(y, v.H * s + listRoom(s), v.vh) };
+  }
+  function zoneScale(id) {
+    var z = ZONES[id], pad = 2 * ZONE_PAD;
+    var s = Math.min(v.vw / (z[2] + pad), v.vh / (z[3] + pad), Math.max(ZONE_MAX, v.fit * ZONE_MAX_FIT));
+    return limit(Math.max(s, ZONE_MIN[id] || 0));
+  }
+  // 명단은 그림 맨 아래에 있어 가장자리 규칙대로면 화면 아래에 붙습니다. 명단을 볼 때만 그림 아래에 빈 자리를 두어
+  // 세로 가운데에 놓습니다. 배율에 따라 이어서 늘어 전체 보기에서는 0 이라 드래그 · 확대 · 축소 때 화면이 튀지 않습니다.
+  function listRoom(s) {
+    if (zone !== 'list') return 0;
+    var z = ZONES.list, end = zoneScale('list'), room = v.vh / 2 - (v.H - z[1] - z[3] / 2) * end;
+    if (room <= 0 || end <= v.fit) return 0;
+    return room * Math.max(0, Math.min(1, (s - v.fit) / (end - v.fit)));
   }
   function place(s, x, y) {
     var c = clampView(s, x, y);
@@ -157,10 +171,13 @@
     setPhase('');
   }
   // 한 점을 고정한 채 배율을 바꾸면 화면에서 곧게 다가갑니다. 배율이 같으면 그대로 옮깁니다.
-  function glide(s, x, y, ms, done) {
+  // quick: 짧은 전환입니다. 부드러운 곡선을 쓰고, 프레임마다 가장자리로 보정하지 않아 고정점이 흔들리지 않습니다.
+  // 명단의 빈 자리를 벗어나 출발할 때도 보정 없이 움직입니다(끝에서 정확한 자리로 맞춥니다).
+  function glide(s, x, y, ms, done, quick) {
     cancelAnimationFrame(tween);
     tween = 0;
-    var to = clampView(s, x, y), s0 = v.s, x0 = v.x, y0 = v.y, r = to.s / s0, t0 = 0;
+    var to = clampView(s, x, y), s0 = v.s, x0 = v.x, y0 = v.y, r = to.s / s0, t0 = 0, here = clampView(s0, x0, y0);
+    var free = !!quick || Math.abs(here.x - x0) > 0.5 || Math.abs(here.y - y0) > 0.5;
     if (!ms || calm()) {
       place(to.s, to.x, to.y);
       paint();
@@ -179,10 +196,11 @@
         if (done) done();
         return;
       }
-      // 천천히 시작해 천천히 멈춥니다(ease-in-out cubic).
-      var e = t < 0.5 ? 4 * t * t * t : 1 - 4 * (1 - t) * (1 - t) * (1 - t);
-      if (scaled) { var k = Math.pow(r, e); place(s0 * k, fx + (x0 - fx) * k, fy + (y0 - fy) * k); }
-      else place(s0, x0 + (to.x - x0) * e, y0 + (to.y - y0) * e);
+      // 천천히 시작해 천천히 멈춥니다(보통은 ease-in-out cubic, 짧은 전환은 더 완만한 sine).
+      var e = quick ? 0.5 - 0.5 * Math.cos(Math.PI * t) : t < 0.5 ? 4 * t * t * t : 1 - 4 * (1 - t) * (1 - t) * (1 - t);
+      var k = scaled ? Math.pow(r, e) : 1;
+      var ns = s0 * k, nx = scaled ? fx + (x0 - fx) * k : x0 + (to.x - x0) * e, ny = scaled ? fy + (y0 - fy) * k : y0 + (to.y - y0) * e;
+      if (free) { v.s = ns; v.x = nx; v.y = ny; } else place(ns, nx, ny);
       paintView();
       tween = requestAnimationFrame(tick);
     }
@@ -192,10 +210,7 @@
   /* ── 구역 이동 ─────────────────────────────────────────────── */
   // 구역과 둘레 ZONE_PAD 가 화면에 들어오는 배율입니다. 읽을 배율을 정한 구역이 넘치면 왼쪽 위부터 보여 줍니다.
   function zoneView(id) {
-    var z = ZONES[id], pad = 2 * ZONE_PAD;
-    var s = Math.min(v.vw / (z[2] + pad), v.vh / (z[3] + pad), Math.max(ZONE_MAX, v.fit * ZONE_MAX_FIT));
-    s = limit(Math.max(s, ZONE_MIN[id] || 0));
-    var w = z[2] * s, h = z[3] * s;
+    var z = ZONES[id], s = zoneScale(id), w = z[2] * s, h = z[3] * s;
     return clampView(s, (w <= v.vw ? (v.vw - w) / 2 : 0) - z[0] * s, (h <= v.vh ? (v.vh - h) / 2 : 0) - z[1] * s);
   }
   function markZone(id) {
@@ -262,6 +277,13 @@
     setPhase('hold');
     holdTimer = setTimeout(zoomIn, HOLD_MS);
   }
+  // 부스 명단은 자리를 찾는 구역이 아니라 읽을거리입니다. 물러나기 · 강조 시간 없이 지금 보기에서 한 번에 짧게 옮깁니다.
+  function goList() {
+    stopAuto();
+    setPhase('in');
+    var to = zoneView('list');
+    glide(to.s, to.x, to.y, LIST_MS, settle, true);
+  }
   // 흐름 중에 다른 구역을 고르면 앞선 움직임을 끊고 목표를 바꿉니다. 직접 옮긴 뒤 같은 구역을 다시 누르면 다시 찾아갑니다.
   function goZone(id, alt) {
     if (!ZONES[id] || !loaded || (id === zone && !moved)) return;
@@ -273,6 +295,7 @@
     showHl(id, alt);
     setTip(id, alt && alt.text);
     paint();
+    if (id === 'list') { goList(); return; }
     if (phase === 'out') return;
     if (phase === 'hold' || atFit()) { holdThenZoom(); return; }
     setPhase('out');
