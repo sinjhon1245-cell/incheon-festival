@@ -236,7 +236,12 @@ ul, ol { padding: 0; list-style: none; }
 }
 
 /* ── 관람객 미리보기 — visitor.css 의 띠 · 큰 숫자 · 구역 탭 · 목록 줄을 줄인 것 ──── */
+/* 미리보기의 단추 · 칸은 눌러 볼 수 있습니다. 모양은 아래 각 칸의 규칙이 정합니다(:where 라 그 규칙을 이기지 않습니다) */
+:where(.vp) button { padding: 0; border: 0; background: none; color: inherit; font: inherit; letter-spacing: inherit; cursor: pointer; }
+.vp [hidden] { display: none !important; }
 .vp {
+  display: flex;
+  flex-direction: column;
   border: 1px solid var(--line);
   background: #fff;
   font-variant-numeric: tabular-nums;
@@ -245,6 +250,9 @@ ul, ol { padding: 0; list-style: none; }
 .vp__band { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 14px; background: var(--accent); color: #fff; }
 .vp__bandtext { min-width: 0; }
 .vp__title { font-size: 18px; font-weight: 800; line-height: 24px; letter-spacing: -0.03em; white-space: nowrap; }
+.vp__home { display: block; text-align: left; white-space: nowrap; }
+@media (hover: hover) { .vp__home:hover { text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 3px; } }
+.vp__band :focus-visible { outline-color: #fff; }
 .vp__event { margin-top: 2px; font-size: 12px; line-height: 17px; color: rgba(255, 255, 255, .85); word-break: keep-all; }
 .vp__mapbtn {
   flex: none;
@@ -301,6 +309,10 @@ ul, ol { padding: 0; list-style: none; }
 .vp__q { display: flex; gap: 5px; height: 36px; margin: 2px 14px 4px; }
 .vp__qbox { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; padding: 0 9px; background: var(--sink); color: var(--muted); font-size: 12.5px; font-weight: 500; white-space: nowrap; overflow: hidden; }
 .vp__qbox svg { flex: none; color: var(--ink); }
+.vp__qbox input { flex: 1; min-width: 0; padding: 0; border: 0; outline: 0; background: none; color: var(--ink); font: inherit; }
+.vp__qbox input::placeholder { color: var(--muted); opacity: 1; }
+.vp__qbox input::-webkit-search-cancel-button { -webkit-appearance: none; }
+.vp__qbox:focus-within { outline: 2px solid var(--accent); outline-offset: -2px; }
 .vp__qbtn { flex: none; display: flex; align-items: center; justify-content: center; width: 56px; background: var(--accent); color: #fff; font-size: 12.5px; font-weight: 700; }
 /* 구역 탭 — 실제 화면은 옆으로 밀어 보는 줄이라 그림에서도 넘치는 탭은 잘라 둡니다 */
 .vp__tabs {
@@ -319,9 +331,12 @@ ul, ol { padding: 0; list-style: none; }
 /* 보기 · 정렬 — 관람객 화면 .seg 를 줄인 것 */
 .vp__ctl { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px; padding: 10px 14px 4px; }
 .vp__seg { display: inline-flex; border: 1px solid var(--line); font-size: 11.5px; font-weight: 600; color: var(--muted); }
-.vp__seg span { display: flex; align-items: center; height: 28px; padding: 0 9px; white-space: nowrap; }
+.vp__seg button { display: flex; align-items: center; height: 28px; padding: 0 9px; white-space: nowrap; }
 .vp__seg .is-on { background: var(--ink); color: #fff; font-weight: 700; }
 .vp__rows { padding: 0 14px; }
+.vp__none { padding: 28px 14px; color: var(--muted); font-size: 13px; text-align: center; }
+/* 관람객 화면 바닥글과 같은 문구. 목록이 짧을 때 미리보기 맨 아래에 붙습니다 */
+.vp__foot { margin-top: auto; padding: 12px 14px; border-top: 1px solid var(--line); color: var(--muted-2); font-size: 11.5px; line-height: 1.6; word-break: keep-all; }
 @media (min-width: 600px) {
   .vp__hero, .vp__tabs, .vp__rows, .vp__ctl { padding-left: 16px; padding-right: 16px; }
   .vp__q { margin-left: 16px; margin-right: 16px; }
@@ -442,8 +457,6 @@ ul, ol { padding: 0; list-style: none; }
   .vmcard { grid-column: 1 / -1; grid-row: 2; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 70px; align-items: start; }
   .vmcard .vm { margin-top: 0; }
   @supports (grid-template-rows: subgrid) { .vmcard { grid-row: 6; } }
-  /* 두 미리보기의 아래 끝이 맞도록 관람객 미리보기의 목록 줄 · 끝 여백(.vp__tiles)만 조금 좁힙니다 */
-  .vr { min-height: 0; padding-top: 11px; padding-bottom: 11px; }
 }
 /* 배치도 창 — 관람객 화면 .vmap 을 줄인 것. 주황은 지도 안의 위치 표시에만 씁니다 */
 .vm { margin-top: 16px; overflow: hidden; }
@@ -468,7 +481,6 @@ ul, ol { padding: 0; list-style: none; }
 @media (min-width: 600px) {
   .vp__sub, .vp__tiles { padding-left: 16px; padding-right: 16px; }
 }
-@media (min-width: 1024px) { .vp__tiles { padding-bottom: 8px; } }
 .tile {
   --tile-edge: rgba(22, 32, 60, .14);
   display: flex;

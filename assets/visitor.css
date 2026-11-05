@@ -186,6 +186,21 @@ img { display: block; max-width: 100%; height: auto; }
   letter-spacing: -0.03em;
   white-space: nowrap;
 }
+/* 제목은 처음 화면으로 돌아가는 단추입니다. 모양은 제목 그대로이고, 마우스를 올릴 때만 밑줄로 눌리는 곳임을 알립니다.
+   ::after 는 보이지 않는 손가락 자리입니다(높이 44px). */
+.band__home {
+  position: relative;
+  display: block;
+  padding: 0;
+  border: 0;
+  background: none;
+  text-align: left;
+  white-space: nowrap;
+}
+.band__home::after { content: ''; position: absolute; inset: -6px -4px; }
+@media (hover: hover) {
+  .band__home:hover { text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 4px; }
+}
 /* 자동 갱신 상태 표시(누르는 곳이 아닙니다): 요약 제목 줄 오른쪽. 정상이면 초록 원이 맥박처럼 뛰고,
    연결이 나쁘면 멈춥니다. 움직임은 CSS 뿐이라 요청을 만들지 않습니다. */
 .herowrap { position: relative; }

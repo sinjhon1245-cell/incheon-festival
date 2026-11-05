@@ -42,13 +42,13 @@
             <p class="card__guide">현장예약 부스는 대기시간 대신 ‘현장예약’으로 표시됩니다. 예약은 부스에서 직접 접수합니다.</p>
           </div>
 
-          <div class="card__pv vp" role="img" aria-label="관람객 화면 미리보기. 위 띠에 제목과 배치도 단추가 있고, 지금 여유로운 부스 수(1곳, 전체 7곳)와 예시 화면 표시, 상태별 부스 수, 검색칸, 학교급 탭, 보기와 정렬 단추가 차례로 있습니다. 아래 목록에 부스마다 번호, 이름, 운영기관, 대기시간과 상태(여유, 보통, 혼잡, 잠시 중단, 마감, 현장예약, 예약 마감)가 있고, 같은 부스를 번호, 짧은 학교 이름, 대기 상태 차례의 칸으로 보는 한눈에 보기가 그 아래에 있습니다.">
+          <div class="card__pv vp" id="vp" role="group" aria-label="관람객 화면 예시. 학교급 탭, 목록과 한눈에, 정렬, 검색을 눌러 볼 수 있고 제목을 누르면 처음 상태로 돌아갑니다. 실제 운영 자료와 연결되지 않습니다.">
             <div class="vp__band">
               <div class="vp__bandtext">
-                <p class="vp__title">부스 대기 현황</p>
+                <p class="vp__title"><button type="button" class="vp__home" aria-label="부스 대기 현황, 처음 화면으로 돌아가기">부스 대기 현황</button></p>
                 <p class="vp__event">2026 인천 AI미래채움 교육페스티벌 · 인천 상상플랫폼</p>
               </div>
-              <span class="vp__mapbtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M18 8c0 3.613-3.869 7.429-5.393 8.795a1 1 0 0 1-1.214 0C9.87 15.429 6 11.613 6 8a6 6 0 0 1 12 0"/><circle cx="12" cy="8" r="2"/><path d="M8.714 14h-3.71a1 1 0 0 0-.948.683l-2.004 6A1 1 0 0 0 3 22h18a1 1 0 0 0 .948-1.316l-2-6a1 1 0 0 0-.949-.684h-3.712"/></svg>배치도</span>
+              <button type="button" class="vp__mapbtn" aria-label="행사장 배치도 예시로 이동"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M18 8c0 3.613-3.869 7.429-5.393 8.795a1 1 0 0 1-1.214 0C9.87 15.429 6 11.613 6 8a6 6 0 0 1 12 0"/><circle cx="12" cy="8" r="2"/><path d="M8.714 14h-3.71a1 1 0 0 0-.948.683l-2.004 6A1 1 0 0 0 3 22h18a1 1 0 0 0 .948-1.316l-2-6a1 1 0 0 0-.949-.684h-3.712"/></svg>배치도</button>
             </div>
             <div class="vp__hero">
               <div class="vp__labelrow">
@@ -70,9 +70,10 @@
                 <li class="cnt"><span class="cnt__w"><i class="sq sq--off"></i>중단·마감</span><b class="cnt__n">3</b></li>
               </ul>
             </div>
-            <p class="vp__q"><span class="vp__qbox"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" aria-hidden="true" focusable="false"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.5-4.5"/></svg>부스번호 · 학교명 검색</span><span class="vp__qbtn">검색</span></p>
-            <p class="vp__tabs"><span class="vp__tab is-on">전체 <span class="vp__tabn"><b>7</b>곳</span></span><span class="vp__tab">초</span><span class="vp__tab">중·특</span><span class="vp__tab">고</span><span class="vp__tab">미래·체험</span></p>
-            <p class="vp__ctl"><span class="vp__seg"><span class="is-on">목록</span><span>한눈에</span></span><span class="vp__seg"><span class="is-on">번호순</span><span>대기 짧은 순</span></span></p>
+            <form class="vp__q" role="search"><label class="vp__qbox"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" aria-hidden="true" focusable="false"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.5-4.5"/></svg><input type="search" id="vp-q" placeholder="부스번호 · 학교명 검색" aria-label="예시 부스 검색" autocomplete="off" /></label><button type="button" class="vp__qbtn">검색</button></form>
+            <p class="vp__tabs"><button type="button" class="vp__tab" data-vp-zone="">전체 <span class="vp__tabn"><b>7</b>곳</span></button><button type="button" class="vp__tab" data-vp-zone="초">초</button><button type="button" class="vp__tab" data-vp-zone="중">중·특</button><button type="button" class="vp__tab" data-vp-zone="고">고</button><button type="button" class="vp__tab" data-vp-zone="미래">미래·체험</button></p>
+            <p class="vp__ctl"><span class="vp__seg"><button type="button" data-vp-view="list">목록</button><button type="button" data-vp-view="grid">한눈에</button></span><span class="vp__seg" data-vp-sortseg><button type="button" data-vp-sort="code">번호순</button><button type="button" data-vp-sort="wait">대기 짧은 순</button></span></p>
+            <p class="vp__none" hidden>찾는 부스가 없어요</p>
             <ul class="vp__rows">
               <li class="vr">
                 <span class="vr__code">A-02</span>
@@ -122,6 +123,7 @@
               <li class="tile is-resv"><span class="tile__no">E-02</span><span class="tile__o">바다중</span><span class="tile__s"><span class="tile__v">현장</span><span class="tile__w">예약</span></span></li>
               <li class="tile is-resv-closed"><span class="tile__no">E-03</span><span class="tile__o">구름초</span><span class="tile__s"><span class="tile__v">예약</span><span class="tile__w">마감</span></span></li>
             </ul>
+            <p class="vp__foot">대기 시간은 각 부스 운영자가 현장에서 직접 입력해요. 실제 현장 상황과 조금 다를 수 있어요.</p>
           </div>
 
           <div class="card__foot">
@@ -287,5 +289,80 @@
       </section>
     </main>
   </div>
+  <script>
+    /* 관람객 미리보기 조작. 관람객 화면과 같은 규칙입니다: 목록 · 한눈에는 표시 방식만 바꾸고, 탭 · 정렬 · 검색은 그대로이며,
+       제목은 처음 상태로 되돌립니다. 이 페이지 안의 예시일 뿐 서버 · 저장소를 쓰지 않습니다. */
+    (function () {
+      var box = document.getElementById('vp');
+      if (!box) return;
+      // 번호: [학교급 탭, 대기 짧은 순 차례]. 대기가 있는 부스 → 현장예약 → 예약 마감 → 잠시 중단 → 오늘 마감(관람객 화면과 같음)
+      var META = { 'A-02': ['미래', 5], 'B-01': ['초', 20], 'C-01': ['중', 30], 'D-03': ['고', 1002], 'E-01': ['고', 1003], 'E-02': ['중', 1000], 'E-03': ['초', 1001] };
+      var one = function (s) { return box.querySelector(s); };
+      var all = function (s) { return [].slice.call(box.querySelectorAll(s)); };
+      var norm = function (s) { return String(s).toLowerCase().replace(/\s+/g, ''); };
+      var codeOf = function (el) { return el.querySelector('.vr__code, .tile__no').textContent; };
+      var rows = one('.vp__rows'), tiles = one('.vp__tiles'), none = one('.vp__none'), input = one('#vp-q'), btn = one('.vp__qbtn'), sortSeg = one('[data-vp-sortseg]');
+      var list = all('.vr'), hay = {}, ui;
+      list.forEach(function (r) { hay[codeOf(r)] = norm(r.textContent); });
+      one('.vp__sub').hidden = true;
+      function start() { ui = { zone: '', view: 'list', sort: 'code', q: '' }; input.value = ''; }
+      function applied() { var v = norm(input.value); return !!ui.q && (!v || v === norm(ui.q)); }
+      function syncBtn() { btn.textContent = applied() ? '초기화' : '검색'; }
+      function press(attr, value) {
+        all('[' + attr + ']').forEach(function (b) {
+          var on = b.getAttribute(attr) === value;
+          b.setAttribute('aria-pressed', on ? 'true' : 'false');
+          b.classList.toggle('is-on', on);
+        });
+      }
+      function paint() {
+        var hit = {}, n = 0;
+        list.forEach(function (r) {
+          var c = codeOf(r), ok = ui.q ? hay[c].indexOf(norm(ui.q)) >= 0 : !ui.zone || META[c][0] === ui.zone;
+          r.hidden = !ok;
+          hit[c] = ok;
+          if (ok) n += 1;
+        });
+        all('.tile').forEach(function (t) { t.hidden = !hit[codeOf(t)]; });
+        list.slice().sort(function (a, b) {
+          return ui.sort === 'wait' ? META[codeOf(a)][1] - META[codeOf(b)][1] : list.indexOf(a) - list.indexOf(b);
+        }).forEach(function (r) { rows.appendChild(r); });
+        rows.hidden = ui.view !== 'list' || !n;
+        tiles.hidden = ui.view !== 'grid' || !n;
+        none.hidden = n > 0;
+        sortSeg.hidden = ui.view !== 'list';
+        press('data-vp-zone', ui.zone);
+        press('data-vp-view', ui.view);
+        press('data-vp-sort', ui.sort);
+        syncBtn();
+      }
+      function search() {
+        var v = input.value;
+        if (!norm(v)) return;
+        ui.q = v;
+        ui.zone = '';
+        paint();
+      }
+      box.addEventListener('click', function (e) {
+        var t = e.target.closest('button');
+        if (!t) return;
+        if (t.hasAttribute('data-vp-zone')) { ui.zone = t.getAttribute('data-vp-zone'); ui.q = ''; input.value = ''; paint(); return; }
+        if (t.hasAttribute('data-vp-view')) { ui.view = t.getAttribute('data-vp-view'); paint(); return; }
+        if (t.hasAttribute('data-vp-sort')) { ui.sort = t.getAttribute('data-vp-sort'); paint(); return; }
+        if (t === btn) { if (applied()) { ui.q = ''; input.value = ''; paint(); } else search(); return; }
+        if (t.classList.contains('vp__home')) {
+          start();
+          paint();
+          if (box.getBoundingClientRect().top < 0) box.scrollIntoView({ block: 'start' });
+          return;
+        }
+        if (t.classList.contains('vp__mapbtn')) document.querySelector('.vmcard').scrollIntoView({ block: 'start' });
+      });
+      one('.vp__q').addEventListener('submit', function (e) { e.preventDefault(); search(); });
+      input.addEventListener('input', syncBtn);
+      start();
+      paint();
+    })();
+  </script>
 </body>
 </html>

@@ -156,6 +156,7 @@ const STATES = { 'A-02': ['is-free', '5분', '여유'], 'B-01': ['is-normal', '2
   'C-05': ['is-resv', '현장', '예약'], 'C-06': ['is-resv-closed', '예약', '마감'], 'B-03': ['is-pause', '잠시', '중단'], 'C-01': ['is-closed', '오늘', '마감'] };
 // 예시가 실제 운영 현황처럼 보이지 않게, 예시 기관은 검증표의 실제 105곳과 겹치면 안 됩니다.
 const REAL_ORGS = new Set(readFileSync(new URL('./short-names-105.md', import.meta.url), 'utf8').split(/\r?\n/).filter((l) => l.startsWith('| ')).map((l) => l.split(' | ')[2]));
+const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 let tagBg = null, realRow = null;
 for (const W of WIDTHS) {
   const { ctx, page } = await openPage(W, '/visitor.html?demo=1');
@@ -368,28 +369,60 @@ for (const W of WIDTHS) {
     const n = getComputedStyle(q('.vp__total b')), t = getComputedStyle(q('.vp__total'));
     return { band: q('.vp__band').textContent.replace(/\s+/g, ''), maps: document.querySelectorAll('.vp .vp__mapbtn').length, mapRight: map.right <= box.right, title: R(q('.vp__title')).right <= map.left,
       sync: q('.vp__sync').textContent, inBand: !!q('.vp__sync').closest('.vp__band'), sameLine: Math.abs((lab.top + lab.height / 2) - (sy.top + sy.height / 2)) <= 3, dot: getComputedStyle(q('.vp__syncdot')).animationName, page: document.body.textContent,
-      total: [parseFloat(n.fontSize), n.fontWeight, parseFloat(t.fontSize)], search: q('.vp__q').textContent.replace(/\s+/g, ''), ctl: q('.vp__ctl').textContent.replace(/\s+/g, ''),
+      total: [parseFloat(n.fontSize), n.fontWeight, parseFloat(t.fontSize)], search: q('.vp__q input').placeholder + '|' + q('.vp__qbtn').textContent, ctl: q('.vp__ctl').textContent.replace(/\s+/g, ''),
       order: ['.vp__hero', '.vp__q', '.vp__tabs', '.vp__ctl', '.vp__rows'].map((s) => Math.round(R(q(s)).top)), chips: [...document.querySelectorAll('.vm__zones span')].map((x) => x.textContent), chipCut: [...document.querySelectorAll('.vm__zones span')].some((x) => x.scrollWidth > x.clientWidth + 0.5),
-      img: img.naturalWidth, boxes: document.querySelectorAll('.vm__hl').length, mini: mv.width > 4 && mv.left >= mm.left && mv.right <= mm.right + 0.5, scripts: document.scripts.length, inputs: document.querySelectorAll('.vp input, .vp button, .vp a, .vmcard input, .vmcard button, .vmcard a').length,
+      img: img.naturalWidth, boxes: document.querySelectorAll('.vm__hl').length, mini: mv.width > 4 && mv.left >= mm.left && mv.right <= mm.right + 0.5, scripts: document.scripts.length, inputs: document.querySelectorAll('.vmcard input, .vmcard button, .vmcard a').length,
       vm: { role: d('.vm').getAttribute('role'), label: /주황색 외곽선/.test(d('.vm').getAttribute('aria-label')), inVp: !!d('.vm').closest('.vp'), cardBottom: Math.round(Math.max(...[...document.querySelectorAll('.card')].map((c) => R(c).bottom))), top: Math.round(R(d('.vmcard')).top), order: [...d('.cards').children].map((c) => c.classList[0]) } };
   });
   t(`E12 ${W}px 미리보기 위 띠: 제목 · 행사명 왼쪽, 배치도 단추 오른쪽에 하나 · 자동 갱신은 띠에 없음`, vp.maps === 1 && vp.mapRight && vp.title && !vp.inBand && vp.band === '부스대기현황2026인천AI미래채움교육페스티벌·인천상상플랫폼배치도', JSON.stringify(vp));
   t(`E13 ${W}px 미리보기 상태 표시: 제목 줄 오른쪽 · 예시 화면 · 맥박 없음 · 페이지 어디에도 자동 갱신 중 없음 · 전체 숫자 강조`, vp.sync === '예시 화면' && vp.sameLine && vp.dot === 'none' && !vp.page.includes('자동 갱신 중') && vp.total[0] > vp.total[2] + 6 && vp.total[1] === '800', JSON.stringify([vp.sync, vp.sameLine, vp.dot, vp.total]));
-  t(`E14 ${W}px 미리보기 검색 · 필터: 운영 화면과 같은 차례 · 취소 없음`, vp.search === '부스번호·학교명검색검색' && vp.ctl === '목록한눈에번호순대기짧은순' && vp.order.every((y, i) => !i || y > vp.order[i - 1]), JSON.stringify([vp.search, vp.ctl, vp.order]));
+  t(`E14 ${W}px 미리보기 검색 · 필터: 운영 화면과 같은 차례 · 취소 없음`, vp.search === '부스번호 · 학교명 검색|검색' && vp.ctl === '목록한눈에번호순대기짧은순' && vp.order.every((y, i) => !i || y > vp.order[i - 1]), JSON.stringify([vp.search, vp.ctl, vp.order]));
   t(`E15 ${W}px 미리보기 배치도: 구역 단추 8개 · 부스 명단 · 주황 외곽선 · 미니맵 · 실제 그림 · 글자 잘림 없음`, JSON.stringify(vp.chips) === JSON.stringify(['전체 보기', '스쿨존 01~44', '스쿨존 45~84', '미래채움존', '체험존', '빅테크존', '홍보존', '부스 명단']) && !vp.chipCut && vp.boxes === 4 && vp.mini && vp.img === 1600, JSON.stringify([vp.chips, vp.chipCut, vp.boxes, vp.mini, vp.img]));
   t(`E17 ${W}px 배치도 칸: 목록 미리보기 밖 · 그림 설명 있음 · 차례는 관람객 → 배치도 → 운영자, 두 카드 나란히일 때는 그 아래`, vp.vm.role === 'img' && vp.vm.label && !vp.vm.inVp && JSON.stringify(vp.vm.order) === JSON.stringify(['card', 'vmcard', 'card']) && (W < 1024 || vp.vm.top >= vp.vm.cardBottom), JSON.stringify(vp.vm));
+  await page.evaluate(() => document.querySelector('.vp [data-vp-view="grid"]').click());
   const pv = await page.evaluate(() => {
     const R = (e) => e.getBoundingClientRect(), tiles = [...document.querySelectorAll('.vp__tiles .tile')];
     const parts = tiles.map((el) => { const o = el.querySelector('.tile__o'), s = el.querySelector('.tile__s'), n = el.querySelector('.tile__no'), g = document.createRange(), r = R(el); g.selectNodeContents(o); return { no: n.textContent, o: o.textContent, lines: new Set([...g.getClientRects()].map((x) => Math.round(x.top))).size, cut: o.scrollWidth > o.clientWidth + 0.5, order: R(n).bottom <= R(o).top + 0.5 && R(o).bottom <= R(s).top + 0.5, h: r.height, inside: g.getBoundingClientRect().right <= r.right && g.getBoundingClientRect().left >= r.left, fs: getComputedStyle(o).fontSize }; });
     const tabs = [...document.querySelectorAll('.vp__tab')], b = tabs[0].querySelector('b');
     return { parts, tabs: tabs.map((x) => x.textContent.replace(/\s+/g, '')), on: document.querySelectorAll('.vp__tab.is-on').length, num: [parseFloat(getComputedStyle(b).fontSize), getComputedStyle(b).fontWeight, getComputedStyle(b).color], rowOrg: [...document.querySelectorAll('.vr__org')].map((x) => x.textContent), rowCode: [...document.querySelectorAll('.vr__code')].map((x) => x.textContent) };
   });
+  await page.evaluate(() => document.querySelector('.vp [data-vp-view="list"]').click());
   const SHORT = { '인천교육청': '인천교육청', '인천새빛초등학교': '새빛초', '인천한빛중학교': '한빛중', '인천한울고등학교': '한울고', '인천미래고등학교': '미래고', '인천바다중학교': '바다중', '인천구름초등학교': '구름초' };
   t(`E18 ${W}px 미리보기 칸: 번호 → 짧은 이름 → 상태 · 이름 한 줄 · 13px · 칸 높이 같음`, pv.parts.length === 7 && pv.parts.every((x) => x.lines === 1 && !x.cut && x.order && x.inside && x.h === 76 && x.fs === '13px'), JSON.stringify(pv.parts));
   t(`E19 ${W}px 미리보기 칸의 이름 = 같은 번호 목록 줄의 기관`, pv.parts.every((x) => { const i = pv.rowCode.indexOf(x.no); return i >= 0 && SHORT[pv.rowOrg[i]] === x.o; }), JSON.stringify([pv.parts.map((x) => [x.no, x.o]), pv.rowOrg]));
   t(`E20 ${W}px 미리보기 탭: 전체 N곳 강조 · 학교급 탭 · 고른 칸 하나`, JSON.stringify(pv.tabs) === JSON.stringify(['전체7곳', '초', '중·특', '고', '미래·체험']) && pv.on === 1 && pv.num[0] === 15 && pv.num[1] === '800' && pv.num[2] === 'rgb(91, 69, 224)', JSON.stringify([pv.tabs, pv.num]));
   t(`E21 ${W}px 예시 기관이 실제 105곳과 겹치지 않음`, pv.rowOrg.every((o) => !REAL_ORGS.has(o)), JSON.stringify(pv.rowOrg.filter((o) => REAL_ORGS.has(o))));
-  t(`E16 ${W}px 미리보기는 그림: 스크립트 · 입력 · 단추 · 링크 없음`, vp.scripts === 0 && vp.inputs === 0, JSON.stringify([vp.scripts, vp.inputs]));
+  t(`E16 ${W}px 배치도 칸은 그림 · 스크립트는 미리보기 조작 하나 · 외부 파일 없음`, vp.scripts === 1 && vp.inputs === 0 && (await page.evaluate(() => [...document.scripts].every((s) => !s.src))), JSON.stringify([vp.scripts, vp.inputs]));
+  const ex2 = await page.evaluate(async () => {
+    const q = (s) => document.querySelector('.vp ' + s), wait = () => new Promise((r) => setTimeout(r, 30));
+    const press = async (s) => { q(s).click(); await wait(); };
+    const seen = () => ({ zone: q('[data-vp-zone][aria-pressed="true"]').getAttribute('data-vp-zone'), view: q('[data-vp-view][aria-pressed="true"]').getAttribute('data-vp-view'), sort: q('[data-vp-sort][aria-pressed="true"]').getAttribute('data-vp-sort'), rows: [...document.querySelectorAll('.vp .vr')].filter((e) => getComputedStyle(e).display !== 'none' && !q('.vp__rows').hidden).map((e) => e.querySelector('.vr__code').textContent), tiles: [...document.querySelectorAll('.vp .tile')].filter((e) => !q('.vp__tiles').hidden && !e.hidden).map((e) => e.querySelector('.tile__no').textContent), q: q('#vp-q').value, btn: q('.vp__qbtn').textContent, sortHidden: q('[data-vp-sortseg]').hidden, sub: q('.vp__sub').hidden });
+    const out = { start: seen() };
+    await press('[data-vp-zone="초"]'); out.zone = seen();
+    await press('[data-vp-view="grid"]'); out.grid = seen();
+    await press('[data-vp-zone="고"]'); out.gridZone = seen();
+    await press('[data-vp-view="list"]'); out.list = seen();
+    await press('[data-vp-zone=""]');
+    await press('[data-vp-sort="wait"]'); out.wait = seen();
+    await press('[data-vp-view="grid"]'); await press('[data-vp-view="list"]'); out.waitBack = seen();
+    await press('[data-vp-zone="중"]'); out.waitZone = seen();
+    const input = q('#vp-q'); input.value = '바다'; input.dispatchEvent(new Event('input', { bubbles: true })); await wait(); out.typed = seen();
+    await press('.vp__qbtn'); out.searched = seen();
+    await press('[data-vp-view="grid"]'); out.searchGrid = seen();
+    await press('.vp__home'); out.home = seen();
+    input.value = '없는이름'; await press('.vp__qbtn'); out.none = { ...seen(), msg: !q('.vp__none').hidden };
+    await press('.vp__qbtn'); out.reset = seen();
+    return out;
+  });
+  const ALL7 = ['A-02', 'B-01', 'C-01', 'D-03', 'E-01', 'E-02', 'E-03'];
+  t(`E22 ${W}px 예시 처음: 전체 · 목록 · 번호순 · 7곳`, ex2.start.zone === '' && ex2.start.view === 'list' && ex2.start.sort === 'code' && same(ex2.start.rows, ALL7) && ex2.start.sub, JSON.stringify(ex2.start));
+  t(`E23 ${W}px 예시 학교급 → 한눈에 → 학교급 변경 → 목록: 탭 · 보기 유지 · 곳 수 일치`, same(ex2.zone.rows, ['B-01', 'E-03']) && ex2.grid.zone === '초' && same(ex2.grid.tiles, ['B-01', 'E-03']) && ex2.grid.rows.length === 0 && ex2.gridZone.view === 'grid' && same(ex2.gridZone.tiles, ['D-03', 'E-01']) && ex2.list.zone === '고' && same(ex2.list.rows, ['D-03', 'E-01']), JSON.stringify([ex2.zone.rows, ex2.grid.tiles, ex2.gridZone.tiles, ex2.list.rows]));
+  t(`E24 ${W}px 예시 대기 짧은 순: 운영 화면과 같은 차례 · 보기를 바꿔도 유지 · 한눈에는 정렬 숨김`, same(ex2.wait.rows, ['A-02', 'B-01', 'C-01', 'E-02', 'E-03', 'D-03', 'E-01']) && same(ex2.waitBack.rows, ex2.wait.rows) && ex2.waitBack.sort === 'wait' && ex2.grid.sortHidden && same(ex2.waitZone.rows, ['C-01', 'E-02']), JSON.stringify([ex2.wait.rows, ex2.waitBack.sort, ex2.waitZone.rows]));
+  t(`E25 ${W}px 예시 검색: 입력만으로는 안 바뀜 · 검색 뒤 초기화 단추 · 보기를 바꿔도 유지`, same(ex2.typed.rows, ['C-01', 'E-02']) && ex2.typed.btn === '검색' && same(ex2.searched.rows, ['E-02']) && ex2.searched.zone === '' && ex2.searched.btn === '초기화' && same(ex2.searchGrid.tiles, ['E-02']), JSON.stringify([ex2.typed.rows, ex2.searched, ex2.searchGrid.tiles]));
+  t(`E26 ${W}px 예시 제목: 전체 · 목록 · 번호순 · 검색 초기화`, ex2.home.zone === '' && ex2.home.view === 'list' && ex2.home.sort === 'code' && ex2.home.q === '' && ex2.home.btn === '검색' && same(ex2.home.rows, ALL7), JSON.stringify(ex2.home));
+  t(`E27 ${W}px 예시 결과 없음 안내 · 초기화로 복귀`, ex2.none.msg && ex2.none.rows.length === 0 && ex2.none.btn === '초기화' && same(ex2.reset.rows, ALL7) && ex2.reset.q === '', JSON.stringify([ex2.none.msg, ex2.none.rows, ex2.reset.rows]));
+  const look = await page.evaluate(() => { const b = document.querySelector('.vp__home'), t = document.querySelector('.vp__title'), s = getComputedStyle(b), r = getComputedStyle(t); return { size: [s.fontSize, r.fontSize], w: s.fontWeight, c: s.color, bg: s.backgroundColor, cur: s.cursor, kids: b.children.length, name: b.getAttribute('aria-label'), api: performance.getEntriesByType('resource').filter((e) => /\/api\/|supabase/.test(e.name)).length, store: Object.keys(localStorage).length }; });
+  t(`E28 ${W}px 예시 제목 모양 그대로 · 눌리는 곳 · 서버 · 저장소 쓰지 않음`, look.size[0] === look.size[1] && look.w === '800' && look.c === 'rgb(255, 255, 255)' && look.bg === 'rgba(0, 0, 0, 0)' && look.cur === 'pointer' && look.kids === 0 && look.name.includes('처음 화면') && look.api === 0 && look.store === 0, JSON.stringify(look));
   t(`E11 ${W}px 화면 안내 상단 요약: 실제 화면과 같은 다섯 상태 · 일곱 부스 합 · 막대에 현장예약 구간`, JSON.stringify(ex.cnt.map((x) => [x[0], x[1]])) === JSON.stringify([['여유', 1], ['보통', 1], ['혼잡', 1], ['현장예약', 1], ['중단·마감', 3]]) && ex.cnt.every((x) => x[2]) && JSON.stringify(ex.dist) === JSON.stringify(['free', 'normal', 'busy', 'resv', 'off']), JSON.stringify([ex.cnt, ex.dist]));
   const op = await page.evaluate(() => {
     const R = (el) => { const r = el.getBoundingClientRect(); return { l: r.left, r: r.right, t: r.top, b: r.bottom, w: r.width, h: r.height }; };
