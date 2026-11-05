@@ -154,6 +154,8 @@ const ringOk = (p, k) => !!p && !!p.ring && p.ring.r.every((x) => x === 4) && (k
 const WIDTHS = [360, 390, 768, 1024, 1440];
 const STATES = { 'A-02': ['is-free', '5분', '여유'], 'B-01': ['is-normal', '20분', '보통'], 'A-04': ['is-busy', '30분', '혼잡'],
   'C-05': ['is-resv', '현장', '예약'], 'C-06': ['is-resv-closed', '예약', '마감'], 'B-03': ['is-pause', '잠시', '중단'], 'C-01': ['is-closed', '오늘', '마감'] };
+// 예시가 실제 운영 현황처럼 보이지 않게, 예시 기관은 검증표의 실제 105곳과 겹치면 안 됩니다.
+const REAL_ORGS = new Set(readFileSync(new URL('./short-names-105.md', import.meta.url), 'utf8').split(/\r?\n/).filter((l) => l.startsWith('| ')).map((l) => l.split(' | ')[2]));
 let tagBg = null, realRow = null;
 for (const W of WIDTHS) {
   const { ctx, page } = await openPage(W, '/visitor.html?demo=1');
@@ -233,13 +235,13 @@ for (const W of WIDTHS) {
     return { no: el.querySelector('.tile__no').textContent, noTop: el.querySelector('.tile__no').getBoundingClientRect().top - r.top, size: r.width, cls: el.className, v: parts[0], w: parts[1], btm: r.bottom, bg: cs.backgroundColor, ink: cs.color };
   }));
   const tb = Object.fromEntries(tiles.map((x) => [x.no, x]));
-  t(`G1 ${W}px 한눈에: 일곱 상태 칸(두 줄 낱말 — 목록과 같은 말)`, Object.entries(STATES).every(([k, [cls, v, w]]) => tb[k] && tb[k].cls.includes(cls) && tb[k].v.t === v && tb[k].w.t === w),
+  t(`G1 ${W}px 한눈에: 일곱 상태 칸(두 낱말 — 목록과 같은 말)`, Object.entries(STATES).every(([k, [cls, v, w]]) => tb[k] && tb[k].cls.includes(cls) && tb[k].v.t === v && tb[k].w.t === w),
     JSON.stringify(Object.keys(STATES).map((k) => tb[k] && [k, tb[k].cls, tb[k].v.t, tb[k].w.t])));
   t(`G2 ${W}px 한눈에: 모든 칸 글자가 칸 안에(아래 · 옆 넘침 없음, 가장 좁은 칸 ${Math.round(Math.min(...tiles.map((x) => x.size)))}px)`,
     tiles.every((x) => x.v.btm <= x.btm - 1 && x.w.btm <= x.btm - 1 && x.v.sw <= x.v.cw + 0.5 && x.w.sw <= x.w.cw + 0.5),
     JSON.stringify(tiles.filter((x) => !(x.v.btm <= x.btm - 1 && x.w.btm <= x.btm - 1 && x.v.sw <= x.v.cw + 0.5 && x.w.sw <= x.w.cw + 0.5)).map((x) => x.no)));
-  t(`G3 ${W}px 한눈에: 글자 크기 — 상태 낱말 12px 이상 · 대기 분이 없는 칸 두 줄 14px`,
-    ['A-02', 'B-01', 'A-04'].every((k) => tb[k].w.fs >= 12) && Object.keys(TAGS).every((k) => tb[k].v.fs >= 14 && tb[k].w.fs >= 14),
+  t(`G3 ${W}px 한눈에: 글자 크기 — 상태 낱말 12px 이상 · 대기 분이 없는 칸 두 낱말 12.5px`,
+    ['A-02', 'B-01', 'A-04'].every((k) => tb[k].w.fs >= 12) && Object.keys(TAGS).every((k) => tb[k].v.fs === 12.5 && tb[k].w.fs === 12.5),
     JSON.stringify(Object.keys(STATES).map((k) => [k, tb[k].v.fs, tb[k].w.fs])));
   t(`G4 ${W}px 한눈에: 목록 상태 표시와 같은 색 갈래(보라 · 채도 낮은 보라 · 흰 바탕 · 옅은 회색)`, !!tagBg && Object.entries(TAGS).every(([c, [, k]]) => tb[c].bg === tagBg[k] && tb[c].ink === COLORS[k].ink),
     JSON.stringify(Object.keys(TAGS).map((k) => [k, tb[k].bg, tb[k].ink])));
@@ -305,6 +307,13 @@ for (const [id, text, k] of [['ex-c05', '현장예약', 'resv'], ['ex-c06', '예
 }
 t('X4 예시 화면(목록 · 한눈에 · 지금 계신 부스)은 서버(Supabase · /api)를 읽지 않음', demoCalls.length === 0, demoCalls.join(' '));
 
+for (const W of [390, 1440]) {
+  const { ctx, page } = await openPage(W, '/visitor.html?demo=1');
+  const d = await page.evaluate(() => { const s = document.getElementById('sync'); return { text: s.textContent, on: s.classList.contains('is-on'), hidden: s.hidden, anim: getComputedStyle(s.querySelector('.sync__dot')).animationName, bar: !document.getElementById('demobar').hidden }; });
+  t(`D1 ${W}px 협의용 예시: 예시 화면 표시 · 자동 갱신 중이라고 하지 않음 · 맥박 없음 · 예시 띠`, d.text === '예시 화면' && !d.on && !d.hidden && d.anim === 'none' && d.bar, JSON.stringify(d));
+  await ctx.close();
+}
+
 /* ── U : 전체 N곳 ───────────────────────────────────────────────── */
 for (const W of WIDTHS) {
   const { ctx, page } = await openPage(W, '/visitor.html?demo=1');
@@ -349,7 +358,7 @@ for (const W of WIDTHS) {
     && eParts.filter((p) => /\bstag\b/.test(p.cls)).length === 4 && eParts.filter((p) => /\bstag\b/.test(p.cls)).every((p) => near(p.w, 76) && near(p.h, 34))
     && eParts.filter((p) => /\bst\b/.test(p.cls)).every((p) => near(p.w, 60) && near(p.h, 22)), JSON.stringify(ex.rows));
   t(`E2 ${W}px 화면 안내 목록: 상태 표시 글 · 색 · 테두리(현장예약 네 면 3px) = 관람객 화면`, Object.entries(want).every(([c, [w, k]]) => er[c] && er[c].parts[0] && er[c].parts[0].text === w && colorOk(er[c].parts[0], k) && ringOk(er[c].parts[0], k)), JSON.stringify(Object.keys(want).map((c) => er[c])));
-  t(`E3 ${W}px 화면 안내 한눈에: 일곱 칸 · 두 줄 낱말 · 색 = 관람객 화면`, ex.tiles === 7 && !!ex.tPause && ex.tPause.v + '/' + ex.tPause.w === '잠시/중단' && ex.tClosed.v + '/' + ex.tClosed.w === '오늘/마감'
+  t(`E3 ${W}px 화면 안내 한눈에: 일곱 칸 · 두 낱말 · 색 = 관람객 화면`, ex.tiles === 7 && !!ex.tPause && ex.tPause.v + '/' + ex.tPause.w === '잠시/중단' && ex.tClosed.v + '/' + ex.tClosed.w === '오늘/마감'
     && ex.tResv.v + '/' + ex.tResv.w === '현장/예약' && ex.tResvClosed.v + '/' + ex.tResvClosed.w === '예약/마감' && !!tagBg
     && ex.tResv.bg === tagBg.resv && ex.tResvClosed.bg === tagBg['resv-off'] && ex.tClosed.bg === tagBg.off && ex.tPause.bg === tagBg.pause, JSON.stringify([ex.tPause, ex.tClosed, ex.tResv, ex.tResvClosed]));
   t(`E4 ${W}px 화면 안내: 두 카드에 예시 화면 살펴보기 링크 · 가로 넘침 없음`, JSON.stringify(ex.demo) === JSON.stringify(['/?demo=1 관람객 예시 화면 살펴보기', '/booth-ctrl?demo 부스 운영자 예시 화면 살펴보기']) && ex.ovf <= 0, JSON.stringify({ demo: ex.demo, ovf: ex.ovf }));
@@ -358,17 +367,28 @@ for (const W of WIDTHS) {
     const map = R(q('.vp__mapbtn')), lab = R(q('.vp__label')), sy = R(q('.vp__sync')), d = (s) => document.querySelector(s), img = d('.vm__img'), mv = R(d('.vm__miniview')), mm = R(d('.vm__minimap'));
     const n = getComputedStyle(q('.vp__total b')), t = getComputedStyle(q('.vp__total'));
     return { band: q('.vp__band').textContent.replace(/\s+/g, ''), maps: document.querySelectorAll('.vp .vp__mapbtn').length, mapRight: map.right <= box.right, title: R(q('.vp__title')).right <= map.left,
-      sync: q('.vp__sync').textContent, inBand: !!q('.vp__sync').closest('.vp__band'), sameLine: Math.abs((lab.top + lab.height / 2) - (sy.top + sy.height / 2)) <= 3, dot: getComputedStyle(q('.vp__syncdot')).animationName,
+      sync: q('.vp__sync').textContent, inBand: !!q('.vp__sync').closest('.vp__band'), sameLine: Math.abs((lab.top + lab.height / 2) - (sy.top + sy.height / 2)) <= 3, dot: getComputedStyle(q('.vp__syncdot')).animationName, page: document.body.textContent,
       total: [parseFloat(n.fontSize), n.fontWeight, parseFloat(t.fontSize)], search: q('.vp__q').textContent.replace(/\s+/g, ''), ctl: q('.vp__ctl').textContent.replace(/\s+/g, ''),
       order: ['.vp__hero', '.vp__q', '.vp__tabs', '.vp__ctl', '.vp__rows'].map((s) => Math.round(R(q(s)).top)), chips: [...document.querySelectorAll('.vm__zones span')].map((x) => x.textContent), chipCut: [...document.querySelectorAll('.vm__zones span')].some((x) => x.scrollWidth > x.clientWidth + 0.5),
       img: img.naturalWidth, boxes: document.querySelectorAll('.vm__hl').length, mini: mv.width > 4 && mv.left >= mm.left && mv.right <= mm.right + 0.5, scripts: document.scripts.length, inputs: document.querySelectorAll('.vp input, .vp button, .vp a, .vmcard input, .vmcard button, .vmcard a').length,
       vm: { role: d('.vm').getAttribute('role'), label: /주황색 외곽선/.test(d('.vm').getAttribute('aria-label')), inVp: !!d('.vm').closest('.vp'), cardBottom: Math.round(Math.max(...[...document.querySelectorAll('.card')].map((c) => R(c).bottom))), top: Math.round(R(d('.vmcard')).top), order: [...d('.cards').children].map((c) => c.classList[0]) } };
   });
   t(`E12 ${W}px 미리보기 위 띠: 제목 · 행사명 왼쪽, 배치도 단추 오른쪽에 하나 · 자동 갱신은 띠에 없음`, vp.maps === 1 && vp.mapRight && vp.title && !vp.inBand && vp.band === '부스대기현황2026인천AI미래채움교육페스티벌·인천상상플랫폼배치도', JSON.stringify(vp));
-  t(`E13 ${W}px 미리보기 자동 갱신: 제목 줄 오른쪽 · 자동 갱신 중 · 초록 맥박 · 전체 숫자 강조`, vp.sync === '자동 갱신 중' && vp.sameLine && vp.dot === 'vp-pulse' && vp.total[0] > vp.total[2] + 6 && vp.total[1] === '800', JSON.stringify([vp.sync, vp.sameLine, vp.dot, vp.total]));
+  t(`E13 ${W}px 미리보기 상태 표시: 제목 줄 오른쪽 · 예시 화면 · 맥박 없음 · 페이지 어디에도 자동 갱신 중 없음 · 전체 숫자 강조`, vp.sync === '예시 화면' && vp.sameLine && vp.dot === 'none' && !vp.page.includes('자동 갱신 중') && vp.total[0] > vp.total[2] + 6 && vp.total[1] === '800', JSON.stringify([vp.sync, vp.sameLine, vp.dot, vp.total]));
   t(`E14 ${W}px 미리보기 검색 · 필터: 운영 화면과 같은 차례 · 취소 없음`, vp.search === '부스번호·학교명검색검색' && vp.ctl === '목록한눈에번호순대기짧은순' && vp.order.every((y, i) => !i || y > vp.order[i - 1]), JSON.stringify([vp.search, vp.ctl, vp.order]));
   t(`E15 ${W}px 미리보기 배치도: 구역 단추 8개 · 부스 명단 · 주황 외곽선 · 미니맵 · 실제 그림 · 글자 잘림 없음`, JSON.stringify(vp.chips) === JSON.stringify(['전체 보기', '스쿨존 01~44', '스쿨존 45~84', '미래채움존', '체험존', '빅테크존', '홍보존', '부스 명단']) && !vp.chipCut && vp.boxes === 4 && vp.mini && vp.img === 1600, JSON.stringify([vp.chips, vp.chipCut, vp.boxes, vp.mini, vp.img]));
   t(`E17 ${W}px 배치도 칸: 목록 미리보기 밖 · 그림 설명 있음 · 차례는 관람객 → 배치도 → 운영자, 두 카드 나란히일 때는 그 아래`, vp.vm.role === 'img' && vp.vm.label && !vp.vm.inVp && JSON.stringify(vp.vm.order) === JSON.stringify(['card', 'vmcard', 'card']) && (W < 1024 || vp.vm.top >= vp.vm.cardBottom), JSON.stringify(vp.vm));
+  const pv = await page.evaluate(() => {
+    const R = (e) => e.getBoundingClientRect(), tiles = [...document.querySelectorAll('.vp__tiles .tile')];
+    const parts = tiles.map((el) => { const o = el.querySelector('.tile__o'), s = el.querySelector('.tile__s'), n = el.querySelector('.tile__no'), g = document.createRange(), r = R(el); g.selectNodeContents(o); return { no: n.textContent, o: o.textContent, lines: new Set([...g.getClientRects()].map((x) => Math.round(x.top))).size, cut: o.scrollWidth > o.clientWidth + 0.5, order: R(n).bottom <= R(o).top + 0.5 && R(o).bottom <= R(s).top + 0.5, h: r.height, inside: g.getBoundingClientRect().right <= r.right && g.getBoundingClientRect().left >= r.left, fs: getComputedStyle(o).fontSize }; });
+    const tabs = [...document.querySelectorAll('.vp__tab')], b = tabs[0].querySelector('b');
+    return { parts, tabs: tabs.map((x) => x.textContent.replace(/\s+/g, '')), on: document.querySelectorAll('.vp__tab.is-on').length, num: [parseFloat(getComputedStyle(b).fontSize), getComputedStyle(b).fontWeight, getComputedStyle(b).color], rowOrg: [...document.querySelectorAll('.vr__org')].map((x) => x.textContent), rowCode: [...document.querySelectorAll('.vr__code')].map((x) => x.textContent) };
+  });
+  const SHORT = { '인천교육청': '인천교육청', '인천새빛초등학교': '새빛초', '인천한빛중학교': '한빛중', '인천한울고등학교': '한울고', '인천미래고등학교': '미래고', '인천바다중학교': '바다중', '인천구름초등학교': '구름초' };
+  t(`E18 ${W}px 미리보기 칸: 번호 → 짧은 이름 → 상태 · 이름 한 줄 · 13px · 칸 높이 같음`, pv.parts.length === 7 && pv.parts.every((x) => x.lines === 1 && !x.cut && x.order && x.inside && x.h === 76 && x.fs === '13px'), JSON.stringify(pv.parts));
+  t(`E19 ${W}px 미리보기 칸의 이름 = 같은 번호 목록 줄의 기관`, pv.parts.every((x) => { const i = pv.rowCode.indexOf(x.no); return i >= 0 && SHORT[pv.rowOrg[i]] === x.o; }), JSON.stringify([pv.parts.map((x) => [x.no, x.o]), pv.rowOrg]));
+  t(`E20 ${W}px 미리보기 탭: 전체 N곳 강조 · 학교급 탭 · 고른 칸 하나`, JSON.stringify(pv.tabs) === JSON.stringify(['전체7곳', '초', '중·특', '고', '미래·체험']) && pv.on === 1 && pv.num[0] === 15 && pv.num[1] === '800' && pv.num[2] === 'rgb(91, 69, 224)', JSON.stringify([pv.tabs, pv.num]));
+  t(`E21 ${W}px 예시 기관이 실제 105곳과 겹치지 않음`, pv.rowOrg.every((o) => !REAL_ORGS.has(o)), JSON.stringify(pv.rowOrg.filter((o) => REAL_ORGS.has(o))));
   t(`E16 ${W}px 미리보기는 그림: 스크립트 · 입력 · 단추 · 링크 없음`, vp.scripts === 0 && vp.inputs === 0, JSON.stringify([vp.scripts, vp.inputs]));
   t(`E11 ${W}px 화면 안내 상단 요약: 실제 화면과 같은 다섯 상태 · 일곱 부스 합 · 막대에 현장예약 구간`, JSON.stringify(ex.cnt.map((x) => [x[0], x[1]])) === JSON.stringify([['여유', 1], ['보통', 1], ['혼잡', 1], ['현장예약', 1], ['중단·마감', 3]]) && ex.cnt.every((x) => x[2]) && JSON.stringify(ex.dist) === JSON.stringify(['free', 'normal', 'busy', 'resv', 'off']), JSON.stringify([ex.cnt, ex.dist]));
   const op = await page.evaluate(() => {

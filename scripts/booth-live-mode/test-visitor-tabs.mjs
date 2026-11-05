@@ -164,7 +164,7 @@ async function tabsAt(W, N) {
   const name = (wide, short) => (mobile ? short : wide);
   const joined = !!N.u, hideN = joined && mobile;
   const n = (v) => (hideN ? '' : v);
-  const want = [`전체${n(N.all)}`, `${name('초등', '초')}${n(N.e)}`, `${name('중등·특수', '중·특')}${n(N.m + N.s)}`, `${name('고등', '고')}${n(N.h)}`,
+  const want = [`전체${N.all}곳`, `${name('초등', '초')}${n(N.e)}`, `${name('중등·특수', '중·특')}${n(N.m + N.s)}`, `${name('고등', '고')}${n(N.h)}`,
     joined ? `${name('미래채움·체험', '미래·체험')}${n(N.u + N.f)}` : `${name('체험존', '체험')}${N.f}`];
   const tag = `${W}px ${N.all}곳`;
   t(`T1 ${tag} 탭 ${want.join(' | ')}`, JSON.stringify(m.tabs.map((x) => x.t)) === JSON.stringify(want), JSON.stringify(m.tabs.map((x) => x.t)));

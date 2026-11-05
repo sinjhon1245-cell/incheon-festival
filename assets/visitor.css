@@ -776,6 +776,8 @@ html.is-demo .row { scroll-margin-top: calc(56px + var(--demo-h) + env(safe-area
 .tab[aria-pressed="true"] { color: var(--ink); }
 .tab[aria-pressed="true"]::after { background: var(--ink); }
 .tab__n { font-size: 13px; font-weight: 600; color: var(--muted-2); }
+/* 전체 칸의 곳 수만 숫자를 키웁니다('곳' 은 다른 칸의 숫자와 같은 크기). 고른 칸 표시는 탭의 글자색 · 밑줄 그대로입니다. */
+.tab__n--all b { margin-right: 1px; font-size: 17px; font-weight: 800; color: var(--accent); letter-spacing: -0.02em; }
 /* 휴대폰: 탭 다섯 칸이 옆으로 밀지 않고 한 줄에 들게 줄인 이름을 쓰고, 칸을 줄 끝까지 고르게 벌립니다(글자 크기는 그대로).
    미래·체험이 묶이면 곳 수를 숨깁니다(곳 수는 화면 읽기 · title 에 남습니다) */
 .tab__short { display: none; }
@@ -786,7 +788,7 @@ html.is-demo .row { scroll-margin-top: calc(56px + var(--demo-h) + env(safe-area
   .tab { gap: 4px; }
   .tab:last-child { padding-right: 0; }
   .tab:last-child::after { right: 0; }
-  .tabs--joined .tab__n { display: none; }
+  .tabs--joined .tab__n:not(.tab__n--all) { display: none; }
 }
 /* 짧은 구역 이름(A 메이커존). 그래도 길면 말줄임 — 전체 이름은 구역 제목 · title 에 */
 .tab__t { max-width: 9em; overflow: hidden; text-overflow: ellipsis; }
@@ -1485,7 +1487,8 @@ html.vmap-on { overflow: hidden; }
    줄 사이 2px)을 칸 가운데(세로)에 둡니다 — 390px(65px 칸)에서도 실제 글자 위아래에 7 · 6px 안팎이 남습니다. */
 .tiles {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+  /* 이름(최대 6글자)이 한 줄에 들어갈 폭을 먼저 잡습니다: 320px 3열 · 360~414px 4열 · 넓은 화면 6열 */
+  grid-template-columns: repeat(auto-fill, minmax(74px, 1fr));
   gap: 6px;
   margin-top: 10px;
 }
@@ -1494,44 +1497,61 @@ html.vmap-on { overflow: hidden; }
   position: relative;
   display: flex;
   flex-direction: column;
+  align-items: center;
   justify-content: center;
-  gap: 2px;
-  aspect-ratio: 1 / 1;
-  min-height: 64px;
+  gap: 3px;
+  height: 76px;
   min-width: 0;
-  padding: 4px 7px;
+  padding: 5px 4px;
   border: 0;
   border-radius: 4px;
   background: var(--line-2);
   box-shadow: inset 0 0 0 1px var(--tile-edge);
   color: var(--muted-2);
-  text-align: left;
+  text-align: center;
   overflow: hidden;
 }
-/* 칸 안의 차례: 번호(가장 크게 · 왼쪽 위 고정) → 대기 분 → 상태 낱말. 세 줄 모두 왼쪽 끝을 맞춰
-   번호만 훑어 내려가도 찾고, 그 바로 아래에서 대기 분을 읽습니다. 칸 크기는 그대로입니다. */
-.tile__no { font-size: 25px; font-weight: 800; line-height: 1; letter-spacing: -0.04em; white-space: nowrap; }
+/* 칸 안의 차례: 번호(가장 크게) → 짧은 학교 · 기관 이름 → 대기 · 상태. 세 줄의 높이를 고정해
+   이름 길이와 상관없이 칸 높이와 줄 자리가 같습니다. */
+.tile__no { height: 26px; font-size: 25px; font-weight: 800; line-height: 26px; letter-spacing: -0.04em; white-space: nowrap; }
 /* 낱말이 든 번호(체험1)는 칸 폭에 맞춰 줄입니다 */
 .tile__no--word { font-size: 19px; }
 .tile__no--word2 { font-size: 16.5px; }
+/* 이름은 어떤 화면에서도 한 줄입니다. 표(SHORT_ORG)에 없는 긴 이름만 말줄임표로 자르고, 공식 이름은 화면 읽기 · title 에 남습니다. */
+.tile__o {
+  max-width: 100%;
+  height: 16px;
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 16px;
+  letter-spacing: -0.03em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tile__s {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 3px;
+  max-width: 100%;
+  height: 16px;
+  line-height: 16px;
+  white-space: nowrap;
+}
 .tile__v {
   display: flex;
   align-items: baseline;
   gap: 1px;
-  font-size: 16px;
+  font-size: 13px;
   font-weight: 800;
-  line-height: 1;
   letter-spacing: -0.03em;
-  white-space: nowrap;
 }
 .tile__u { font-size: 10.5px; font-weight: 700; }
-.tile__w {
-  min-height: 12px;
-  font-size: 12px;
-  font-weight: 700;
-  line-height: 1;
-  white-space: nowrap;
-}
+.tile__w { font-size: 12px; font-weight: 700; }
+.tile.is-free .tile__w::before,
+.tile.is-normal .tile__w::before,
+.tile.is-busy .tile__w::before { content: '·'; margin-right: 3px; }
 .tile.is-free   { background: var(--st-free);   color: #fff; }
 .tile.is-normal { background: var(--st-normal); color: var(--ink); }
 .tile.is-busy   { background: var(--st-busy);   color: #fff; }
@@ -1551,7 +1571,7 @@ html.vmap-on { overflow: hidden; }
 .tile.is-resv .tile__v,
 .tile.is-resv-closed .tile__v,
 .tile.is-resv .tile__w,
-.tile.is-resv-closed .tile__w { min-height: 0; font-size: 14px; font-weight: 700; line-height: 1; letter-spacing: -0.02em; }
+.tile.is-resv-closed .tile__w { font-size: 12.5px; font-weight: 700; letter-spacing: -0.02em; }
 .tile.is-pause .tile__no,
 .tile.is-closed .tile__no { color: var(--ink-2); }
 /* 회색 바탕(--line-2) 위의 '정보 없음' 은 --muted-2 로는 4.3:1 이라 한 단계 진하게. 번호는 목록과 같은 진한 보라 */

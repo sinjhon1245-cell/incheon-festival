@@ -244,7 +244,7 @@ const tagOf = (el) => { const b = el && el.querySelector('.stag'); return b ? { 
   if (mapBtn) mapBtn.click();
   await until(() => dm.querySelectorAll('.tile').length === 7, 1500);
   const tile = (i) => { const el = dm.querySelectorAll('.tile')[i]; return el ? el.className + '|' + txt(el.querySelector('.tile__v')) + '|' + txt(el.querySelector('.tile__w')) : ''; };
-  t('V3 한눈에: 현장예약 칸 = 목록과 같은 두 줄 "현장 / 예약"(칸 크기 그대로 · "운영 중" 없음)', /is-resv\b/.test(tile(5)) && /\|현장\|예약$/.test(tile(5)), tile(5));
+  t('V3 한눈에: 현장예약 칸 = 목록과 같은 두 낱말 "현장 / 예약"(칸 크기 그대로 · "운영 중" 없음)', /is-resv\b/.test(tile(5)) && /\|현장\|예약$/.test(tile(5)), tile(5));
   t('V3 한눈에: 예약 마감 칸 = "예약 · 마감"', /is-resv-closed/.test(tile(6)) && /\|예약\|마감$/.test(tile(6)), tile(6));
   const lbl = dm.querySelectorAll('.tile')[5] ? txt(dm.querySelectorAll('.tile')[5].querySelector('.sr-only')) : '';
   t('V3 한눈에: 화면 읽기 문장 "현장예약 운영 중"', /현장예약 운영 중/.test(lbl), lbl);

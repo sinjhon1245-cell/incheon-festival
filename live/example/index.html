@@ -42,7 +42,7 @@
             <p class="card__guide">현장예약 부스는 대기시간 대신 ‘현장예약’으로 표시됩니다. 예약은 부스에서 직접 접수합니다.</p>
           </div>
 
-          <div class="card__pv vp" role="img" aria-label="관람객 화면 미리보기. 위 띠에 제목과 배치도 단추가 있고, 지금 여유로운 부스 수(1곳, 전체 7곳)와 자동 갱신 상태, 상태별 부스 수, 검색칸, 구역 탭, 보기와 정렬 단추가 차례로 있습니다. 아래 목록에 부스마다 번호, 이름, 운영기관, 대기시간과 상태(여유, 보통, 혼잡, 잠시 중단, 마감, 현장예약, 예약 마감)가 있고, 같은 부스를 칸으로 보는 한눈에 보기가 그 아래에 있습니다.">
+          <div class="card__pv vp" role="img" aria-label="관람객 화면 미리보기. 위 띠에 제목과 배치도 단추가 있고, 지금 여유로운 부스 수(1곳, 전체 7곳)와 예시 화면 표시, 상태별 부스 수, 검색칸, 학교급 탭, 보기와 정렬 단추가 차례로 있습니다. 아래 목록에 부스마다 번호, 이름, 운영기관, 대기시간과 상태(여유, 보통, 혼잡, 잠시 중단, 마감, 현장예약, 예약 마감)가 있고, 같은 부스를 번호, 짧은 학교 이름, 대기 상태 차례의 칸으로 보는 한눈에 보기가 그 아래에 있습니다.">
             <div class="vp__band">
               <div class="vp__bandtext">
                 <p class="vp__title">부스 대기 현황</p>
@@ -53,7 +53,7 @@
             <div class="vp__hero">
               <div class="vp__labelrow">
                 <p class="vp__label">지금 여유로운 부스</p>
-                <p class="vp__sync"><i class="vp__syncdot"></i>자동 갱신 중</p>
+                <p class="vp__sync"><i class="vp__syncdot"></i>예시 화면</p>
               </div>
               <div class="vp__fig">
                 <p class="vp__big"><b class="vp__num">1</b><span class="vp__unit">곳</span></p>
@@ -71,7 +71,7 @@
               </ul>
             </div>
             <p class="vp__q"><span class="vp__qbox"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" aria-hidden="true" focusable="false"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.5-4.5"/></svg>부스번호 · 학교명 검색</span><span class="vp__qbtn">검색</span></p>
-            <p class="vp__tabs"><span class="vp__tab is-on">전체 <span class="vp__tabn">7</span></span><span class="vp__tab">A 구역 <span class="vp__tabn">1</span></span><span class="vp__tab">B 구역 <span class="vp__tabn">1</span></span><span class="vp__tab">C 구역 <span class="vp__tabn">1</span></span><span class="vp__tab">D 구역 <span class="vp__tabn">1</span></span></p>
+            <p class="vp__tabs"><span class="vp__tab is-on">전체 <span class="vp__tabn"><b>7</b>곳</span></span><span class="vp__tab">초</span><span class="vp__tab">중·특</span><span class="vp__tab">고</span><span class="vp__tab">미래·체험</span></p>
             <p class="vp__ctl"><span class="vp__seg"><span class="is-on">목록</span><span>한눈에</span></span><span class="vp__seg"><span class="is-on">번호순</span><span>대기 짧은 순</span></span></p>
             <ul class="vp__rows">
               <li class="vr">
@@ -107,20 +107,20 @@
               </li>
               <li class="vr">
                 <span class="vr__code">E-03</span>
-                <span class="vr__body"><span class="vr__name">드론 비행 교실</span><span class="vr__org">인천하늘초등학교</span></span>
+                <span class="vr__body"><span class="vr__name">드론 비행 교실</span><span class="vr__org">인천구름초등학교</span></span>
                 <span class="vr__right"><span class="stag stag--resv-off" aria-hidden="true">예약 마감</span></span>
               </li>
             </ul>
-            <!-- 한눈에 보기: 위 목록과 같은 일곱 부스를 칸으로(관람객 화면 .tile 과 같은 칠 · 같은 두 줄 낱말) -->
+            <!-- 한눈에 보기: 위 목록과 같은 일곱 부스를 칸으로(관람객 화면 .tile 과 같은 칠 · 같은 차례: 번호 → 짧은 이름 → 대기 · 상태) -->
             <p class="vp__sub">한눈에 보기</p>
             <ul class="vp__tiles">
-              <li class="tile is-free"><span class="tile__no">A-02</span><span class="tile__v">5<span class="tile__u">분</span></span><span class="tile__w">여유</span></li>
-              <li class="tile is-normal"><span class="tile__no">B-01</span><span class="tile__v">20<span class="tile__u">분</span></span><span class="tile__w">보통</span></li>
-              <li class="tile is-busy"><span class="tile__no">C-01</span><span class="tile__v">30<span class="tile__u">분</span></span><span class="tile__w">혼잡</span></li>
-              <li class="tile is-pause"><span class="tile__no">D-03</span><span class="tile__v">잠시</span><span class="tile__w">중단</span></li>
-              <li class="tile is-closed"><span class="tile__no">E-01</span><span class="tile__v">오늘</span><span class="tile__w">마감</span></li>
-              <li class="tile is-resv"><span class="tile__no">E-02</span><span class="tile__v">현장</span><span class="tile__w">예약</span></li>
-              <li class="tile is-resv-closed"><span class="tile__no">E-03</span><span class="tile__v">예약</span><span class="tile__w">마감</span></li>
+              <li class="tile is-free"><span class="tile__no">A-02</span><span class="tile__o">인천교육청</span><span class="tile__s"><span class="tile__v">5<span class="tile__u">분</span></span><span class="tile__w">여유</span></span></li>
+              <li class="tile is-normal"><span class="tile__no">B-01</span><span class="tile__o">새빛초</span><span class="tile__s"><span class="tile__v">20<span class="tile__u">분</span></span><span class="tile__w">보통</span></span></li>
+              <li class="tile is-busy"><span class="tile__no">C-01</span><span class="tile__o">한빛중</span><span class="tile__s"><span class="tile__v">30<span class="tile__u">분</span></span><span class="tile__w">혼잡</span></span></li>
+              <li class="tile is-pause"><span class="tile__no">D-03</span><span class="tile__o">한울고</span><span class="tile__s"><span class="tile__v">잠시</span><span class="tile__w">중단</span></span></li>
+              <li class="tile is-closed"><span class="tile__no">E-01</span><span class="tile__o">미래고</span><span class="tile__s"><span class="tile__v">오늘</span><span class="tile__w">마감</span></span></li>
+              <li class="tile is-resv"><span class="tile__no">E-02</span><span class="tile__o">바다중</span><span class="tile__s"><span class="tile__v">현장</span><span class="tile__w">예약</span></span></li>
+              <li class="tile is-resv-closed"><span class="tile__no">E-03</span><span class="tile__o">구름초</span><span class="tile__s"><span class="tile__v">예약</span><span class="tile__w">마감</span></span></li>
             </ul>
           </div>
 

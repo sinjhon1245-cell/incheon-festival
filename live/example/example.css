@@ -270,12 +270,8 @@ ul, ol { padding: 0; list-style: none; }
 .vp__label { font-size: 12.5px; font-weight: 600; color: var(--muted); }
 /* 자동 갱신 상태 — 관람객 화면 .sync 와 같은 초록 맥박 */
 .vp__sync { display: inline-flex; align-items: center; gap: 5px; color: var(--ink-2); font-size: 11px; font-weight: 700; line-height: 1; white-space: nowrap; }
-.vp__syncdot { width: 8px; height: 8px; border-radius: 50%; background: var(--v-free); animation: vp-pulse 2s ease-in-out infinite; }
-@keyframes vp-pulse {
-  0%, 100% { transform: scale(.8); }
-  50% { transform: scale(1.25); }
-}
-@media (prefers-reduced-motion: reduce) { .vp__syncdot { animation: none; } }
+/* 예시는 서버와 동기화하지 않으므로 자동 갱신의 초록 맥박을 쓰지 않습니다. 자리와 글자 모양만 관람객 화면과 같습니다 */
+.vp__syncdot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted-2); }
 .vp__fig { display: flex; align-items: flex-end; justify-content: space-between; gap: 10px; margin-top: 6px; }
 .vp__big { display: flex; align-items: baseline; gap: 3px; line-height: .86; }
 .vp__num { font-size: 48px; font-weight: 800; letter-spacing: -0.055em; }
@@ -309,7 +305,8 @@ ul, ol { padding: 0; list-style: none; }
 /* 구역 탭 — 실제 화면은 옆으로 밀어 보는 줄이라 그림에서도 넘치는 탭은 잘라 둡니다 */
 .vp__tabs {
   display: flex;
-  gap: 16px;
+  justify-content: space-between;
+  gap: 8px;
   padding: 0 14px;
   border-bottom: 1px solid var(--line);
   overflow: hidden;
@@ -317,7 +314,8 @@ ul, ol { padding: 0; list-style: none; }
 }
 .vp__tab { flex: none; padding: 8px 0 7px; border-bottom: 2px solid transparent; font-size: 13px; font-weight: 700; color: var(--muted); }
 .vp__tab.is-on { border-bottom-color: var(--ink); color: var(--ink); }
-.vp__tabn { font-weight: 600; color: var(--muted-2); }
+.vp__tabn { font-size: 11px; font-weight: 600; color: var(--muted-2); }
+.vp__tabn b { margin-right: 1px; font-size: 15px; font-weight: 800; color: var(--accent); letter-spacing: -0.02em; }
 /* 보기 · 정렬 — 관람객 화면 .seg 를 줄인 것 */
 .vp__ctl { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px; padding: 10px 14px 4px; }
 .vp__seg { display: inline-flex; border: 1px solid var(--line); font-size: 11.5px; font-weight: 600; color: var(--muted); }
@@ -463,34 +461,40 @@ ul, ol { padding: 0; list-style: none; }
 .vm__tools span { display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; border: 1px solid var(--line); border-radius: 4px; background: #fff; color: var(--ink); font-size: 15px; font-weight: 700; line-height: 1; box-shadow: 0 1px 2px rgba(22, 32, 60, .2); }
 .vp__tiles {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(66px, 1fr));
   gap: 6px;
   padding: 10px 14px 16px;
 }
 @media (min-width: 600px) {
   .vp__sub, .vp__tiles { padding-left: 16px; padding-right: 16px; }
 }
-@media (min-width: 1024px) { .vp__tiles { padding-bottom: 12px; } }
+@media (min-width: 1024px) { .vp__tiles { padding-bottom: 8px; } }
 .tile {
   --tile-edge: rgba(22, 32, 60, .14);
   display: flex;
   flex-direction: column;
+  align-items: center;
   justify-content: center;
-  gap: 2px;
-  aspect-ratio: 1 / 1;
-  min-height: 64px;
+  gap: 3px;
+  height: 76px;
   min-width: 0;
-  padding: 4px 7px;
+  padding: 5px 4px;
   border-radius: 4px;
   background: #F5F6FA;
   box-shadow: inset 0 0 0 1px var(--tile-edge);
   color: var(--muted-2);
+  text-align: center;
   overflow: hidden;
 }
-.tile__no { font-size: 25px; font-weight: 800; line-height: 1; letter-spacing: -0.04em; white-space: nowrap; }
-.tile__v { display: flex; align-items: baseline; gap: 1px; font-size: 16px; font-weight: 800; line-height: 1; letter-spacing: -0.03em; white-space: nowrap; }
+.tile__no { height: 26px; font-size: 25px; font-weight: 800; line-height: 26px; letter-spacing: -0.04em; white-space: nowrap; }
+.tile__o { max-width: 100%; height: 16px; overflow: hidden; font-size: 13px; font-weight: 800; line-height: 16px; letter-spacing: -0.03em; text-overflow: ellipsis; white-space: nowrap; }
+.tile__s { display: flex; align-items: baseline; justify-content: center; gap: 3px; max-width: 100%; height: 16px; line-height: 16px; white-space: nowrap; }
+.tile__v { display: flex; align-items: baseline; gap: 1px; font-size: 13px; font-weight: 800; letter-spacing: -0.03em; }
 .tile__u { font-size: 10.5px; font-weight: 700; }
-.tile__w { min-height: 12px; font-size: 12px; font-weight: 700; line-height: 1; white-space: nowrap; }
+.tile__w { font-size: 12px; font-weight: 700; }
+.tile.is-free .tile__w::before,
+.tile.is-normal .tile__w::before,
+.tile.is-busy .tile__w::before { content: '·'; margin-right: 3px; }
 .tile.is-free   { background: var(--v-free);   color: #fff; }
 .tile.is-normal { background: var(--v-normal); color: var(--ink); }
 .tile.is-busy   { background: var(--v-busy);   color: #fff; }
@@ -505,7 +509,7 @@ ul, ol { padding: 0; list-style: none; }
 .tile.is-resv .tile__v,
 .tile.is-resv-closed .tile__v,
 .tile.is-resv .tile__w,
-.tile.is-resv-closed .tile__w { min-height: 0; font-size: 14px; font-weight: 700; line-height: 1; letter-spacing: -0.02em; }
+.tile.is-resv-closed .tile__w { font-size: 12.5px; font-weight: 700; letter-spacing: -0.02em; }
 .tile.is-pause .tile__no,
 .tile.is-closed .tile__no { color: var(--ink-2); }
 

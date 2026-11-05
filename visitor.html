@@ -744,6 +744,8 @@
       var manualBtn = S.mode === 'manual' && S.hasData && liveWindow(Date.now()).on;
       if (S.info && S.info.phase === 'after') show = false;
       else if (!S.hasData) { text = S.failed ? '연결 안 됨' : '불러오는 중'; bad = S.failed; }
+      // 협의용 예시는 서버를 읽지 않으니 '자동 갱신' 이라고 하지 않습니다.
+      else if (core.isMock) text = '예시 화면';
       // 마지막 요청이 실패했으면 아직 늦었다고 볼 때가 아니어도 정상처럼 보이지 않게 합니다.
       else if (lag || S.failed) { text = '연결 지연'; bad = true; }
       else if (!S.fresh) text = '불러오는 중';
@@ -1029,7 +1031,7 @@
       }
       S.keys.tabs = key;
       var tabs = $('tabs');
-      // 미래·체험이 묶이면 휴대폰에서는 곳 수를 숨겨 글자 크기는 그대로 다섯 칸을 둡니다(곳 수는 aria-label · title 에 남습니다).
+      // 미래·체험이 묶이면 휴대폰에서는 구역별 곳 수를 숨겨 글자 크기는 그대로 다섯 칸을 둡니다(곳 수는 aria-label · title 에 남습니다). 전체 곳 수는 늘 보입니다.
       tabs.classList.toggle('tabs--joined', tabIsJoined('미래'));
       var restore = focusKey(tabs);
       // 탭에는 짧은 이름(A 스쿨존)만 둡니다. 전체 이름은 목록의 구역 제목 · 탭의 title 에 있습니다.
@@ -1045,7 +1047,7 @@
         var full = z.key ? z.label + ' · 부스 ' + z.n + '곳' : '전체 부스 ' + z.n + '곳';
         return '<button type="button" class="tab" data-zone="' + esc(z.key) + '" aria-pressed="' + on + '"' +
           ' title="' + esc(full) + '" aria-label="' + esc(full) + '">' +
-          tabNameHtml(z) + '<span class="tab__n">' + z.n + '</span></button>';
+          tabNameHtml(z) + (z.key ? '<span class="tab__n">' + z.n + '</span>' : '<span class="tab__n tab__n--all"><b>' + z.n + '</b>곳</span>') + '</button>';
       }
       var all = { key: '', label: '전체', n: S.booths.length };
       if (ts.length >= ZONE_SELECT_MIN) {
@@ -1248,11 +1250,51 @@
       '</li>';
     }
 
+    // 한눈에 칸의 짧은 이름. 화면에만 쓰는 값이라 DB 의 공식 이름은 그대로이고, 공식 이름은 목록 · 화면 읽기 · title 에 남습니다.
+    // 규칙(앞의 '인천' 빼기 · 학교급 줄이기 · 끝의 '협동조합' 빼기)으로 틀리게 되는 이름만 아래 표에 적습니다.
+    // 105곳 검증표: scripts/booth-live-mode/short-names-105.md (이름을 바꾸면 그 표도 함께 고칩니다)
+    var SHORT_ORG = {
+      '인천남고등학교': '인천남고',    // '남고' 는 남자고등학교로 읽힙니다
+      '인천남중학교': '인천남중',      // '남중' 도 같습니다
+      '인천공항고등학교': '인천공항고', // '인천공항' 이 이름의 일부입니다
+      '인하대학교사범대학부속고등학교': '인하사대부고',
+      '인하대학교사범대학부속중학교': '인하사대부중',
+      '인천연일학교, 인천청선학교': '연일·청선',
+      '협의용 예시 학교': '예시 학교',
+      '협의용 예시 기관': '예시 기관'
+    };
+    // 기관명이 등록되지 않은 체험존은 없는 기관명을 만들지 않고, 등록된 프로그램명 속 낱말을 그대로 씁니다.
+    var SHORT_PROGRAM = {
+      '카미봇 미션 레이싱 챌린지': '카미봇',
+      '나만의 앨범만들기': '앨범만들기',
+      '나도 될 수 있다, 케이팝 아이돌': '케이팝 아이돌',
+      '경찰과 도둑': '경찰과 도둑',
+      '나는야 아케이드 게임제작자': '게임제작자',
+      'AI 동화책 작가 되기': '동화책 작가',
+      '스마트 모빌리티의 기초 : 엠봇으로 배우는 로봇제어': '로봇제어',
+      '나만의 필터 카메라앱 만들기': '카메라앱',
+      '내가 만드는 AR 방탈출 - 장면전환과 코딩의마법': 'AR 방탈출',
+      '돌려라! 맞춰라! AI Cube 코딩챌린지': 'AI Cube',
+      '알티노로 배우는 AI 음성인식 자율주행 모빌리티': '알티노',
+      'AI와 함께 뚝딱 나만의 4컷 웹툰 만들기': '4컷 웹툰'
+    };
+    var SCHOOL_NAME = /^(?:인천)?(.+?)(여자)?(초등|중|고등)학교$/;
+    var SCHOOL_LEVEL = { '초등': '초', '중': '중', '고등': '고' };
+    // 규칙에 맞지 않는 이름은 줄이지 않고 그대로 돌려줍니다(넘치면 칸이 말줄임표로 자릅니다). 뜻 모를 약어를 만들지 않습니다.
+    function shortName(b) {
+      var org = orgText(b).trim();
+      if (!org) return SHORT_PROGRAM[b.name] || b.name || '';
+      if (SHORT_ORG[org]) return SHORT_ORG[org];
+      var m = org.match(SCHOOL_NAME);
+      if (m) return m[1] + (m[2] ? '여' : '') + SCHOOL_LEVEL[m[3]];
+      return org.replace(/\s*(?:교육)?협동조합$/, '') || org;
+    }
+
     function tileParts(b) {
       if (!liveOn()) return { cls: 'is-idle', v: '', w: '' };
       var c = b.congestion;
       if (!c) return { cls: 'is-unknown', v: '—', w: '정보 없음' };
-      // 대기 분이 없는 상태: 칸 크기는 그대로, 목록과 같은 낱말 · 같은 색을 칸에 맞게 두 줄로('현장 / 예약' · '예약 / 마감' · '잠시 / 중단' · '오늘 / 마감')
+      // 대기 분이 없는 상태: 칸 크기는 그대로, 목록과 같은 낱말 · 같은 색을 두 낱말로('현장 / 예약' · '예약 / 마감' · '잠시 / 중단' · '오늘 / 마감')
       var sb = STAT_TAG[c];
       if (sb) {
         var cls = { '예약중': 'is-resv', '예약마감': 'is-resv-closed', '중단': 'is-pause', '마감': 'is-closed' }[c];
@@ -1262,15 +1304,15 @@
       return { cls: 'is-' + core.meta(c).key, v: v, w: c };
     }
 
-    // 칸 왼쪽 위의 번호가 칸에서 가장 큰 글자입니다(관람객은 번호부터 찾음). 목록과 같은 공식 번호(앞에 0 없음).
-    // 칸은 읽기 전용 정보 칸입니다. 화면 읽기 프로그램에는 칸마다 '번호 · 이름 · 대기 · 상태' 한 줄(tileLabel)을 읽히고,
-    // 눈으로 보는 번호 · 숫자 · 낱말은 그 한 줄과 겹쳐 읽히지 않게 감춥니다.
+    // 칸 맨 위의 번호가 칸에서 가장 큰 글자입니다(관람객은 번호부터 찾음). 목록과 같은 공식 번호(앞에 0 없음).
+    // 칸은 읽기 전용 정보 칸입니다. 화면 읽기 프로그램에는 칸마다 '번호 · 이름 · 공식 기관 · 대기 · 상태' 한 줄(tileLabel)을 읽히고,
+    // 눈으로 보는 번호 · 짧은 이름 · 대기 · 상태는 그 한 줄과 겹쳐 읽히지 않게 감춥니다.
     function tileInner(b) {
       var p = tileParts(b);
       return '<span class="sr-only">' + esc(tileLabel(b)) + '</span>' +
         '<span class="tile__no' + tileNoCls(codeLabel(b)) + '" aria-hidden="true">' + esc(codeLabel(b)) + '</span>' +
-        '<span class="tile__v" aria-hidden="true">' + p.v + '</span>' +
-        '<span class="tile__w" aria-hidden="true">' + esc(p.w) + '</span>';
+        '<span class="tile__o" aria-hidden="true">' + esc(shortName(b)) + '</span>' +
+        '<span class="tile__s" aria-hidden="true"><span class="tile__v">' + p.v + '</span><span class="tile__w">' + esc(p.w) + '</span></span>';
     }
 
     function tileNoCls(code) {
@@ -1280,11 +1322,11 @@
 
     function tileLabel(b) {
       var code = codeLabel(b);
-      return [code ? code + '번' : '', b.name].filter(Boolean).join(' ') + (liveOn() ? ', ' + statusSpeech(b) : '');
+      return [code ? code + '번' : '', b.name, orgText(b)].filter(Boolean).join(' ') + (liveOn() ? ', ' + statusSpeech(b) : '');
     }
 
     function tileHtml(b) {
-      return '<li class="tile ' + tileParts(b).cls + '" data-id="' + esc(b.id) + '">' + tileInner(b) + '</li>';
+      return '<li class="tile ' + tileParts(b).cls + '" data-id="' + esc(b.id) + '" title="' + esc(orgText(b) || b.name) + '">' + tileInner(b) + '</li>';
     }
 
     function safeMapUrl(u) {
