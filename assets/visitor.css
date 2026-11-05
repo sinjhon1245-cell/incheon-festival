@@ -146,7 +146,15 @@ img { display: block; max-width: 100%; height: auto; }
   padding-top: calc(14px + env(safe-area-inset-top));
   padding-bottom: 14px;
 }
-.band__text { min-width: 0; }
+/* 제목 · 행사명 칸 전체가 처음 화면으로 돌아가는 곳입니다(.band__home::after 가 이 칸을 덮습니다). */
+.band__text {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
 /* 배치도: 보라 띠 위에서 눈에 띄도록 흰 바탕에 보라 아이콘 · 글자입니다. 제목 · 행사명 두 줄과 같은 높이로 띠의 오른쪽을 채웁니다. */
 .mapbtn {
   flex: none;
@@ -186,20 +194,36 @@ img { display: block; max-width: 100%; height: auto; }
   letter-spacing: -0.03em;
   white-space: nowrap;
 }
-/* 제목은 처음 화면으로 돌아가는 단추입니다. 모양은 제목 그대로이고, 마우스를 올릴 때만 밑줄로 눌리는 곳임을 알립니다.
-   ::after 는 보이지 않는 손가락 자리입니다(높이 44px). */
+/* 평소에는 제목 그대로입니다. 단추의 ::after 가 왼쪽 글자 칸 전체를 덮어 누르는 자리가 되고, 마우스를 올리면 아주 옅게,
+   누르면 조금 더 밝아지며 살짝 들어갑니다. 글자는 움직이지 않습니다. */
 .band__home {
-  position: relative;
   display: block;
   padding: 0;
   border: 0;
   background: none;
   text-align: left;
   white-space: nowrap;
+  touch-action: manipulation;
 }
-.band__home::after { content: ''; position: absolute; inset: -6px -4px; }
+.band__home::after {
+  content: '';
+  position: absolute;
+  inset: -10px -8px;
+  border-radius: 8px;
+  background: transparent;
+  transition: background-color 120ms ease, transform 120ms ease;
+}
 @media (hover: hover) {
-  .band__home:hover { text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 4px; }
+  .band__home:hover::after { background: rgba(255, 255, 255, .08); }
+}
+.band__home:active::after,
+.band__home.is-press::after { background: rgba(255, 255, 255, .16); transform: scale(.985); }
+.band__home:focus-visible { outline: 0; }
+.band__home:focus-visible::after { outline: 2px solid #fff; outline-offset: -2px; }
+@media (prefers-reduced-motion: reduce) {
+  .band__home::after { transition: none; }
+  .band__home:active::after,
+  .band__home.is-press::after { transform: none; }
 }
 /* 자동 갱신 상태 표시(누르는 곳이 아닙니다): 요약 제목 줄 오른쪽. 정상이면 초록 원이 맥박처럼 뛰고,
    연결이 나쁘면 멈춥니다. 움직임은 CSS 뿐이라 요청을 만들지 않습니다. */

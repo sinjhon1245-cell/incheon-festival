@@ -3,6 +3,8 @@
 
      V  보기    목록 · 한눈에는 표시 방식만 바꿈: 학교급 · 상태 고름 · 검색 · 정렬 유지 · 곳 수와 표시 부스 일치 · 기록 · 요청 없음
      H  제목    학교급 · 보기 · 정렬 · 상태 고름 · 검색 초기화 · 맨 위 · 새로 고침 · 요청 없음 · 뒤로 가기 · 터치 · 키보드 · 모양
+     F  피드백  320 · 390 · 768 · 1440: 글자 칸 전체가 누르는 자리 · 배치도 단추와 안 겹침 · 올림 · 눌림 · 초점 · 260ms 이동 ·
+                첫 화면 안내 · 연속 클릭 · 움직임 줄이기 · ?b= · 뒤로 가기
      Q  QR      ?b= 로 들어온 지금 계신 부스는 제목을 눌러도 유지
      M  지도    열린 배치도 창을 닫음
      A  갱신    제목을 누른 뒤에도 실제 자동 갱신이 돌고 기본 화면 유지
@@ -70,9 +72,10 @@ function pinClock(at) {
   }
   window.Date = Pinned;
 }
-async function open(W, q = '') {
+async function open(W, q = '', reduce = false) {
   const ctx = await browser.createBrowserContext();
   const page = await ctx.newPage();
+  if (reduce) await page.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'reduce' }]);
   const errs = [];
   page.on('pageerror', (e) => errs.push(e.message));
   await page.evaluateOnNewDocument(pinClock, NOON);
@@ -204,7 +207,7 @@ for (const W of [320, 390, 1440]) {
       const h = document.querySelector('.band__title'), b = h.querySelector('.band__home'), hs = getComputedStyle(h), bs = getComputedStyle(b), r = b.getBoundingClientRect(), a = getComputedStyle(b, '::after');
       const cx = r.left + r.width / 2;
       const hitTop = document.elementFromPoint(cx, r.top - 4), hitBot = document.elementFromPoint(cx, r.bottom + 4);
-      return { tag: b.tagName, type: b.type, text: b.textContent, name: b.getAttribute('aria-label'), kids: b.children.length, size: [hs.fontSize, bs.fontSize], weight: bs.fontWeight, line: bs.lineHeight, color: bs.color, bg: bs.backgroundColor, border: bs.borderTopWidth, shadow: bs.boxShadow, cursor: bs.cursor, deco: bs.textDecorationLine, left: r.left - h.getBoundingClientRect().left, hit: [hitTop === b, hitBot === b], areaH: r.height + parseFloat(a.top) * -1 + parseFloat(a.bottom) * -1, ovf: document.documentElement.scrollWidth - document.documentElement.clientWidth };
+      return { tag: b.tagName, type: b.type, text: b.textContent, name: b.getAttribute('aria-label'), kids: b.children.length, size: [hs.fontSize, bs.fontSize], weight: bs.fontWeight, line: bs.lineHeight, color: bs.color, bg: bs.backgroundColor, border: bs.borderTopWidth, shadow: bs.boxShadow, cursor: bs.cursor, deco: bs.textDecorationLine, left: r.left - h.getBoundingClientRect().left, hit: [hitTop === b, hitBot === b], areaH: parseFloat(a.height), ovf: document.documentElement.scrollWidth - document.documentElement.clientWidth };
     });
     t(`H7 ${W}px 제목 모양 그대로(24px · 800 · 흰색 · 배경 · 테두리 · 아이콘 없음) · 손가락 자리 44px`, look.tag === 'BUTTON' && look.type === 'button' && look.text === '부스 대기 현황' && look.kids === 0 && same(look.size, ['24px', '24px']) && look.weight === '800' && look.line === '32px' && look.color === 'rgb(255, 255, 255)' && look.bg === 'rgba(0, 0, 0, 0)' && look.border === '0px' && look.shadow === 'none' && look.cursor === 'pointer' && look.left === 0 && look.deco === 'none' && look.areaH >= 44 && look.hit.every(Boolean) && look.ovf <= 0, JSON.stringify(look));
     t(`H8 ${W}px 화면 읽기 이름에 제목 글자 포함 · 제목은 h1 안`, look.name.startsWith('부스 대기 현황') && look.name.includes('처음 화면') && (await page.$('h1 .band__home')) !== null, look.name);
@@ -216,7 +219,7 @@ for (const W of [320, 390, 1440]) {
     await page.keyboard.down('Shift'); await page.keyboard.press('Tab'); await page.keyboard.up('Shift');
     const tabs = 1, onTitle = await page.evaluate(() => document.activeElement.classList.contains('band__home'));
     await page.keyboard.press('Enter'); await sleep(450);
-    const kb = await page.evaluate(() => ({ focus: document.activeElement.className, ring: getComputedStyle(document.activeElement).outlineStyle }));
+    const kb = await page.evaluate(() => ({ focus: document.activeElement.className, ring: getComputedStyle(document.activeElement, '::after').outlineStyle }));
     t(`H9 ${W}px 키보드: Tab 으로 닿고 Enter 로 동작 · 초점 유지 · 초점 표시`, onTitle && isHome(await shown(page)) && kb.focus === 'band__home' && kb.ring !== 'none', JSON.stringify([tabs, kb]));
     await click(page, tab('중등'));
     await page.focus('.band__home'); await page.keyboard.press('Space'); await sleep(450);
@@ -231,7 +234,7 @@ for (const W of [320, 390, 1440]) {
     } else {
       await page.hover('.band__home');
       const u = await page.$eval('.band__home', (b) => getComputedStyle(b).textDecorationLine);
-      t(`H11 ${W}px 마우스를 올리면 밑줄로 눌리는 곳임을 알림`, u === 'underline', u);
+      t(`H11 ${W}px 마우스를 올려도 밑줄 없음`, u === 'none', u);
     }
     t(`H12 ${W}px 페이지 오류 없음 · 요청 그대로`, errs.length === 0 && net.snap === snap0, JSON.stringify([errs, net.snap - snap0]));
     await ctx.close();
@@ -275,6 +278,138 @@ for (const W of [320, 390, 1440]) {
     t(`M2 ${W}px 닫은 뒤 배치도를 다시 열 수 있음 · 오류 · 요청 없음`, again && errs.length === 0 && net.snap === snap0, JSON.stringify([again, errs]));
     await ctx.close();
   }
+}
+
+/* ── F : 제목 영역 · 피드백 ─────────────────────────────────────── */
+const after = (page) => page.$eval('.band__home', (b) => { const a = getComputedStyle(b, '::after'); return { bg: a.backgroundColor, tf: a.transform, deco: getComputedStyle(b).textDecorationLine, outline: [a.outlineStyle, a.outlineWidth, a.outlineColor], tr: a.transitionDuration, shadow: a.boxShadow }; });
+const toastNow = (page) => page.$eval('#home-toast', (e) => { const c = getComputedStyle(e); return { text: e.textContent, on: e.classList.contains('is-on'), pos: c.position, pe: c.pointerEvents, role: e.getAttribute('role') }; });
+for (const W of [320, 390, 768, 1440]) {
+  const mobile = W < 768;
+  const { ctx, page, errs } = await open(W);
+  const snap0 = net.snap, hist0 = await page.evaluate(() => history.length);
+  const g = await page.evaluate(() => {
+    const t = document.querySelector('.band__text'), r = t.getBoundingClientRect(), m = document.getElementById('map-open').getBoundingClientRect(), h = document.querySelector('.band__home'), e = document.getElementById('band-event').getBoundingClientRect(), a = getComputedStyle(h, '::after');
+    const at = (x, y) => document.elementFromPoint(x, y);
+    const pts = [[r.left + 1, r.top + 1], [r.right - 1, r.top + 1], [r.left + 1, r.bottom - 1], [r.right - 1, r.bottom - 1], [(r.left + r.right) / 2, (r.top + r.bottom) / 2], [e.left + e.width / 2, e.top + e.height / 2], [r.right + 6, r.top + 4]];
+    const areaR = r.right + 8;
+    return { hit: pts.map(([x, y]) => at(x, y) === h), map: [[m.left + 1, m.top + m.height / 2], [m.left + m.width / 2, m.top + m.height / 2], [m.right - 8, m.bottom - 8]].map(([x, y]) => !!at(x, y).closest('#map-open')), gap: m.left - areaR, area: [parseFloat(a.width), parseFloat(a.height)], text: [r.width, r.height], sel: getComputedStyle(t).userSelect, tap: getComputedStyle(h).webkitTapHighlightColor, touch: getComputedStyle(h).touchAction, kids: h.children.length };
+  });
+  t(`F1 ${W}px 제목 · 행사명 칸 전체가 누르는 자리(모서리 · 설명 글자 · 글자 없는 오른쪽)`, g.hit.every(Boolean) && g.area[0] > g.text[0] && g.area[1] >= 44, JSON.stringify(g));
+  t(`F2 ${W}px 배치도 단추는 포함되지 않음 · 누르는 자리와 ${Math.round(g.gap)}px 떨어짐 · 홈 단추 · 아이콘 추가 없음`, g.map.every(Boolean) && g.gap >= 2 && g.kids === 0 && (await page.$$('.band button')).length === 2, JSON.stringify(g));
+  const rest = await after(page);
+  t(`F3 ${W}px 평소 배경 없음 · 밑줄 없음 · 그림자 없음 · 반응 120ms`, rest.bg === 'rgba(0, 0, 0, 0)' && rest.deco === 'none' && rest.shadow === 'none' && rest.tr === '0.12s, 0.12s', JSON.stringify(rest));
+  t(`F4 ${W}px 글자 선택 · 터치 강조 없음`, g.sel === 'none' && g.tap === 'rgba(0, 0, 0, 0)' && g.touch === 'manipulation', JSON.stringify([g.sel, g.tap, g.touch]));
+  // 글자 없는 곳을 눌러도 동작
+  await click(page, tab('초등'));
+  await page.evaluate(() => window.scrollTo(0, 0)); await sleep(120);
+  const ev = await page.$eval('#band-event', (e) => { const r = e.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; });
+  if (mobile) await page.touchscreen.tap(ev.x, ev.y); else await page.mouse.click(ev.x, ev.y);
+  await sleep(400);
+  t(`F5 ${W}px 행사 설명을 ${mobile ? '터치' : '클릭'}해도 처음 화면`, isHome(await shown(page)));
+  await click(page, tab('초등'));
+  const edge = await page.$eval('.band__text', (e) => { const r = e.getBoundingClientRect(); return { x: r.right - 3, y: r.top + 3 }; });
+  if (mobile) await page.touchscreen.tap(edge.x, edge.y); else await page.mouse.click(edge.x, edge.y);
+  await sleep(400);
+  t(`F6 ${W}px 칸 오른쪽 위 끝을 눌러도 처음 화면`, isHome(await shown(page)));
+  await click(page, tab('초등'));
+  await page.click('#map-open'); await sleep(350);
+  const m0 = await page.evaluate(() => window.VenueMap.isOpen());
+  await page.evaluate(() => window.VenueMap.close()); await sleep(200);
+  t(`F7 ${W}px 배치도 단추는 지도만 열고 홈이 실행되지 않음`, m0 && (await shown(page)).zone === '초등', JSON.stringify(m0));
+  await click(page, tab(''));
+  // 올림 · 눌림
+  if (!mobile) {
+    await page.hover('.band__home'); await sleep(170);
+    const hv = await after(page);
+    t(`F8 ${W}px 마우스를 올리면 아주 옅은 흰 배경 · 밑줄 없음`, hv.bg === 'rgba(255, 255, 255, 0.08)' && hv.deco === 'none', JSON.stringify(hv));
+    await page.mouse.down(); await sleep(170);
+    const dn = await after(page);
+    await page.mouse.up(); await sleep(60);
+    t(`F9 ${W}px 누르면 조금 밝아지고 살짝 들어감 · 밑줄 없음`, dn.bg === 'rgba(255, 255, 255, 0.16)' && /^matrix\(0\.985/.test(dn.tf) && dn.deco === 'none', JSON.stringify(dn));
+    await page.mouse.move(2, 500); await sleep(1100);
+  } else {
+    await sleep(1000);
+    const af = await after(page);
+    t(`F8 ${W}px 터치 뒤 배경이 남지 않음`, af.bg === 'rgba(0, 0, 0, 0)', JSON.stringify(af));
+  }
+  await page.evaluate(() => document.querySelector('.band__home').click());
+  const p0 = await page.$eval('.band__home', (b) => b.classList.contains('is-press'));
+  const pv = await after(page);
+  await sleep(300);
+  const p1 = await page.$eval('.band__home', (b) => b.classList.contains('is-press'));
+  t(`F10 ${W}px 누르는 즉시 눌림 표시 · 짧게 사라짐`, p0 && !p1 && pv.tr === '0.12s, 0.12s', JSON.stringify([p0, p1]));
+  await sleep(900);
+  // 키보드
+  await page.focus('#map-open');
+  await page.keyboard.down('Shift'); await page.keyboard.press('Tab'); await page.keyboard.up('Shift');
+  const fc = await after(page);
+  t(`F11 ${W}px 키보드 초점: 칸 전체에 흰 테두리`, fc.outline[0] === 'solid' && fc.outline[1] === '2px' && fc.outline[2] === 'rgb(255, 255, 255)', JSON.stringify(fc.outline));
+  await click(page, tab('고등'));
+  await page.focus('.band__home'); await page.keyboard.press('Enter');
+  const kp = await page.$eval('.band__home', (b) => b.classList.contains('is-press')); await sleep(450);
+  const k1 = await shown(page);
+  await click(page, tab('고등'));
+  await page.focus('.band__home'); await page.keyboard.press('Space'); await sleep(450);
+  t(`F12 ${W}px Enter · Space 로 처음 화면 · 눌림 표시`, kp && isHome(k1) && isHome(await shown(page)), JSON.stringify([kp]));
+  await sleep(1000);
+  // 맨 위로
+  const run = (n, gap) => page.evaluate(async (count, wait) => {
+    window.scrollTo(0, 1600);
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    const y0 = window.scrollY, out = [], t0 = performance.now(), b = document.querySelector('.band__home');
+    let on = true;
+    (function f() { out.push({ t: performance.now() - t0, y: window.scrollY }); if (on) requestAnimationFrame(f); })();
+    for (let i = 0; i < count; i++) { b.click(); if (wait) await new Promise((r) => setTimeout(r, wait)); }
+    await new Promise((r) => setTimeout(r, 700));
+    on = false;
+    return { y0, out };
+  }, n, gap);
+  const moving = (o) => o.filter((f, i) => i && f.y !== o[i - 1].y);
+  const one = await run(1, 0), om = moving(one.out), od = om.at(-1).t;
+  t(`F13 ${W}px 아래에서 약 260ms 동안 맨 위로(${Math.round(od)}ms) · 내려가지 않음 · 안내 없음`, one.y0 > 300 && od >= 190 && od <= 340 && one.out.at(-1).y === 0 && one.out.every((f, i) => !i || f.y <= one.out[i - 1].y) && !(await toastNow(page)).on, JSON.stringify([one.y0, Math.round(od)]));
+  // 첫 화면 안내
+  const h0 = await page.evaluate(() => ({ h: document.documentElement.scrollHeight, top: document.querySelector('.band').getBoundingClientRect().top, list: document.getElementById('list').getBoundingClientRect().top }));
+  await page.evaluate(() => document.querySelector('.band__home').click()); await sleep(250);
+  const a0 = await toastNow(page), box = await page.$eval('#home-toast', (e) => { const r = e.getBoundingClientRect(); return { l: r.left, r: r.right, b: r.bottom, h: r.height, o: getComputedStyle(e).opacity }; });
+  const h1 = await page.evaluate(() => ({ h: document.documentElement.scrollHeight, top: document.querySelector('.band').getBoundingClientRect().top, list: document.getElementById('list').getBoundingClientRect().top }));
+  t(`F14 ${W}px 첫 화면에서 누르면 '첫 화면입니다' · 화면을 밀지 않음 · 누름을 막지 않음`, a0.text === '첫 화면입니다' && a0.on && a0.pos === 'fixed' && a0.pe === 'none' && a0.role === 'status' && box.o === '1' && box.l >= 0 && box.r <= W && box.h <= 48 && same(h0, h1), JSON.stringify([a0, box, h0, h1]));
+  await sleep(450);
+  const a1 = await toastNow(page);
+  await sleep(450);
+  const a2 = await toastNow(page);
+  t(`F15 ${W}px 안내는 0.8초 뒤에도 있고 1.1초 안에 사라짐`, a1.on && !a2.on && a2.text === '', JSON.stringify([a1, a2]));
+  await click(page, tab('중등'));
+  await page.evaluate(() => document.querySelector('.band__home').click()); await sleep(250);
+  t(`F16 ${W}px 바뀐 것이 있으면 안내 없이 초기화`, !(await toastNow(page)).on && isHome(await shown(page)));
+  // 연속 클릭
+  const rapid = await page.evaluate(async () => { const b = document.querySelector('.band__home'); for (let i = 0; i < 8; i++) { b.click(); await new Promise((r) => setTimeout(r, 40)); } return { toasts: document.querySelectorAll('#home-toast.is-on').length }; });
+  await sleep(1050);
+  const r1 = await toastNow(page);
+  t(`F17 ${W}px 첫 화면 연속 클릭: 안내 하나 · 마지막 뒤 사라짐 · 눌림 남지 않음`, rapid.toasts === 1 && !r1.on && !(await page.$eval('.band__home', (b) => b.classList.contains('is-press'))) && isHome(await shown(page)), JSON.stringify([rapid, r1]));
+  const many = await run(6, 35), mm = moving(many.out), md = mm.at(-1).t;
+  t(`F18 ${W}px 스크롤 중 연속 클릭: 이동을 다시 시작하지 않음(${Math.round(md)}ms) · 내려가지 않음`, md <= 340 && many.out.at(-1).y === 0 && many.out.every((f, i) => !i || f.y <= many.out[i - 1].y), JSON.stringify([Math.round(md), many.y0]));
+  await sleep(1000);
+  t(`F19 ${W}px 서버 요청 · 기록 칸이 늘지 않음 · 새로 고침 없음 · 오류 없음`, net.snap === snap0 && (await page.evaluate(() => !!window.__sameDocument)) && errs.length === 0, JSON.stringify([net.snap - snap0, errs]));
+  await ctx.close();
+
+  // QR
+  const b = booths.find((x) => x.code === '57');
+  const q = await open(W, `?b=${b.id}`);
+  const s0 = await q.page.evaluate(() => ({ st: history.state, len: history.length, here: document.getElementById('here').textContent.slice(0, 40) }));
+  await q.page.evaluate(() => document.querySelector('.band__home').click()); await sleep(250);
+  const qa = await toastNow(q.page);
+  const s1 = await q.page.evaluate(() => ({ st: history.state, len: history.length, here: document.getElementById('here').textContent.slice(0, 40), s: location.search }));
+  t(`F20 ${W}px QR 첫 화면: 안내 표시 · ?b= · 지금 계신 부스 · 뒤로 가기 기록 그대로`, qa.on && s1.s === `?b=${b.id}` && s1.here === s0.here && same(s1.st, s0.st) && s1.len === s0.len, JSON.stringify([qa, s0.st, s1.st]));
+  await q.ctx.close();
+}
+{
+  const { ctx, page, errs } = await open(390, '', true);
+  const r = await page.evaluate(async () => { window.scrollTo(0, 1600); await new Promise((d) => requestAnimationFrame(() => requestAnimationFrame(d))); const y0 = window.scrollY; document.querySelector('.band__home').click(); const y1 = window.scrollY; const a = getComputedStyle(document.querySelector('.band__home'), '::after'); return { y0, y1, tr: a.transitionDuration, tf: a.transform, bg: a.backgroundColor }; });
+  t('F21 움직임 줄이기: 바로 맨 위 · 전환 없음 · 들어가는 움직임 없음(배경만 표시)', r.y0 > 300 && r.y1 === 0 && r.tr === '0s' && r.tf === 'none' && r.bg === 'rgba(255, 255, 255, 0.16)', JSON.stringify(r));
+  await sleep(300);
+  await page.evaluate(() => document.querySelector('.band__home').click()); await sleep(100);
+  t('F22 움직임 줄이기: 첫 화면 안내는 그대로 · 오류 없음', (await toastNow(page)).on && errs.length === 0, JSON.stringify(errs));
+  await ctx.close();
 }
 
 /* ── A : 실제 자동 갱신 ─────────────────────────────────────────── */
