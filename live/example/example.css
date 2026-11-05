@@ -248,10 +248,23 @@ ul, ol { padding: 0; list-style: none; }
 }
 /* 위 띠 — 제목 · 행사명과 오른쪽 배치도 단추(관람객 화면 .mapbtn 을 줄인 것) */
 .vp__band { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 14px; background: var(--accent); color: #fff; }
-.vp__bandtext { min-width: 0; }
+.vp__bandtext { position: relative; flex: 1; min-width: 0; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
 .vp__title { font-size: 18px; font-weight: 800; line-height: 24px; letter-spacing: -0.03em; white-space: nowrap; }
-.vp__home { display: block; text-align: left; white-space: nowrap; }
-@media (hover: hover) { .vp__home:hover { text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 3px; } }
+/* 관람객 화면 .band__home 과 같습니다: 글자 칸 전체가 누르는 자리, 올리면 아주 옅게, 누르면 조금 밝게 */
+.vp__home { display: block; text-align: left; white-space: nowrap; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+.vp__home::after { content: ''; position: absolute; inset: -8px -6px; border-radius: 7px; background: transparent; transition: background-color 120ms ease, transform 120ms ease; }
+@media (hover: hover) { .vp__home:hover::after { background: rgba(255, 255, 255, .08); } }
+.vp__home:active::after,
+.vp__home.is-press::after { background: rgba(255, 255, 255, .16); transform: scale(.985); }
+.vp__home:focus-visible { outline: 0; }
+.vp__home:focus-visible::after { outline: 2px solid #fff; outline-offset: -2px; }
+.vp__toast { position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom)); z-index: 40; width: max-content; max-width: calc(100% - 32px); padding: 11px 18px; background: var(--ink); color: #fff; font-size: 14px; font-weight: 600; line-height: 1.4; text-align: center; box-shadow: 0 6px 18px rgba(22, 32, 60, .22); opacity: 0; transform: translate(-50%, 8px); pointer-events: none; transition: opacity .18s ease, transform .18s ease; }
+.vp__toast:empty { padding: 0; box-shadow: none; }
+.vp__toast.is-on { opacity: 1; transform: translate(-50%, 0); }
+@media (prefers-reduced-motion: reduce) {
+  .vp__home::after, .vp__toast { transition: none; }
+  .vp__home:active::after, .vp__home.is-press::after { transform: none; }
+}
 .vp__band :focus-visible { outline-color: #fff; }
 .vp__event { margin-top: 2px; font-size: 12px; line-height: 17px; color: rgba(255, 255, 255, .85); word-break: keep-all; }
 .vp__mapbtn {

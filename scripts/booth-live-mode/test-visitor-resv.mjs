@@ -421,6 +421,40 @@ for (const W of WIDTHS) {
   t(`E25 ${W}px 예시 검색: 입력만으로는 안 바뀜 · 검색 뒤 초기화 단추 · 보기를 바꿔도 유지`, same(ex2.typed.rows, ['C-01', 'E-02']) && ex2.typed.btn === '검색' && same(ex2.searched.rows, ['E-02']) && ex2.searched.zone === '' && ex2.searched.btn === '초기화' && same(ex2.searchGrid.tiles, ['E-02']), JSON.stringify([ex2.typed.rows, ex2.searched, ex2.searchGrid.tiles]));
   t(`E26 ${W}px 예시 제목: 전체 · 목록 · 번호순 · 검색 초기화`, ex2.home.zone === '' && ex2.home.view === 'list' && ex2.home.sort === 'code' && ex2.home.q === '' && ex2.home.btn === '검색' && same(ex2.home.rows, ALL7), JSON.stringify(ex2.home));
   t(`E27 ${W}px 예시 결과 없음 안내 · 초기화로 복귀`, ex2.none.msg && ex2.none.rows.length === 0 && ex2.none.btn === '초기화' && same(ex2.reset.rows, ALL7) && ex2.reset.q === '', JSON.stringify([ex2.none.msg, ex2.none.rows, ex2.reset.rows]));
+  const ex3 = await page.evaluate(async () => {
+    const q = (s) => document.querySelector('.vp ' + s), wait = (ms) => new Promise((r) => setTimeout(r, ms)), h = q('.vp__home'), toast = q('.vp__toast');
+    q('.vp__band').scrollIntoView({ block: 'center' });
+    // 앞 단계의 눌림이 풀리는 전환은 프레임이 그려질 때 끝납니다. 평소 상태에 닿을 때까지 기다립니다(2초 안에 못 닿으면 E29 실패).
+    for (let i = 0; i < 40 && getComputedStyle(h, '::after').backgroundColor !== 'rgba(0, 0, 0, 0)'; i++) await wait(50);
+    const t = q('.vp__bandtext').getBoundingClientRect(), m = q('.vp__mapbtn').getBoundingClientRect(), e = q('.vp__event').getBoundingClientRect(), at = (x, y) => document.elementFromPoint(x, y), a = getComputedStyle(h, '::after');
+    const o = { hit: [[t.left + 1, t.top + 1], [t.right - 1, t.bottom - 1], [e.left + e.width / 2, e.top + e.height / 2]].map(([x, y]) => at(x, y) === h), map: !!at(m.left + m.width / 2, m.top + m.height / 2).closest('.vp__mapbtn'), gap: m.left - (t.right + 6), rest: [a.backgroundColor, getComputedStyle(h).textDecorationLine, a.transitionDuration], sel: getComputedStyle(q('.vp__bandtext')).userSelect };
+    const box = document.getElementById('vp'), y = box.getBoundingClientRect().top + scrollY;
+    window.scrollTo(0, Math.max(0, y - 10)); await wait(40);
+    h.click(); o.press = h.classList.contains('is-press'); await wait(230);
+    o.tip = [toast.textContent, toast.classList.contains('is-on'), getComputedStyle(toast).position, getComputedStyle(toast).pointerEvents, toast.getAttribute('role')];
+    o.pressOff = !h.classList.contains('is-press');
+    await wait(560); o.still = toast.classList.contains('is-on');
+    await wait(300); o.gone = !toast.classList.contains('is-on') && toast.textContent === '';
+    q('[data-vp-zone="고"]').click(); await wait(30); h.click(); await wait(200);
+    o.changed = [toast.classList.contains('is-on'), q('[data-vp-zone=""]').getAttribute('aria-pressed')];
+    for (let i = 0; i < 6; i++) { h.click(); await wait(35); }
+    o.rapid = document.querySelectorAll('.vp__toast.is-on').length;
+    await wait(1000); o.rapidGone = !toast.classList.contains('is-on');
+    // 시험 기계나 그림 해독으로 프레임이 40ms 넘게 멈춘 판은 다시 잽니다(움직임은 시간 기준이라 그 판만 늦게 끝납니다).
+    for (let i = 0; i < 4; i++) {
+      window.scrollTo(0, y + 500); await wait(160);
+      const y0 = window.scrollY, t0 = performance.now(), seen = []; let on = true;
+      (function f() { seen.push([performance.now() - t0, window.scrollY]); if (on) requestAnimationFrame(f); })();
+      h.click(); await wait(560); on = false;
+      const mv = seen.filter((v, k) => k && v[1] !== seen[k - 1][1]), gap = Math.max(...seen.slice(1).map((v, k) => v[0] - seen[k][0]));
+      o.scroll = [mv.length ? Math.round(mv.at(-1)[0]) : -1, Math.round(seen.at(-1)[1] - y), y0 > y + 100, Math.round(gap), i, Math.round(y0 - y), seen.length];
+      if (mv.length && gap <= 40) break;
+    }
+    return o;
+  });
+  t(`E29 ${W}px 예시 제목 칸 전체가 누르는 자리 · 배치도 단추 제외 · 평소 배경 · 밑줄 없음`, ex3.hit.every(Boolean) && ex3.map && ex3.gap >= 2 && ex3.rest[0] === 'rgba(0, 0, 0, 0)' && ex3.rest[1] === 'none' && ex3.rest[2] === '0.12s, 0.12s' && ex3.sel === 'none', JSON.stringify(ex3));
+  t(`E30 ${W}px 예시 첫 화면 안내 · 눌림 표시 · 약 0.9초 뒤 사라짐 · 바뀐 것이 있으면 안내 없음`, ex3.press && ex3.pressOff && same(ex3.tip, ['첫 화면입니다', true, 'fixed', 'none', 'status']) && ex3.still && ex3.gone && same(ex3.changed, [false, 'true']), JSON.stringify([ex3.press, ex3.tip, ex3.still, ex3.gone, ex3.changed]));
+  t(`E31 ${W}px 예시 연속 클릭 안내 하나 · 아래에서 약 260ms 동안 미리보기 맨 위로`, ex3.rapid === 1 && ex3.rapidGone && ex3.scroll[2] && ex3.scroll[0] >= 190 && ex3.scroll[0] <= 340 && Math.abs(ex3.scroll[1]) <= 1, JSON.stringify([ex3.rapid, ex3.rapidGone, ex3.scroll]));
   const look = await page.evaluate(() => { const b = document.querySelector('.vp__home'), t = document.querySelector('.vp__title'), s = getComputedStyle(b), r = getComputedStyle(t); return { size: [s.fontSize, r.fontSize], w: s.fontWeight, c: s.color, bg: s.backgroundColor, cur: s.cursor, kids: b.children.length, name: b.getAttribute('aria-label'), api: performance.getEntriesByType('resource').filter((e) => /\/api\/|supabase/.test(e.name)).length, store: Object.keys(localStorage).length }; });
   t(`E28 ${W}px 예시 제목 모양 그대로 · 눌리는 곳 · 서버 · 저장소 쓰지 않음`, look.size[0] === look.size[1] && look.w === '800' && look.c === 'rgb(255, 255, 255)' && look.bg === 'rgba(0, 0, 0, 0)' && look.cur === 'pointer' && look.kids === 0 && look.name.includes('처음 화면') && look.api === 0 && look.store === 0, JSON.stringify(look));
   t(`E11 ${W}px 화면 안내 상단 요약: 실제 화면과 같은 다섯 상태 · 일곱 부스 합 · 막대에 현장예약 구간`, JSON.stringify(ex.cnt.map((x) => [x[0], x[1]])) === JSON.stringify([['여유', 1], ['보통', 1], ['혼잡', 1], ['현장예약', 1], ['중단·마감', 3]]) && ex.cnt.every((x) => x[2]) && JSON.stringify(ex.dist) === JSON.stringify(['free', 'normal', 'busy', 'resv', 'off']), JSON.stringify([ex.cnt, ex.dist]));

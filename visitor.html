@@ -139,6 +139,7 @@
   <p class="sr-only" id="sr-summary" aria-live="polite"></p>
   <!-- 기본 화면에서 첫 뒤로 가기 때만 2초 동안 글이 들어갑니다(navExitArm). 비어 있으면 보이지 않습니다. -->
   <p class="exit-toast" id="exit-toast" role="status" aria-live="polite"></p>
+  <p class="exit-toast" id="home-toast" role="status" aria-live="polite"></p>
 
   <noscript>
     <div class="col"><p class="empty__d">이 화면은 자바스크립트를 켜야 볼 수 있어요.</p></div>
@@ -1860,24 +1861,68 @@
       render(false);
     }
 
-    // 제목: 처음 화면으로 돌아갑니다. 화면의 고름만 기본값으로 되돌리고, 이미 받은 값으로 다시 그립니다
+    // 제목 영역: 처음 화면으로 돌아갑니다. 화면의 고름만 기본값으로 되돌리고, 이미 받은 값으로 다시 그립니다
     // (새로 고침 · 서버 요청 없음). 지금 계신 부스(?b=)는 화면의 고름이 아니라 건드리지 않습니다.
+    // 이미 처음 화면이면 다시 그리지 않고, 눌린 것을 알 수 있게 짧게 안내합니다.
     function goHome() {
+      var open = !!window.VenueMap && VenueMap.isOpen();
+      var plain = !S.ui.zone && !S.ui.count && S.ui.view === 'list' && S.ui.sort === 'code' && !S.ui.q && !$('q').value && !S.zpick && !S.mapOpen && !open;
+      var settled = plain && window.pageYOffset < HOME_TOP && !homeAnim;
       if (document.activeElement === $('q')) $('q').blur();
-      S.ui.zone = '';
-      S.ui.count = '';
-      S.ui.view = 'list';
-      S.ui.sort = 'code';
-      S.ui.q = '';
-      $('q').value = '';
-      S.zpick = false;
-      S.mapOpen = false;
-      S.ui.map = false;
-      if (window.VenueMap && VenueMap.isOpen()) VenueMap.close({ silent: true });
-      navHome();
-      render(true);
+      if (!plain) {
+        S.ui.zone = '';
+        S.ui.count = '';
+        S.ui.view = 'list';
+        S.ui.sort = 'code';
+        S.ui.q = '';
+        $('q').value = '';
+        S.zpick = false;
+        S.mapOpen = false;
+        S.ui.map = false;
+        if (open) VenueMap.close({ silent: true });
+        navHome();
+        render(true);
+      }
       $('tabs').scrollLeft = 0;
-      window.scrollTo({ top: 0, behavior: smooth() });
+      scrollHome();
+      homeToast(settled);
+    }
+    // 누르는 즉시 짧게 눌린 모양을 보여 줍니다. 터치 · 키보드도 마우스와 같아지도록 :active 에만 맡기지 않습니다.
+    var HOME_PRESS_MS = 140, HOME_SCROLL_MS = 260, HOME_TOAST_MS = 900, HOME_TOP = 8;
+    var homePress = 0, homeAnim = 0, homeTip = 0;
+    function pressHome(el) {
+      el.classList.add('is-press');
+      clearTimeout(homePress);
+      homePress = setTimeout(function () { el.classList.remove('is-press'); }, HOME_PRESS_MS);
+    }
+    function endHomeScroll() {
+      cancelAnimationFrame(homeAnim);
+      homeAnim = 0;
+      window.removeEventListener('wheel', endHomeScroll);
+      window.removeEventListener('touchstart', endHomeScroll);
+    }
+    // 시간을 정하려고 직접 옮깁니다(브라우저의 부드러운 이동은 거리마다 시간이 다릅니다). 이미 움직이는 중이면 다시 시작하지 않고,
+    // 손가락 · 휠이 닿으면 멈춥니다. 움직임 줄이기에서는 바로 올라갑니다.
+    function scrollHome() {
+      var y0 = window.pageYOffset, t0 = 0;
+      if (homeAnim || y0 <= 0) return;
+      if (smooth() === 'auto') { window.scrollTo(0, 0); return; }
+      window.addEventListener('wheel', endHomeScroll, { passive: true });
+      window.addEventListener('touchstart', endHomeScroll, { passive: true });
+      homeAnim = requestAnimationFrame(function tick(now) {
+        t0 = t0 || now;
+        var t = Math.min(1, (now - t0) / HOME_SCROLL_MS);
+        window.scrollTo(0, y0 * (0.5 + 0.5 * Math.cos(Math.PI * t)));
+        if (t < 1) homeAnim = requestAnimationFrame(tick); else endHomeScroll();
+      });
+    }
+    function homeToast(on) {
+      var el = $('home-toast');
+      clearTimeout(homeTip);
+      el.classList.toggle('is-on', on);
+      if (!on) { el.textContent = ''; return; }
+      el.textContent = '첫 화면입니다';
+      homeTip = setTimeout(function () { homeToast(false); }, HOME_TOAST_MS);
     }
 
     // 지금 계신 부스의 대안을 누르면, 전체 목록에서 그 부스 줄로 옮겨 잠깐 표시합니다(펼침 없음).
@@ -1961,6 +2006,7 @@
 
         switch (t.getAttribute('data-act') || t.id) {
           case 'home':
+            pressHome(t);
             goHome();
             break;
           case 'clear-count':
