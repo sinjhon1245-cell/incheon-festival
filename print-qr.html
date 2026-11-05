@@ -1079,6 +1079,16 @@
      여기서도 관리자입니다. 권한은 화면이 아니라 DB 함수(is_admin)가 막습니다.
      운영자 QR 은 페이지를 연다고 만들어지지 않습니다. '운영자 QR 발급' 단추로만 만듭니다.
      =================================================================== */
+  /* 운영자 카드 · PIN 배부표의 인쇄 순서. 숫자만 있는 번호(1, 2 … 84)는 구역을 넘어 숫자 크기 순서로 놓고,
+     그 뒤에 낱말 번호(체험1 · 미래1 · A-01)를 받은 차례(구역 → 번호) 그대로, 맨 뒤에 배치 미정을 둡니다.
+     번호가 같은 부스(다른 구역의 같은 번호)도 받은 차례(구역 순서)를 지킵니다. 공식 번호 · PIN 은 건드리지 않고 차례만 정합니다. */
+  function boothPrintOrder(list) {
+    function rank(b) { return b.unplaced ? 2 : (/^\d+$/.test(String(b.code)) ? 0 : 1); }
+    return list.map(function (b, i) { return { b: b, i: i, r: rank(b), n: Number(b.code) }; })
+      .sort(function (x, y) { return (x.r - y.r) || (x.r === 0 ? x.n - y.n : 0) || (x.i - y.i); })
+      .map(function (x) { return x.b; });
+  }
+
   (function () {
     'use strict';
 
@@ -1558,7 +1568,7 @@
       return null;
     }
     // 찾는 칸은 관람객 화면 검색과 같은 칸을 봅니다: 부스 코드(B-12 · b12 · 12) · 부스명 · 체험 내용 · 운영기관 · 구역 이름.
-    // 인쇄 순서는 바꾸지 않습니다(종이는 늘 구역 · 번호 순) — 여기서는 맞는 카드만 남깁니다.
+    // 찾기는 인쇄 순서를 바꾸지 않습니다 — 여기서는 맞는 카드만 남깁니다.
     // 배치 미정 부스는 번호가 없어 '배치 미정' 과 카드에 찍힌 부스 id 앞 8자리로도 찾습니다.
     function matches(b, q) {
       if (!q) return true;
@@ -1615,7 +1625,8 @@
 
     /* ── 구역 ─────────────────────────────────────────────────────────
        카드는 구역마다 묶어 그립니다(.zsect). '구역별로 새 페이지' 가 꺼져 있으면 묶음은 배치에 아무
-       영향이 없고(display: contents), 켜면 구역마다 새 종이에서 시작합니다. 구역 칩은 그 구역 카드만 남깁니다.
+       영향이 없고(display: contents), ① 운영자 카드는 카드마다 준 CSS order 로 번호순(boothPrintOrder)이 됩니다.
+       켜면 구역마다 새 종이에서 시작하고 그 안에서 번호순입니다. 구역 칩은 그 구역 카드만 남깁니다.
        배치 미정 부스는 맨 뒤 '배치 미정' 묶음 · 칩 하나로 모입니다(① 에만 있습니다). */
     function zonedHtml(list, itemHtml) {
       var out = '', cur = null;
@@ -1780,7 +1791,7 @@
       // 바꾸기 · 끄기가 아직 도는 중에 카드가 다시 그려져도 두 '예' 단추는 계속 잠가 둡니다.
       var busyAttr = S.ops.busy[b.id] ? ' disabled' : '';
       var cls = off ? ' is-keyoff' : (noKey ? ' is-nokey' : (S.lists.ops.off[b.id] ? ' is-off' : ''));
-      return '<div class="item item--ops' + cls + (BC.isSample(b) ? ' is-sample' : '') + (unplaced ? ' is-unplaced' : '') + '" data-id="' + esc(b.id) + '">' +
+      return '<div class="item item--ops' + cls + (BC.isSample(b) ? ' is-sample' : '') + (unplaced ? ' is-unplaced' : '') + '" data-id="' + esc(b.id) + '" style="order:' + (S.printAt[b.id] || 0) + '">' +
         '<article class="card" aria-label="' + esc(codeText(b) + (off ? ' 운영자 카드 (열쇠 꺼짐)' : noKey ? ' 운영자 카드 (QR 미발급)' : ' 운영자 카드')) + '">' +
           '<div class="card__band">' + (off ? '부스 운영자용 · 열쇠 꺼짐' : noKey ? '부스 운영자용 · QR 미발급' : '부스 운영자용 · 관람객용 아님') + '</div>' +
           (isMock ? '<span class="stamp">' + esc(MSG.STAMP) + '</span>' : '') +
@@ -2559,6 +2570,8 @@
       S.unassigned = unassigned || 0;
       S.byId = {};
       S.booths.forEach(function (b) { S.byId[b.id] = b; });
+      S.printAt = {};
+      boothPrintOrder(S.booths).forEach(function (b, i) { S.printAt[b.id] = i; });
       pickRealByDefault();
     }
     // 인쇄 기본값은 실제 부스만(① · ②). 예시 부스(기관 '[예시]')는 처음 보일 때 '인쇄에 포함' 을 꺼 둡니다 —
@@ -5040,7 +5053,8 @@
       });
       return '﻿' + lines.join('\r\n') + '\r\n';
     }
-    function okPins(job) { return job.items.filter(function (it) { return it.status === 'ok' && it.pin; }); }
+    // CSV · 배부표 · QR카드는 부스 번호순입니다(boothPrintOrder). 차례만 바꾸고 부스와 PIN 의 짝은 그대로입니다.
+    function okPins(job) { return boothPrintOrder(job.items.filter(function (it) { return it.status === 'ok' && it.pin; })); }
     // CSV · 배부표 · QR카드: 서버 확인이 정상(또는 보관 기능 없는 서버에서 상태 일치)이고, 누를 때 서버 상태를 다시 확인한 뒤에만.
     function canDist(job, phases) {
       return !!job && phases.indexOf(job.phase) >= 0 && !job.checking && distOk(job) && okPins(job).length > 0;
