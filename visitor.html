@@ -755,7 +755,17 @@
       var key = [line, show, text, bad, manualBtn].join('|');
       if (key === S.keys.band) return;
       S.keys.band = key;
-      $('band-event').textContent = line;
+      // 행사명과 장소명을 분리해 장소명(앞의 구분점 포함)이 모바일에서 둘로 갈라지지 않게 합니다.
+      var eventEl = $('band-event');
+      eventEl.textContent = '';
+      if (s.event_title) eventEl.appendChild(document.createTextNode(s.event_title));
+      if (s.venue) {
+        if (s.event_title) eventEl.appendChild(document.createTextNode(' '));
+        var venueEl = document.createElement('span');
+        venueEl.className = 'band__venue';
+        venueEl.textContent = (s.event_title ? '· ' : '') + s.venue;
+        eventEl.appendChild(venueEl);
+      }
       $('sync').hidden = !show;
       $('sync').className = 'sync' + (bad ? ' is-lag' : '') + (text === '자동 갱신 중' ? ' is-on' : '');
       $('sync-text').textContent = text;
