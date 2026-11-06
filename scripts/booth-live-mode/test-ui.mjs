@@ -39,8 +39,11 @@ mkdirSync(join(TMP, 'old', 'lib'), { recursive: true });
 writeFileSync(join(TMP, 'old', 'api', 'live-snapshot.mjs'), git('live/api/live-snapshot.mjs'));
 writeFileSync(join(TMP, 'old', 'lib', 'public-config.mjs'), git('live/lib/public-config.mjs'));
 let imp = 0;
+// 예전 코드와 응답을 견주는 시험이라 시계를 행사 전날로 고정합니다(실제 행사 시간에 돌려도 때 규칙이 끼어들지 않게).
+const SNAP_NOW = Date.parse('2026-11-05T03:00:00Z');
 async function snapshotOf(file, tables) {
-  const realFetch = globalThis.fetch;
+  const realFetch = globalThis.fetch, realNow = Date.now;
+  Date.now = () => SNAP_NOW;
   globalThis.fetch = async (url) => {
     const u = String(url);
     const name = u.split('/rest/v1/')[1].split('?')[0];
@@ -54,7 +57,7 @@ async function snapshotOf(file, tables) {
     const mod = await import(pathToFileURL(file).href + '?i=' + (++imp));
     const res = await mod.default.fetch(new Request('https://x.test/api/live-snapshot'));
     return { status: res.status, body: res.status === 200 ? JSON.parse(await res.text()) : null };
-  } finally { globalThis.fetch = realFetch; }
+  } finally { globalThis.fetch = realFetch; Date.now = realNow; }
 }
 const SNAP_NEW = resolve(REPO, 'live/api/live-snapshot.mjs');
 const SNAP_OLD = join(TMP, 'old', 'api', 'live-snapshot.mjs');

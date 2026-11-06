@@ -2475,7 +2475,7 @@
     // 운영 중인데 오늘 문 열기 전에 넣은 값 — 관람객 화면에는 '정보 없음' 으로 보입니다.
     function beforeOpen(b, info) {
       if (!info || info.phase !== 'open' || !info.todayOpenAt || !b || !b.congestion) return false;
-      return toMs(b.congestion_updated_at) < info.todayOpenAt.getTime();
+      return toMs(b.congestion_updated_at) < (info.todayFromAt || info.todayOpenAt).getTime();
     }
     function beforeOpenValue(info) { return beforeOpen(booth, info); }
     // 행사 전에는 오늘(한국 날짜) 저장된 값만 관람객에게 표시합니다.
