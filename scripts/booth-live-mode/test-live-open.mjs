@@ -36,7 +36,7 @@ const SETTINGS = { event_title: '시험 행사', venue: '시험 장소', date_la
 const ZONES = [['초등', 1], ['중등', 2], ['고등', 3], ['특수', 4], ['체험', 5], ['미래', 6]].map(([key, sort_order]) => ({ key, label: key, sort_order }));
 // 저장된 값. 시각이 지나기 전에는 표에 없습니다(그때의 DB 처럼).
 const row = (code, c, w, at) => ({ booth_id: idOf(code), congestion: c, wait_minutes: w, updated_at: iso(at), _at: at });
-const DAY1 = [row('57', '보통', 20, K('06', '09:35')), row('45', '예약중', 0, K('06', '09:40')), row('58', '혼잡', 30, K('06', '10:05')), row('76', '예약마감', 0, K('06', '09:50')),
+const DAY1 = [row('57', '보통', 20, K('06', '09:35')), row('45', '예약중', 0, K('06', '09:45')), row('58', '혼잡', 30, K('06', '10:05')), row('76', '예약마감', 0, K('06', '09:50')),
   row('미래9', '예약중', 0, K('06', '07:50')), row('5', '중단', 0, K('06', '09:17')), row('59', '보통', 15, K('06', '06:50')), row('60', '여유', 5, K('05', '18:00'))];
 const DAY2 = [row('57', '보통', 20, K('06', '16:30')), row('61', '여유', 5, K('07', '09:20')), row('62', '혼잡', 30, K('07', '09:40')), row('45', '예약중', 0, K('07', '09:41'))];
 const MODES = [{ booth_id: idOf('45'), mode: 'reserve' }, { booth_id: idOf('76'), mode: 'reserve' }, { booth_id: idOf('미래9'), mode: 'reserve' }];
@@ -69,6 +69,7 @@ const DAY1_EXPECT = [
   ['10:00', { 57: '보통:20', 45: '예약:open', 76: '예약:closed', 미래9: '예약:open', 5: '중단:0' }],
   ['10:01', { 57: '보통:20', 45: '예약:open', 76: '예약:closed', 미래9: '예약:open', 5: '중단:0' }],
   ['10:06', { 57: '보통:20', 45: '예약:open', 58: '혼잡:30', 76: '예약:closed', 미래9: '예약:open', 5: '중단:0' }],
+  ['13:00', { 57: '보통:20', 45: '예약:open', 58: '혼잡:30', 76: '예약:closed', 미래9: '예약:open', 5: '중단:0' }],
   ['16:59', { 57: '보통:20', 45: '예약:open', 58: '혼잡:30', 76: '예약:closed', 미래9: '예약:open', 5: '중단:0' }],
   ['17:00', {}],
   ['23:30', {}],
@@ -145,7 +146,7 @@ async function open(at, list, q = '', opt = {}) {
 const rowText = (page) => page.$$eval('#list .row', (r) => Object.fromEntries(r.map((x) => [x.querySelector('.row__code').textContent, x.querySelector('.row__right').textContent.replace(/\s+/g, '')])));
 const hero = (page) => page.evaluate(() => ({ head: (document.querySelector('.hero__head') || {}).textContent || '', free: (document.querySelector('[data-count="여유"] [data-n]') || {}).textContent || '', sync: document.getElementById('sync').textContent, total: (document.getElementById('h-total') || {}).textContent || '' }));
 
-for (const [hm, want, d, list] of [['09:29', 'pre', '06', DAY1], ['09:30', 'live', '06', DAY1], ['09:45', 'live', '06', DAY1], ['09:59', 'live', '06', DAY1], ['10:00', 'live', '06', DAY1], ['10:01', 'live', '06', DAY1], ['17:00', 'closed', '06', DAY1], ['09:29', 'pre', '07', DAY2], ['09:30', 'live', '07', DAY2], ['09:40', 'live', '07', DAY2], ['10:00', 'live', '07', DAY2], ['17:00', 'after', '07', DAY2]]) {
+for (const [hm, want, d, list] of [['09:29', 'pre', '06', DAY1], ['09:30', 'live', '06', DAY1], ['09:45', 'live', '06', DAY1], ['09:59', 'live', '06', DAY1], ['10:00', 'live', '06', DAY1], ['10:01', 'live', '06', DAY1], ['13:00', 'live', '06', DAY1], ['17:00', 'closed', '06', DAY1], ['09:29', 'pre', '07', DAY2], ['09:30', 'live', '07', DAY2], ['09:40', 'live', '07', DAY2], ['10:00', 'live', '07', DAY2], ['17:00', 'after', '07', DAY2]]) {
   const at = K(d, hm), { ctx, page, errs } = await open(at, list);
   const r = await rowText(page), h = await hero(page), api = d === '06' ? DAY1_EXPECT : DAY2_EXPECT, exp = (api.find(([x]) => x === hm) || [])[1] || {};
   const filled = Object.entries(r).filter(([, v]) => v && !/정보없음/.test(v)).map(([k]) => k).sort();
