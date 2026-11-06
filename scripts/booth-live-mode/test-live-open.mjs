@@ -62,15 +62,15 @@ async function callApi(mod, at, list) {
 const shownOf = (d) => Object.fromEntries(d.booths.filter((b) => b.status || b.reserve).map((b) => [b.code, b.reserve ? `예약:${b.reserve}` : `${b.status}:${b.waitMinutes}`]));
 const DAY1_EXPECT = [
   ['09:29', {}],
-  ['09:30', { 미래9: '예약:open', 5: '중단:0' }],
-  ['09:35', { 57: '보통:20', 미래9: '예약:open', 5: '중단:0' }],
-  ['09:45', { 57: '보통:20', 45: '예약:open', 미래9: '예약:open', 5: '중단:0' }],
-  ['09:59', { 57: '보통:20', 45: '예약:open', 76: '예약:closed', 미래9: '예약:open', 5: '중단:0' }],
-  ['10:00', { 57: '보통:20', 45: '예약:open', 76: '예약:closed', 미래9: '예약:open', 5: '중단:0' }],
-  ['10:01', { 57: '보통:20', 45: '예약:open', 76: '예약:closed', 미래9: '예약:open', 5: '중단:0' }],
-  ['10:06', { 57: '보통:20', 45: '예약:open', 58: '혼잡:30', 76: '예약:closed', 미래9: '예약:open', 5: '중단:0' }],
-  ['13:00', { 57: '보통:20', 45: '예약:open', 58: '혼잡:30', 76: '예약:closed', 미래9: '예약:open', 5: '중단:0' }],
-  ['16:59', { 57: '보통:20', 45: '예약:open', 58: '혼잡:30', 76: '예약:closed', 미래9: '예약:open', 5: '중단:0' }],
+  ['09:30', {}],
+  ['09:35', { 57: '보통:20' }],
+  ['09:45', { 57: '보통:20', 45: '예약:open' }],
+  ['09:59', { 57: '보통:20', 45: '예약:open', 76: '예약:closed' }],
+  ['10:00', { 57: '보통:20', 45: '예약:open', 76: '예약:closed' }],
+  ['10:01', { 57: '보통:20', 45: '예약:open', 76: '예약:closed' }],
+  ['10:06', { 57: '보통:20', 45: '예약:open', 58: '혼잡:30', 76: '예약:closed' }],
+  ['13:00', { 57: '보통:20', 45: '예약:open', 58: '혼잡:30', 76: '예약:closed' }],
+  ['16:59', { 57: '보통:20', 45: '예약:open', 58: '혼잡:30', 76: '예약:closed' }],
   ['17:00', {}],
   ['23:30', {}],
 ];
@@ -78,7 +78,7 @@ const DAY2_EXPECT = [['09:29', {}], ['09:30', {}], ['09:40', { 62: '혼잡:30' }
 const sortKeys = (o) => Object.fromEntries(Object.entries(o).sort(([a], [b]) => a.localeCompare(b)));
 for (const [hm, want] of DAY1_EXPECT) {
   const d = await callApi(await loadApi(), K('06', hm), DAY1);
-  t(`A1 11-06 ${hm} 공개 값 ${Object.keys(want).length}곳(06:50 값 · 어제 값은 없음) · 105곳`, same(sortKeys(shownOf(d)), sortKeys(want)) && d.booths.length === 105, JSON.stringify(shownOf(d)));
+  t(`A1 11-06 ${hm} 공개 값 ${Object.keys(want).length}곳(09:30 전 값 · 어제 값은 없음) · 105곳`, same(sortKeys(shownOf(d)), sortKeys(want)) && d.booths.length === 105, JSON.stringify(shownOf(d)));
 }
 for (const [hm, want] of DAY2_EXPECT) {
   const d = await callApi(await loadApi(), K('07', hm), DAY2);
@@ -96,7 +96,7 @@ for (const [hm, want] of DAY2_EXPECT) {
   t('A6 같은 인스턴스의 캐시가 09:30 경계를 넘으면 5초 안쪽 받기로 새 값을 공개', Object.keys(shownOf(a)).length === 0 && shownOf(c)['63'] === '보통:15', JSON.stringify([shownOf(a), shownOf(c)]));
   const m2 = await loadApi();
   const x = await callApi(m2, K('06', '09:59', '59'), DAY1), y = await callApi(m2, K('06', '10:00', '01'), DAY1);
-  t('A7 10:00 정각을 넘어도 같은 값(사라지지 않음)', same(sortKeys(shownOf(x)), sortKeys(shownOf(y))) && Object.keys(shownOf(y)).length === 5, JSON.stringify(shownOf(y)));
+  t('A7 10:00 정각을 넘어도 같은 값(사라지지 않음)', same(sortKeys(shownOf(x)), sortKeys(shownOf(y))) && Object.keys(shownOf(y)).length === 3, JSON.stringify(shownOf(y)));
   t('A8 공개 API 는 DB 에 쓰지 않음', writes.length === 0, writes.join(' '));
 }
 
@@ -161,7 +161,7 @@ for (const [hm, want, d, list] of [['09:29', 'pre', '06', DAY1], ['09:30', 'live
 {
   const { ctx, page, errs } = await open(K('06', '10:06'), DAY1);
   const r = await rowText(page);
-  t('V3 현장대기 · 현장예약 · 예약 마감 · 중단 표시', /20분/.test(r['57']) && /보통/.test(r['57']) && /현장예약/.test(r['45']) && /예약마감/.test(r['76']) && /잠시중단/.test(r['5']) && /30분/.test(r['58']), JSON.stringify([r['57'], r['45'], r['76'], r['5'], r['58']]));
+  t('V3 현장대기 · 현장예약 · 예약 마감 · 중단 표시', /20분/.test(r['57']) && /보통/.test(r['57']) && /현장예약/.test(r['45']) && /예약마감/.test(r['76']) && /30분/.test(r['58']), JSON.stringify([r['57'], r['45'], r['76'], r['58']]));
   await page.evaluate(() => document.querySelector('[data-sort="wait"]').click()); await sleep(200);
   const first = await page.$eval('#list .row__code', (e) => e.textContent);
   await page.evaluate(() => document.querySelector('[data-view="grid"]').click()); await sleep(200);
@@ -193,12 +193,12 @@ for (const hm of ['09:45', '10:00', '10:06']) {
     const i1 = info(a.t0929), i2 = info(a.t0930), i3 = info(a.t1000), i4 = info(a.t1700), i5 = info(a.d2);
     const b = (at) => ({ congestion: '여유', wait_minutes: 0, congestion_updated_at: new Date(at).toISOString() });
     const keep = (i, at) => !!window.BoothCore.applyOpenRule([b(at)], i)[0].congestion;
-    return { start: s.event_start, label: s.time_label, ph: [i1.phase, i2.phase, i3.phase, i4.phase], open: i2.openTime, close: i2.closeTime, next: i1.nextOpenLabel, from6: new Date(i3.todayFromAt).toISOString(), from7: new Date(i5.todayFromAt).toISOString(), keep: [keep(i3, a.t0935), keep(i3, a.t0750), keep(i3, a.t0650), keep(i5, a.d2early), keep(i5, a.d2ok)] };
+    return { start: s.event_start, label: s.time_label, ph: [i1.phase, i2.phase, i3.phase, i4.phase], open: i2.openTime, close: i2.closeTime, next: i1.nextOpenLabel, from6: new Date(i3.todayOpenAt).toISOString(), from7: new Date(i5.todayOpenAt).toISOString(), keep: [keep(i3, a.t0935), keep(i3, a.t0750), keep(i3, a.t0650), keep(i5, a.d2early), keep(i5, a.d2ok)] };
   }, { t0929: K('06', '09:29'), t0930: K('06', '09:30'), t1000: K('06', '10:00'), t1700: K('06', '17:00'), d2: K('07', '10:00'), t0935: K('06', '09:35'), t0750: K('06', '07:50'), t0650: K('06', '06:50'), d2early: K('07', '09:20'), d2ok: K('07', '09:40') });
   t('C1 운영자 설정: 때 판단은 09:30 · 공식 시간 글자는 그대로', c.start === '2026-11-06T00:30:00.000Z' && c.label === '10:00 ~ 17:00' && c.open === '09:30' && c.close === '17:00', JSON.stringify(c));
   t('C2 09:29 준비 · 09:30 공개 · 10:00 공개 · 17:00 마감', same(c.ph, ['preopen', 'open', 'open', 'dayclosed']), JSON.stringify(c.ph));
-  t('C3 공개 기준: 11-06 은 07:00 · 11-07 은 09:30', c.from6 === iso(K('06', '07:00')) && c.from7 === iso(K('07', '09:30')), JSON.stringify([c.from6, c.from7]));
-  t('C4 applyOpenRule 이 공개 API 와 같은 값만 남김', same(c.keep, [true, true, false, false, true]), JSON.stringify(c.keep));
+  t('C3 공개 기준: 11-06 · 11-07 모두 09:30', c.from6 === iso(K('06', '09:30')) && c.from7 === iso(K('07', '09:30')), JSON.stringify([c.from6, c.from7]));
+  t('C4 applyOpenRule 이 공개 API 와 같은 값만 남김', same(c.keep, [true, false, false, false, true]), JSON.stringify(c.keep));
   await ctx.close();
 }
 

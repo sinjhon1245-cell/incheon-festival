@@ -342,8 +342,6 @@
   /* 대기 현황 공개는 공식 시작(event_start)보다 30분 먼저입니다(10:00 행사 → 09:30 공개). 공식 값은 DB · time_label 그대로입니다.
      관람객 화면은 공개 API 가 이미 공개 시작을 보내고, 운영자 화면은 getSettings() 에서 맞춥니다. live/api/live-snapshot.mjs 와 같아야 합니다. */
   var LIVE_LEAD_MS = 30 * 60 * 1000;
-  // 2026-11-06 은 09:30 공개 결정 전에 운영자가 아침에 넣은 값을 확인해 그날 하루만 함께 공개합니다(07:00 이후, 공개 API 와 같음).
-  var EARLY_FROM = Date.parse('2026-11-05T22:00:00Z'), EARLY_UNTIL = Date.parse('2026-11-06T15:00:00Z');
   function liveStart(start) {
     var a = Date.parse(String(start || ''));
     return isNaN(a) ? start : new Date(a - LIVE_LEAD_MS).toISOString();
@@ -365,7 +363,7 @@
     var info = {
       phase: 'open', dday: 0, nextOpenLabel: '', nextOpenAt: null,
       openTime: label ? label[0] : '', closeTime: label ? label[1] : '',
-      todayOpenAt: null, todayFromAt: null, todayCloseAt: null
+      todayOpenAt: null, todayCloseAt: null
     };
     var s = kstParts(settings.event_start), e = kstParts(settings.event_end);
     // 시연은 언제 열어 봐도 '운영 중' 화면이어야 하고, 시간표가 비어 있으면
@@ -380,8 +378,6 @@
     var t = kstParts(nowOf(now));
     var today = t.dayNum, first = s.dayNum, last = e.dayNum;
     info.todayOpenAt = kstAt(today, openMin);
-    var nowMs = toMs(nowOf(now));
-    info.todayFromAt = nowMs >= EARLY_FROM && nowMs < EARLY_UNTIL ? new Date(EARLY_FROM) : info.todayOpenAt;
     info.todayCloseAt = kstAt(today, closeMin);
     info.dday = Math.max(0, first - today);
 
@@ -418,7 +414,7 @@
   }
   function applyOpenRule(booths, info) {
     if (!booths || !info || info.phase !== 'open' || !info.todayOpenAt) return booths;
-    var openMs = toMs(info.todayFromAt || info.todayOpenAt);
+    var openMs = toMs(info.todayOpenAt);
     function one(b) {
       if (!b || !b.congestion_updated_at) return b;
       return toMs(b.congestion_updated_at) < openMs ? clearLive(b) : b;

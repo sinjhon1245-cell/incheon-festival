@@ -65,8 +65,6 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 // 대기 현황 공개는 공식 시작(event_start)보다 30분 먼저입니다(10:00 행사 → 09:30 공개). 공식 값은 DB · time_label 그대로이고
 // 공개 시각만 여기서 정합니다. assets/booth-core.js 의 LIVE_LEAD_MS 와 같아야 합니다.
 const LIVE_LEAD_MS = 30 * 60 * 1000;
-// 2026-11-06 은 09:30 공개 결정 전에 운영자가 아침에 넣은 값을 확인해 그날 하루만 함께 공개합니다(07:00 이후, booth-core 와 같음).
-const EARLY_FROM = Date.parse('2026-11-05T22:00:00Z'), EARLY_UNTIL = Date.parse('2026-11-06T15:00:00Z');
 
 let master = null;    // { at, settings, zones, booths }
 let snap = null;      // { at, body, ms, key, m, liveRows } — key: 만들 때의 때(livePhase().key)
@@ -168,8 +166,7 @@ function livePhase(s, now) {
   if (day > last) return { key: 'after', from: null };
   if (min < openMin) return { key: 'preopen:' + day, from: null };
   if (min >= closeMin) return { key: 'closed:' + day, from: null };
-  const opened = dayStart + openMin * 60000;                                      // 오늘 공개 시작 뒤 값만
-  return { key: 'open:' + day, from: now >= EARLY_FROM && now < EARLY_UNTIL ? Math.min(opened, EARLY_FROM) : opened };
+  return { key: 'open:' + day, from: dayStart + openMin * 60000 };               // 오늘 공개 시작 뒤 값만
 }
 // 화면에 보내는 시작 시각은 공개 시작입니다. 화면은 이 값으로 공개 때를 판단하고, 이미 열려 있는 화면도 다음 받기부터 같아집니다.
 // 공식 행사 시간은 timeLabel 로 그대로 보냅니다.
