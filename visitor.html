@@ -760,10 +760,9 @@
       eventEl.textContent = '';
       if (s.event_title) eventEl.appendChild(document.createTextNode(s.event_title));
       if (s.venue) {
-        if (s.event_title) eventEl.appendChild(document.createTextNode(' '));
         var venueEl = document.createElement('span');
         venueEl.className = 'band__venue';
-        venueEl.textContent = (s.event_title ? '· ' : '') + s.venue;
+        venueEl.textContent = s.venue;
         eventEl.appendChild(venueEl);
       }
       $('sync').hidden = !show;
