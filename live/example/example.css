@@ -267,7 +267,7 @@ ul, ol { padding: 0; list-style: none; }
 }
 .vp__band :focus-visible { outline-color: #fff; }
 .vp__event { margin-top: 2px; font-size: 12px; line-height: 17px; color: rgba(255, 255, 255, .85); word-break: keep-all; }
-.vp__venue { display: inline-block; white-space: nowrap; }
+.vp__venue { display: block; margin-top: 2px; white-space: nowrap; color: rgba(255, 255, 255, .73); }
 .vp__mapbtn {
   flex: none;
   display: inline-flex;
