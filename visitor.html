@@ -901,7 +901,7 @@
     function offHint(mode) {
       var i = S.info || {};
       if (mode === 'notready') return '현재 대기 정보를 불러올 수 없어요';
-      if (mode === 'preopen') return '오늘 ' + (i.openTime || '') + '에 문을 열어요';
+      if (mode === 'preopen') return '오늘 ' + (i.openTime || '') + '부터 대기 현황을 볼 수 있어요';
       if (mode === 'dayclosed') return '오늘 체험은 끝났어요';
       if (mode === 'after') return '행사가 끝났어요';
       return '';
@@ -927,7 +927,7 @@
         return label + '<p class="hero__head">현재 대기 정보를<br />불러올 수 없어요</p>';
       }
       if (mode === 'preopen') {
-        return label + '<p class="hero__head">오늘 ' + esc(i.openTime) + '에 문을 열어요</p>' +
+        return label + '<p class="hero__head">오늘 ' + esc(i.openTime) + '부터 대기 현황을 볼 수 있어요</p>' +
           '<p class="hero__copy">문을 열면 부스별 대기 시간이 여기에 실시간으로 표시돼요.</p>';
       }
       if (mode === 'dayclosed') {

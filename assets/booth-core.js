@@ -339,6 +339,14 @@
     return p.m + '. ' + p.d + '. ' + pad2(p.hh) + ':' + pad2(p.mi);
   }
 
+  /* 대기 현황 공개는 공식 시작(event_start)보다 30분 먼저입니다(10:00 행사 → 09:30 공개). 공식 값은 DB · time_label 그대로입니다.
+     관람객 화면은 공개 API 가 이미 공개 시작을 보내고, 운영자 화면은 getSettings() 에서 맞춥니다. live/api/live-snapshot.mjs 와 같아야 합니다. */
+  var LIVE_LEAD_MS = 30 * 60 * 1000;
+  function liveStart(start) {
+    var a = Date.parse(String(start || ''));
+    return isNaN(a) ? start : new Date(a - LIVE_LEAD_MS).toISOString();
+  }
+
   /* ── 행사 시간표 ─────────────────────────────────────────────────
      행사일은 event_start 의 날짜부터 event_end 의 날짜까지(한국 날짜),
      매일 여는 시각은 event_start 의 시각, 닫는 시각은 event_end 의 시각입니다.
@@ -811,7 +819,9 @@
     if (isMock) return demoAfter(demoSettings);
     return request('GET', 'settings?select=event_title,venue,date_label,time_label,event_start,event_end,' +
       'booth_map_url,booth_map_alt&order=id.asc&limit=1').then(function (rows) {
-      return (rows && rows[0]) || {};
+      var s = (rows && rows[0]) || {};
+      if (s.event_start) s.event_start = liveStart(s.event_start);   // 때 판단은 공개 시작 기준(공식 시간은 time_label)
+      return s;
     });
   }
 
