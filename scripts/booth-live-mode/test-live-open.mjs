@@ -38,7 +38,7 @@ const ZONES = [['초등', 1], ['중등', 2], ['고등', 3], ['특수', 4], ['체
 const row = (code, c, w, at) => ({ booth_id: idOf(code), congestion: c, wait_minutes: w, updated_at: iso(at), _at: at });
 const DAY1 = [row('57', '보통', 20, K('06', '09:35')), row('45', '예약중', 0, K('06', '09:45')), row('58', '혼잡', 30, K('06', '10:05')), row('76', '예약마감', 0, K('06', '09:50')),
   row('미래9', '예약중', 0, K('06', '07:50')), row('5', '중단', 0, K('06', '09:17')), row('59', '보통', 15, K('06', '06:50')), row('60', '여유', 5, K('05', '18:00'))];
-const DAY2 = [row('57', '보통', 20, K('06', '16:30')), row('61', '여유', 5, K('07', '09:20')), row('62', '혼잡', 30, K('07', '09:40')), row('45', '예약중', 0, K('07', '09:41'))];
+const DAY2 = [row('57', '보통', 20, K('06', '16:30')), row('14', '예약마감', 0, K('06', '23:51')), row('70', '여유', 0, K('07', '07:50')), row('61', '여유', 5, K('07', '09:20')), row('62', '혼잡', 30, K('07', '09:40')), row('45', '예약중', 0, K('07', '09:41'))];
 const MODES = [{ booth_id: idOf('45'), mode: 'reserve' }, { booth_id: idOf('76'), mode: 'reserve' }, { booth_id: idOf('미래9'), mode: 'reserve' }];
 const writes = [];
 function tables(list, at) { return { settings: [SETTINGS], zones: ZONES, booths, 'rpc/booth_preview_list': [], booth_live: list.filter((r) => r._at <= at).map(({ _at, ...r }) => r), booth_live_mode: MODES }; }
@@ -74,7 +74,7 @@ const DAY1_EXPECT = [
   ['17:00', {}],
   ['23:30', {}],
 ];
-const DAY2_EXPECT = [['09:29', {}], ['09:30', {}], ['09:40', { 62: '혼잡:30' }], ['09:45', { 62: '혼잡:30', 45: '예약:open' }], ['10:00', { 62: '혼잡:30', 45: '예약:open' }], ['16:59', { 62: '혼잡:30', 45: '예약:open' }], ['17:00', {}]];
+const DAY2_EXPECT = [['09:29', {}], ['09:30', { 61: '여유:5' }], ['09:40', { 61: '여유:5', 62: '혼잡:30' }], ['09:45', { 61: '여유:5', 62: '혼잡:30', 45: '예약:open' }], ['10:00', { 61: '여유:5', 62: '혼잡:30', 45: '예약:open' }], ['16:59', { 61: '여유:5', 62: '혼잡:30', 45: '예약:open' }], ['17:00', {}]];
 const sortKeys = (o) => Object.fromEntries(Object.entries(o).sort(([a], [b]) => a.localeCompare(b)));
 for (const [hm, want] of DAY1_EXPECT) {
   const d = await callApi(await loadApi(), K('06', hm), DAY1);
@@ -82,7 +82,7 @@ for (const [hm, want] of DAY1_EXPECT) {
 }
 for (const [hm, want] of DAY2_EXPECT) {
   const d = await callApi(await loadApi(), K('07', hm), DAY2);
-  t(`A2 11-07 ${hm} 공개 값 ${Object.keys(want).length}곳(전날 값 · 09:30 전 준비값은 없음)`, same(sortKeys(shownOf(d)), sortKeys(want)), JSON.stringify(shownOf(d)));
+  t(`A2 11-07 ${hm} 공개 값 ${Object.keys(want).length}곳(전날 값 · 08:00 전 값은 없음 · 08:00~09:29 값은 09:30 부터)`, same(sortKeys(shownOf(d)), sortKeys(want)), JSON.stringify(shownOf(d)));
 }
 {
   const d = await callApi(await loadApi(), K('06', '09:45'), DAY1);
@@ -97,6 +97,8 @@ for (const [hm, want] of DAY2_EXPECT) {
   const m2 = await loadApi();
   const x = await callApi(m2, K('06', '09:59', '59'), DAY1), y = await callApi(m2, K('06', '10:00', '01'), DAY1);
   t('A7 10:00 정각을 넘어도 같은 값(사라지지 않음)', same(sortKeys(shownOf(x)), sortKeys(shownOf(y))) && Object.keys(shownOf(y)).length === 3, JSON.stringify(shownOf(y)));
+  const p7 = await callApi(await loadApi(), K('07', '09:29'), DAY2), o7 = await callApi(await loadApi(), K('07', '09:32'), DAY2);
+  t('A9 11-07 화면용 시작: 09:29 까지 09:30 · 공개 뒤 08:00 · 공식 시간 글자 그대로', p7.event.start === '2026-11-06T00:30:00.000Z' && o7.event.start === '2026-11-05T23:00:00.000Z' && o7.event.timeLabel === '10:00 ~ 17:00', JSON.stringify([p7.event.start, o7.event.start]));
   t('A8 공개 API 는 DB 에 쓰지 않음', writes.length === 0, writes.join(' '));
 }
 
@@ -200,6 +202,11 @@ for (const hm of ['09:45', '10:00', '10:06']) {
   t('C3 공개 기준: 11-06 · 11-07 모두 09:30', c.from6 === iso(K('06', '09:30')) && c.from7 === iso(K('07', '09:30')), JSON.stringify([c.from6, c.from7]));
   t('C4 applyOpenRule 이 공개 API 와 같은 값만 남김', same(c.keep, [true, false, false, false, true]), JSON.stringify(c.keep));
   await ctx.close();
+}
+{
+  const startAt = async (hm) => { const { ctx, page } = await open(K('07', hm), DAY2); const v = await page.evaluate(async () => (await window.BoothCore.getSettings()).event_start); await ctx.close(); return v; };
+  const a = await startAt('09:29'), b = await startAt('09:32');
+  t('C5 11-07 운영자 기준도 공개 API 와 같음: 09:29 까지 09:30 · 공개 뒤 08:00', a === '2026-11-06T00:30:00.000Z' && b === '2026-11-05T23:00:00.000Z', JSON.stringify([a, b]));
 }
 
 /* ── 기존 자동 갱신으로 경계 넘기 ───────────────────────────────── */

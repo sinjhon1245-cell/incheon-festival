@@ -342,9 +342,11 @@
   /* 대기 현황 공개는 공식 시작(event_start)보다 30분 먼저입니다(10:00 행사 → 09:30 공개). 공식 값은 DB · time_label 그대로입니다.
      관람객 화면은 공개 API 가 이미 공개 시작을 보내고, 운영자 화면은 getSettings() 에서 맞춥니다. live/api/live-snapshot.mjs 와 같아야 합니다. */
   var LIVE_LEAD_MS = 30 * 60 * 1000;
+  // 2026-11-07 은 09:30 공개가 시작된 뒤부터 그날 08:00 이후 저장값도 공개합니다. 공개 API 와 같은 기준이라 운영자 안내도 어긋나지 않습니다.
+  var WIDE_AT = Date.parse('2026-11-07T00:30:00Z'), WIDE_LEAD_MS = 120 * 60 * 1000;
   function liveStart(start) {
     var a = Date.parse(String(start || ''));
-    return isNaN(a) ? start : new Date(a - LIVE_LEAD_MS).toISOString();
+    return isNaN(a) ? start : new Date(a - (toMs(nowOf()) >= WIDE_AT ? WIDE_LEAD_MS : LIVE_LEAD_MS)).toISOString();
   }
 
   /* ── 행사 시간표 ─────────────────────────────────────────────────

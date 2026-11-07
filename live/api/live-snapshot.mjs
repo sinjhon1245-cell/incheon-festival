@@ -65,6 +65,10 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 // 대기 현황 공개는 공식 시작(event_start)보다 30분 먼저입니다(10:00 행사 → 09:30 공개). 공식 값은 DB · time_label 그대로이고
 // 공개 시각만 여기서 정합니다. assets/booth-core.js 의 LIVE_LEAD_MS 와 같아야 합니다.
 const LIVE_LEAD_MS = 30 * 60 * 1000;
+// 2026-11-07 은 운영본부 결정으로 09:30 공개가 시작된 뒤부터 그날 08:00 이후 저장값도 함께 공개합니다(전날 값은 그대로 제외).
+// 화면은 event.start 의 시각으로 값을 거르므로 여기서만 바꾸면 열려 있는 화면도 다음 받기부터 같아집니다.
+const WIDE_AT = Date.parse('2026-11-07T00:30:00Z'), WIDE_LEAD_MS = 120 * 60 * 1000;
+const leadAt = (now) => (now >= WIDE_AT ? WIDE_LEAD_MS : LIVE_LEAD_MS);
 
 let master = null;    // { at, settings, zones, booths }
 let snap = null;      // { at, body, ms, key, m, liveRows } — key: 만들 때의 때(livePhase().key)
@@ -153,7 +157,7 @@ async function readModes() {
      key           때가 바뀌는 곳(자정 · 여는 시각 · 닫는 시각)마다 달라지는 이름 — 캐시한 응답을 다시 만들지 정할 때 씀
    일정이 비었거나 읽을 수 없으면 거르지 않습니다(관람객 화면도 그때는 늘 '운영 중' 으로 그림). */
 function livePhase(s, now) {
-  const a = Date.parse(String((s && s.event_start) || '')) - LIVE_LEAD_MS, b = Date.parse(String((s && s.event_end) || ''));
+  const a = Date.parse(String((s && s.event_start) || '')) - leadAt(now), b = Date.parse(String((s && s.event_end) || ''));
   if (Number.isNaN(a) || Number.isNaN(b)) return { key: 'always', from: 0 };
   const day = Math.floor((now + KST_MS) / DAY_MS);
   const first = Math.floor((a + KST_MS) / DAY_MS), last = Math.floor((b + KST_MS) / DAY_MS);
@@ -170,9 +174,9 @@ function livePhase(s, now) {
 }
 // 화면에 보내는 시작 시각은 공개 시작입니다. 화면은 이 값으로 공개 때를 판단하고, 이미 열려 있는 화면도 다음 받기부터 같아집니다.
 // 공식 행사 시간은 timeLabel 로 그대로 보냅니다.
-function liveStart(start) {
+function liveStart(start, now) {
   const a = Date.parse(String(start || ''));
-  return Number.isNaN(a) ? (start || null) : new Date(a - LIVE_LEAD_MS).toISOString();
+  return Number.isNaN(a) ? (start || null) : new Date(a - leadAt(now)).toISOString();
 }
 
 // 상태 값이 어느 방식의 것인가(서버 private.booth_live_kind 와 같음).
@@ -195,7 +199,7 @@ function compose(m, liveRows, now, modeRows) {
     liveReady: liveRows !== null,
     event: {
       title: str(s.event_title), venue: str(s.venue), dateLabel: str(s.date_label), timeLabel: str(s.time_label),
-      start: liveStart(s.event_start), end: s.event_end || null,
+      start: liveStart(s.event_start, now), end: s.event_end || null,
       mapUrl: str(s.booth_map_url), mapAlt: str(s.booth_map_alt)
     },
     zones: (m.zones || []).map((z) => ({ key: str(z.key), label: str(z.label), order: z.sort_order ?? null })),
