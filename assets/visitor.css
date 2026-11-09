@@ -696,6 +696,63 @@ html.is-demo .row { scroll-margin-top: calc(56px + var(--demo-h) + env(safe-area
 }
 .hero__dday + .hero__copy { margin-top: 18px; }
 
+/* 행사 종료 — 다음 페스티벌까지. 개최일이 정해지지 않아 실제 날짜는 없고, 세 자리가 각각
+   독립된 리듬으로 끝없이 도는 시각적 장식입니다(움직임은 visitor.html 참고). */
+.end-dial { margin-top: 28px; }
+.end-dial__row {
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+.end-dial__sign {
+  margin-right: 2px;
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--accent);   /* 보라는 D− 기호에만 */
+}
+.dial {
+  --dial-h: 48px;
+  --dial-w: 36px;
+  flex: none;
+  width: var(--dial-w);
+  height: var(--dial-h);
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: inset 0 8px 8px -8px rgba(22, 32, 60, .12), inset 0 -8px 8px -8px rgba(22, 32, 60, .12);
+}
+.dial__strip {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  transition-property: transform;
+  transition-duration: 0s;   /* 실제 이동 시간은 JS가 한 걸음씩 정합니다 */
+  transition-timing-function: cubic-bezier(.22, .96, .38, 1.08);
+  will-change: transform;
+}
+.dial__strip span {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: var(--dial-h);
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--ink);
+}
+@media (min-width: 600px) {
+  .end-dial__sign { font-size: 26px; }
+  .dial { --dial-h: 56px; --dial-w: 42px; }
+  .dial__strip span { font-size: 28px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dial__strip { transition: none; }
+}
+
 /* 처음 여는 순간(아직 아무 정보도 없을 때)의 자리 표시 — 깜빡이지 않습니다 */
 .ph { display: block; background: var(--line-2); }
 .ph--label { width: 180px; height: 14px; margin-top: 3px; }

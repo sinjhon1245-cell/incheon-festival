@@ -944,7 +944,16 @@
           (i.nextOpenLabel ? '<p class="hero__copy">' + esc(i.nextOpenLabel) + '에 다시 열려요</p>' : '');
       }
       if (mode === 'after') {
-        return label + '<p class="hero__head">행사가 끝났어요.</p><p class="hero__copy">함께해 줘서 고마워요.</p>';
+        return '<p class="hero__head">오늘의 호기심이<br />내일의 미래로</p>' +
+          '<p class="hero__copy">함께해 주셔서 고맙습니다.</p>' +
+          '<div class="end-dial">' +
+            '<p class="hero__label">다음 페스티벌까지</p>' +
+            '<div class="end-dial__row" aria-hidden="true">' +
+              '<span class="end-dial__sign">D−</span>' +
+              dialHtml('h') + dialHtml('t') + dialHtml('o') +
+            '</div>' +
+            '<p class="hero__sub">다음 행사 일정 미정<span class="sr-only"> · 숫자는 시각적 연출입니다</span></p>' +
+          '</div>';
       }
       if (mode === 'placing') {
         return label + '<p class="hero__head">부스 배치를<br />준비하고 있어요</p>' +
@@ -975,17 +984,139 @@
         '</div>';
     }
 
+    /* ── 5-1. 행사 종료 — 다음 페스티벌 다이얼 ───────────────────────
+       개최일이 정해지지 않아 실제 D-day를 계산하지 않습니다. 세 자리는 날짜
+       계산과 떼어 둔 순수한 시각적 장식이고, 각자 다른 리듬으로 쉬었다가
+       한 칸씩 끝없이 돌아갑니다. 날짜가 정해지면 이 블록만 실제 카운트다운
+       으로 바꾸면 됩니다. */
+    var DIAL_CFG = {
+      h: { hold: 3000, move: 550 },   // 백의 자리 — 가장 느긋하게
+      t: { hold: 2600, move: 500 },
+      o: { hold: 2000, move: 500 }    // 일의 자리 — 가장 자주 움직임
+    };
+    var DIAL_DIGITS = (function () {
+      var s = '', i;
+      for (i = 0; i <= 9; i++) s += '<span>' + i + '</span>';
+      return s + '<span>0</span>';   // 9 → 0 이 끊기지 않도록 0을 한 번 더 둡니다
+    })();
+    var endDials = null;   // { items, onVis, onResize } — 종료 화면을 떠나면 바로 비웁니다
+
+    function dialHtml(key) {
+      return '<span class="dial" data-dial="' + key + '"><span class="dial__strip">' + DIAL_DIGITS + '</span></span>';
+    }
+
+    // 한 자리(0~9)를 쉬었다가 한 칸, 다시 쉬었다가 한 칸 돌립니다. 자리마다 따로 만들어
+    // 서로 다른 시점에 멈추고 움직이게 합니다.
+    function createDial(el, cfg) {
+      var strip = el.querySelector('.dial__strip');
+      var pos = 0;          // 지금 쉬고 있는 숫자(0~9)
+      var inFlight = null;  // 넘어가는 중인 자리(1~10), 쉬는 중이면 null
+      var holdT = null, moveT = null, dead = false;
+
+      function cellH() {
+        var first = strip.children[0];
+        return (first && first.offsetHeight) || el.clientHeight || 48;
+      }
+      function snap(i) {
+        strip.style.transitionDuration = '0s';
+        strip.style.transform = 'translateY(-' + (i * cellH()) + 'px)';
+        void strip.offsetHeight;   // 되흐름(reflow) — 다음 이동이 '0s'를 물려받지 않도록
+      }
+      function finishMove() {
+        pos = inFlight === 10 ? 0 : inFlight;
+        inFlight = null;
+        snap(pos);   // 9→0도, 쉬다가 돌아와도 늘 같은 자리에서 다시 시작합니다
+      }
+      function scheduleHold() {
+        holdT = setTimeout(step, cfg.hold * (0.9 + Math.random() * 0.2));
+      }
+      function step() {
+        holdT = null;
+        if (dead) return;
+        inFlight = pos + 1;   // 1~10 (10 = 다음 칸의 '0')
+        strip.style.transitionDuration = cfg.move + 'ms';
+        strip.style.transform = 'translateY(-' + (inFlight * cellH()) + 'px)';
+        moveT = setTimeout(function () {
+          moveT = null;
+          if (dead) return;
+          finishMove();
+          scheduleHold();
+        }, cfg.move);
+      }
+
+      snap(0);
+      scheduleHold();
+
+      return {
+        pause: function () {
+          if (holdT) { clearTimeout(holdT); holdT = null; }
+          if (moveT) { clearTimeout(moveT); moveT = null; }
+          if (inFlight !== null) finishMove();   // 넘어가는 중이면 끝까지 보여주지 않고 바로 정리
+        },
+        resume: function () {
+          if (dead) return;
+          snap(pos);   // 숨어 있던 동안 화면 폭이 바뀌었을 수 있어 다시 맞춥니다
+          if (!holdT && !moveT) scheduleHold();
+        },
+        relayout: function () { if (!dead) snap(pos); },
+        destroy: function () {
+          dead = true;
+          if (holdT) clearTimeout(holdT);
+          if (moveT) clearTimeout(moveT);
+        }
+      };
+    }
+
+    function endDialsStop() {
+      if (!endDials) return;
+      endDials.items.forEach(function (d) { d.destroy(); });
+      document.removeEventListener('visibilitychange', endDials.onVis);
+      window.removeEventListener('resize', endDials.onResize);
+      endDials = null;
+    }
+
+    function endDialsStart(root) {
+      endDialsStop();
+      var nodes = root.querySelectorAll('[data-dial]');
+      if (!nodes.length) return;
+      var items = [];
+      each(nodes, function (el) {
+        var strip = el.querySelector('.dial__strip');
+        if (reduceMotion) {
+          strip.style.transitionDuration = '0s';
+          strip.style.transform = 'translateY(0)';
+          return;
+        }
+        items.push(createDial(el, DIAL_CFG[el.getAttribute('data-dial')] || DIAL_CFG.o));
+      });
+      if (!items.length) return;
+      function onVis() {
+        if (document.hidden) items.forEach(function (d) { d.pause(); });
+        else items.forEach(function (d) { d.resume(); });
+      }
+      function onResize() { items.forEach(function (d) { d.relayout(); }); }
+      document.addEventListener('visibilitychange', onVis);
+      window.addEventListener('resize', onResize);
+      endDials = { items: items, onVis: onVis, onResize: onResize };
+    }
+
     function renderHero(c) {
       var hero = $('hero');
       var mode = heroMode();
       if (mode !== 'live') {
         var html = heroMessageHtml(mode);
-        if (S.keys.hero !== html) { S.keys.hero = html; hero.innerHTML = html; }
+        if (S.keys.hero !== html) {
+          S.keys.hero = html;
+          endDialsStop();
+          hero.innerHTML = html;
+          if (mode === 'after') endDialsStart(hero);
+        }
         return;
       }
       if (S.keys.hero !== 'live') {
         var restore = focusKey(hero);
         S.keys.hero = 'live';
+        endDialsStop();
         hero.innerHTML = heroLiveHtml();
         restoreFocus(hero, restore);
       }
