@@ -704,9 +704,17 @@ html.is-demo .row { scroll-margin-top: calc(56px + var(--demo-h) + env(safe-area
   letter-spacing: -0.03em;
   white-space: nowrap;
 }
+/* 감사 문구 — hero__copy보다 또렷하게(크게 · 진하게) 읽히도록 전용 칸을 둡니다 */
+.end-thanks {
+  margin-top: 10px;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--ink);
+}
 
-/* 다음 페스티벌을 기다리며 — 365(상징적인 숫자일 뿐 실제 날짜가 아님)로 쉬다가 한 바퀴씩
-   도는 시각적 장식입니다(움직임은 visitor.html 참고). */
+/* 다음 페스티벌을 기다리며 — 365(상징적인 숫자일 뿐 실제 날짜가 아님)로 쉬다가 한두 칸만
+   살짝 다녀오는 시각적 장식입니다(움직임은 visitor.html 참고). */
 .end-dial { margin-top: 28px; }
 .end-dial__row {
   display: flex;
@@ -747,6 +755,7 @@ html.is-demo .row { scroll-margin-top: calc(56px + var(--demo-h) + env(safe-area
   color: var(--ink);
 }
 @media (min-width: 600px) {
+  .end-thanks { font-size: 17px; }
   .end-dial .dial { --dial-h: 56px; --dial-w: 42px; }
   .end-dial .dial__strip span { font-size: 28px; }
 }
