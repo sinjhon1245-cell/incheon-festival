@@ -696,15 +696,18 @@ html.is-demo .row { scroll-margin-top: calc(56px + var(--demo-h) + env(safe-area
 }
 .hero__dday + .hero__copy { margin-top: 18px; }
 
-/* 행사 종료 — 메인 문구는 화면 폭에 상관없이 한 줄로 둡니다(너비에 맞춰 글자 크기만 줄어듭니다). */
+/* 행사 종료 — 메인 문구는 화면 폭에 상관없이 한 줄로 둡니다. clamp()는 JS(visitor.html의
+   fitEndTexts)가 실제 사용 가능한 폭을 재서 글자 크기를 정하기 전까지의 자리 표시이자,
+   JS가 없을 때의 대비값입니다. */
 .end-title {
-  font-size: clamp(17px, 5.6vw, 27px);
+  font-size: clamp(17px, 5.6vw, 30px);
   font-weight: 800;
   line-height: 1.3;
   letter-spacing: -0.03em;
   white-space: nowrap;
 }
-/* 감사 문구 — hero__copy보다 또렷하게(크게 · 진하게) 읽히도록 전용 칸을 둡니다 */
+/* 감사 문구 — hero__copy보다 또렷하게(크게 · 진하게) 읽히도록 전용 칸을 둡니다.
+   글자 크기는 JS가 제목의 절반으로 맞춥니다(아래는 대비값). */
 .end-thanks {
   margin-top: 10px;
   font-size: 16px;

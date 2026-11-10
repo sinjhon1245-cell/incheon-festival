@@ -976,12 +976,53 @@
         '</div>';
     }
 
+    /* ── 5-1. 행사 종료 — 제목 · 감사 문구 크기를 실제 폭에 맞춥니다 ───────
+       .col이 560px에서 폭이 고정돼 vw 기준 clamp()만으로는 모든 화면 폭에서
+       '콘텐츠 영역의 95~98%' 를 정확히 맞추기 어려워, 이 제목 하나에만 최소한의
+       측정 로직을 둡니다. Range.getBoundingClientRect()로 실제 글자 폭을 재고,
+       가진 폭에 맞춰 역산합니다 — letter-spacing이 em 단위라 글자 크기와 함께
+       그대로 늘어나므로 선형 비례가 그대로 맞습니다. */
+    var END_FILL = 0.97, END_TITLE_MIN = 16, END_TITLE_MAX = 48, END_THANKS_MIN = 12;
+    var endFitW = 0;   // 마지막으로 잰 가진 폭 — 같으면 다시 재지 않습니다
+    function endTextWidth(el) {
+      var r = document.createRange();
+      r.selectNodeContents(el);
+      return r.getBoundingClientRect().width;
+    }
+    function fitEndTexts() {
+      var title = document.querySelector('.end-title');
+      if (!title) { endFitW = 0; return; }
+      var avail = title.clientWidth;
+      if (!avail || avail === endFitW) return;
+      endFitW = avail;
+      title.style.fontSize = '';   // CSS clamp() 기준으로 되돌려 재야 어긋나지 않습니다
+      var base = parseFloat(getComputedStyle(title).fontSize);
+      var natural = endTextWidth(title);
+      if (!natural) return;
+      var size = base * (avail * END_FILL) / natural;
+      size = Math.max(END_TITLE_MIN, Math.min(END_TITLE_MAX, size));
+      title.style.fontSize = size.toFixed(1) + 'px';
+      var thanks = document.querySelector('.end-thanks');
+      if (thanks) thanks.style.fontSize = Math.max(END_THANKS_MIN, size * 0.5).toFixed(1) + 'px';
+    }
+    var endFitRaf = null;
+    function scheduleEndFit() {
+      if (endFitRaf) return;
+      endFitRaf = requestAnimationFrame(function () { endFitRaf = null; fitEndTexts(); });
+    }
+    window.addEventListener('resize', scheduleEndFit);
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(scheduleEndFit);
+
     function renderHero(c) {
       var hero = $('hero');
       var mode = heroMode();
       if (mode !== 'live') {
         var html = heroMessageHtml(mode);
-        if (S.keys.hero !== html) { S.keys.hero = html; hero.innerHTML = html; }
+        if (S.keys.hero !== html) {
+          S.keys.hero = html;
+          hero.innerHTML = html;
+          if (mode === 'after') fitEndTexts();
+        }
         return;
       }
       if (S.keys.hero !== 'live') {
